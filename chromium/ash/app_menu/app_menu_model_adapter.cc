@@ -84,14 +84,22 @@ void AppMenuModelAdapter::Cancel() {
   menu_runner_->Cancel();
 }
 
+int AppMenuModelAdapter::GetCommandIdForHistograms(int command_id) {
+  return command_id;
+}
+
 base::TimeTicks AppMenuModelAdapter::GetClosingEventTime() {
   DCHECK(menu_runner_);
   return menu_runner_->closing_event_time();
 }
 
 void AppMenuModelAdapter::ExecuteCommand(int id, int mouse_event_flags) {
+  // Note that the command execution may cause this to get deleted - for
+  // example, for search result menus, the command could open an app window
+  // causing the app list search to get cleared, destroying non-zero state
+  // search results.
+  RecordExecuteCommandHistogram(GetCommandIdForHistograms(id));
   views::MenuModelAdapter::ExecuteCommand(id, mouse_event_flags);
-  RecordExecuteCommandHistogram(id);
 }
 
 void AppMenuModelAdapter::OnMenuClosed(views::MenuItemView* menu) {

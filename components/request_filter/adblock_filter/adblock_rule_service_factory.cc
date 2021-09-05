@@ -2,12 +2,11 @@
 
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 
+#include "app/vivaldi_apptools.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
-
-#include "app/vivaldi_apptools.h"
 
 namespace adblock_filter {
 
@@ -40,8 +39,7 @@ KeyedService* RuleServiceFactory::BuildServiceInstanceFor(
   RuleServiceImpl* rule_service = new RuleServiceImpl(context);
   // Avoid actually loading the service during unit tests.
   if (vivaldi::IsVivaldiRunning())
-    rule_service->Load(
-        Profile::FromBrowserContext(context)->GetIOTaskRunner().get());
+    rule_service->Load();
   return rule_service;
 }
 

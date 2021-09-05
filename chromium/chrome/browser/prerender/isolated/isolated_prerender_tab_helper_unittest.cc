@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/optional.h"
 #include "base/strings/string_util.h"
@@ -30,13 +32,14 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/fake_service_worker_context.h"
 #include "content/public/test/mock_navigation_handle.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/isolation_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_util.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -86,6 +89,37 @@ class TestIsolatedPrerenderTabHelper : public IsolatedPrerenderTabHelper {
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 };
 
+class IsolatedPrerenderTabHelperTestObserver
+    : public IsolatedPrerenderTabHelper::Observer {
+ public:
+  explicit IsolatedPrerenderTabHelperTestObserver(
+      IsolatedPrerenderTabHelper* tab_helper) {
+    tab_helper->AddObserverForTesting(this);
+  }
+
+  void WaitForNEligibilityChecks(size_t n) {
+    if (on_eligibility_result_calls_before_wait_ >= n) {
+      return;
+    }
+    base::RunLoop run_loop;
+    on_eligibility_result_callback_ = base::BarrierClosure(
+        n - on_eligibility_result_calls_before_wait_, run_loop.QuitClosure());
+    run_loop.Run();
+  }
+
+  void OnNewEligiblePrefetchStarted() override {
+    if (!on_eligibility_result_callback_) {
+      on_eligibility_result_calls_before_wait_++;
+      return;
+    }
+    on_eligibility_result_callback_.Run();
+  }
+
+ private:
+  size_t on_eligibility_result_calls_before_wait_ = 0;
+  base::RepeatingClosure on_eligibility_result_callback_;
+};
+
 class IsolatedPrerenderTabHelperTest : public ChromeRenderViewHostTestHarness {
  public:
   IsolatedPrerenderTabHelperTest()
@@ -97,14 +131,10 @@ class IsolatedPrerenderTabHelperTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    content::ServiceWorkerContext* service_worker_context_ =
-        content::BrowserContext::GetDefaultStoragePartition(profile())
-            ->GetServiceWorkerContext();
-    service_worker_context_->WaitForRegistrationsInitializedForTest();
-
     tab_helper_ =
         std::make_unique<TestIsolatedPrerenderTabHelper>(web_contents());
     tab_helper_->SetURLLoaderFactory(test_shared_loader_factory_);
+    tab_helper_->SetServiceWorkerContextForTest(&service_worker_context_);
 
     SetDataSaverEnabled(true);
   }
@@ -231,9 +261,10 @@ class IsolatedPrerenderTabHelperTest : public ChromeRenderViewHostTestHarness {
     EXPECT_FALSE(isolation_info.site_for_cookies().IsNull());
   }
 
-  network::ResourceRequest VerifyCommonRequestState(const GURL& url) {
+  network::ResourceRequest VerifyCommonRequestState(const GURL& url,
+                                                    int request_count = 1) {
     SCOPED_TRACE(url.spec());
-    EXPECT_EQ(RequestCount(), 1);
+    EXPECT_EQ(RequestCount(), request_count);
 
     network::TestURLLoaderFactory::PendingRequest* request =
         test_url_loader_factory_.GetPendingRequest(0);
@@ -324,8 +355,8 @@ class IsolatedPrerenderTabHelperTest : public ChromeRenderViewHostTestHarness {
         *cc.get(), url, options,
         base::BindOnce(
             [](bool* result, base::RunLoop* run_loop,
-               net::CookieInclusionStatus set_cookie_status) {
-              *result = set_cookie_status.IsInclude();
+               net::CookieAccessResult set_cookie_access_result) {
+              *result = set_cookie_access_result.status.IsInclude();
               run_loop->Quit();
             },
             &result, &run_loop));
@@ -336,6 +367,8 @@ class IsolatedPrerenderTabHelperTest : public ChromeRenderViewHostTestHarness {
  protected:
   network::TestURLLoaderFactory test_url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
+
+  content::FakeServiceWorkerContext service_worker_context_;
 
  private:
   std::unique_ptr<TestIsolatedPrerenderTabHelper> tab_helper_;
@@ -778,6 +811,50 @@ TEST_F(IsolatedPrerenderTabHelperTest, NetErrorOKOnly) {
       "IsolatedPrerender.Prefetch.Mainframe.TotalRedirects", 0, 1);
 }
 
+TEST_F(IsolatedPrerenderTabHelperTest, ResponseBodyLimit) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      features::kIsolatePrerenders, {{"max_mainframe_body_length_kb", "0"}});
+
+  NavigateSomewhere();
+  GURL doc_url("https://www.google.com/search?q=cats");
+  GURL prediction_url("https://www.cat-food.com/");
+  MakeNavigationPrediction(web_contents(), doc_url, {prediction_url});
+
+  network::ResourceRequest request = VerifyCommonRequestState(prediction_url);
+  MakeResponseAndWait(net::HTTP_OK, net::OK, kHTMLMimeType, /*headers=*/{},
+                      kHTMLBody);
+
+  EXPECT_EQ(predicted_urls_count(), 1U);
+  EXPECT_EQ(prefetch_eligible_count(), 1U);
+  EXPECT_EQ(prefetch_attempted_count(), 1U);
+  EXPECT_EQ(prefetch_successful_count(), 0U);
+  EXPECT_EQ(prefetch_total_redirect_count(), 0U);
+  EXPECT_TRUE(navigation_to_prefetch_start().has_value());
+
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.NetError",
+      std::abs(net::ERR_INSUFFICIENT_RESOURCES), 1);
+  histogram_tester.ExpectTotalCount(
+      "IsolatedPrerender.Prefetch.Mainframe.RespCode", 0);
+  histogram_tester.ExpectTotalCount(
+      "IsolatedPrerender.Prefetch.Mainframe.BodyLength", 0);
+  histogram_tester.ExpectTotalCount(
+      "IsolatedPrerender.Prefetch.Mainframe.TotalTime", 0);
+  histogram_tester.ExpectTotalCount(
+      "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", 0);
+
+  NavigateAndVerifyPrefetchStatus(
+      prediction_url,
+      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchFailedNetError);
+  EXPECT_EQ(after_srp_prefetch_eligible_count(), 1U);
+  EXPECT_EQ(base::Optional<size_t>(0), after_srp_clicked_link_srp_position());
+
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.TotalRedirects", 0, 1);
+}
+
 TEST_F(IsolatedPrerenderTabHelperTest, NonHTML) {
   base::HistogramTester histogram_tester;
   base::test::ScopedFeatureList scoped_feature_list;
@@ -1126,6 +1203,61 @@ TEST_F(IsolatedPrerenderTabHelperTest,
       "IsolatedPrerender.Prefetch.Mainframe.TotalRedirects", 0, 1);
 }
 
+TEST_F(IsolatedPrerenderTabHelperTest, ConcurrentPrefetches) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      features::kIsolatePrerenders,
+      {{"max_concurrent_prefetches", "2"}, {"max_srp_prefetches", "-1"}});
+
+  IsolatedPrerenderTabHelperTestObserver observer(tab_helper());
+
+  NavigateSomewhere();
+  GURL doc_url("https://www.google.com/search?q=cats");
+  GURL prediction_url_1("https://www.cat-food.com/");
+  GURL prediction_url_2("https://www.dogs-r-dumb.com/");
+  MakeNavigationPrediction(web_contents(), doc_url,
+                           {prediction_url_1, prediction_url_2});
+
+  observer.WaitForNEligibilityChecks(2);
+  EXPECT_EQ(RequestCount(), 2);
+
+  VerifyCommonRequestState(prediction_url_1, 2);
+  MakeResponseAndWait(net::HTTP_OK, net::OK, kHTMLMimeType, {}, kHTMLBody);
+  VerifyCommonRequestState(prediction_url_2);
+  MakeResponseAndWait(net::HTTP_OK, net::OK, kHTMLMimeType, {}, kHTMLBody);
+
+  EXPECT_EQ(RequestCount(), 0);
+  EXPECT_EQ(predicted_urls_count(), 2U);
+  EXPECT_EQ(prefetch_eligible_count(), 2U);
+  EXPECT_EQ(prefetch_attempted_count(), 2U);
+  EXPECT_EQ(prefetch_successful_count(), 2U);
+  EXPECT_EQ(prefetch_total_redirect_count(), 0U);
+  EXPECT_TRUE(navigation_to_prefetch_start().has_value());
+
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.NetError", net::OK, 2);
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.RespCode", net::HTTP_OK, 2);
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.BodyLength", base::size(kHTMLBody),
+      2);
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.TotalTime", kTotalTimeDuration, 2);
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.ConnectTime", kConnectTimeDuration,
+      2);
+
+  NavigateAndVerifyPrefetchStatus(
+      prediction_url_2,
+      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchSuccessful);
+  EXPECT_EQ(after_srp_prefetch_eligible_count(), 2U);
+  EXPECT_EQ(base::Optional<size_t>(1), after_srp_clicked_link_srp_position());
+
+  histogram_tester.ExpectUniqueSample(
+      "IsolatedPrerender.Prefetch.Mainframe.TotalRedirects", 0, 1);
+}
+
 TEST_F(IsolatedPrerenderTabHelperTest, OrderedBitMask) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
@@ -1380,10 +1512,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, ServiceWorkerRegistered) {
   GURL doc_url("https://www.google.com/search?q=cats");
   GURL prediction_url("https://www.cat-food.com/");
 
-  content::ServiceWorkerContext* service_worker_context_ =
-      content::BrowserContext::GetDefaultStoragePartition(profile())
-          ->GetServiceWorkerContext();
-  service_worker_context_->AddRegistrationToRegisteredOriginsForTest(
+  service_worker_context_.AddRegistrationToRegisteredOrigins(
       url::Origin::Create(prediction_url));
 
   MakeNavigationPrediction(web_contents(), doc_url, {prediction_url});
@@ -1412,10 +1541,7 @@ TEST_F(IsolatedPrerenderTabHelperTest, ServiceWorkerNotRegistered) {
   GURL prediction_url("https://www.cat-food.com/");
   GURL service_worker_registration("https://www.service-worker.com/");
 
-  content::ServiceWorkerContext* service_worker_context_ =
-      content::BrowserContext::GetDefaultStoragePartition(profile())
-          ->GetServiceWorkerContext();
-  service_worker_context_->AddRegistrationToRegisteredOriginsForTest(
+  service_worker_context_.AddRegistrationToRegisteredOrigins(
       url::Origin::Create(service_worker_registration));
 
   MakeNavigationPrediction(web_contents(), doc_url, {prediction_url});
@@ -1510,9 +1636,6 @@ class IsolatedPrerenderTabHelperRedirectTest
     GURL doc_url("https://www.google.com/search?q=cats");
     GURL prediction_url("https://www.cat-food.com/");
 
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
-
     MakeNavigationPrediction(web_contents(), doc_url, {prediction_url});
 
     VerifyCommonRequestState(prediction_url);
@@ -1522,13 +1645,9 @@ class IsolatedPrerenderTabHelperRedirectTest
   }
 };
 
-// Fails on TSAN builders: https://crbug.com/1078965.
-#if defined(THREAD_SANITIZER)
-#define MAYBE_NoRedirect_Cookies DISABLED_NoRedirect_Cookies
-#else
-#define MAYBE_NoRedirect_Cookies NoRedirect_Cookies
-#endif
-TEST_F(IsolatedPrerenderTabHelperRedirectTest, MAYBE_NoRedirect_Cookies) {
+TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Cookies) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
   NavigateSomewhere();
 
   GURL site_with_cookies("https://cookies.com");
@@ -1550,6 +1669,8 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, MAYBE_NoRedirect_Cookies) {
 }
 
 TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Insecure) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
   NavigateSomewhere();
 
   GURL url("http://insecure.com");
@@ -1571,6 +1692,8 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Insecure) {
 }
 
 TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Insecure_Continued) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
   NavigateSomewhere();
 
   GURL url("http://insecure.com");
@@ -1587,14 +1710,14 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Insecure_Continued) {
   GURL final_url("http://final.com/");
 
   content::MockNavigationHandle handle(web_contents());
-  handle.set_url(final_url);
+  handle.set_url(url);
   tab_helper()->DidStartNavigation(&handle);
   handle.set_has_committed(true);
   handle.set_redirect_chain({
-      GURL("https://start.test.com"),
       url,
       final_url,
   });
+  handle.set_url(final_url);
   tab_helper()->DidFinishNavigation(&handle);
 
   ASSERT_TRUE(tab_helper()->after_srp_metrics().has_value());
@@ -1608,6 +1731,8 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Insecure_Continued) {
 }
 
 TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Google) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
   NavigateSomewhere();
 
   GURL url("https://www.google.com");
@@ -1629,14 +1754,13 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_Google) {
 }
 
 TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_ServiceWorker) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kIsolatePrerenders);
   NavigateSomewhere();
 
   GURL site_with_worker("https://service-worker.com");
 
-  content::ServiceWorkerContext* service_worker_context_ =
-      content::BrowserContext::GetDefaultStoragePartition(profile())
-          ->GetServiceWorkerContext();
-  service_worker_context_->AddRegistrationToRegisteredOriginsForTest(
+  service_worker_context_.AddRegistrationToRegisteredOrigins(
       url::Origin::Create(site_with_worker));
 
   RunNoRedirectTest(site_with_worker);
@@ -1656,17 +1780,17 @@ TEST_F(IsolatedPrerenderTabHelperRedirectTest, NoRedirect_ServiceWorker) {
 }
 
 TEST_F(IsolatedPrerenderTabHelperRedirectTest, SuccessfulRedirect) {
-  base::HistogramTester histogram_tester;
-  NavigateSomewhere();
-  GURL doc_url("https://www.google.com/search?q=cats");
-  GURL prediction_url("https://www.cat-food.com/");
-  GURL redirect_url("https://redirect-here.com");
-
   // Enable unlimited prefetches so we can follow the redirect chain all the
   // way.
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       features::kIsolatePrerenders, {{"max_srp_prefetches", "-1"}});
+
+  base::HistogramTester histogram_tester;
+  NavigateSomewhere();
+  GURL doc_url("https://www.google.com/search?q=cats");
+  GURL prediction_url("https://www.cat-food.com/");
+  GURL redirect_url("https://redirect-here.com");
 
   MakeNavigationPrediction(web_contents(), doc_url, {prediction_url});
   VerifyCommonRequestState(prediction_url);

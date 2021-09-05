@@ -6,15 +6,15 @@
 
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
+#include "third_party/blink/public/mojom/loader/content_security_notifier.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/dom/events/event_queue.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
-#include "third_party/blink/renderer/core/execution_context/security_context_init.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
-#include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/loader_factory_for_worker.h"
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_fetch_request.h"
@@ -55,8 +55,6 @@ namespace {
 class OutsideSettingsCSPDelegate final
     : public GarbageCollected<OutsideSettingsCSPDelegate>,
       public ContentSecurityPolicyDelegate {
-  USING_GARBAGE_COLLECTED_MIXIN(OutsideSettingsCSPDelegate);
-
  public:
   OutsideSettingsCSPDelegate(
       const FetchClientSettingsObject& outside_settings_object,
@@ -162,6 +160,11 @@ class OutsideSettingsCSPDelegate final
     // nothing for workers/worklets.
   }
 
+  void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr info) override {
+    DCHECK(global_scope_for_logging_->IsContextThread());
+    global_scope_for_logging_->AddInspectorIssue(std::move(info));
+  }
+
  private:
   const Member<const FetchClientSettingsObject> outside_settings_object_;
 
@@ -184,10 +187,6 @@ WorkerOrWorkletGlobalScope::WorkerOrWorkletGlobalScope(
     scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context,
     WorkerReportingProxy& reporting_proxy)
     : ExecutionContext(isolate, agent),
-      security_context_(
-          SecurityContextInit(origin,
-                              MakeGarbageCollected<OriginTrialContext>()),
-          SecurityContext::kWorker),
       name_(name),
       parent_devtools_token_(parent_devtools_token),
       worker_clients_(worker_clients),
@@ -197,7 +196,7 @@ WorkerOrWorkletGlobalScope::WorkerOrWorkletGlobalScope(
           MakeGarbageCollected<WorkerOrWorkletScriptController>(this, isolate)),
       v8_cache_options_(v8_cache_options),
       reporting_proxy_(reporting_proxy) {
-  GetSecurityContext().GetOriginTrialContext()->BindExecutionContext(this);
+  GetSecurityContext().SetSecurityOrigin(std::move(origin));
   if (worker_clients_)
     worker_clients_->ReattachThread();
 }
@@ -244,26 +243,6 @@ void WorkerOrWorkletGlobalScope::CountFeature(WebFeature feature) {
     return;
   used_features_.set(static_cast<size_t>(feature));
   ReportingProxy().CountFeature(feature);
-}
-
-void WorkerOrWorkletGlobalScope::CountDeprecation(WebFeature feature) {
-  DCHECK(IsContextThread());
-  DCHECK_NE(WebFeature::kOBSOLETE_PageDestruction, feature);
-  DCHECK_GT(WebFeature::kNumberOfFeatures, feature);
-  if (used_features_[static_cast<size_t>(feature)])
-    return;
-  used_features_.set(static_cast<size_t>(feature));
-
-  ReportingContext::From(this)->QueueReport(
-      Deprecation::CreateReport(Url(), feature));
-
-  // Adds a deprecation message to the console.
-  DCHECK(!Deprecation::DeprecationMessage(feature).IsEmpty());
-  AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-      mojom::ConsoleMessageSource::kDeprecation,
-      mojom::ConsoleMessageLevel::kWarning,
-      Deprecation::DeprecationMessage(feature)));
-  ReportingProxy().CountDeprecation(feature);
 }
 
 ResourceLoadScheduler::ThrottleOptionOverride
@@ -330,14 +309,13 @@ ResourceFetcher* WorkerOrWorkletGlobalScope::CreateFetcherInternal(
             *MakeGarbageCollected<WorkerResourceFetcherProperties>(
                 *this, fetch_client_settings_object,
                 web_worker_fetch_context_));
-    ResourceFetcherInit init(
-        properties,
-        MakeGarbageCollected<WorkerFetchContext>(
-            properties, *this, web_worker_fetch_context_, subresource_filter_,
-            content_security_policy, resource_timing_notifier),
-        GetTaskRunner(TaskType::kNetworking),
-        MakeGarbageCollected<LoaderFactoryForWorker>(
-            *this, web_worker_fetch_context_));
+    auto* worker_fetch_context = MakeGarbageCollected<WorkerFetchContext>(
+        properties, *this, web_worker_fetch_context_, subresource_filter_,
+        content_security_policy, resource_timing_notifier);
+    ResourceFetcherInit init(properties, worker_fetch_context,
+                             GetTaskRunner(TaskType::kNetworking),
+                             MakeGarbageCollected<LoaderFactoryForWorker>(
+                                 *this, web_worker_fetch_context_));
     init.use_counter = MakeGarbageCollected<DetachableUseCounter>(this);
     init.console_logger = MakeGarbageCollected<DetachableConsoleLogger>(this);
 
@@ -358,7 +336,7 @@ ResourceFetcher* WorkerOrWorkletGlobalScope::CreateFetcherInternal(
     fetcher->SetResourceLoadObserver(
         MakeGarbageCollected<ResourceLoadObserverForWorker>(
             *probe::ToCoreProbeSink(static_cast<ExecutionContext*>(this)),
-            fetcher->GetProperties(), web_worker_fetch_context_,
+            fetcher->GetProperties(), *worker_fetch_context,
             GetDevToolsToken()));
   } else {
     auto& properties =
@@ -545,8 +523,12 @@ int WorkerOrWorkletGlobalScope::GetOutstandingThrottledLimit() const {
   return 2;
 }
 
+CrossVariantMojoRemote<mojom::ResourceLoadInfoNotifierInterfaceBase>
+WorkerOrWorkletGlobalScope::CloneResourceLoadInfoNotifier() {
+  return web_worker_fetch_context_->CloneResourceLoadInfoNotifier();
+}
+
 void WorkerOrWorkletGlobalScope::Trace(Visitor* visitor) const {
-  visitor->Trace(security_context_);
   visitor->Trace(inside_settings_resource_fetcher_);
   visitor->Trace(resource_fetchers_);
   visitor->Trace(subresource_filter_);

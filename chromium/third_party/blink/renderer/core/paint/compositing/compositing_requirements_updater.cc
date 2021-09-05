@@ -26,7 +26,6 @@
 
 #include "third_party/blink/renderer/core/paint/compositing/compositing_requirements_updater.h"
 
-#include "base/macros.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -83,6 +82,8 @@ class CompositingRequirementsUpdater::OverlapMap {
     // finishCurrentOverlapTestingContext() call.
     BeginNewOverlapTestingContext();
   }
+  OverlapMap(const OverlapMap&) = delete;
+  OverlapMap& operator=(const OverlapMap&) = delete;
 
   // Each rect added is marked as clipped or unclipped. clipped rects may
   // overlap only with other clipped rects, but unclipped rects may overlap
@@ -141,7 +142,6 @@ class CompositingRequirementsUpdater::OverlapMap {
 
  private:
   Vector<OverlapMapContainers> overlap_stack_;
-  DISALLOW_COPY_AND_ASSIGN(OverlapMap);
 };
 
 class CompositingRequirementsUpdater::RecursionData {
@@ -306,6 +306,8 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   if (can_be_composited)
     reasons_to_composite |= direct_reasons;
 
+  const LayoutObject& layout_object = layer->GetLayoutObject();
+
   // Next, accumulate reasons related to overlap.
   // If overlap testing is used, this reason will be overridden. If overlap
   // testing is not used, we must assume we overlap if there is anything
@@ -325,7 +327,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
       // should opt in. Unfortunately we can't easily remove from the list
       // while we're iterating, so we have to store it for later removal.
       if (unclipped_descendant->GetLayoutObject().ContainingBlock() ==
-          &layer->GetLayoutObject()) {
+          &layout_object) {
         unclipped_descendants_to_remove.push_back(i);
         continue;
       }
@@ -352,16 +354,19 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   IntRect abs_bounds = use_clipped_bounding_rect
                            ? layer->ClippedAbsoluteBoundingBox()
                            : layer->UnclippedAbsoluteBoundingBox();
-  PaintLayer* root_layer = layout_view_.Layer();
-  // |abs_bounds| does not include root scroller offset. For the purposes
-  // of overlap, this only matters for fixed-position objects, and their
-  // relative position to other elements. Therefore, it's still correct to,
-  // instead of adding scroll to all non-fixed elements, add a reverse scroll
-  // to ones that are fixed.
-  if (root_layer->GetScrollableArea() &&
-      !layer->IsAffectedByScrollOf(root_layer)) {
-    abs_bounds.Move(
-        RoundedIntSize(root_layer->GetScrollableArea()->GetScrollOffset()));
+
+  if (!RuntimeEnabledFeatures::CompositingOptimizationsEnabled()) {
+    PaintLayer* root_layer = layout_view_.Layer();
+    // |abs_bounds| does not include root scroller offset. For the purposes
+    // of overlap, this only matters for fixed-position objects, and their
+    // relative position to other elements. Therefore, it's still correct to,
+    // instead of adding scroll to all non-fixed elements, add a reverse scroll
+    // to ones that are fixed.
+    if (root_layer->GetScrollableArea() &&
+        !layer->IsAffectedByScrollOf(root_layer)) {
+      abs_bounds.Move(
+          RoundedIntSize(root_layer->GetScrollableArea()->GetScrollOffset()));
+    }
   }
 
   absolute_descendant_bounding_box = abs_bounds;

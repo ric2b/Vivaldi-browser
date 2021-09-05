@@ -44,7 +44,7 @@
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #endif
-#if defined(OS_LINUX) && defined(ARCH_CPU_X86_64)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ARCH_CPU_X86_64)
 #include "v8/include/v8-wasm-trap-handler-posix.h"
 #endif
 namespace {
@@ -161,7 +161,7 @@ RenderProcessImpl::RenderProcessImpl()
 
   SetV8FlagIfNotFeature(features::kWebAssemblyTrapHandler,
                         "--no-wasm-trap-handler");
-#if defined(OS_LINUX) && defined(ARCH_CPU_X86_64)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ARCH_CPU_X86_64)
   if (base::FeatureList::IsEnabled(features::kWebAssemblyTrapHandler)) {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     if (!command_line->HasSwitch(
@@ -192,7 +192,7 @@ RenderProcessImpl::RenderProcessImpl()
     v8::V8::EnableWebAssemblyTrapHandler(use_v8_trap_handler);
   }
 #endif
-#if defined(OS_MACOSX) && defined(ARCH_CPU_X86_64)
+#if defined(OS_MAC) && defined(ARCH_CPU_X86_64)
   if (base::FeatureList::IsEnabled(features::kWebAssemblyTrapHandler)) {
     // On macOS, Crashpad uses exception ports to handle signals in a different
     // process. As we cannot just pass a callback to this other process, we ask
@@ -200,7 +200,7 @@ RenderProcessImpl::RenderProcessImpl()
     bool use_v8_signal_handler = true;
     v8::V8::EnableWebAssemblyTrapHandler(use_v8_signal_handler);
   }
-#endif  // defined(OS_MACOSX) && defined(ARCH_CPU_X86_64)
+#endif  // defined(OS_MAC) && defined(ARCH_CPU_X86_64)
 
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();

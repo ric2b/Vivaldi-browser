@@ -3,6 +3,17 @@
 // found in the LICENSE file.
 
 cr.define('settings', function() {
+
+  /**
+   * The state of the preference controlling Smart Lock's ability to sign-in the
+   * user.
+   * @enum {string}
+   */
+  /* #export */ const SmartLockSignInEnabledState = {
+    ENABLED: 'enabled',
+    DISABLED: 'disabled',
+  };
+
   /**
    * The possible statuses of hosts on the logged in account that determine the
    * page content. Note that this is based on (and must include an analog of
@@ -10,7 +21,7 @@ cr.define('settings', function() {
    * services/multidevice_setup/public/mojom/multidevice_setup.mojom.
    * @enum {number}
    */
-  MultiDeviceSettingsMode = {
+  /* #export */ const MultiDeviceSettingsMode = {
     NO_ELIGIBLE_HOSTS: 0,
     NO_HOST_SET: 1,
     HOST_SET_WAITING_FOR_SERVER: 2,
@@ -24,11 +35,15 @@ cr.define('settings', function() {
    * //chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.
    * @enum {number}
    */
-  MultiDeviceFeature = {
+  /* #export */ const MultiDeviceFeature = {
     BETTER_TOGETHER_SUITE: 0,
     INSTANT_TETHERING: 1,
     MESSAGES: 2,
     SMART_LOCK: 3,
+    PHONE_HUB: 4,
+    PHONE_HUB_NOTIFICATIONS: 5,
+    PHONE_HUB_NOTIFICATION_BADGE: 6,
+    PHONE_HUB_TASK_CONTINUATION: 7,
   };
 
   /**
@@ -37,7 +52,7 @@ cr.define('settings', function() {
    * //chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.
    * @enum {number}
    */
-  MultiDeviceFeatureState = {
+  /* #export */ const MultiDeviceFeatureState = {
     PROHIBITED_BY_POLICY: 0,
     DISABLED_BY_USER: 1,
     ENABLED_BY_USER: 2,
@@ -47,6 +62,7 @@ cr.define('settings', function() {
     UNAVAILABLE_INSUFFICIENT_SECURITY: 6,
     UNAVAILABLE_SUITE_DISABLED: 7,
     FURTHER_SETUP_REQUIRED: 8,
+    UNAVAILABLE_TOP_LEVEL_FEATURE_DISABLED: 9,
   };
 
   /**
@@ -69,10 +85,14 @@ cr.define('settings', function() {
    *   instantTetheringState: !settings.MultiDeviceFeatureState,
    *   messagesState: !settings.MultiDeviceFeatureState,
    *   smartLockState: !settings.MultiDeviceFeatureState,
+   *   phoneHubState: !settings.MultiDeviceFeatureState,
+   *   phoneHubNotificationsState: !settings.MultiDeviceFeatureState,
+   *   phoneHubNotificationBadgeState: !settings.MultiDeviceFeatureState,
+   *   phoneHubTaskContinuationState: !settings.MultiDeviceFeatureState,
    *   isAndroidSmsPairingComplete: boolean
    * }}
    */
-  let MultiDevicePageContentData;
+  /* #export */ let MultiDevicePageContentData;
 
   // #cr_define_end
   return {
@@ -80,5 +100,6 @@ cr.define('settings', function() {
     MultiDeviceFeature,
     MultiDeviceFeatureState,
     MultiDevicePageContentData,
+    SmartLockSignInEnabledState
   };
 });

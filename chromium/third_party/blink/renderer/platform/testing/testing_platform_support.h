@@ -61,9 +61,7 @@ class TestingPlatformSupport : public Platform {
 
   // Platform:
   WebString DefaultLocale() override;
-  std::unique_ptr<blink::WebURLLoaderFactory> CreateDefaultURLLoaderFactory()
-      override;
-  std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader() override {
+  std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() override {
     return std::make_unique<CodeCacheLoaderMock>();
   }
   WebData GetDataResource(int resource_id,
@@ -163,12 +161,9 @@ class ScopedUnittestsEnvironmentSetup final {
   ~ScopedUnittestsEnvironmentSetup();
 
  private:
-  class DummyRendererResourceCoordinator;
   std::unique_ptr<base::TestDiscardableMemoryAllocator>
       discardable_memory_allocator_;
   std::unique_ptr<Platform> dummy_platform_;
-  std::unique_ptr<DummyRendererResourceCoordinator>
-      dummy_renderer_resource_coordinator_;
   std::unique_ptr<TestingPlatformSupport> testing_platform_support_;
 };
 

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/values.h"
 #include "extensions/browser/extension_function.h"
 
@@ -43,8 +44,8 @@ class NetworkingPrivateGetPropertiesFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
  private:
-  void Success(std::unique_ptr<base::DictionaryValue> result);
-  void Failure(const std::string& error_name);
+  void Result(base::Optional<base::Value> result,
+              base::Optional<std::string> error);
 
   DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateGetPropertiesFunction);
 };
@@ -63,8 +64,8 @@ class NetworkingPrivateGetManagedPropertiesFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
  private:
-  void Success(std::unique_ptr<base::DictionaryValue> result);
-  void Failure(const std::string& error);
+  void Result(base::Optional<base::Value> result,
+              base::Optional<std::string> error);
 
   DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateGetManagedPropertiesFunction);
 };
@@ -375,7 +376,7 @@ class NetworkingPrivateVerifyAndEncryptDataFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateVerifyAndEncryptDataFunction);
 };
 
-// Implements the chrome.networkingPrivate.setWifiTDLSEnabledState method.
+// Deprecated chrome.networkingPrivate.setWifiTDLSEnabledState method.
 class NetworkingPrivateSetWifiTDLSEnabledStateFunction
     : public ExtensionFunction {
  public:
@@ -389,14 +390,11 @@ class NetworkingPrivateSetWifiTDLSEnabledStateFunction
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void Success(const std::string& result);
-  void Failure(const std::string& error);
-
  private:
   DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateSetWifiTDLSEnabledStateFunction);
 };
 
-// Implements the chrome.networkingPrivate.getWifiTDLSStatus method.
+// Deprecated chrome.networkingPrivate.getWifiTDLSStatus method.
 class NetworkingPrivateGetWifiTDLSStatusFunction : public ExtensionFunction {
  public:
   NetworkingPrivateGetWifiTDLSStatusFunction() {}
@@ -408,9 +406,6 @@ class NetworkingPrivateGetWifiTDLSStatusFunction : public ExtensionFunction {
 
   // ExtensionFunction:
   ResponseAction Run() override;
-
-  void Success(const std::string& result);
-  void Failure(const std::string& error);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NetworkingPrivateGetWifiTDLSStatusFunction);

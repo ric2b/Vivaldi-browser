@@ -12,7 +12,7 @@
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/mojom/url_loader.mojom-forward.h"
 #include "third_party/blink/public/common/common_export.h"
-#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-forward.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 
 namespace mojo {
 
@@ -79,7 +79,7 @@ struct BLINK_COMMON_EXPORT
   }
   static mojo::PendingRemote<network::mojom::ChunkedDataPipeGetter>
   chunked_data_pipe_getter(const network::DataElement& element) {
-    if (element.type_ != network::mojom::DataElementType::kChunkedDataPipe)
+    if (element.type_ != network::mojom::DataElementType::kReadOnceStream)
       return mojo::NullRemote();
     return const_cast<network::DataElement&>(element)
         .ReleaseChunkedDataPipeGetter();

@@ -129,33 +129,32 @@ class MFPhotoCallback final
 // and automatically unlocks the buffer when destroyed.
 class ScopedBufferLock {
  public:
-  ScopedBufferLock(ComPtr<IMFMediaBuffer> buffer) : buffer_(std::move(buffer)) {
+  explicit ScopedBufferLock(ComPtr<IMFMediaBuffer> buffer)
+      : buffer_(std::move(buffer)) {
     if (FAILED(buffer_.As(&buffer_2d_))) {
       LockSlow();
       return;
     }
     // Try lock methods from fastest to slowest: Lock2DSize(), then Lock2D(),
     // then finally LockSlow().
-    if ((Lock2DSize() || Lock2D()) && !UnlockedNoncontiguousBuffer())
-      return;
+    if (Lock2DSize() || Lock2D()) {
+      if (IsContiguous())
+        return;
+      buffer_2d_->Unlock2D();
+    }
     // Fall back to LockSlow() if 2D buffer was unsupported or noncontiguous.
     buffer_2d_ = nullptr;
     LockSlow();
   }
 
-  // Unlocks |buffer_2d_| and returns true if |buffer_2d_| is non-contiguous or
-  // has negative pitch. If |buffer_2d_| is contiguous with positive pitch,
-  // i.e., the buffer format that the surrounding code expects, returns false.
-  bool UnlockedNoncontiguousBuffer() {
+  // Returns whether |buffer_2d_| is contiguous with positive pitch, i.e., the
+  // buffer format that the surrounding code expects.
+  bool IsContiguous() {
     BOOL is_contiguous;
-    if (pitch_ > 0 &&
-        SUCCEEDED(buffer_2d_->IsContiguousFormat(&is_contiguous)) &&
-        is_contiguous &&
-        (length_ || SUCCEEDED(buffer_2d_->GetContiguousLength(&length_)))) {
-      return false;
-    }
-    buffer_2d_->Unlock2D();
-    return true;
+    return pitch_ > 0 &&
+           SUCCEEDED(buffer_2d_->IsContiguousFormat(&is_contiguous)) &&
+           is_contiguous &&
+           (length_ || SUCCEEDED(buffer_2d_->GetContiguousLength(&length_)));
   }
 
   bool Lock2DSize() {
@@ -417,7 +416,7 @@ const CapabilityWin& GetBestMatchedPhotoCapability(
 
 HRESULT CreateCaptureEngine(IMFCaptureEngine** engine) {
   ComPtr<IMFCaptureEngineClassFactory> capture_engine_class_factory;
-  HRESULT hr = CoCreateInstance(CLSID_MFCaptureEngineClassFactory, NULL,
+  HRESULT hr = CoCreateInstance(CLSID_MFCaptureEngineClassFactory, nullptr,
                                 CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARGS(&capture_engine_class_factory));
   if (FAILED(hr))
@@ -436,7 +435,7 @@ mojom::RangePtr RetrieveControlRangeAndCurrent(
     std::vector<mojom::MeteringMode>* supported_modes = nullptr,
     mojom::MeteringMode* current_mode = nullptr,
     double (*value_converter)(long) = PlatformToCaptureValue,
-    double (*step_converter)(long) = PlatformToCaptureValue) {
+    double (*step_converter)(long, double, double) = PlatformToCaptureStep) {
   return media::RetrieveControlRangeAndCurrent(
       [&control_interface, control_property](auto... args) {
         return control_interface->GetRange(control_property, args...);
@@ -560,6 +559,39 @@ bool VideoCaptureDeviceMFWin::GetPixelFormatFromMFSourceMediaSubtype(
 
   *pixel_format = media_format_configuration.pixel_format;
   return true;
+}
+
+// Check if the video capture device supports at least one of pan, tilt and zoom
+// controls.
+// static
+bool VideoCaptureDeviceMFWin::IsPanTiltZoomSupported(
+    ComPtr<IMFMediaSource> source) {
+  ComPtr<IAMCameraControl> camera_control;
+  HRESULT hr = source.As(&camera_control);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to retrieve IAMCameraControl", hr);
+  ComPtr<IAMVideoProcAmp> video_control;
+  hr = source.As(&video_control);
+  DLOG_IF_FAILED_WITH_HRESULT("Failed to retrieve IAMVideoProcAmp", hr);
+  // On Windows platform, some Image Capture video constraints and settings are
+  // get or set using IAMCameraControl interface while the rest are get or set
+  // using IAMVideoProcAmp interface and most device drivers define both of
+  // them. So for simplicity GetPhotoState and SetPhotoState support Image
+  // Capture API constraints and settings only if both interfaces are available.
+  // Therefore, if either of these interface is missing, this backend does not
+  // really support pan, tilt nor zoom.
+  if (!camera_control || !video_control)
+    return false;
+
+  for (CameraControlProperty control_property :
+       {CameraControl_Pan, CameraControl_Tilt, CameraControl_Zoom}) {
+    long min, max, step, default_value, flags;
+    HRESULT hr = camera_control->GetRange(control_property, &min, &max, &step,
+                                          &default_value, &flags);
+    if (SUCCEEDED(hr) && min < max)
+      return true;
+  }
+
+  return false;
 }
 
 HRESULT VideoCaptureDeviceMFWin::ExecuteHresultCallbackWithRetries(
@@ -745,8 +777,17 @@ bool VideoCaptureDeviceMFWin::Init() {
   }
 
   ComPtr<IMFAttributes> attributes;
-  MFCreateAttributes(&attributes, 1);
-  DCHECK(attributes);
+  hr = MFCreateAttributes(&attributes, 1);
+  if (FAILED(hr)) {
+    LogError(FROM_HERE, hr);
+    return false;
+  }
+
+  hr = attributes->SetUINT32(MF_CAPTURE_ENGINE_USE_VIDEO_DEVICE_ONLY, TRUE);
+  if (FAILED(hr)) {
+    LogError(FROM_HERE, hr);
+    return false;
+  }
 
   video_callback_ = new MFVideoCallback(this);
   hr = engine_->Initialize(video_callback_.get(), attributes.Get(), nullptr,
@@ -882,7 +923,7 @@ void VideoCaptureDeviceMFWin::AllocateAndStart(
 
   DWORD dw_sink_stream_index = 0;
   hr = preview_sink->AddStream(best_match_video_capability.stream_index,
-                               sink_video_media_type.Get(), NULL,
+                               sink_video_media_type.Get(), nullptr,
                                &dw_sink_stream_index);
   if (FAILED(hr)) {
     OnError(VideoCaptureError::kWinMediaFoundationSinkAddStreamFailed,
@@ -1010,9 +1051,9 @@ void VideoCaptureDeviceMFWin::TakePhoto(TakePhotoCallback callback) {
   }
 
   DWORD dw_sink_stream_index = 0;
-  hr =
-      photo_sink->AddStream(selected_photo_capability_->stream_index,
-                            sink_media_type.Get(), NULL, &dw_sink_stream_index);
+  hr = photo_sink->AddStream(selected_photo_capability_->stream_index,
+                             sink_media_type.Get(), nullptr,
+                             &dw_sink_stream_index);
   if (FAILED(hr)) {
     LogError(FROM_HERE, hr);
     return;

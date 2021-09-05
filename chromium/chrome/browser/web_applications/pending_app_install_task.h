@@ -15,7 +15,9 @@
 #include "chrome/browser/web_applications/components/external_install_options.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
+#include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
+#include "chrome/common/web_application_info.h"
 
 class Profile;
 
@@ -25,8 +27,7 @@ class WebContents;
 
 namespace web_app {
 
-class AppShortcutManager;
-class FileHandlerManager;
+class OsIntegrationManager;
 class InstallFinalizer;
 class InstallManager;
 class WebAppUiManager;
@@ -59,8 +60,7 @@ class PendingAppInstallTask {
   // policy, etc.
   explicit PendingAppInstallTask(Profile* profile,
                                  AppRegistrar* registrar,
-                                 AppShortcutManager* shortcut_manager,
-                                 FileHandlerManager* file_handler_manager,
+                                 OsIntegrationManager* os_integration_manager,
                                  WebAppUiManager* ui_manager,
                                  InstallFinalizer* install_finalizer,
                                  InstallManager* install_manager,
@@ -74,6 +74,10 @@ class PendingAppInstallTask {
   virtual void Install(content::WebContents* web_contents,
                        WebAppUrlLoader::Result load_url_result,
                        ResultCallback result_callback);
+
+  // Install directly from a fully specified WebApplicationInfo struct. Used
+  // by system apps.
+  virtual void InstallFromInfo(ResultCallback result_callback);
 
   const ExternalInstallOptions& install_options() { return install_options_; }
 
@@ -94,8 +98,7 @@ class PendingAppInstallTask {
 
   Profile* const profile_;
   AppRegistrar* const registrar_;
-  AppShortcutManager* const shortcut_manager_;
-  FileHandlerManager* const file_handler_manager_;
+  OsIntegrationManager* const os_integration_manager_;
   InstallFinalizer* const install_finalizer_;
   InstallManager* const install_manager_;
   WebAppUiManager* const ui_manager_;

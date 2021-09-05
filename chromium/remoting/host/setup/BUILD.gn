@@ -41,7 +41,6 @@ source_set("common") {
     "//remoting/base:authorization",
     "//remoting/host:common",
     "//remoting/host/native_messaging",
-    "//remoting/proto/remoting/v1:directory_grpc_library",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
   ]
@@ -50,7 +49,7 @@ source_set("common") {
     deps += [ "//remoting/host/mac:permission_checking" ]
   }
 
-  if (is_mac || is_ios) {
+  if (is_apple) {
     deps += [ "//remoting/host/mac:constants" ]
   }
 

@@ -12,7 +12,7 @@ import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   import("//build/linux/extract_symbols.gni")
 }
 
@@ -246,7 +246,7 @@ source_set("app_shell_lib") {
       "//ppapi/shared_impl:shared_impl",
     ]
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       deps += [ "//components/nacl/loader:nacl_helper" ]
 
       if (enable_nacl_nonsfi) {
@@ -276,6 +276,10 @@ executable("app_shell") {
 }
 
 test("app_shell_unittests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   sources = [
     "../test/extensions_unittests_main.cc",
     "browser/api/identity/identity_api_unittest.cc",

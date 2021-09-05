@@ -28,6 +28,20 @@ class PageLoad;
 }
 }  // namespace ukm
 
+// This enum represents the type of page load: abort, non-abort, or neither.
+// A page is of type NEVER_FOREGROUND if it was never in the foreground.
+// A page is of type ABORT if it was in the foreground at some point but did not
+// reach FCP. A page is of type REACHED_FCP if it was in the foreground at some
+// point and reached FCP. These values are persisted to logs. Entries should not
+// be renumbered and numeric values should never be reused. For any additions,
+// also update the corresponding enum in enums.xml.
+enum class PageLoadType {
+  kNeverForegrounded = 0,
+  kAborted = 1,
+  kReachedFCP = 2,
+  kMaxValue = kReachedFCP,
+};
+
 // If URL-Keyed-Metrics (UKM) is enabled in the system, this is used to
 // populate it with top-level page-load metrics.
 class UkmPageLoadMetricsObserver
@@ -60,6 +74,8 @@ class UkmPageLoadMetricsObserver
 
   ObservePolicy OnHidden(
       const page_load_metrics::mojom::PageLoadTiming& timing) override;
+
+  ObservePolicy OnShown() override;
 
   void OnFailedProvisionalLoad(
       const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info)
@@ -114,10 +130,8 @@ class UkmPageLoadMetricsObserver
   // Records metrics based on the page load information exposed by the observer
   // delegate, as well as updating the URL. |app_background_time| should be set
   // to a timestamp if the app was backgrounded, otherwise it should be set to
-  // a null TimeTicks. |became_hidden| should be set when this method callback
-  // was caused by the page becoming backgrounded but not closed.
-  void RecordPageLoadMetrics(base::TimeTicks app_background_time,
-                             bool became_hidden);
+  // a null TimeTicks.
+  void RecordPageLoadMetrics(base::TimeTicks app_background_time);
 
   // Adds main resource timing metrics to |builder|.
   void ReportMainResourceTimingMetrics(
@@ -125,6 +139,13 @@ class UkmPageLoadMetricsObserver
       ukm::builders::PageLoad* builder);
 
   void ReportLayoutStability();
+
+  void ReportPerfectHeuristicsMetrics();
+
+  void RecordAbortMetrics(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
+      base::TimeTicks page_end_time,
+      ukm::builders::PageLoad* builder);
 
   void RecordInputTimingMetrics();
 
@@ -150,6 +171,12 @@ class UkmPageLoadMetricsObserver
   // engine) for starting URL and committed URL.
   void RecordGeneratedNavigationUKM(ukm::SourceId source_id,
                                     const GURL& committed_url);
+
+  // Records some metrics at the end of a page, even for failed provisional
+  // loads.
+  void RecordPageEndMetrics(
+      const page_load_metrics::mojom::PageLoadTiming* timing,
+      base::TimeTicks page_end_time);
 
   // Guaranteed to be non-null during the lifetime of |this|.
   network::NetworkQualityTracker* network_quality_tracker_;
@@ -228,7 +255,14 @@ class UkmPageLoadMetricsObserver
   // Unique across the lifetime of the browser process.
   int main_document_sequence_number_ = -1;
 
-  bool font_preload_started_before_rendering_observed_ = false;
+  // This is to capture observed LoadingBehaviorFlags.
+  bool delay_async_script_execution_before_finished_parsing_seen_ = false;
+
+  bool currently_in_foreground_ = false;
+  // The last time the page became foregrounded, or navigation start if the page
+  // started in the foreground and has not been backgrounded.
+  base::TimeTicks last_time_shown_;
+  base::TimeDelta total_foreground_duration_;
 
   // The connection info for the committed URL.
   base::Optional<net::HttpResponseInfo::ConnectionInfo> connection_info_;

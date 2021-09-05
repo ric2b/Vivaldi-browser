@@ -103,7 +103,7 @@ class BrowsingDataRemoverFunction
   BrowsingDataRemoverFunction();
 
   // BrowsingDataRemover::Observer interface method.
-  void OnBrowsingDataRemoverDone() override;
+  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -156,7 +156,7 @@ class BrowsingDataRemoverFunction
   uint64_t origin_type_mask_ = 0;
   std::vector<url::Origin> origins_;
   content::BrowsingDataFilterBuilder::Mode mode_ =
-      content::BrowsingDataFilterBuilder::Mode::BLACKLIST;
+      content::BrowsingDataFilterBuilder::Mode::kPreserve;
   int pending_tasks_ = 0;
   ScopedObserver<content::BrowsingDataRemover,
                  content::BrowsingDataRemover::Observer>

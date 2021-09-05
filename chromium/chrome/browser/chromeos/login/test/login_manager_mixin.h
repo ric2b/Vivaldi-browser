@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/chromeos/login/test/local_state_mixin.h"
 #include "chrome/browser/chromeos/login/test/session_flags_manager.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
@@ -17,6 +18,11 @@
 #include "components/user_manager/user_type.h"
 
 namespace chromeos {
+
+namespace test {
+constexpr char kTestEmail[] = "test_user@gmail.com";
+constexpr char kTestGaiaId[] = "111111111";
+}  // namespace test
 
 class StubAuthenticatorBuilder;
 class UserContext;
@@ -67,6 +73,9 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
   explicit LoginManagerMixin(InProcessBrowserTestMixinHost* host);
   LoginManagerMixin(InProcessBrowserTestMixinHost* host,
                     const UserList& initial_users);
+  LoginManagerMixin(InProcessBrowserTestMixinHost* host,
+                    const UserList& initial_users,
+                    FakeGaiaMixin* gaia_mixin);
 
   ~LoginManagerMixin() override;
 
@@ -79,6 +88,8 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
   // launch browser as part of user session setup - use this to override that
   // behavior.
   void set_should_launch_browser(bool value) { should_launch_browser_ = value; }
+
+  void set_should_obtain_handles(bool value) { should_obtain_handles_ = value; }
 
   const UserList& users() const { return initial_users_; }
 
@@ -121,7 +132,11 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
 
   // Logs in as a regular user with default user context. Should be used for
   // proceeding into the session from the login screen.
-  void LoginAsNewReguarUser();
+  void LoginAsNewRegularUser();
+
+  // Logs in as a child user with default user context.Should be used for
+  // proceeding into the session from the login screen.
+  void LoginAsNewChildUser();
 
  private:
   UserList initial_users_;
@@ -135,7 +150,12 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
   // Whether the user session manager should skip browser launch steps for
   // testing.
   bool should_launch_browser_ = false;
+
+  // Whether the user session manager should try to obtain token handles.
+  bool should_obtain_handles_ = false;
+
   LocalStateMixin local_state_mixin_;
+  FakeGaiaMixin* fake_gaia_mixin_;
 
   DISALLOW_COPY_AND_ASSIGN(LoginManagerMixin);
 };

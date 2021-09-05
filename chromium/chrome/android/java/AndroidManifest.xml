@@ -41,6 +41,7 @@ by a child template that "extends" this file.
     <uses-permission-sdk-23 android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     {% if target_sdk_version|int > 27 or target_sdk_version == "Q" %}
         <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -218,17 +219,17 @@ by a child template that "extends" this file.
                 {% block common_view_intent_shared_filter_body %}
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 {% if channel in ['stable', 'default'] %}<data android:scheme="googlechrome" />{% endif %}
                 <data android:scheme="http" />
                 <data android:scheme="https" />
                 <data android:scheme="about" />
                 <data android:scheme="javascript" />
                 {% endblock %}
+                <category android:name="android.intent.category.BROWSABLE" />
             </intent-filter>
             <!-- Same filter as above but with MIME types.  Intents that
                  do not specify a MIME type won't match. -->
-            <intent-filter>
+            <intent-filter tools:ignore="AppLinkUrlError">
                 {{ self.common_view_intent_shared_filter_body() }}
                 <data android:scheme="content" />
                 <data android:mimeType="text/html"/>
@@ -239,7 +240,13 @@ by a child template that "extends" this file.
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="file"/>
+                <data android:mimeType="multipart/related"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content"/>
                 <data android:mimeType="multipart/related"/>
             </intent-filter>
@@ -256,10 +263,11 @@ by a child template that "extends" this file.
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="file"/>
-                <data android:scheme="content"/>
                 <data android:host="*" />
-                <data android:pathPattern="/.*\\.mhtml"/>
-                <data android:pathPattern="/.*\\.mht"/>
+                {% for i in range(10) %}
+                <data android:pathPattern="/.*{{ '\\\\..*' * i }}\\.mhtml" />
+                <data android:pathPattern="/.*{{ '\\\\..*' * i }}\\.mht" />
+                {% endfor %}
                 {% endblock %}
             </intent-filter>
             <!-- Same filter as above but with mimeType="*/*". Used for
@@ -271,21 +279,24 @@ by a child template that "extends" this file.
             <!-- Web Bundles (.wbn) support -->
             {% if channel in ['dev', 'canary', 'default'] %}
             <intent-filter>
+                {% block wbn_view_intent_shared_filter_body %}
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="file" />
-                <data android:scheme="content" />
-                <data android:mimeType="*/*" />
                 <data android:host="*" />
                 {% for i in range(10) %}
                 <data android:pathPattern="/.*{{ '\\\\..*' * i }}\\.wbn" />
                 {% endfor %}
+                {% endblock %}
             </intent-filter>
             <intent-filter>
+                {{ self.wbn_view_intent_shared_filter_body() }}
+                <data android:mimeType="*/*"/>
+            </intent-filter>
+            <intent-filter tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" />
                 <data android:mimeType="application/webbundle" />
             </intent-filter>
@@ -635,7 +646,15 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
+        <activity android:name="org.vivaldi.browser.preferences.StartPagePreference"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
         <activity android:name="org.vivaldi.browser.preferences.ManageTrackerBlockingSourcesPreference"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+        <activity android:name="org.vivaldi.browser.preferences.VivaldiGamePreference"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
@@ -931,7 +950,7 @@ by a child template that "extends" this file.
         </activity>
 
         <receiver
-            android:name="org.chromium.chrome.browser.browserservices.trustedwebactivityui.DisclosureAcceptanceBroadcastReceiver"
+            android:name="org.chromium.chrome.browser.browserservices.ui.trustedwebactivity.DisclosureAcceptanceBroadcastReceiver"
             android:exported="false" />
 
         <!-- Service for decoding images in a sandboxed process. -->
@@ -1059,19 +1078,12 @@ by a child template that "extends" this file.
                <category android:name="{{ manifest_package }}"/>
             </intent-filter>
         </receiver>
-        <!-- GcmTaskService for registration for Invalidations. -->
+        <!-- GcmTaskService for registration for Invalidations. Not actually implemented anymore. -->
         <service android:name="com.google.ipc.invalidation.ticl.android2.channel.GcmRegistrationTaskService"
             android:exported="true"
             android:permission="com.google.android.gms.permission.BIND_NETWORK_TASK_SERVICE" >
             <intent-filter>
                 <action android:name="com.google.android.gms.gcm.ACTION_TASK_READY"/>
-            </intent-filter>
-        </service>
-        <!-- InstanceIDListenerService for token refresh events from GCM. -->
-        <service android:name="com.google.ipc.invalidation.ticl.android2.channel.AndroidInstanceIDListenerService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.android.gms.iid.InstanceID"/>
             </intent-filter>
         </service>
         <!-- GcmListenerService for messages from GCM. -->
@@ -1083,19 +1095,7 @@ by a child template that "extends" this file.
         </service>
         <service android:name="org.chromium.chrome.browser.services.gcm.GCMBackgroundService"
             android:exported="false"/>
-        <meta-data android:name="ipc.invalidation.ticl.gcm_upstream_service_class"
-            android:value="org.chromium.chrome.browser.services.gcm.InvalidationGcmUpstreamSender" />
         <service android:name="org.chromium.chrome.browser.services.gcm.InvalidationGcmUpstreamSender"
-            android:exported="false"/>
-
-        <!-- Notification service for sync. -->
-        <service android:name="com.google.ipc.invalidation.ticl.android2.TiclService"
-            android:exported="false"/>
-        <service android:name="com.google.ipc.invalidation.ticl.android2.channel.AndroidMessageSenderService"
-            android:exported="false"/>
-        <receiver android:name="com.google.ipc.invalidation.ticl.android2.AndroidInternalScheduler$AlarmReceiver"
-            android:exported="false"/>
-        <receiver android:name="com.google.ipc.invalidation.external.client.contrib.AndroidListener$AlarmReceiver"
             android:exported="false"/>
 
         <!-- Android Notification service listener -->
@@ -1149,12 +1149,13 @@ by a child template that "extends" this file.
             tools:ignore="ExportedService">
             <intent-filter>
               <action android:name="android.support.customtabs.action.CustomTabsService" />
+              <category android:name="androidx.browser.customtabs.category.ColorSchemeCustomization"/>
+              <category android:name="androidx.browser.customtabs.category.NavBarColorCustomization"/>
+              <category android:name="androidx.browser.trusted.category.ImmersiveMode"/>
+              <category android:name="androidx.browser.trusted.category.LaunchSiteSettings" />
               <category android:name="androidx.browser.trusted.category.TrustedWebActivities"/>
               <category android:name="androidx.browser.trusted.category.TrustedWebActivitySplashScreensV1"/>
-              <category android:name="androidx.browser.customtabs.category.NavBarColorCustomization"/>
-              <category android:name="androidx.browser.customtabs.category.ColorSchemeCustomization"/>
               <category android:name="androidx.browser.trusted.category.WebShareTargetV2"/>
-              <category android:name="androidx.browser.trusted.category.ImmersiveMode"/>
             </intent-filter>
         </service>
         <service android:name="androidx.browser.customtabs.PostMessageService" />
@@ -1224,7 +1225,7 @@ by a child template that "extends" this file.
         <receiver android:name="org.chromium.chrome.browser.notifications.scheduler.DisplayAgent$Receiver"
             android:exported="false"/>
 
-        <receiver android:name="org.chromium.chrome.browser.send_tab_to_self.NotificationManager$SendTabToSelfNotificationReceiver"
+        <receiver android:name="org.chromium.chrome.browser.app.send_tab_to_self.SendTabToSelfNotificationReceiver"
             android:exported="false"/>
 
         <receiver android:name="org.chromium.chrome.browser.sharing.click_to_call.ClickToCallMessageHandler$TapReceiver"
@@ -1297,6 +1298,10 @@ by a child template that "extends" this file.
              controllers with its own list. -->
         <meta-data android:name="org.chromium.content.browser.REMOTE_MEDIA_PLAYERS"
             android:value="org.chromium.chrome.browser.media.remote.DefaultMediaRouteController"/>
+
+        <!-- Downloads Google Sans from GMS Core -->
+        <meta-data android:name="preloaded_fonts"
+            android:resource="@array/preloaded_google_sans_fonts" />
 
         {% endblock %}
         {% block extra_application_definitions_for_test %}

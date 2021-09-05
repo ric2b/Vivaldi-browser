@@ -1,6 +1,6 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-if(!is_android) {
+if(vivaldi_build_tests) {
   update_template_instance("//chrome/test:sync_integration_tests") {
     sources += [
       "//vivaldi/sync/test/integration/single_client_notes_sync_test.cpp",
@@ -13,11 +13,10 @@ update_target("//components/sync:rest_of_sync") {
   sources += [
     "//vivaldi/sync/notes/note_update_preprocessing.cc",
     "//vivaldi/sync/notes/note_update_preprocessing.h",
-    "//vivaldi/sync/vivaldi_directory_backing_store.cc",
   ]
 }
 
-update_template_instance("//components/sync/base:base") {
+update_target("//components/sync/base:base") {
   sources += [
     "//vivaldi/sync/vivaldi_hash_util.h",
     "//vivaldi/sync/vivaldi_prefs_names.cc",

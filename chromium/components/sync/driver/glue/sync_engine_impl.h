@@ -28,6 +28,7 @@
 #include "components/sync/engine/model_type_configurer.h"
 #include "components/sync/engine/sync_credentials.h"
 #include "components/sync/engine/sync_engine.h"
+#include "components/sync/invalidations/invalidations_listener.h"
 #include "components/sync/protocol/encryption.pb.h"
 #include "components/sync/protocol/sync_protocol_error.h"
 
@@ -37,18 +38,22 @@ class InvalidationService;
 
 namespace syncer {
 
-class SyncEngineBackend;
 class SyncBackendRegistrar;
+class SyncEngineBackend;
+class SyncInvalidationsService;
 class SyncPrefs;
 
 // The only real implementation of the SyncEngine. See that interface's
 // definition for documentation of public methods.
-class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
+class SyncEngineImpl : public SyncEngine,
+                       public InvalidationHandler,
+                       public InvalidationsListener {
  public:
   using Status = SyncStatus;
 
   SyncEngineImpl(const std::string& name,
                  invalidation::InvalidationService* invalidator,
+                 SyncInvalidationsService* sync_invalidations_service,
                  const base::WeakPtr<SyncPrefs>& sync_prefs,
                  const base::FilePath& sync_data_folder);
   ~SyncEngineImpl() override;
@@ -96,6 +101,9 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
       const TopicInvalidationMap& invalidation_map) override;
   std::string GetOwnerName() const override;
   void OnInvalidatorClientIdChange(const std::string& client_id) override;
+
+  // InvalidationsListener implementation.
+  void OnInvalidationReceived(const std::string& payload) override;
 
  protected:
   // The types and functions below are protected so that test
@@ -204,8 +212,15 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
   // A pointer to the registrar; owned by |backend_|.
   SyncBackendRegistrar* registrar_ = nullptr;
 
-  invalidation::InvalidationService* invalidator_;
+  invalidation::InvalidationService* invalidator_ = nullptr;
   bool invalidation_handler_registered_ = false;
+
+  // Sync invalidation service, it may be nullptr if sync invalidations are
+  // disabled or not supported. It doesn't need to have the same as
+  // |invalidation_handler_registered_| flag as the service doesn't have topics
+  // to unsibscribe.
+  SyncInvalidationsService* sync_invalidations_service_ = nullptr;
+
   ModelTypeSet last_enabled_types_;
   bool sessions_invalidation_enabled_ = false;
 

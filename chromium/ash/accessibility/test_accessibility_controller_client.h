@@ -29,7 +29,8 @@ class TestAccessibilityControllerClient : public AccessibilityControllerClient {
       const std::string& message) override;
   void PlayEarcon(int32_t sound_key) override;
   base::TimeDelta PlayShutdownSound() override;
-  void HandleAccessibilityGesture(ax::mojom::Gesture gesture) override;
+  void HandleAccessibilityGesture(ax::mojom::Gesture gesture,
+                                  gfx::PointF location) override;
   bool ToggleDictation() override;
   void SilenceSpokenFeedback() override;
   void OnTwoFingerTouchStart() override;
@@ -48,10 +49,11 @@ class TestAccessibilityControllerClient : public AccessibilityControllerClient {
   int select_to_speak_change_change_requests() const {
     return select_to_speak_state_change_requests_;
   }
+  const std::string& last_alert_message() const { return last_alert_message_; }
 
  private:
   AccessibilityAlert last_a11y_alert_ = AccessibilityAlert::NONE;
-
+  std::string last_alert_message_;
   int32_t sound_key_ = -1;
   bool is_dictation_active_ = false;
 

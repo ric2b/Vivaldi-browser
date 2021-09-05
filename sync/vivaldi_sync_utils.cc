@@ -5,14 +5,12 @@
 #include "base/base64.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/base/model_type.h"
+#include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
 #include "components/sync/protocol/sync.pb.h"
-#include "components/sync/syncable/base_transaction.h"
-#include "components/sync/syncable/directory.h"
-#include "components/sync/syncable/model_neutral_mutable_entry.h"
-#include "components/sync/syncable/read_node.h"
 
 namespace syncer {
 
@@ -83,49 +81,6 @@ const char* ProtoEnumToString(
   }
   NOTREACHED();
   return "";
-}
-
-// ModelNeutralMutableEntry
-namespace syncable {
-void ModelNeutralMutableEntry::PutUniqueNotesTag(const std::string& tag) {
-  // This unique tag will eventually be used as the unique suffix when adjusting
-  // this bookmark's position.  Let's make sure it's a valid suffix.
-  if (!UniquePosition::IsValidSuffix(tag)) {
-    NOTREACHED();
-    return;
-  }
-
-  if (!kernel_->ref(UNIQUE_NOTES_TAG).empty() &&
-      tag != kernel_->ref(UNIQUE_NOTES_TAG)) {
-    // There is only one scenario where our tag is expected to change.  That
-    // scenario occurs when our current tag is a non-correct tag assigned during
-    // the UniquePosition migration.
-    std::string migration_generated_tag = GenerateSyncableNotesHash(
-        std::string(), kernel_->ref(ID).GetServerId());
-    DCHECK_EQ(migration_generated_tag, kernel_->ref(UNIQUE_NOTES_TAG));
-  }
-
-  kernel_->put(UNIQUE_NOTES_TAG, tag);
-  kernel_->mark_dirty(&dir()->kernel()->dirty_metahandles);
-}
-}  // namespace syncable
-
-// ReadNode
-BaseNode::InitByLookupResult ReadNode::InitByTagLookupForNotes(
-    const std::string& tag) {
-  DCHECK(!entry_) << "Init called twice";
-  if (tag.empty())
-    return INIT_FAILED_PRECONDITION;
-  syncable::BaseTransaction* trans = transaction_->GetWrappedTrans();
-  entry_ = new syncable::Entry(trans, syncable::GET_BY_SERVER_TAG, tag);
-  if (!entry_->good())
-    return INIT_FAILED_ENTRY_NOT_GOOD;
-  if (entry_->GetIsDel())
-    return INIT_FAILED_ENTRY_IS_DEL;
-  ModelType model_type = GetModelType();
-  DCHECK_EQ(model_type, NOTES)
-      << "InitByTagLookup deprecated for all types except notes.";
-  return DecryptIfNecessary() ? INIT_OK : INIT_FAILED_DECRYPT_IF_NECESSARY;
 }
 
 }  // namespace syncer

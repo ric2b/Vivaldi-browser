@@ -548,7 +548,7 @@ void ThreadState::ScheduleConcurrentAndLazySweep() {
           WTF::CrossThreadBindRepeating(&ThreadState::PerformConcurrentSweep,
                                         WTF::CrossThreadUnretained(this))),
       ConvertToBaseRepeatingCallback(WTF::CrossThreadBindRepeating(
-          [](ThreadState* state) -> size_t {
+          [](ThreadState* state, size_t /*worker_count*/) -> size_t {
             return state->has_unswept_pages_.load(std::memory_order_relaxed)
                        ? 1
                        : 0;
@@ -682,8 +682,7 @@ void ThreadState::AtomicPauseMarkPrologue(
     BlinkGC::GCReason reason) {
   ThreadHeapStatsCollector::EnabledScope mark_prologue_scope(
       Heap().stats_collector(),
-      ThreadHeapStatsCollector::kAtomicPauseMarkPrologue, "epoch", gc_age_,
-      "forced", IsForcedGC(reason));
+      ThreadHeapStatsCollector::kAtomicPauseMarkPrologue);
   EnterAtomicPause();
   EnterNoAllocationScope();
   EnterGCForbiddenScope();
@@ -768,8 +767,7 @@ void ThreadState::CompleteSweep() {
     ScriptForbiddenScope script_forbidden;
     SweepForbiddenScope scope(this);
     ThreadHeapStatsCollector::EnabledScope stats_scope(
-        Heap().stats_collector(), ThreadHeapStatsCollector::kCompleteSweep,
-        "forced", IsForcedGC(current_gc_data_.reason));
+        Heap().stats_collector(), ThreadHeapStatsCollector::kCompleteSweep);
     // Boost priority of sweeping job to complete ASAP and avoid taking time on
     // the main thread.
     if (sweeper_handle_)
@@ -1114,7 +1112,7 @@ void ThreadState::IncrementalMarkingStart(BlinkGC::GCReason reason) {
   // Sweeping is performed in driver functions.
   DCHECK(!IsSweepingInProgress());
   Heap().stats_collector()->NotifyMarkingStarted(
-      BlinkGC::CollectionType::kMajor, reason);
+      BlinkGC::CollectionType::kMajor, reason, IsForcedGC(reason));
   {
     ThreadHeapStatsCollector::EnabledScope stats_scope(
         Heap().stats_collector(),
@@ -1180,9 +1178,9 @@ void ThreadState::IncrementalMarkingStep(BlinkGC::StackState stack_state) {
     skip_incremental_marking_for_testing_ = false;
   } else {
     complete = MarkPhaseAdvanceMarking(
-        base::TimeTicks::Now() +
-        marking_scheduling_->GetNextIncrementalStepDurationForTask(
-            Heap().stats_collector()->object_size_in_bytes()));
+            marking_scheduling_->GetNextIncrementalStepDurationForTask(
+                Heap().stats_collector()->object_size_in_bytes()),
+        EphemeronProcessing::kPartialProcessing);
   }
 
   if (base::FeatureList::IsEnabled(
@@ -1294,7 +1292,8 @@ void ThreadState::CollectGarbage(BlinkGC::CollectionType collection_type,
   if (should_do_full_gc) {
     CompleteSweep();
     SetGCState(kNoGCScheduled);
-    Heap().stats_collector()->NotifyMarkingStarted(collection_type, reason);
+    Heap().stats_collector()->NotifyMarkingStarted(collection_type, reason,
+                                                   IsForcedGC(reason));
     RunAtomicPause(collection_type, stack_state, marking_type, sweeping_type,
                    reason);
   }
@@ -1333,8 +1332,8 @@ void ThreadState::AtomicPauseMarkRoots(BlinkGC::StackState stack_state,
                                        BlinkGC::MarkingType marking_type,
                                        BlinkGC::GCReason reason) {
   ThreadHeapStatsCollector::EnabledScope advance_tracing_scope(
-      Heap().stats_collector(), ThreadHeapStatsCollector::kAtomicPauseMarkRoots,
-      "epoch", gc_age_, "forced", IsForcedGC(current_gc_data_.reason));
+      Heap().stats_collector(),
+      ThreadHeapStatsCollector::kAtomicPauseMarkRoots);
   MarkPhaseVisitRoots();
   MarkPhaseVisitNotFullyConstructedObjects();
 }
@@ -1342,16 +1341,16 @@ void ThreadState::AtomicPauseMarkRoots(BlinkGC::StackState stack_state,
 void ThreadState::AtomicPauseMarkTransitiveClosure() {
   ThreadHeapStatsCollector::EnabledScope advance_tracing_scope(
       Heap().stats_collector(),
-      ThreadHeapStatsCollector::kAtomicPauseMarkTransitiveClosure, "epoch",
-      gc_age_, "forced", IsForcedGC(current_gc_data_.reason));
-  CHECK(MarkPhaseAdvanceMarking(base::TimeTicks::Max()));
+      ThreadHeapStatsCollector::kAtomicPauseMarkTransitiveClosure);
+  // base::TimeTicks::Now() + base::TimeDelta::Max() == base::TimeTicks::Max()
+  CHECK(MarkPhaseAdvanceMarking(base::TimeDelta::Max(),
+                                EphemeronProcessing::kFullProcessing));
 }
 
 void ThreadState::AtomicPauseMarkEpilogue(BlinkGC::MarkingType marking_type) {
   ThreadHeapStatsCollector::EnabledScope stats_scope(
       Heap().stats_collector(),
-      ThreadHeapStatsCollector::kAtomicPauseMarkEpilogue, "epoch", gc_age_,
-      "forced", IsForcedGC(current_gc_data_.reason));
+      ThreadHeapStatsCollector::kAtomicPauseMarkEpilogue);
   MarkPhaseEpilogue(marking_type);
   LeaveGCForbiddenScope();
   LeaveNoAllocationScope();
@@ -1365,8 +1364,7 @@ void ThreadState::AtomicPauseSweepAndCompact(
     BlinkGC::SweepingType sweeping_type) {
   ThreadHeapStatsCollector::EnabledScope stats(
       Heap().stats_collector(),
-      ThreadHeapStatsCollector::kAtomicPauseSweepAndCompact, "epoch", gc_age_,
-      "forced", IsForcedGC(current_gc_data_.reason));
+      ThreadHeapStatsCollector::kAtomicPauseSweepAndCompact);
   AtomicPauseScope atomic_pause_scope(this);
   ScriptForbiddenScope script_forbidden_scope;
 
@@ -1583,25 +1581,34 @@ void ThreadState::MarkPhaseVisitRoots() {
 }
 
 bool ThreadState::MarkPhaseAdvanceMarkingBasedOnSchedule(
-    base::TimeDelta max_deadline) {
+    base::TimeDelta max_deadline,
+    EphemeronProcessing ephemeron_processing) {
   return MarkPhaseAdvanceMarking(
-      base::TimeTicks::Now() +
       std::min(max_deadline,
                marking_scheduling_->GetNextIncrementalStepDurationForTask(
-                   Heap().stats_collector()->object_size_in_bytes())));
+                   Heap().stats_collector()->object_size_in_bytes())),
+      ephemeron_processing);
 }
 
-bool ThreadState::MarkPhaseAdvanceMarking(base::TimeTicks deadline) {
+bool ThreadState::MarkPhaseAdvanceMarking(
+    base::TimeDelta deadline,
+    EphemeronProcessing ephemeron_processing) {
   MarkingVisitor* visitor = current_gc_data_.visitor.get();
+  ThreadHeapStatsCollector::EnabledScope deadline_scope(
+      Heap().stats_collector(),
+      ThreadHeapStatsCollector::kIncrementalMarkingWithDeadline, "deadline_ms",
+      deadline.InMillisecondsF());
   const bool finished = Heap().AdvanceMarking(
-      reinterpret_cast<MarkingVisitor*>(visitor), deadline);
+      reinterpret_cast<MarkingVisitor*>(visitor),
+      base::TimeTicks::Now() + deadline, ephemeron_processing);
   // visitor->marked_bytes() can also include bytes marked during roots
   // visitation which is not counted in worklist_processing_time_foreground.
   // Since the size of the roots is usually small relative to the size of
   // the object graph, this is fine.
   marking_scheduling_->UpdateIncrementalMarkingStats(
       visitor->marked_bytes(),
-      Heap().stats_collector()->worklist_processing_time_foreground());
+      Heap().stats_collector()->worklist_processing_time_foreground(),
+      Heap().stats_collector()->flushing_v8_references_time());
   return finished;
 }
 
@@ -1672,8 +1679,9 @@ void ThreadState::CollectAllGarbageForTesting(BlinkGC::StackState stack_state) {
     if (isolate_) {
       unified_heap_controller()->GarbageCollectionForTesting(
           stack_state == BlinkGC::kNoHeapPointersOnStack
-              ? v8::EmbedderHeapTracer::EmbedderStackState::kEmpty
-              : v8::EmbedderHeapTracer::EmbedderStackState::kUnknown);
+              ? v8::EmbedderHeapTracer::EmbedderStackState::kNoHeapPointers
+              : v8::EmbedderHeapTracer::EmbedderStackState::
+                    kMayContainHeapPointers);
     } else {
       CollectGarbage(BlinkGC::CollectionType::kMajor, stack_state,
                      BlinkGC::kAtomicMarking, BlinkGC::kEagerSweeping,

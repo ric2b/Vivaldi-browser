@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "base/check_op.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -53,7 +53,7 @@ Slider::Slider(SliderListener* listener)
       pending_accessibility_value_change_(false) {
   highlight_animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(150));
   EnableCanvasFlippingForRTLUI(true);
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 #else
   SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -134,7 +134,7 @@ void Slider::SetValueInternal(float value, SliderChangeReason reason) {
   if (listener_)
     listener_->SliderValueChanged(this, value_, old_value, reason);
 
-  if (old_value_valid && base::MessageLoopCurrent::Get()) {
+  if (old_value_valid && base::CurrentThread::Get()) {
     // Do not animate when setting the value of the slider for the first time.
     // There is no message-loop when running tests. So we cannot animate then.
     if (!move_animation_) {

@@ -113,7 +113,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
       Widget::MoveLoopEscapeBehavior escape_behavior) override;
   void EndMoveLoop() override;
   void SetVisibilityChangedAnimationsEnabled(bool value) override;
-  NonClientFrameView* CreateNonClientFrameView() override;
+  std::unique_ptr<NonClientFrameView> CreateNonClientFrameView() override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;
@@ -175,7 +175,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   bool WidgetSizeIsClientSize() const override;
   bool IsModal() const override;
   int GetInitialShowState() const override;
-  bool WillProcessWorkAreaChange() const override;
   int GetNonClientComponent(const gfx::Point& point) const override;
   void GetWindowMask(const gfx::Size& size, SkPath* path) override;
   bool GetClientAreaInsets(gfx::Insets* insets,

@@ -30,10 +30,18 @@ class MenuManager {
 
     /** @private {AutomationNode} */
     this.menuAutomationNode_;
+
+    /** @private {!EventHandler} */
+    this.clickHandler_ = new EventHandler(
+        [], chrome.automation.EventType.CLICKED,
+        this.onButtonClicked_.bind(this));
   }
 
-  static initialize() {
-    MenuManager.instance = new MenuManager();
+  static get instance() {
+    if (!MenuManager.instance_) {
+      MenuManager.instance_ = new MenuManager();
+    }
+    return MenuManager.instance_;
   }
 
   // ================= Static Methods ==================
@@ -44,7 +52,7 @@ class MenuManager {
    */
   static enter() {
     const node = NavigationManager.currentNode;
-    if (!MenuManager.instance || node.actions.length <= 1 || !node.location) {
+    if (node.actions.length <= 1 || !node.location) {
       node.doDefaultAction();
       return;
     }
@@ -55,28 +63,27 @@ class MenuManager {
 
   /** Exits the menu. */
   static exit() {
-    if (MenuManager.instance) {
-      if (MenuManager.instance.inTextNavigation_) {
-        // If we're exiting the text navigation menu, we simply return to the
-        // main menu.
-        MenuManager.instance.openMainMenu_();
-        return;
-      }
-
-      MenuManager.instance.isMenuOpen_ = false;
-      MenuManager.instance.actionNode_ = null;
-      MenuManager.instance.displayedActions_ = null;
-      MenuManager.instance.displayedLocation_ = null;
-      NavigationManager.exitIfInGroup(MenuManager.instance.menuAutomationNode_);
-      MenuManager.instance.menuAutomationNode_ = null;
+    if (MenuManager.instance.inTextNavigation_) {
+      // If we're exiting the text navigation menu, we simply return to the
+      // main menu.
+      MenuManager.instance.openMainMenu_();
+      return;
     }
+
+    MenuManager.instance.isMenuOpen_ = false;
+    MenuManager.instance.actionNode_ = null;
+    MenuManager.instance.displayedActions_ = null;
+    MenuManager.instance.displayedLocation_ = null;
+    NavigationManager.exitIfInGroup(MenuManager.instance.menuAutomationNode_);
+    MenuManager.instance.menuAutomationNode_ = null;
+
     chrome.accessibilityPrivate.updateSwitchAccessBubble(
         chrome.accessibilityPrivate.SwitchAccessBubble.MENU, false /* show */);
   }
 
   /** @return {boolean} */
   static isMenuOpen() {
-    return MenuManager.instance && MenuManager.instance.isMenuOpen_;
+    return MenuManager.instance.isMenuOpen_;
   }
 
   /** @param {!SAChildNode} node */
@@ -88,15 +95,11 @@ class MenuManager {
     MenuManager.instance.refreshActions_();
   }
 
-  /**
-   * Checks if the given node is the Switch Access menu node.
-   * @param {AutomationNode} node
-   * @return {boolean}
-   * @private
-   */
-  static isSwitchAccessMenuNode_(node) {
-    return !!node && node.role === chrome.automation.RoleType.MENU &&
-        node.htmlAttributes.id === 'switch_access_menu_view';
+  static refreshMenu() {
+    if (!MenuManager.isMenuOpen()) {
+      return;
+    }
+    MenuManager.instance.refreshActions_();
   }
 
   // ================= Private Methods ==================
@@ -151,8 +154,11 @@ class MenuManager {
     if (this.hasValidMenuAutomationNode_() && this.menuAutomationNode_) {
       this.jumpToMenuAutomationNode_(this.menuAutomationNode_);
     }
-    SwitchAccess.findNodeMatchingPredicate(
-        MenuManager.isSwitchAccessMenuNode_,
+    SwitchAccess.findNodeMatching(
+        {
+          role: chrome.automation.RoleType.MENU,
+          attributes: {className: 'SwitchAccessMenuView'}
+        },
         this.jumpToMenuAutomationNode_.bind(this));
   }
 
@@ -194,24 +200,20 @@ class MenuManager {
     // If the menu hasn't fully loaded, wait for that before jumping.
     if (node.children.length < 1 ||
         node.firstChild.state[chrome.automation.StateType.OFFSCREEN]) {
-      const callback = () => {
-        node.removeEventListener(
-            chrome.automation.EventType.CHILDREN_CHANGED, callback, false);
-        node.removeEventListener(
-            chrome.automation.EventType.LOCATION_CHANGED, callback, false);
-        this.jumpToMenuAutomationNode_(node);
-      };
-      node.addEventListener(
-          chrome.automation.EventType.CHILDREN_CHANGED, callback, false);
-      node.addEventListener(
-          chrome.automation.EventType.LOCATION_CHANGED, callback, false);
+      new EventHandler(
+          node,
+          [
+            chrome.automation.EventType.CHILDREN_CHANGED,
+            chrome.automation.EventType.LOCATION_CHANGED
+          ],
+          this.jumpToMenuAutomationNode_.bind(this, node), {listenOnce: true})
+          .start();
       return;
     }
 
     this.menuAutomationNode_ = node;
-    this.menuAutomationNode_.addEventListener(
-        chrome.automation.EventType.CLICKED, this.onButtonClicked_.bind(this),
-        false);
+    this.clickHandler_.setNodes(this.menuAutomationNode_);
+    this.clickHandler_.start();
     NavigationManager.jumpToSwitchAccessMenu(this.menuAutomationNode_);
   }
 
@@ -285,7 +287,8 @@ class MenuManager {
    * @private
    */
   refreshActions_() {
-    if (!this.actionNode_.location || this.actionNode_.actions.length <= 1) {
+    if (!this.actionNode_.isValidAndVisible() ||
+        this.actionNode_.actions.length <= 1) {
       MenuManager.exit();
       return;
     }

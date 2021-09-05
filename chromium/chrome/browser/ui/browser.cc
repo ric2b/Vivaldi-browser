@@ -41,8 +41,8 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/content_settings/sound_content_setting_observer.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/custom_handlers/register_protocol_handler_permission_request.h"
@@ -163,7 +163,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/captive_portal/core/buildflags.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/find_in_page/find_tab_helper.h"
@@ -218,6 +218,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
+#include "extensions/browser/process_map.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -814,7 +815,7 @@ base::string16 Browser::GetWindowTitleFromWebContents(
   if (title.empty() && (is_type_normal() || is_type_popup()))
     title = CoreTabHelper::GetDefaultTitle();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On Mac, we don't want to suffix the page title with the application name.
   return title;
 #else
@@ -944,7 +945,7 @@ void Browser::OnWindowClosing() {
       TabRestoreServiceFactory::GetForProfile(profile());
 
   bool notify_restore_service = is_type_normal() && tab_strip_model_->count();
-#if defined(USE_AURA) || defined(OS_MACOSX)
+#if defined(USE_AURA) || defined(OS_MAC)
   notify_restore_service |= is_type_app() || is_type_app_popup();
 #endif
 
@@ -1271,17 +1272,17 @@ void Browser::TabPinnedStateChanged(TabStripModel* tab_strip_model,
 
 void Browser::TabGroupedStateChanged(
     base::Optional<tab_groups::TabGroupId> group,
+    content::WebContents* contents,
     int index) {
   SessionService* const session_service =
       SessionServiceFactory::GetForProfile(profile_);
-  if (session_service) {
-    content::WebContents* const web_contents =
-        tab_strip_model_->GetWebContentsAt(index);
-    sessions::SessionTabHelper* const session_tab_helper =
-        sessions::SessionTabHelper::FromWebContents(web_contents);
-    session_service->SetTabGroup(session_id(), session_tab_helper->session_id(),
-                                 std::move(group));
-  }
+  if (!session_service)
+    return;
+
+  sessions::SessionTabHelper* const session_tab_helper =
+      sessions::SessionTabHelper::FromWebContents(contents);
+  session_service->SetTabGroup(session_id(), session_tab_helper->session_id(),
+                               std::move(group));
 }
 
 void Browser::TabStripEmpty() {
@@ -1310,7 +1311,7 @@ int Browser::GetTopControlsHeight() {
 }
 
 bool Browser::DoBrowserControlsShrinkRendererSize(
-    const content::WebContents* contents) {
+    content::WebContents* contents) {
   return window_->DoBrowserControlsShrinkRendererSize(contents);
 }
 
@@ -1477,11 +1478,14 @@ bool Browser::ShouldAllowRunningInsecureContent(
     // Note: this is a browser-side-translation of the call to
     // DidBlockContentType from inside
     // ContentSettingsObserver::allowRunningInsecureContent.
-    content_settings::TabSpecificContentSettings* tab_settings =
-        content_settings::TabSpecificContentSettings::FromWebContents(
-            web_contents);
-    DCHECK(tab_settings);
-    tab_settings->OnContentBlocked(ContentSettingsType::MIXEDSCRIPT);
+    // TODO(https://crbug.com/1103176): Plumb the actual frame reference here
+    // (MixedContentNavigationThrottle::ShouldBlockNavigation has
+    // |mixed_content_frame| reference)
+    content_settings::PageSpecificContentSettings* page_settings =
+        content_settings::PageSpecificContentSettings::GetForFrame(
+            web_contents->GetMainFrame());
+    DCHECK(page_settings);
+    page_settings->OnContentBlocked(ContentSettingsType::MIXEDSCRIPT);
   }
   return allowed;
 }
@@ -1528,6 +1532,20 @@ std::unique_ptr<content::WebContents> Browser::ActivatePortalWebContents(
   return SwapWebContents(predecessor_contents, std::move(portal_contents));
 }
 
+void Browser::UpdateInspectedWebContentsIfNecessary(
+    content::WebContents* old_contents,
+    content::WebContents* new_contents,
+    base::OnceCallback<void()> callback) {
+  DevToolsWindow* dev_tools_window =
+      DevToolsWindow::GetInstanceForInspectedWebContents(old_contents);
+  if (dev_tools_window) {
+    dev_tools_window->UpdateInspectedWebContents(new_contents,
+                                                 std::move(callback));
+  } else {
+    std::move(callback).Run();
+  }
+}
+
 std::unique_ptr<content::WebContents> Browser::SwapWebContents(
     content::WebContents* old_contents,
     std::unique_ptr<content::WebContents> new_contents) {
@@ -1542,11 +1560,6 @@ std::unique_ptr<content::WebContents> Browser::SwapWebContents(
     if (old_view && new_view)
       new_view->TakeFallbackContentFrom(old_view);
   }
-
-  DevToolsWindow* dev_tools_window =
-      DevToolsWindow::GetInstanceForInspectedWebContents(old_contents);
-  if (dev_tools_window)
-    dev_tools_window->UpdateInspectedWebContents(new_contents.get());
 
   // TODO(crbug.com/836409): TabLoadTracker should not rely on being notified
   // directly about tab contents swaps.
@@ -1709,7 +1722,7 @@ void Browser::AddNewContents(WebContents* source,
                              const gfx::Rect& initial_rect,
                              bool user_gesture,
                              bool* was_blocked) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On the Mac, the convention is to turn popups into new tabs when in
   // fullscreen mode. Only worry about user-initiated fullscreen as showing a
   // popup in HTML5 fullscreen would have kicked the page out of fullscreen.
@@ -1959,7 +1972,7 @@ std::unique_ptr<content::EyeDropper> Browser::OpenEyeDropper(
 
 void Browser::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const blink::mojom::FileChooserParams& params) {
   FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
                                    params);
@@ -1967,7 +1980,7 @@ void Browser::RunFileChooser(
 
 void Browser::EnumerateDirectory(
     WebContents* web_contents,
-    std::unique_ptr<content::FileSelectListener> listener,
+    scoped_refptr<content::FileSelectListener> listener,
     const base::FilePath& path) {
   FileSelectHelper::EnumerateDirectory(web_contents, std::move(listener), path);
 }
@@ -1998,19 +2011,26 @@ blink::mojom::DisplayMode Browser::GetDisplayMode(
   if (window_->IsFullscreen())
     return blink::mojom::DisplayMode::kFullscreen;
 
-  if (is_type_app() || is_type_devtools() || is_type_app_popup())
+  if (is_type_app() || is_type_devtools() || is_type_app_popup()) {
+    if (app_controller_ && app_controller_->HasMinimalUiButtons())
+      return blink::mojom::DisplayMode::kMinimalUi;
     return blink::mojom::DisplayMode::kStandalone;
+  }
 
   return blink::mojom::DisplayMode::kBrowser;
 }
 
-void Browser::RegisterProtocolHandler(WebContents* web_contents,
-                                      const std::string& protocol,
-                                      const GURL& url,
-                                      bool user_gesture) {
-  content::BrowserContext* context = web_contents->GetBrowserContext();
+void Browser::RegisterProtocolHandler(
+    content::RenderFrameHost* requesting_frame,
+    const std::string& protocol,
+    const GURL& url,
+    bool user_gesture) {
+  content::BrowserContext* context = requesting_frame->GetBrowserContext();
   if (context->IsOffTheRecord())
     return;
+
+  auto* web_contents =
+      content::WebContents::FromRenderFrameHost(requesting_frame);
 
   // Permission request UI cannot currently be rendered binocularly in VR mode,
   // so we suppress the UI. crbug.com/736568
@@ -2028,11 +2048,14 @@ void Browser::RegisterProtocolHandler(WebContents* web_contents,
   if (registry->SilentlyHandleRegisterHandlerRequest(handler))
     return;
 
-  auto* tab_content_settings_delegate =
-      chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents);
+  // TODO(carlscab): This should probably be FromFrame() once it becomes
+  // PageSpecificContentSettingsDelegate
+  auto* page_content_settings_delegate =
+      chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+          web_contents);
   if (!user_gesture && window_) {
-    tab_content_settings_delegate->set_pending_protocol_handler(handler);
-    tab_content_settings_delegate->set_previous_protocol_handler(
+    page_content_settings_delegate->set_pending_protocol_handler(handler);
+    page_content_settings_delegate->set_previous_protocol_handler(
         registry->GetHandlerFor(handler.protocol()));
     if (window_->GetLocationBar()) {
     window_->GetLocationBar()->UpdateContentSettingsIcons();
@@ -2043,7 +2066,7 @@ void Browser::RegisterProtocolHandler(WebContents* web_contents,
   // Make sure content-setting icon is turned off in case the page does
   // ungestured and gestured RPH calls.
   if (window_) {
-    tab_content_settings_delegate->ClearPendingProtocolHandler();
+    page_content_settings_delegate->ClearPendingProtocolHandler();
     window_->GetLocationBar()->UpdateContentSettingsIcons();
   }
 
@@ -2056,18 +2079,20 @@ void Browser::RegisterProtocolHandler(WebContents* web_contents,
         web_contents->ForSecurityDropFullscreen();
 
     permission_request_manager->AddRequest(
+        requesting_frame,
         new RegisterProtocolHandlerPermissionRequest(
             registry, handler, url, user_gesture, std::move(fullscreen_block)));
   }
 }
 
-void Browser::UnregisterProtocolHandler(WebContents* web_contents,
-                                        const std::string& protocol,
-                                        const GURL& url,
-                                        bool user_gesture) {
+void Browser::UnregisterProtocolHandler(
+    content::RenderFrameHost* requesting_frame,
+    const std::string& protocol,
+    const GURL& url,
+    bool user_gesture) {
   // user_gesture will be used in case we decide to have confirmation bubble
   // for user while un-registering the handler.
-  content::BrowserContext* context = web_contents->GetBrowserContext();
+  content::BrowserContext* context = requesting_frame->GetBrowserContext();
   if (context->IsOffTheRecord())
     return;
 
@@ -2164,9 +2189,10 @@ void Browser::RequestPpapiBrokerPermission(
     return;
   }
 
-  content_settings::TabSpecificContentSettings* tab_content_settings =
-      content_settings::TabSpecificContentSettings::FromWebContents(
-          web_contents);
+  // TODO(https://crbug.com/1103176): Plumb the actual frame reference here
+  content_settings::PageSpecificContentSettings* tab_content_settings =
+      content_settings::PageSpecificContentSettings::GetForFrame(
+          web_contents->GetMainFrame());
 
   HostContentSettingsMap* content_settings =
       HostContentSettingsMapFactory::GetForProfile(profile);
@@ -2195,7 +2221,9 @@ void Browser::RequestPpapiBrokerPermission(
   base::RecordAction(allowed
                          ? base::UserMetricsAction("PPAPI.BrokerSettingAllow")
                          : base::UserMetricsAction("PPAPI.BrokerSettingDeny"));
-  tab_content_settings->SetPepperBrokerAllowed(allowed);
+  if (tab_content_settings) {
+    tab_content_settings->SetPepperBrokerAllowed(allowed);
+  }
   std::move(callback).Run(allowed);
 #endif
 }
@@ -2213,7 +2241,7 @@ void Browser::PrintCrossProcessSubframe(
 #endif
 
 #if BUILDFLAG(ENABLE_PAINT_PREVIEW)
-void Browser::CapturePaintPreviewOfCrossProcessSubframe(
+void Browser::CapturePaintPreviewOfSubframe(
     content::WebContents* web_contents,
     const gfx::Rect& rect,
     const base::UnguessableToken& guid,
@@ -2241,7 +2269,7 @@ void Browser::SetWebContentsBlocked(content::WebContents* web_contents,
   // For security, if the WebContents is in fullscreen, have it drop fullscreen.
   // This gives the user the context they need in order to make informed
   // decisions.
-  if (web_contents->IsFullscreenForCurrentTab()) {
+  if (web_contents->IsFullscreen()) {
     // FullscreenWithinTab mode exception: In this case, the browser window is
     // in its normal layout and not fullscreen (tab content rendering is in a
     // "simulated fullscreen" state for the benefit of screen capture). Thus,
@@ -2446,7 +2474,7 @@ void Browser::OnActiveTabChanged(WebContents* old_contents,
 // background color, so it does not need this block of code. Aura should
 // implement this as well.
 // https://crbug.com/719230
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // Copies the background color from an old WebContents to a new one that
   // replaces it on the screen. This allows the new WebContents to use the
   // old one's background color as the starting background color, before having
@@ -2757,7 +2785,7 @@ void Browser::SyncHistoryWithTabs(int index) {
 // Browser, In-progress download termination handling (private):
 
 bool Browser::CanCloseWithInProgressDownloads() {
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_MAC) || defined(OS_CHROMEOS)
   // On Mac and ChromeOS, non-incognito download can still continue after window
   // is closed.
   if (!profile_->IsOffTheRecord())

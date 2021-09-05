@@ -12,7 +12,6 @@ import {isRTL} from 'chrome://resources/js/util.m.js';
 import {AlertIndicatorsElement} from './alert_indicators.js';
 import {CustomElement} from './custom_element.js';
 import {TabStripEmbedderProxy, TabStripEmbedderProxyImpl} from './tab_strip_embedder_proxy.js';
-import {tabStripOptions} from './tab_strip_options.js';
 import {TabSwiper} from './tab_swiper.js';
 import {CloseTabAction, TabData, TabNetworkState, TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
 
@@ -201,6 +200,13 @@ export class TabElement extends CustomElement {
     return this.dragImageEl_;
   }
 
+  /** @return {!HTMLElement} */
+  getDragImageCenter() {
+    // dragImageEl_ has padding, so the drag image should be centered relative
+    // to tabEl_, the element within the padding.
+    return this.tabEl_;
+  }
+
   /**
    * @param {string} imgData
    */
@@ -218,9 +224,7 @@ export class TabElement extends CustomElement {
     this.onTabActivating_(tabId);
     this.tabsApi_.activateTab(tabId);
 
-    if (tabStripOptions.autoCloseEnabled) {
-      this.embedderApi_.closeContainer();
-    }
+    this.embedderApi_.closeContainer();
   }
 
   /**
@@ -229,13 +233,6 @@ export class TabElement extends CustomElement {
    */
   onContextMenu_(event) {
     event.preventDefault();
-
-    if (!this.tab_) {
-      return;
-    }
-
-    this.embedderApi_.showTabContextMenu(
-        this.tab_.id, event.clientX, event.clientY);
     event.stopPropagation();
   }
 
@@ -274,6 +271,11 @@ export class TabElement extends CustomElement {
    */
   setDragging(isDragging) {
     this.toggleAttribute('dragging_', isDragging);
+  }
+
+  /** @param {boolean} isDraggedOut */
+  setDraggedOut(isDraggedOut) {
+    this.toggleAttribute('dragged-out_', isDraggedOut);
   }
 
   /**

@@ -377,6 +377,11 @@ const struct QuicErrorMapping {
      "quic.http_zero_rtt_resumption_settings_mismatch"},
     {quic::QUIC_HTTP_ZERO_RTT_REJECTION_SETTINGS_MISMATCH,
      "quic.http_zero_rtt_rejection_settings_mismatch"},
+    {quic::QUIC_HTTP_GOAWAY_INVALID_STREAM_ID,
+     "quic.quic_http_goaway_invalid_stream_id"},
+    {quic::QUIC_HTTP_GOAWAY_ID_LARGER_THAN_PREVIOUS,
+     "quic.quic_http_goaway_id_larger_than_previous"},
+    {quic::QUIC_SILENT_IDLE_TIMEOUT, "quic.silent_idle_timeout"},
 
     // QUIC_INVALID_APPLICATION_CLOSE_DATA was code 101. The code has been
     // deprecated, but to keep the assert below happy, there needs to be

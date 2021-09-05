@@ -11,7 +11,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
-#include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/web/web_heap.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_video_capturer_source.h"
@@ -162,11 +161,11 @@ TEST_F(CanvasCaptureHandlerTest, DestructHandler) {
 // Checks that VideoCapturerSource call sequence works fine.
 TEST_P(CanvasCaptureHandlerTest, GetFormatsStartAndStop) {
   InSequence s;
-  const WebMediaStreamSource& web_media_stream_source = component_->Source();
-  EXPECT_FALSE(web_media_stream_source.IsNull());
+  MediaStreamSource* const media_stream_source = component_->Source();
+  EXPECT_TRUE(media_stream_source);
   blink::MediaStreamVideoCapturerSource* const ms_source =
       static_cast<blink::MediaStreamVideoCapturerSource*>(
-          web_media_stream_source.GetPlatformSource());
+          media_stream_source->GetPlatformSource());
   EXPECT_TRUE(ms_source);
   media::VideoCapturerSource* source = GetVideoCapturerSource(ms_source);
   EXPECT_TRUE(source);

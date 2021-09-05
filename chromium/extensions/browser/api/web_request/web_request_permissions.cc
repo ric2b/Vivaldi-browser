@@ -19,6 +19,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/process_map.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
@@ -199,7 +200,7 @@ bool IsSensitiveGoogleClientUrl(const extensions::WebRequestInfo& request) {
 
   base::StringPiece host = url.host_piece();
 
-  while (host.ends_with("."))
+  while (base::EndsWith(host, "."))
     host.remove_suffix(1u);
 
   // Check for "clients[0-9]*.google.com" hosts.

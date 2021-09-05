@@ -42,7 +42,7 @@ enum RequestPriority {
   kHighest
 };
 
-// This enum corresponds to net::URLRequest::ReferrerPolicy. See its comments.
+// This enum corresponds to net::ReferrerPolicy. See its comments.
 enum URLRequestReferrerPolicy {
   kClearReferrerOnTransitionFromSecureToInsecure,
   kReduceReferrerGranularityOnTransitionCrossOrigin,
@@ -62,6 +62,7 @@ enum DataElementType {
   // Only used for Upload with Network Service as of now:
   kDataPipe,
   kChunkedDataPipe,
+  kReadOnceStream,
   kRawFile,
 
   // Used for Upload when Network Service is disabled:
@@ -150,7 +151,7 @@ struct URLRequest {
   //
   // See also:
   // - |isolated_world_origin|
-  // - URLLoaderFactoryParams::request_initiator_site_lock
+  // - URLLoaderFactoryParams::request_initiator_origin_lock
   url.mojom.Origin? request_initiator;
 
   // If this is a subresource request initiated from an isolated world (e.g.

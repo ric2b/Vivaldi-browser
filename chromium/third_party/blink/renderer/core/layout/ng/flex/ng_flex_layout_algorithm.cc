@@ -7,6 +7,7 @@
 #include <memory>
 #include "third_party/blink/renderer/core/layout/flexible_box_algorithm.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/core/layout/layout_button.h"
 #include "third_party/blink/renderer/core/layout/layout_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/ng/flex/ng_flex_child_iterator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
@@ -33,7 +34,6 @@ NGFlexLayoutAlgorithm::NGFlexLayoutAlgorithm(
       is_cross_size_definite_(IsContainerCrossSizeDefinite()) {
   container_builder_.SetIsNewFormattingContext(
       params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
 
   border_box_size_ = container_builder_.InitialBorderBoxSize();
   child_percentage_size_ = CalculateChildPercentageSize(
@@ -423,7 +423,7 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems() {
         ComputePhysicalMargins(flex_basis_space, child_style);
 
     NGBoxStrut border_padding_in_child_writing_mode =
-        ComputeBorders(flex_basis_space, child_style) +
+        ComputeBorders(flex_basis_space, child) +
         ComputePadding(flex_basis_space, child_style);
 
     NGPhysicalBoxStrut physical_border_padding(
@@ -605,12 +605,9 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems() {
     // https://www.w3.org/TR/css-flexbox-1/#algo-main-item
     // Blink's FlexibleBoxAlgorithm expects it to be content + scrollbar widths,
     // but no padding or border.
-    // The ClampNegativeToZero is needed for the last canvas element in
-    // flexbox-flex-basis-content-001a.html. It's possibly only needed because
-    // we don't properly account for borders+padding when multiplying by the
-    // aspect ratio.
+    DCHECK_GE(flex_base_border_box, main_axis_border_padding);
     LayoutUnit flex_base_content_size =
-        (flex_base_border_box - main_axis_border_padding).ClampNegativeToZero();
+        flex_base_border_box - main_axis_border_padding;
 
     const Length& min = is_horizontal_flow_ ? child.Style().MinWidth()
                                             : child.Style().MinHeight();
@@ -856,6 +853,33 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::LayoutInternal() {
       LogicalSize available_size;
       NGBoxStrut margins = flex_item.physical_margins.ConvertToLogical(
           ConstraintSpace().GetWritingMode(), Style().Direction());
+      LayoutUnit fixed_aspect_ratio_cross_size = kIndefiniteSize;
+      if (RuntimeEnabledFeatures::FlexAspectRatioEnabled() &&
+          flex_item.ng_input_node.HasAspectRatio() &&
+          flex_item.ng_input_node.IsReplaced()) {
+        // This code derives the cross axis size from the flexed main size and
+        // the aspect ratio. We can delete this code when
+        // NGReplacedLayoutAlgorithm exists, because it will do this for us.
+        NGConstraintSpace flex_basis_space =
+            BuildSpaceForFlexBasis(flex_item.ng_input_node);
+        const Length& cross_axis_length =
+            is_horizontal_flow_ ? child_style.Height() : child_style.Width();
+        // Only derive the cross axis size from the aspect ratio if the computed
+        // cross axis length might be indefinite. The item's cross axis length
+        // might still be definite if it is stretched, but that is checked in
+        // the |WillChildCrossSizeBeContainerCrossSize| calls below.
+        if (cross_axis_length.IsAuto() ||
+            (MainAxisIsInlineAxis(flex_item.ng_input_node) &&
+             BlockLengthUnresolvable(flex_basis_space, cross_axis_length,
+                                     LengthResolvePhase::kLayout))) {
+          fixed_aspect_ratio_cross_size =
+              flex_item.min_max_cross_sizes->ClampSizeToMinAndMax(
+                  flex_item.cross_axis_border_padding +
+                  LayoutUnit(
+                      flex_item.flexed_content_size /
+                      GetMainOverCrossAspectRatio(flex_item.ng_input_node)));
+        }
+      }
       if (is_column_) {
         available_size.inline_size = ChildAvailableSize().inline_size;
         available_size.block_size =
@@ -865,6 +889,9 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::LayoutInternal() {
           space_builder.SetIsFixedInlineSize(true);
           available_size.inline_size = CalculateFixedCrossSize(
               flex_item.min_max_cross_sizes.value(), margins);
+        } else if (fixed_aspect_ratio_cross_size != kIndefiniteSize) {
+          space_builder.SetIsFixedInlineSize(true);
+          available_size.inline_size = fixed_aspect_ratio_cross_size;
         }
         // https://drafts.csswg.org/css-flexbox/#definite-sizes
         // If the flex container has a definite main size, a flex item's
@@ -883,6 +910,9 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::LayoutInternal() {
           space_builder.SetIsFixedBlockSize(true);
           available_size.block_size = CalculateFixedCrossSize(
               flex_item.min_max_cross_sizes.value(), margins);
+        } else if (fixed_aspect_ratio_cross_size != kIndefiniteSize) {
+          space_builder.SetIsFixedBlockSize(true);
+          available_size.block_size = fixed_aspect_ratio_cross_size;
         } else if (DoesItemStretch(flex_item.ng_input_node)) {
           // If we are in a row flexbox, and we don't have a fixed block-size
           // (yet), use the "measure" cache slot. This will be the first
@@ -912,6 +942,15 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::LayoutInternal() {
       if (ShouldItemShrinkToFit(flex_item.ng_input_node))
         space_builder.SetIsShrinkToFit(true);
 
+      // For a button child, we need the baseline type same as the container's
+      // baseline type for UseCounter. For example, if the container's display
+      // property is 'inline-block', we need the last-line baseline of the
+      // child. See the bottom of GiveLinesAndItemsFinalPositionAndSize().
+      if (Node().IsButton()) {
+        space_builder.SetBaselineAlgorithmType(
+            ConstraintSpace().BaselineAlgorithmType());
+      }
+
       NGConstraintSpace child_space = space_builder.ToConstraintSpace();
       flex_item.layout_result =
           flex_item.ng_input_node.Layout(child_space, nullptr /*break token*/);
@@ -932,8 +971,7 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::LayoutInternal() {
 
   LayoutUnit intrinsic_block_size = BorderScrollbarPadding().BlockSum();
 
-  if (algorithm_->FlexLines().IsEmpty() &&
-      To<LayoutBlock>(Node().GetLayoutBox())->HasLineIfEmpty()) {
+  if (algorithm_->FlexLines().IsEmpty() && Node().HasLineIfEmpty()) {
     intrinsic_block_size += Node().GetLayoutBox()->LogicalHeightForEmptyLine();
   } else {
     intrinsic_block_size += algorithm_->IntrinsicContentBlockSize();
@@ -953,11 +991,7 @@ scoped_refptr<const NGLayoutResult> NGFlexLayoutAlgorithm::LayoutInternal() {
   if (!success)
     return nullptr;
 
-  NGOutOfFlowLayoutPart(
-      Node(), ConstraintSpace(),
-      container_builder_.Borders() + container_builder_.Scrollbar(),
-      &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   return container_builder_.ToBoxFragment();
 }
@@ -1097,8 +1131,67 @@ bool NGFlexLayoutAlgorithm::GiveLinesAndItemsFinalPositionAndSize() {
   if (!container_builder_.Baseline() && fallback_baseline)
     container_builder_.SetBaseline(*fallback_baseline);
 
+  if (Node().IsButton())
+    AdjustButtonBaseline(final_content_cross_size);
+
   // Signal if we need to relayout with new child scrollbar information.
   return success;
+}
+
+void NGFlexLayoutAlgorithm::AdjustButtonBaseline(
+    LayoutUnit final_content_cross_size) {
+  // See LayoutButton::BaselinePosition()
+  if (!Node().HasLineIfEmpty() && !Node().ShouldApplyLayoutContainment() &&
+      !container_builder_.Baseline()) {
+    // To ensure that we have a consistent baseline when we have no children,
+    // even when we have the anonymous LayoutBlock child, we calculate the
+    // baseline for the empty case manually here.
+    container_builder_.SetBaseline(BorderScrollbarPadding().block_start +
+                                   final_content_cross_size);
+    return;
+  }
+
+  // Apply flexbox's baseline as is.  That is to say, the baseline of the
+  // first line.
+  // However, we count the differences between it and the last-line baseline
+  // of the anonymous block. crbug.com/690036.
+  // We also have a difference in empty buttons. See crbug.com/304848.
+
+  const LayoutObject* parent = Node().GetLayoutBox()->Parent();
+  if (!LayoutButton::ShouldCountWrongBaseline(
+          Style(), parent ? parent->Style() : nullptr))
+    return;
+
+  // The button should have at most one child.
+  const NGContainerFragmentBuilder::ChildrenVector& children =
+      container_builder_.Children();
+  if (children.size() < 1) {
+    const LayoutBlock* layout_block = To<LayoutBlock>(Node().GetLayoutBox());
+    base::Optional<LayoutUnit> baseline = layout_block->BaselineForEmptyLine(
+        layout_block->IsHorizontalWritingMode() ? kHorizontalLine
+                                                : kVerticalLine);
+    if (container_builder_.Baseline() != baseline) {
+      UseCounter::Count(Node().GetDocument(),
+                        WebFeature::kWrongBaselineOfEmptyLineButton);
+    }
+    return;
+  }
+  DCHECK_EQ(children.size(), 1u);
+  const NGContainerFragmentBuilder::ChildWithOffset& child = children[0];
+  DCHECK(!child.fragment->IsLineBox());
+  const NGConstraintSpace& space = ConstraintSpace();
+  NGBoxFragment fragment(space.GetWritingMode(), space.Direction(),
+                         To<NGPhysicalBoxFragment>(*child.fragment));
+  base::Optional<LayoutUnit> child_baseline =
+      space.BaselineAlgorithmType() == NGBaselineAlgorithmType::kFirstLine
+          ? fragment.FirstBaseline()
+          : fragment.Baseline();
+  if (child_baseline)
+    child_baseline = *child_baseline + child.offset.block_offset;
+  if (container_builder_.Baseline() != child_baseline) {
+    UseCounter::Count(Node().GetDocument(),
+                      WebFeature::kWrongBaselineOfMultiLineButton);
+  }
 }
 
 void NGFlexLayoutAlgorithm::PropagateBaselineFromChild(
@@ -1111,7 +1204,8 @@ void NGFlexLayoutAlgorithm::PropagateBaselineFromChild(
     return;
 
   LayoutUnit baseline_offset =
-      block_offset + fragment.Baseline().value_or(fragment.BlockSize());
+      block_offset + (Node().IsButton() ? fragment.FirstBaselineOrSynthesize()
+                                        : fragment.BaselineOrSynthesize());
 
   // We prefer a baseline from a child with baseline alignment, and no
   // auto-margins in the cross axis (even if we have to synthesize the

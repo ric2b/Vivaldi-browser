@@ -9,19 +9,22 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.DialogInterface.OnCancelListener;
+import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.os.Build;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.provider.Browser;
 import android.provider.Telephony;
 import android.text.TextUtils;
 import android.util.Pair;
+import android.view.WindowManager.BadTokenException;
 import android.webkit.MimeTypeMap;
 import android.webkit.WebView;
 
@@ -42,6 +45,8 @@ import org.chromium.base.task.PostTask;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
+import org.chromium.components.webapk.lib.client.ChromeWebApkHostSignature;
+import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
@@ -49,6 +54,7 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.network.mojom.ReferrerPolicy;
+import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.PermissionCallback;
 import org.chromium.url.URI;
@@ -164,7 +170,7 @@ public class ExternalNavigationHandler {
 
     // Helper class to return a boolean by reference.
     private static class MutableBoolean {
-        private Boolean mValue = null;
+        private Boolean mValue;
         public void set(boolean value) {
             mValue = value;
         }
@@ -958,8 +964,7 @@ public class ExternalNavigationHandler {
             boolean shouldProxyForInstantApps) {
         // This intent may leave this app. Warn the user that incognito does not carry over
         // to external apps.
-        if (mDelegate.startIncognitoIntent(targetIntent, params.getReferrerUrl(),
-                    browserFallbackUrl,
+        if (startIncognitoIntent(targetIntent, params.getReferrerUrl(), browserFallbackUrl,
                     params.shouldCloseContentsOnOverrideUrlLoadingAndLaunchIntent(),
                     shouldProxyForInstantApps)) {
             if (DEBUG) Log.i(TAG, "Incognito navigation out");
@@ -967,6 +972,81 @@ public class ExternalNavigationHandler {
         }
         if (DEBUG) Log.i(TAG, "Failed to show incognito alert dialog.");
         return OverrideUrlLoadingResult.NO_OVERRIDE;
+    }
+
+    /**
+     * Display a dialog warning the user that they may be leaving this app by starting this
+     * intent. Give the user the opportunity to cancel the action. And if it is canceled, a
+     * navigation will happen in this app. Catches BadTokenExceptions caused by showing the dialog
+     * on certain devices. (crbug.com/782602)
+     * @param intent The intent for external application that will be sent.
+     * @param referrerUrl The referrer for the current navigation.
+     * @param fallbackUrl The URL to load if the user doesn't proceed with external intent.
+     * @param needsToCloseTab Whether the current tab has to be closed after the intent is sent.
+     * @param proxy Whether we need to proxy the intent through AuthenticatedProxyActivity (this is
+     *              used by Instant Apps intents.
+     * @return True if the function returned error free, false if it threw an exception.
+     */
+    private boolean startIncognitoIntent(final Intent intent, final String referrerUrl,
+            final String fallbackUrl, final boolean needsToCloseTab, final boolean proxy) {
+        try {
+            return startIncognitoIntentInternal(
+                    intent, referrerUrl, fallbackUrl, needsToCloseTab, proxy);
+        } catch (BadTokenException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Internal implementation of startIncognitoIntent(), with all the same parameters.
+     */
+    @VisibleForTesting
+    protected boolean startIncognitoIntentInternal(final Intent intent, final String referrerUrl,
+            final String fallbackUrl, final boolean needsToCloseTab, final boolean proxy) {
+        if (!mDelegate.hasValidTab()) return false;
+        Context context = mDelegate.getContext();
+        if (ContextUtils.activityFromContext(context) == null) return false;
+
+        new UiUtils.CompatibleAlertDialogBuilder(context, R.style.Theme_Chromium_AlertDialog)
+                .setTitle(R.string.external_app_leave_incognito_warning_title)
+                .setMessage(R.string.external_app_leave_incognito_warning)
+                .setPositiveButton(R.string.external_app_leave_incognito_leave,
+                        new OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                try {
+                                    startActivity(intent, proxy, mDelegate);
+                                    if (mDelegate.canCloseTabOnIncognitoIntentLaunch()
+                                            && needsToCloseTab) {
+                                        mDelegate.closeTab();
+                                    }
+                                } catch (ActivityNotFoundException e) {
+                                    // The activity that we thought was going to handle the intent
+                                    // no longer exists, so catch the exception and assume Chrome
+                                    // can handle it.
+                                    loadUrlFromIntent(referrerUrl, fallbackUrl,
+                                            intent.getDataString(), mDelegate, needsToCloseTab,
+                                            true);
+                                }
+                            }
+                        })
+                .setNegativeButton(R.string.external_app_leave_incognito_stay,
+                        new OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                loadUrlFromIntent(referrerUrl, fallbackUrl, intent.getDataString(),
+                                        mDelegate, needsToCloseTab, true);
+                            }
+                        })
+                .setOnCancelListener(new OnCancelListener() {
+                    @Override
+                    public void onCancel(DialogInterface dialog) {
+                        loadUrlFromIntent(referrerUrl, fallbackUrl, intent.getDataString(),
+                                mDelegate, needsToCloseTab, true);
+                    }
+                })
+                .show();
+        return true;
     }
 
     /**
@@ -986,6 +1066,19 @@ public class ExternalNavigationHandler {
             return true;
         }
         return false;
+    }
+
+    /**
+     * @param packageName The package to check.
+     * @return Whether the package is a valid WebAPK package.
+     */
+    @VisibleForTesting
+    protected boolean isValidWebApk(String packageName) {
+        // Ensure that WebApkValidator is initialized (note: this method is a no-op after the first
+        // time that it is invoked).
+        WebApkValidator.init(
+                ChromeWebApkHostSignature.EXPECTED_SIGNATURE, ChromeWebApkHostSignature.PUBLIC_KEY);
+        return WebApkValidator.isValidWebApk(ContextUtils.getApplicationContext(), packageName);
     }
 
     /**
@@ -1250,7 +1343,7 @@ public class ExternalNavigationHandler {
         }
 
         if (params.isIncognito()) {
-            if (!mDelegate.startIncognitoIntent(intent, params.getReferrerUrl(), null,
+            if (!startIncognitoIntent(intent, params.getReferrerUrl(), null,
 
                         params.shouldCloseContentsOnOverrideUrlLoadingAndLaunchIntent(), false)) {
                 if (DEBUG) Log.i(TAG, "Failed to show incognito alert dialog.");
@@ -1325,7 +1418,7 @@ public class ExternalNavigationHandler {
     private boolean launchWebApkIfSoleIntentHandler(
             List<ResolveInfo> resolvingInfos, Intent targetIntent) {
         ArrayList<String> packages = getSpecializedHandlers(resolvingInfos);
-        if (packages.size() != 1 || !mDelegate.isValidWebApk(packages.get(0))) return false;
+        if (packages.size() != 1 || !isValidWebApk(packages.get(0))) return false;
         Intent webApkIntent = new Intent(targetIntent);
         webApkIntent.setPackage(packages.get(0));
         try {
@@ -1405,25 +1498,10 @@ public class ExternalNavigationHandler {
     }
 
     /**
-     * Get a {@link Context} linked to this instance with preference to the delegate's {@link
-     * Activity}. At times the delegate might not have an associated Activity, in which case the
-     * ApplicationContext is returned.
-     * @return The activity {@link Context} if it can be reached.
-     *         Application {@link Context} if not.
-     */
-    public static Context getAvailableContext(ExternalNavigationDelegate delegate) {
-        Activity activityContext = delegate.getActivityContext();
-        if (activityContext == null) return ContextUtils.getApplicationContext();
-        return activityContext;
-    }
-
-    /**
      * Retrieve the best activity for the given intent. If a default activity is provided,
      * choose the default one. Otherwise, return the Intent picker if there are more than one
      * capable activities. If the intent is pdf type, return the platform pdf viewer if
      * it is available so user don't need to choose it from Intent picker.
-     *
-     * Note this function is slow on Android versions less than Lollipop.
      *
      * @param intent Intent to open.
      * @param allowSelfOpen Whether chrome itself is allowed to open the intent.
@@ -1477,8 +1555,13 @@ public class ExternalNavigationHandler {
             if (proxy) {
                 delegate.dispatchAuthenticatedIntent(intent);
             } else {
-                Context context = getAvailableContext(delegate);
-                if (!(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                // Start the activity via the current activity if possible, and otherwise as a new
+                // task from the application context.
+                Context context = ContextUtils.activityFromContext(delegate.getContext());
+                if (context == null) {
+                    context = ContextUtils.getApplicationContext();
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                }
                 context.startActivity(intent);
             }
             recordExternalNavigationDispatched(intent);
@@ -1529,9 +1612,9 @@ public class ExternalNavigationHandler {
                 mDelegate.dispatchAuthenticatedIntent(intent);
                 activityWasLaunched = true;
             } else {
-                Context context = getAvailableContext(mDelegate);
-                if (context instanceof Activity) {
-                    activityWasLaunched = ((Activity) context).startActivityIfNeeded(intent, -1);
+                Activity activity = ContextUtils.activityFromContext(mDelegate.getContext());
+                if (activity != null) {
+                    activityWasLaunched = activity.startActivityIfNeeded(intent, -1);
                 } else {
                     activityWasLaunched = false;
                 }
@@ -1636,7 +1719,6 @@ public class ExternalNavigationHandler {
 
     @VisibleForTesting
     protected String getDefaultSmsPackageNameFromSystem() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) return null;
         return Telephony.Sms.getDefaultSmsPackage(ContextUtils.getApplicationContext());
     }
 

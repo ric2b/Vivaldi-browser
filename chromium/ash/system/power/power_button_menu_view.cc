@@ -4,7 +4,10 @@
 
 #include "ash/system/power/power_button_menu_view.h"
 
+#include <memory>
+
 #include "ash/display/screen_orientation_controller.h"
+#include "ash/login/login_screen_controller.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -19,8 +22,10 @@
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/vector_icon_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
 
 namespace ash {
@@ -57,11 +62,11 @@ PowerButtonMenuView::PowerButtonMenuView(
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
+  layer()->SetOpacity(0.f);
   GetViewAccessibility().OverrideRole(ax::mojom::Role::kMenu);
   GetViewAccessibility().OverrideName(
       l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_ACCESSIBLE));
-
-  CreateItems();
+  RecreateItems();
 }
 
 PowerButtonMenuView::~PowerButtonMenuView() = default;
@@ -71,19 +76,17 @@ void PowerButtonMenuView::FocusPowerOffButton() {
 }
 
 void PowerButtonMenuView::ScheduleShowHideAnimation(bool show) {
-  // Cancel any previous animation.
-  layer()->GetAnimator()->AbortAllAnimations();
-
   // Set initial state.
   SetVisible(true);
-  layer()->SetOpacity(show ? 0.f : layer()->opacity());
+  layer()->GetAnimator()->AbortAllAnimations();
 
   ui::ScopedLayerAnimationSettings animation(layer()->GetAnimator());
   animation.AddObserver(this);
   animation.SetTweenType(show ? gfx::Tween::EASE_IN
                               : gfx::Tween::FAST_OUT_LINEAR_IN);
   animation.SetTransitionDuration(kMenuAnimationDuration);
-
+  animation.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
   layer()->SetOpacity(show ? 1.0f : 0.f);
 
   // Animation of the menu view bounds change.
@@ -145,43 +148,58 @@ PowerButtonMenuView::GetTransformDisplacement() const {
   return transform_displacement;
 }
 
-const char* PowerButtonMenuView::GetClassName() const {
-  return "PowerButtonMenuView";
-}
+void PowerButtonMenuView::RecreateItems() {
+  // Helper to add or remove a menu item from |this|. Stores weak pointer to
+  // |out_item_ptr|.
+  auto add_remove_item = [this](
+                             bool create, const gfx::VectorIcon& icon,
+                             const base::string16& string,
+                             PowerButtonMenuItemView** out_item_ptr) -> void {
+    // If an item needs to be created and exists, or needs to be destroyed but
+    // does not exist, there is nothing to be done.
+    if (create && *out_item_ptr)
+      return;
+    if (!create && !*out_item_ptr)
+      return;
 
-void PowerButtonMenuView::CreateItems() {
-  power_off_item_ = new PowerButtonMenuItemView(
-      this, kSystemPowerButtonMenuPowerOffIcon,
-      l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_POWER_OFF_BUTTON));
-  AddChildView(power_off_item_);
+    if (create) {
+      *out_item_ptr = AddChildView(
+          std::make_unique<PowerButtonMenuItemView>(this, icon, string));
+    } else {
+      std::unique_ptr<PowerButtonMenuItemView> to_delete =
+          RemoveChildViewT(*out_item_ptr);
+      *out_item_ptr = nullptr;
+    }
+  };
 
   const SessionControllerImpl* const session_controller =
       Shell::Get()->session_controller();
   const LoginStatus login_status = session_controller->login_status();
-  if (login_status != LoginStatus::NOT_LOGGED_IN) {
-    sign_out_item_ = new PowerButtonMenuItemView(
-        this, kSystemPowerButtonMenuSignOutIcon,
-        user::GetLocalizedSignOutStringForStatus(login_status, false));
-    AddChildView(sign_out_item_);
-  }
+  const bool create_sign_out = login_status != LoginStatus::NOT_LOGGED_IN;
+  const bool create_lock_screen = login_status != LoginStatus::LOCKED &&
+                                  session_controller->CanLockScreen();
+  const bool create_feedback = login_status != LoginStatus::LOCKED &&
+                               login_status != LoginStatus::KIOSK_APP;
 
-  if (login_status != LoginStatus::LOCKED &&
-      session_controller->CanLockScreen()) {
-    lock_screen_item_ = new PowerButtonMenuItemView(
-        this, kSystemPowerButtonMenuLockScreenIcon,
-        l10n_util::GetStringUTF16(
-            IDS_ASH_POWER_BUTTON_MENU_LOCK_SCREEN_BUTTON));
-    AddChildView(lock_screen_item_);
-  }
+  add_remove_item(
+      true, kSystemPowerButtonMenuPowerOffIcon,
+      l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_POWER_OFF_BUTTON),
+      &power_off_item_);
+  add_remove_item(create_sign_out, kSystemPowerButtonMenuSignOutIcon,
+                  user::GetLocalizedSignOutStringForStatus(login_status, false),
+                  &sign_out_item_);
+  add_remove_item(
+      create_lock_screen, kSystemPowerButtonMenuLockScreenIcon,
+      l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_LOCK_SCREEN_BUTTON),
+      &lock_screen_item_);
+  add_remove_item(
+      create_feedback, kSystemPowerButtonMenuFeedbackIcon,
+      l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_FEEDBACK_BUTTON),
+      &feedback_item_);
+}
 
-  if (login_status != LoginStatus::NOT_LOGGED_IN &&
-      login_status != LoginStatus::LOCKED &&
-      login_status != LoginStatus::KIOSK_APP) {
-    feedback_item_ = new PowerButtonMenuItemView(
-        this, kSystemPowerButtonMenuFeedbackIcon,
-        l10n_util::GetStringUTF16(IDS_ASH_POWER_BUTTON_MENU_FEEDBACK_BUTTON));
-    AddChildView(feedback_item_);
-  }
+const char* PowerButtonMenuView::GetClassName() const {
+  return "PowerButtonMenuView";
 }
 
 void PowerButtonMenuView::Layout() {
@@ -194,11 +212,12 @@ void PowerButtonMenuView::Layout() {
   rect.Offset(x_offset, y_offset);
   power_off_item_->SetBoundsRect(rect);
 
+  const int padding_between_items_with_border =
+      kPaddingBetweenMenuItems -
+      2 * PowerButtonMenuItemView::kItemBorderThickness;
+  x_offset = rect.width() + padding_between_items_with_border;
+
   if (sign_out_item_) {
-    const int padding_between_items_with_border =
-        kPaddingBetweenMenuItems -
-        2 * PowerButtonMenuItemView::kItemBorderThickness;
-    x_offset = rect.width() + padding_between_items_with_border;
     rect.Offset(x_offset, 0);
     sign_out_item_->SetBoundsRect(rect);
 
@@ -206,11 +225,10 @@ void PowerButtonMenuView::Layout() {
       rect.Offset(x_offset, 0);
       lock_screen_item_->SetBoundsRect(rect);
     }
-
-    if (feedback_item_) {
-      rect.Offset(x_offset, 0);
-      feedback_item_->SetBoundsRect(rect);
-    }
+  }
+  if (feedback_item_) {
+    rect.Offset(x_offset, 0);
+    feedback_item_->SetBoundsRect(rect);
   }
 }
 
@@ -235,15 +253,15 @@ gfx::Size PowerButtonMenuView::CalculatePreferredSize() const {
 
   int width =
       PowerButtonMenuItemView::kMenuItemWidth + 2 * kMenuItemHorizontalPadding;
+  const int one_item_x_offset =
+      PowerButtonMenuItemView::kMenuItemWidth + kPaddingBetweenMenuItems;
   if (sign_out_item_) {
-    const int one_item_x_offset =
-        PowerButtonMenuItemView::kMenuItemWidth + kPaddingBetweenMenuItems;
-    width += one_item_x_offset;
-    if (lock_screen_item_)
       width += one_item_x_offset;
-    if (feedback_item_)
-      width += one_item_x_offset;
+      if (lock_screen_item_)
+        width += one_item_x_offset;
   }
+  if (feedback_item_)
+    width += one_item_x_offset;
   menu_size.set_width(width);
   return menu_size;
 }
@@ -264,7 +282,16 @@ void PowerButtonMenuView::ButtonPressed(views::Button* sender,
     shell->session_controller()->LockScreen();
   } else if (sender == feedback_item_) {
     RecordMenuActionHistogram(PowerButtonMenuActionType::kFeedback);
-    NewWindowDelegate::GetInstance()->OpenFeedbackPage();
+    if (shell->session_controller()->login_status() ==
+        LoginStatus::NOT_LOGGED_IN) {
+      // There is a special flow for feedback while in login screen, therefore
+      // we trigger the same handler associated with the feedback accelerator
+      // from the login screen to bring up the feedback dialog.
+      shell->login_screen_controller()->HandleAccelerator(
+          LoginAcceleratorAction::kShowFeedback);
+    } else {
+      NewWindowDelegate::GetInstance()->OpenFeedbackPage();
+    }
   } else {
     NOTREACHED() << "Invalid sender";
   }

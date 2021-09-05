@@ -31,6 +31,7 @@
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/file_system/file_stream_reader.h"
 #include "storage/browser/test/async_file_test_helper.h"
+#include "storage/browser/test/test_file_system_backend.h"
 #include "storage/browser/test/test_file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -45,6 +46,55 @@ using testing::Eq;
 using testing::Field;
 
 namespace content {
+
+namespace {
+
+class MockQuarantine : public quarantine::mojom::Quarantine {
+ public:
+  MockQuarantine() = default;
+
+  void QuarantineFile(const base::FilePath& full_path,
+                      const GURL& source_url,
+                      const GURL& referrer_url,
+                      const std::string& client_guid,
+                      QuarantineFileCallback callback) override {
+    paths.push_back(full_path);
+    std::move(callback).Run(quarantine::mojom::QuarantineFileResult::OK);
+  }
+
+  std::vector<base::FilePath> paths;
+};
+
+// File System Backend that can notify whenever a FileSystemOperation is
+// created. This lets tests simulate race conditions between file operations and
+// other work.
+class TestFileSystemBackend : public storage::TestFileSystemBackend {
+ public:
+  TestFileSystemBackend(base::SequencedTaskRunner* task_runner,
+                        const base::FilePath& base_path)
+      : storage::TestFileSystemBackend(task_runner, base_path) {}
+
+  storage::FileSystemOperation* CreateFileSystemOperation(
+      const storage::FileSystemURL& url,
+      storage::FileSystemContext* context,
+      base::File::Error* error_code) const override {
+    if (operation_created_callback_)
+      std::move(operation_created_callback_).Run(url);
+    return storage::TestFileSystemBackend::CreateFileSystemOperation(
+        url, context, error_code);
+  }
+
+  void SetOperationCreatedCallback(
+      base::OnceCallback<void(const storage::FileSystemURL&)> callback) {
+    operation_created_callback_ = std::move(callback);
+  }
+
+ private:
+  mutable base::OnceCallback<void(const storage::FileSystemURL&)>
+      operation_created_callback_;
+};
+
+}  // namespace
 
 std::string GetHexEncodedString(const std::string& input) {
   return base::HexEncode(base::as_bytes(base::make_span(input)));
@@ -64,8 +114,19 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(dir_.CreateUniqueTempDir());
-    file_system_context_ = storage::CreateFileSystemContextForTesting(
-        /*quota_manager_proxy=*/nullptr, dir_.GetPath());
+    std::vector<std::unique_ptr<storage::FileSystemBackend>>
+        additional_providers;
+    additional_providers.push_back(std::make_unique<TestFileSystemBackend>(
+        base::ThreadTaskRunnerHandle::Get().get(), dir_.GetPath()));
+    test_file_system_backend_ =
+        static_cast<TestFileSystemBackend*>(additional_providers[0].get());
+
+    file_system_context_ =
+        storage::CreateFileSystemContextWithAdditionalProvidersForTesting(
+            base::ThreadTaskRunnerHandle::Get().get(),
+            base::ThreadTaskRunnerHandle::Get().get(),
+            /*quota_manager_proxy=*/nullptr, std::move(additional_providers),
+            dir_.GetPath());
 
     auto* isolated_context = IsolatedContext::GetInstance();
     std::string base_name;
@@ -102,6 +163,11 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
         /*permission_context=*/permission_context(),
         /*off_the_record=*/false);
 
+    quarantine_callback_ = base::BindLambdaForTesting(
+        [&](mojo::PendingReceiver<quarantine::mojom::Quarantine> receiver) {
+          quarantine_receivers_.Add(&quarantine_, std::move(receiver));
+        });
+
     handle_ = std::make_unique<NativeFileSystemFileWriterImpl>(
         manager_.get(),
         NativeFileSystemManagerImpl::BindingContext(kTestOrigin, kTestURL,
@@ -109,8 +175,7 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
         test_file_url_, test_swap_url_,
         NativeFileSystemManagerImpl::SharedHandleState(
             permission_grant_, permission_grant_, std::move(fs)),
-        /*has_transient_user_activation=*/false);
-    handle_->SetSkipQuarantineCheckForTesting();
+        /*has_transient_user_activation=*/false, quarantine_callback_);
   }
 
   void TearDown() override {
@@ -261,12 +326,17 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
 
   base::ScopedTempDir dir_;
   scoped_refptr<storage::FileSystemContext> file_system_context_;
+  TestFileSystemBackend* test_file_system_backend_;
   scoped_refptr<ChromeBlobStorageContext> chrome_blob_context_;
   storage::BlobStorageContext* blob_context_;
   scoped_refptr<NativeFileSystemManagerImpl> manager_;
 
   FileSystemURL test_file_url_;
   FileSystemURL test_swap_url_;
+
+  MockQuarantine quarantine_;
+  mojo::ReceiverSet<quarantine::mojom::Quarantine> quarantine_receivers_;
+  download::QuarantineConnectionCallback quarantine_callback_;
 
   scoped_refptr<FixedNativeFileSystemPermissionGrant> permission_grant_ =
       base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
@@ -384,6 +454,7 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteValidEmptyString) {
 
   result = CloseSync();
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   EXPECT_EQ("", ReadFile(test_file_url_));
 }
@@ -397,6 +468,7 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteValidNonEmpty) {
 
   result = CloseSync();
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   EXPECT_EQ(test_data, ReadFile(test_file_url_));
 }
@@ -415,6 +487,7 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteWithOffsetInFile) {
 
   result = CloseSync();
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   EXPECT_EQ("1234abc890", ReadFile(test_file_url_));
 }
@@ -430,6 +503,7 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteWithOffsetPastFile) {
 
   result = CloseSync();
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   using std::string_literals::operator""s;
   EXPECT_EQ("\0\0\0\0abc"s, ReadFile(test_file_url_));
@@ -619,6 +693,83 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, HandleCloseDuringCheck) {
       storage::AsyncFileTestHelper::kDontCheckSize));
   EXPECT_TRUE(storage::AsyncFileTestHelper::FileExists(
       file_system_context_.get(), test_file_url_, 0));
+}
+
+TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest,
+       DestructDuringMoveQuarantines) {
+  // This test uses kFileSystemTypeTest to be able to intercept file system
+  // operations. As such, recreate urls and handle_.
+  test_file_url_ = file_system_context_->CreateCrackedFileSystemURL(
+      kTestOrigin, storage::kFileSystemTypeTest,
+      base::FilePath::FromUTF8Unsafe("test2"));
+
+  test_swap_url_ = file_system_context_->CreateCrackedFileSystemURL(
+      kTestOrigin, storage::kFileSystemTypeTest,
+      base::FilePath::FromUTF8Unsafe("test2.crswap"));
+
+  ASSERT_EQ(base::File::FILE_OK,
+            storage::AsyncFileTestHelper::CreateFile(file_system_context_.get(),
+                                                     test_file_url_));
+
+  ASSERT_EQ(base::File::FILE_OK,
+            storage::AsyncFileTestHelper::CreateFile(file_system_context_.get(),
+                                                     test_swap_url_));
+
+  handle_ = std::make_unique<NativeFileSystemFileWriterImpl>(
+      manager_.get(),
+      NativeFileSystemManagerImpl::BindingContext(kTestOrigin, kTestURL,
+                                                  kFrameId),
+      test_file_url_, test_swap_url_,
+      NativeFileSystemManagerImpl::SharedHandleState(permission_grant_,
+                                                     permission_grant_, {}),
+      /*has_transient_user_activation=*/false, quarantine_callback_);
+
+  uint64_t bytes_written;
+  NativeFileSystemStatus result = WriteSync(0, "foo", &bytes_written);
+  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(bytes_written, 3u);
+
+  using SBCallback = base::OnceCallback<void(
+      NativeFileSystemPermissionContext::AfterWriteCheckResult)>;
+  SBCallback sb_callback;
+  base::RunLoop sb_loop;
+  EXPECT_CALL(permission_context_, PerformAfterWriteChecks_)
+      .WillOnce(testing::Invoke([&](NativeFileSystemWriteItem* item,
+                                    GlobalFrameRoutingId frame_id,
+                                    SBCallback& callback) {
+        sb_callback = std::move(callback);
+        sb_loop.Quit();
+      }));
+
+  handle_->Close(base::DoNothing());
+  sb_loop.Run();
+  std::move(sb_callback)
+      .Run(NativeFileSystemPermissionContext::AfterWriteCheckResult::kAllow);
+
+  base::RunLoop move_loop;
+  test_file_system_backend_->SetOperationCreatedCallback(
+      base::BindLambdaForTesting([&](const storage::FileSystemURL& url) {
+        EXPECT_EQ(url, test_swap_url_);
+        move_loop.Quit();
+      }));
+  move_loop.Run();
+  // About to start the move operation. Now destroy the writer. The
+  // move will still complete, but make sure that quarantine was also
+  // applied to the resulting file.
+  handle_.reset();
+  task_environment_.RunUntilIdle();
+
+  // Swap file should have been deleted since writer was closed.
+  ASSERT_FALSE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_swap_url_,
+      storage::AsyncFileTestHelper::kDontCheckSize));
+  // And destination file should have been created, since writer was
+  // destroyed after move was started.
+  ASSERT_TRUE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_file_url_, 3));
+
+  // Destination file should also have been quarantined.
+  EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 }
 
 }  // namespace content

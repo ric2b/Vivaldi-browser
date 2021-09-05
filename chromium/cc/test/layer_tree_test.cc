@@ -50,6 +50,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gl/gl_switches.h"
 
@@ -63,6 +64,7 @@ class SynchronousLayerTreeFrameSink : public TestLayerTreeFrameSink {
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const viz::RendererSettings& renderer_settings,
+      const viz::DebugRendererSettings* const debug_settings,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       double refresh_rate,
       viz::BeginFrameSource* begin_frame_source,
@@ -71,6 +73,7 @@ class SynchronousLayerTreeFrameSink : public TestLayerTreeFrameSink {
                                std::move(worker_context_provider),
                                gpu_memory_buffer_manager,
                                renderer_settings,
+                               debug_settings,
                                task_runner,
                                false,
                                false,
@@ -609,7 +612,7 @@ class LayerTreeTestLayerTreeFrameSinkClient
   TestHooks* hooks_;
 };
 
-LayerTreeTest::LayerTreeTest(LayerTreeTest::RendererType renderer_type)
+LayerTreeTest::LayerTreeTest(TestRendererType renderer_type)
     : renderer_type_(renderer_type),
       initial_root_bounds_(1, 1),
       layer_tree_frame_sink_client_(
@@ -619,7 +622,8 @@ LayerTreeTest::LayerTreeTest(LayerTreeTest::RendererType renderer_type)
   // Tests should timeout quickly unless --cc-layer-tree-test-no-timeout was
   // specified (for running in a debugger).
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(switches::kCCLayerTreeTestNoTimeout))
+  if (!command_line->HasSwitch(switches::kCCLayerTreeTestNoTimeout)) {
+    timeout_seconds_ = 10;
 #if defined(THREAD_SANITIZER)
     // SwiftShader is a multi-threaded renderer and TSAN takes a lot longer to
     // run tests when using SwiftShader
@@ -637,22 +641,29 @@ LayerTreeTest::LayerTreeTest(LayerTreeTest::RendererType renderer_type)
     BUILDFLAG(CFI_ENFORCEMENT_DIAGNOSTIC) || BUILDFLAG(CFI_ENFORCEMENT_TRAP)
     // CFI is slow as well.
     timeout_seconds_ = 20;
-#elif defined(ADDRESS_SANITIZER) || defined(_DEBUG) || defined(USE_OZONE)
-    // ASAN and Debug builds are slower than release builds, as expected
-    // Ozone builds also go through a slower path than regular Linux builds
+#elif defined(ADDRESS_SANITIZER) || defined(_DEBUG)
+    // ASAN and Debug builds are slower than release builds, as expected.
     timeout_seconds_ = 30;
-#else
-    timeout_seconds_ = 10;
+#elif defined(USE_OZONE)
+    // Ozone builds go through a slower path than regular Linux builds.
+    // TODO(https://crbug.com/1096425): This special case of having both Ozone
+    // and X11 enabled that will be removed when Ozone is the default. Until
+    // then, we only need to use the slower Ozone timeout when the Ozone
+    // platform is being used. Remove this condition once it is not needed.
+    if (features::IsUsingOzonePlatform())
+      timeout_seconds_ = 30;
 #endif
+  }
+
   if (command_line->HasSwitch(switches::kCCLayerTreeTestLongTimeout))
     timeout_seconds_ = 5 * 60;
 
   // Check if the graphics backend needs to initialize Vulkan.
   bool init_vulkan = false;
-  if (renderer_type_ == RENDERER_SKIA_VK) {
+  if (renderer_type_ == TestRendererType::kSkiaVk) {
     scoped_feature_list_.InitAndEnableFeature(features::kVulkan);
     init_vulkan = true;
-  } else if (renderer_type_ == RENDERER_SKIA_DAWN) {
+  } else if (renderer_type_ == TestRendererType::kSkiaDawn) {
     scoped_feature_list_.InitAndEnableFeature(features::kSkiaDawn);
 #if defined(OS_LINUX)
     init_vulkan = true;
@@ -1140,15 +1151,16 @@ std::unique_ptr<TestLayerTreeFrameSink> LayerTreeTest::CreateLayerTreeFrameSink(
   if (layer_tree_host()->GetSettings().using_synchronous_renderer_compositor) {
     return std::make_unique<SynchronousLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        gpu_memory_buffer_manager(), renderer_settings, impl_task_runner_,
-        refresh_rate, begin_frame_source_, use_software_renderer());
+        gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
+        impl_task_runner_, refresh_rate, begin_frame_source_,
+        use_software_renderer());
   }
 
   return std::make_unique<TestLayerTreeFrameSink>(
       compositor_context_provider, std::move(worker_context_provider),
-      gpu_memory_buffer_manager(), renderer_settings, impl_task_runner_,
-      synchronous_composite, disable_display_vsync, refresh_rate,
-      begin_frame_source_);
+      gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
+      impl_task_runner_, synchronous_composite, disable_display_vsync,
+      refresh_rate, begin_frame_source_);
 }
 
 std::unique_ptr<viz::SkiaOutputSurface>
@@ -1184,7 +1196,7 @@ TaskRunnerProvider* LayerTreeTest::task_runner_provider() const {
   return host->GetTaskRunnerProvider();
 }
 
-LayerTreeHost* LayerTreeTest::layer_tree_host() {
+LayerTreeHost* LayerTreeTest::layer_tree_host() const {
   DCHECK(task_runner_provider()->IsMainThread() ||
          task_runner_provider()->IsMainThreadBlocked());
   return layer_tree_host_.get();

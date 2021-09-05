@@ -35,6 +35,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "media/base/logging_override_if_enabled.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_participation.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 #include "third_party/blink/public/platform/web_media_source.h"
 #include "third_party/blink/public/platform/web_source_buffer.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -43,7 +46,7 @@
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html/track/audio_track_list.h"
 #include "third_party/blink/renderer/core/html/track/video_track_list.h"
-#include "third_party/blink/renderer/modules/mediasource/media_source_registry.h"
+#include "third_party/blink/renderer/modules/mediasource/media_source_tracer_impl.h"
 #include "third_party/blink/renderer/modules/mediasource/source_buffer_track_base_supplement.h"
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -52,6 +55,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/network/mime/content_type.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 using blink::WebMediaSource;
@@ -137,8 +141,7 @@ MediaSourceImpl::MediaSourceImpl(ExecutionContext* context)
       active_source_buffers_(
           MakeGarbageCollected<SourceBufferList>(GetExecutionContext(),
                                                  async_event_queue_.Get())),
-      live_seekable_range_(MakeGarbageCollected<TimeRanges>()),
-      added_to_registry_counter_(0) {
+      live_seekable_range_(MakeGarbageCollected<TimeRanges>()) {
   DVLOG(1) << __func__ << " this=" << this;
 
   DCHECK(RuntimeEnabledFeatures::MediaSourceInWorkersEnabled() ||
@@ -203,7 +206,7 @@ SourceBuffer* MediaSourceImpl::addSourceBuffer(
   // relaxation of impl's StreamParserFactory (since it returns false if a
   // stream parser can't be constructed with |type|). See
   // https://crbug.com/535738.
-  if (!isTypeSupported(type)) {
+  if (!isTypeSupported(GetExecutionContext(), type)) {
     LogAndThrowDOMException(
         exception_state, DOMExceptionCode::kNotSupportedError,
         "The type provided ('" + type + "') is unsupported.");
@@ -332,7 +335,8 @@ bool MediaSourceImpl::IsUpdating() const {
 }
 
 // static
-bool MediaSourceImpl::isTypeSupported(const String& type) {
+bool MediaSourceImpl::isTypeSupported(ExecutionContext* context,
+                                      const String& type) {
   // Section 2.2 isTypeSupported() method steps.
   // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-MediaSource-isTypeSupported-boolean-DOMString-type
   // 1. If type is an empty string, then return false.
@@ -361,6 +365,8 @@ bool MediaSourceImpl::isTypeSupported(const String& type) {
       MIMETypeRegistry::kIsNotSupported) {
     DVLOG(1) << __func__ << "(" << type
              << ") -> false (not supported by HTMLMediaElement)";
+    if (IsUserInIdentifiabilityStudy())
+      RecordIdentifiabilityMetric(context, type, false);
     return false;
   }
 #endif
@@ -384,7 +390,20 @@ bool MediaSourceImpl::isTypeSupported(const String& type) {
                 MIMETypeRegistry::SupportsMediaSourceMIMEType(
                     content_type.GetType(), codecs);
   DVLOG(2) << __func__ << "(" << type << ") -> " << (result ? "true" : "false");
+  if (IsUserInIdentifiabilityStudy())
+    RecordIdentifiabilityMetric(context, type, result);
   return result;
+}
+
+void MediaSourceImpl::RecordIdentifiabilityMetric(ExecutionContext* context,
+                                                  const String& type,
+                                                  bool result) {
+  blink::IdentifiabilityMetricBuilder(context->UkmSourceID())
+      .Set(blink::IdentifiableSurface::FromTypeAndToken(
+               blink::IdentifiableSurface::Type::kMediaSource_IsTypeSupported,
+               IdentifiabilityBenignStringToken(type)),
+           result)
+      .Record(context->UkmRecorder());
 }
 
 const AtomicString& MediaSourceImpl::InterfaceName() const {
@@ -415,17 +434,6 @@ void MediaSourceImpl::CompleteAttachingToMediaElement(
   DCHECK(attached_element_);
   web_media_source_ = std::move(web_media_source);
   SetReadyState(OpenKeyword());
-}
-
-void MediaSourceImpl::AddedToRegistry() {
-  ++added_to_registry_counter_;
-  // Ensure there's no counter overflow.
-  CHECK_GT(added_to_registry_counter_, 0);
-}
-
-void MediaSourceImpl::RemovedFromRegistry() {
-  DCHECK_GT(added_to_registry_counter_, 0);
-  --added_to_registry_counter_;
 }
 
 double MediaSourceImpl::duration() const {
@@ -848,9 +856,10 @@ void MediaSourceImpl::Close() {
   SetReadyState(ClosedKeyword());
 }
 
-bool MediaSourceImpl::StartAttachingToMediaElement(HTMLMediaElement* element) {
+MediaSourceTracer* MediaSourceImpl::StartAttachingToMediaElement(
+    HTMLMediaElement* element) {
   if (attached_element_)
-    return false;
+    return nullptr;
 
   DCHECK(IsClosed());
 
@@ -858,7 +867,7 @@ bool MediaSourceImpl::StartAttachingToMediaElement(HTMLMediaElement* element) {
       "media", "MediaSourceImpl::StartAttachingToMediaElement",
       TRACE_ID_LOCAL(this));
   attached_element_ = element;
-  return true;
+  return MakeGarbageCollected<MediaSourceTracerImpl>(element, this);
 }
 
 void MediaSourceImpl::OpenIfInEndedState() {
@@ -878,8 +887,7 @@ bool MediaSourceImpl::HasPendingActivity() const {
   // further motivation for apps to properly revokeObjectUrl and for the MSE
   // spec, implementations and API users to transition to using HTMLME srcObject
   // for MSE attachment instead of objectUrl.
-  return async_event_queue_->HasPendingEvents() ||
-         added_to_registry_counter_ > 0;
+  return async_event_queue_->HasPendingEvents();
 }
 
 void MediaSourceImpl::ContextDestroyed() {
@@ -934,10 +942,6 @@ void MediaSourceImpl::ScheduleEvent(const AtomicString& event_name) {
   event->SetTarget(this);
 
   async_event_queue_->EnqueueEvent(FROM_HERE, *event);
-}
-
-URLRegistry& MediaSourceImpl::Registry() const {
-  return MediaSourceRegistry::Registry();
 }
 
 }  // namespace blink

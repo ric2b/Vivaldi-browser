@@ -318,8 +318,9 @@ bool ExtensionDownloader::AddPendingExtensionWithVersion(
 void ExtensionDownloader::StartAllPending(ExtensionCache* cache) {
   if (cache) {
     extension_cache_ = cache;
-    extension_cache_->Start(base::Bind(&ExtensionDownloader::DoStartAllPending,
-                                       weak_ptr_factory_.GetWeakPtr()));
+    extension_cache_->Start(
+        base::BindOnce(&ExtensionDownloader::DoStartAllPending,
+                       weak_ptr_factory_.GetWeakPtr()));
   } else {
     DoStartAllPending();
   }
@@ -585,9 +586,9 @@ void ExtensionDownloader::CreateManifestLoader() {
             "This feature cannot be disabled. It is only enabled when the user "
             "has installed extensions."
           chrome_policy {
-            ExtensionInstallBlacklist {
+            ExtensionInstallBlocklist {
               policy_options {mode: MANDATORY}
-              ExtensionInstallBlacklist: {
+              ExtensionInstallBlocklist: {
                 entries: '*'
               }
             }
@@ -660,7 +661,8 @@ void ExtensionDownloader::TryFetchingExtensionsFromCache(
     ExtensionDownloaderDelegate::Error error,
     const int net_error,
     const int response_code,
-    const base::Optional<ManifestInvalidErrorList>& manifest_invalid_errors) {
+    const base::Optional<ManifestInvalidFailureDataList>&
+        manifest_invalid_errors) {
   const ExtensionIdSet extension_ids = fetch_data->GetExtensionIds();
   ExtensionIdSet extensions_fetched_from_cache;
   for (const auto& extension_id : extension_ids) {
@@ -702,7 +704,7 @@ void ExtensionDownloader::TryFetchingExtensionsFromCache(
     return;
   }
   DCHECK(manifest_invalid_errors);
-  ManifestInvalidErrorList errors_for_remaining_extensions;
+  ManifestInvalidFailureDataList errors_for_remaining_extensions;
   for (const auto& manifest_invalid_error : manifest_invalid_errors.value()) {
     if (!extensions_fetched_from_cache.count(manifest_invalid_error.first))
       errors_for_remaining_extensions.push_back(manifest_invalid_error);
@@ -807,14 +809,15 @@ void ExtensionDownloader::HandleManifestResults(
   if (!results) {
     VLOG(2) << "parsing manifest failed (" << fetch_data->full_url() << ")";
     DCHECK(error.has_value());
-    ManifestInvalidErrorList manifest_invalid_errors;
+    ManifestInvalidFailureDataList manifest_invalid_errors;
     const ExtensionIdSet extension_ids = fetch_data->GetExtensionIds();
     manifest_invalid_errors.reserve(extension_ids.size());
     // If the manifest parsing failed for all the extensions with a common
     // error, add all extensions in the list with that error.
     for (const auto& extension_id : extension_ids) {
-      manifest_invalid_errors.push_back(
-          std::make_pair(extension_id, error.value().error));
+      manifest_invalid_errors.push_back(std::make_pair(
+          extension_id,
+          ExtensionDownloaderDelegate::FailureData(error.value().error)));
     }
     TryFetchingExtensionsFromCache(
         fetch_data.get(), ExtensionDownloaderDelegate::Error::MANIFEST_INVALID,
@@ -833,7 +836,7 @@ void ExtensionDownloader::HandleManifestResults(
 
   std::vector<UpdateManifestResult*> to_update;
   std::set<std::string> no_updates;
-  ManifestInvalidErrorList errors;
+  ManifestInvalidFailureDataList errors;
 
   // Examine the parsed manifest and kick off fetches of any new crx files.
   DetermineUpdates(*fetch_data, *results, &to_update, &no_updates, &errors);
@@ -964,7 +967,7 @@ void ExtensionDownloader::DetermineUpdates(
     const UpdateManifestResults& possible_updates,
     std::vector<UpdateManifestResult*>* to_update,
     std::set<std::string>* no_updates,
-    ManifestInvalidErrorList* errors) {
+    ManifestInvalidFailureDataList* errors) {
   DCHECK_NE(nullptr, to_update);
   DCHECK_NE(nullptr, no_updates);
   DCHECK_NE(nullptr, errors);
@@ -1018,13 +1021,20 @@ void ExtensionDownloader::DetermineUpdates(
     if (!extension_errors.count(id))
       continue;
     DCHECK(possible_update.parse_error);
+    ManifestInvalidError error_type = possible_update.parse_error.value().error;
     // Report any error corresponding to an extension.
-    errors->emplace_back(id, possible_update.parse_error.value().error);
+    errors->emplace_back(
+        id, error_type == ManifestInvalidError::BAD_APP_STATUS
+                ? ExtensionDownloaderDelegate::FailureData(
+                      error_type, possible_update.app_status)
+                : ExtensionDownloaderDelegate::FailureData(error_type));
     extension_errors.erase(id);
   }
   // For the remaining extensions, we have missing ids.
-  for (const auto& id : extension_errors)
-    errors->emplace_back(id, ManifestInvalidError::MISSING_APP_ID);
+  for (const auto& id : extension_errors) {
+    errors->emplace_back(id, ExtensionDownloaderDelegate::FailureData(
+                                 ManifestInvalidError::MISSING_APP_ID));
+  }
 }
 
 base::Optional<base::FilePath> ExtensionDownloader::GetCachedExtension(
@@ -1343,13 +1353,12 @@ void ExtensionDownloader::NotifyExtensionManifestUpdateCheckStatus(
 }
 
 void ExtensionDownloader::NotifyExtensionsManifestInvalidFailure(
-    const ManifestInvalidErrorList& errors,
+    const ManifestInvalidFailureDataList& errors,
     const std::set<int>& request_ids) {
   for (const auto& error_data : errors) {
     const ExtensionId& extension_id = error_data.first;
-    ManifestInvalidError manifest_invalid_error = error_data.second;
+    ExtensionDownloaderDelegate::FailureData data = error_data.second;
     auto ping_iter = ping_results_.find(extension_id);
-    ExtensionDownloaderDelegate::FailureData data(manifest_invalid_error);
     delegate_->OnExtensionDownloadFailed(
         extension_id, ExtensionDownloaderDelegate::Error::MANIFEST_INVALID,
         ping_iter == ping_results_.end()

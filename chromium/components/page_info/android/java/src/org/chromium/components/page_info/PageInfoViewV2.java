@@ -19,7 +19,6 @@ public class PageInfoViewV2 extends PageInfoView {
     // Components specific to this PageInfoView
     private LinearLayout mRowWrapper;
     private PageInfoRowView mConnectionRow;
-    private PageInfoRowView mPerformanceRow;
     private PageInfoRowView mPermissionsRow;
     private PageInfoRowView mCookiesRow;
 
@@ -49,9 +48,7 @@ public class PageInfoViewV2 extends PageInfoView {
     }
 
     @Override
-    protected void initPerformance(PageInfoView.PageInfoViewParams params) {
-        mPerformanceRow = findViewById(R.id.page_info_performance_row);
-    }
+    protected void initPerformance(PageInfoView.PageInfoViewParams params) {}
 
     @Override
     protected void initPermissions(PageInfoView.PageInfoViewParams params) {
@@ -73,10 +70,6 @@ public class PageInfoViewV2 extends PageInfoView {
         return mConnectionRow;
     }
 
-    public PageInfoRowView getPerformanceRowView() {
-        return mPerformanceRow;
-    }
-
     public PageInfoRowView getPermissionsRowView() {
         return mPermissionsRow;
     }
@@ -90,8 +83,7 @@ public class PageInfoViewV2 extends PageInfoView {
      */
     @Override
     protected List<View> collectAnimatableViews() {
-        return Arrays.asList(mUrlTitle, mPreviewMessage, mPreviewStaleTimestamp,
-                mPreviewLoadOriginal, mPreviewSeparator, mInstantAppButton, mRowWrapper,
-                mSiteSettingsButton);
+        return Arrays.asList(mUrlTitle, mPreviewMessage, mPreviewLoadOriginal, mPreviewSeparator,
+                mInstantAppButton, mRowWrapper, mSiteSettingsButton);
     }
 }

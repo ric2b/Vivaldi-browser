@@ -62,7 +62,8 @@ Widget* DialogDelegate::CreateDialogWidget(WidgetDelegate* delegate,
 
 // static
 bool DialogDelegate::CanSupportCustomFrame(gfx::NativeView parent) {
-#if defined(OS_LINUX) && BUILDFLAG(ENABLE_DESKTOP_AURA)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+    BUILDFLAG(ENABLE_DESKTOP_AURA)
   // The new style doesn't support unparented dialogs on Linux desktop.
   return parent != nullptr;
 #else
@@ -92,7 +93,7 @@ Widget::InitParams DialogDelegate::GetDialogWidgetInitParams(
   if (!dialog || dialog->use_custom_frame()) {
     params.opacity = Widget::InitParams::WindowOpacity::kTranslucent;
     params.remove_standard_frame = true;
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
     // Except on Mac, the bubble frame includes its own shadow; remove any
     // native shadowing. On Mac, the window server provides the shadow.
     params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
@@ -100,7 +101,7 @@ Widget::InitParams DialogDelegate::GetDialogWidgetInitParams(
   }
   params.context = context;
   params.parent = parent;
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   // Web-modal (ui::MODAL_TYPE_CHILD) dialogs with parents are marked as child
   // widgets to prevent top-level window behavior (independent movement, etc).
   // On Mac, however, the parent may be a native window (not a views::Widget),
@@ -194,11 +195,10 @@ ClientView* DialogDelegate::CreateClientView(Widget* widget) {
   return new DialogClientView(widget, GetContentsView());
 }
 
-NonClientFrameView* DialogDelegate::CreateNonClientFrameView(Widget* widget) {
-  if (use_custom_frame())
-    return CreateDialogFrameView(widget);
-
-  return WidgetDelegate::CreateNonClientFrameView(widget);
+std::unique_ptr<NonClientFrameView> DialogDelegate::CreateNonClientFrameView(
+    Widget* widget) {
+  return use_custom_frame() ? CreateDialogFrameView(widget)
+                            : WidgetDelegate::CreateNonClientFrameView(widget);
 }
 
 void DialogDelegate::WindowWillClose() {
@@ -214,16 +214,6 @@ void DialogDelegate::WindowWillClose() {
   if (new_callback_present)
     return;
 
-  // Old-style close behavior: if the only button was Ok, call Accept();
-  // otherwise call Cancel(). Note that in this case the window is already going
-  // to close, so the return values of Accept()/Cancel(), which normally say
-  // whether the window should close, are ignored.
-  int buttons = GetDialogButtons();
-  if (buttons == ui::DIALOG_BUTTON_OK)
-    Accept();
-  else
-    Cancel();
-
   // This is set here instead of before the invocations of Accept()/Cancel() so
   // that those methods can DCHECK that !already_started_close_. Otherwise,
   // client code could (eg) call Accept() from inside the cancel callback, which
@@ -232,9 +222,10 @@ void DialogDelegate::WindowWillClose() {
 }
 
 // static
-NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
+std::unique_ptr<NonClientFrameView> DialogDelegate::CreateDialogFrameView(
+    Widget* widget) {
   LayoutProvider* provider = LayoutProvider::Get();
-  BubbleFrameView* frame = new BubbleFrameView(
+  auto frame = std::make_unique<BubbleFrameView>(
       provider->GetInsetsMetric(INSETS_DIALOG_TITLE), gfx::Insets());
 
   const BubbleBorder::Shadow kShadow = BubbleBorder::DIALOG_SHADOW;
@@ -243,13 +234,8 @@ NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   border->set_use_theme_background_color(true);
   DialogDelegate* delegate = widget->widget_delegate()->AsDialogDelegate();
   if (delegate) {
-    if (delegate->GetParams().round_corners) {
-      border->SetCornerRadius(
-          base::FeatureList::IsEnabled(
-              features::kEnableMDRoundedCornersOnDialogs)
-              ? provider->GetCornerRadiusMetric(views::EMPHASIS_HIGH)
-              : 2);
-    }
+    if (delegate->GetParams().round_corners)
+      border->SetCornerRadius(delegate->GetCornerRadius());
     frame->SetFootnoteView(delegate->DisownFootnoteView());
   }
   frame->SetBubbleBorder(std::move(border));
@@ -419,6 +405,14 @@ DialogDelegate::~DialogDelegate() {
 
 ax::mojom::Role DialogDelegate::GetAccessibleWindowRole() {
   return ax::mojom::Role::kDialog;
+}
+
+int DialogDelegate::GetCornerRadius() const {
+  return base::FeatureList::IsEnabled(
+             features::kEnableMDRoundedCornersOnDialogs)
+             ? LayoutProvider::Get()->GetCornerRadiusMetric(
+                   views::EMPHASIS_MEDIUM)
+             : 2;
 }
 
 std::unique_ptr<View> DialogDelegate::DisownFootnoteView() {

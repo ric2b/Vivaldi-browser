@@ -8,10 +8,10 @@
 #include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 
-using content_settings::TabSpecificContentSettings;
+using content_settings::PageSpecificContentSettings;
 
 VivaldiLocationBar::VivaldiLocationBar() {
 }
@@ -54,20 +54,21 @@ void VivaldiLocationBar::UpdateContentSettingsIcons() {
       browser_->tab_strip_model()->GetActiveWebContents();
   if (active_contents) {
     auto* content_settings =
-        TabSpecificContentSettings::FromWebContents(active_contents);
+        content_settings::PageSpecificContentSettings::GetForFrame(
+            active_contents->GetMainFrame());
     extensions::VivaldiPrivateTabObserver* private_tab =
         extensions::VivaldiPrivateTabObserver::FromWebContents(active_contents);
     if (private_tab && content_settings) {
-      TabSpecificContentSettings::MicrophoneCameraState cam_state =
+      PageSpecificContentSettings::MicrophoneCameraState cam_state =
           content_settings->GetMicrophoneCameraState();
       bool microphoneAccessed =
-          (cam_state & TabSpecificContentSettings::MICROPHONE_ACCESSED) != 0;
+          (cam_state & PageSpecificContentSettings::MICROPHONE_ACCESSED) != 0;
       bool cameraAccessed =
-          (cam_state & TabSpecificContentSettings::CAMERA_ACCESSED) != 0;
+          (cam_state & PageSpecificContentSettings::CAMERA_ACCESSED) != 0;
       bool microphoneBlocked =
-          (cam_state & TabSpecificContentSettings::MICROPHONE_BLOCKED) != 0;
+          (cam_state & PageSpecificContentSettings::MICROPHONE_BLOCKED) != 0;
       bool cameraBlocked =
-          (cam_state & TabSpecificContentSettings::CAMERA_BLOCKED) != 0;
+          (cam_state & PageSpecificContentSettings::CAMERA_BLOCKED) != 0;
 
       if (microphoneAccessed || cameraAccessed || microphoneBlocked ||
           cameraBlocked) {

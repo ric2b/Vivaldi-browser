@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/accessibility/accessibility_focus_highlight.h"
 
 #include "base/numerics/ranges.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/pref_names.h"
 #include "content/public/browser/focused_node_details.h"
@@ -27,35 +28,34 @@ namespace {
 
 // The number of pixels of padding between the outer edge of the focused
 // element's bounding box and the inner edge of the inner focus ring.
-constexpr int kPaddingDIPs = 8;
+constexpr int kPadding = 8;
 
 // The size of the border radius of the innermost focus highlight ring.
-constexpr int kBorderRadiusDIPs = 4;
+constexpr int kBorderRadius = 4;
 
-// The stroke width, in DIPs, of the innermost focus ring, and each line drawn
+// The stroke width, in , of the innermost focus ring, and each line drawn
 // as part of the focus ring gradient effect.
-constexpr int kStrokeWidthDIPs = 2;
+constexpr int kStrokeWidth = 2;
 
-// The thickness, in DIPs, of the outer focus ring gradient.
-constexpr int kGradientWidthDIPs = 9;
+// The thickness, in px, of the outer focus ring gradient.
+constexpr int kGradientWidth = 9;
 
 // The padding between the bounds of the layer and the bounds of the
-// drawn focus ring, in DIPs. If it's zero the focus ring might be
-// clipped.
-constexpr int kLayerPaddingDIPs = 2;
+// drawn focus ring, in px. If it's zero the focus ring might be clipped.
+constexpr int kLayerPadding = 2;
 
-// Total DIPs between the edge of the node and the edge of the layer.
-constexpr int kTotalLayerPaddingDIPs =
-    kPaddingDIPs + kStrokeWidthDIPs + kGradientWidthDIPs + kLayerPaddingDIPs;
+// Total px between the edge of the node and the edge of the layer.
+constexpr int kTotalLayerPadding =
+    kPadding + kStrokeWidth + kGradientWidth + kLayerPadding;
 
 // The amount of time it should take for the highlight to fade in.
-constexpr int kFadeInTimeMilliseconds = 100;
+constexpr auto kFadeInTime = base::TimeDelta::FromMilliseconds(100);
 
 // The amount of time the highlight should persist before beginning to fade.
-constexpr int kHighlightPersistTimeMilliseconds = 1000;
+constexpr auto kHighlightPersistTime = base::TimeDelta::FromSeconds(1);
 
 // The amount of time it should take for the highlight to fade out.
-constexpr int kFadeOutTimeMilliseconds = 600;
+constexpr auto kFadeOutTime = base::TimeDelta::FromMilliseconds(600);
 
 }  // namespace
 
@@ -79,9 +79,7 @@ bool AccessibilityFocusHighlight::use_default_color_for_testing_ = false;
 
 AccessibilityFocusHighlight::AccessibilityFocusHighlight(
     BrowserView* browser_view)
-    : browser_view_(browser_view),
-      device_scale_factor_(
-          browser_view_->GetWidget()->GetLayer()->device_scale_factor()) {
+    : browser_view_(browser_view) {
   DCHECK(browser_view);
 
   // Listen for preference changes.
@@ -97,11 +95,9 @@ AccessibilityFocusHighlight::AccessibilityFocusHighlight(
 
   // One-time initialization of statics the first time an instance is created.
   if (fade_in_time_.is_zero()) {
-    fade_in_time_ = base::TimeDelta::FromMilliseconds(kFadeInTimeMilliseconds);
-    persist_time_ =
-        base::TimeDelta::FromMilliseconds(kHighlightPersistTimeMilliseconds);
-    fade_out_time_ =
-        base::TimeDelta::FromMilliseconds(kFadeOutTimeMilliseconds);
+    fade_in_time_ = kFadeInTime;
+    persist_time_ = kHighlightPersistTime;
+    fade_out_time_ = kFadeOutTime;
     default_color_ = SkColorSetRGB(16, 16, 16);  // #101010
   }
 }
@@ -129,13 +125,14 @@ void AccessibilityFocusHighlight::UseDefaultColorForTesting() {
 }
 
 SkColor AccessibilityFocusHighlight::GetHighlightColor() {
-  SkColor theme_color = browser_view_->GetNativeTheme()->GetSystemColor(
+  ui::NativeTheme* native_theme = ui::NativeTheme::GetInstanceForWeb();
+  SkColor theme_color = native_theme->GetSystemColor(
       ui::NativeTheme::kColorId_FocusedBorderColor);
 
   if (theme_color == SK_ColorTRANSPARENT || use_default_color_for_testing_)
     return default_color_;
 
-  return theme_color;
+  return native_theme->FocusRingColorForBaseColor(theme_color);
 }
 
 void AccessibilityFocusHighlight::CreateOrUpdateLayer(gfx::Rect node_bounds) {
@@ -164,7 +161,7 @@ void AccessibilityFocusHighlight::CreateOrUpdateLayer(gfx::Rect node_bounds) {
   // Outset the bounds of the layer by the total width of the focus highlight,
   // plus the extra padding to ensure the highlight isn't clipped.
   gfx::Rect layer_bounds = node_bounds;
-  int padding = kTotalLayerPaddingDIPs * device_scale_factor_;
+  int padding = kTotalLayerPadding;
   layer_bounds.Inset(-padding, -padding);
 
   layer_->SetBounds(layer_bounds);
@@ -236,11 +233,14 @@ void AccessibilityFocusHighlight::Observe(
   if (!browser_view_->IsActive() && !skip_activation_check_for_testing_)
     return;
 
-  // Get the bounds of the focused node from the web page. Initially it's
-  // given to us in screen DIPs.
+  // Get the bounds of the focused node from the web page.
   content::FocusedNodeDetails* node_details =
       content::Details<content::FocusedNodeDetails>(details).ptr();
   gfx::Rect node_bounds = node_details->node_bounds_in_screen;
+
+  // This happens if e.g. we focus on <body>. Don't show a confusing highlight.
+  if (node_bounds.IsEmpty())
+    return;
 
   // Convert it to the local coordinates of this BrowserView's widget.
   node_bounds.Offset(-gfx::ToFlooredVector2d(browser_view_->GetWidget()
@@ -255,37 +255,38 @@ void AccessibilityFocusHighlight::OnPaintLayer(
     const ui::PaintContext& context) {
   ui::PaintRecorder recorder(context, layer_->size());
   SkColor highlight_color = GetHighlightColor();
-  cc::PaintFlags flags;
-  flags.setAntiAlias(true);
-  flags.setStyle(cc::PaintFlags::kStroke_Style);
-  flags.setColor(highlight_color);
+
+  cc::PaintFlags original_flags;
+  original_flags.setAntiAlias(true);
+  original_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  original_flags.setColor(highlight_color);
+  original_flags.setStrokeWidth(kStrokeWidth);
 
   gfx::RectF bounds(node_bounds_);
 
-  // Draw gradient first, so other lines will be drawn over the top.
   // Apply padding
-  int padding = kPaddingDIPs * device_scale_factor_;
-  bounds.Inset(-padding, -padding);
+  bounds.Inset(-kPadding, -kPadding);
 
+  // Draw gradient first, so other lines will be drawn over the top.
   gfx::RectF gradient_bounds(bounds);
-  int border_radius = kBorderRadiusDIPs * device_scale_factor_;
-  int gradient_border_radius = border_radius;
+  int gradient_border_radius = kBorderRadius;
+  gradient_bounds.Inset(-kStrokeWidth, -kStrokeWidth);
+  gradient_border_radius += kStrokeWidth;
+  cc::PaintFlags gradient_flags(original_flags);
+  gradient_flags.setStrokeWidth(1);
+  int original_alpha = std::min(SkColorGetA(highlight_color), 192u);
 
   // Create a gradient effect by drawing the path outline multiple
-  // times with increasing insets from 0 to kGradientWidthDIPs, and
+  // times with increasing insets from 0 to kGradientWidth, and
   // with increasing transparency.
-  int gradient_width = kGradientWidthDIPs * device_scale_factor_;
-  int stroke_width = kStrokeWidthDIPs * device_scale_factor_;
-  flags.setStrokeWidth(stroke_width);
-  int original_alpha = std::min(SkColorGetA(highlight_color), 192u);
-  for (int remaining = gradient_width; remaining > 0; remaining -= 1) {
+  for (int remaining = kGradientWidth; remaining > 0; remaining -= 1) {
     // Decrease alpha as distance remaining decreases.
     int alpha = (original_alpha * remaining * remaining) /
-                (gradient_width * gradient_width);
-    flags.setAlpha(alpha);
+                (kGradientWidth * kGradientWidth);
+    gradient_flags.setAlpha(alpha);
 
     recorder.canvas()->DrawRoundRect(gradient_bounds, gradient_border_radius,
-                                     flags);
+                                     gradient_flags);
 
     gradient_bounds.Inset(-1, -1);
     gradient_border_radius += 1;
@@ -297,25 +298,17 @@ void AccessibilityFocusHighlight::OnPaintLayer(
 
   // Resize bounds and border radius around inner ring
   gfx::RectF white_ring_bounds(bounds);
-  white_ring_bounds.Inset(-(stroke_width / 2), -(stroke_width / 2));
-  int white_ring_border_radius = border_radius + (stroke_width / 2);
+  white_ring_bounds.Inset(-(kStrokeWidth / 2), -(kStrokeWidth / 2));
+  int white_ring_border_radius = kBorderRadius + (kStrokeWidth / 2);
 
-  flags.setColor(SK_ColorWHITE);
-  flags.setStrokeWidth(stroke_width);
+  cc::PaintFlags white_ring_flags(original_flags);
+  white_ring_flags.setColor(SK_ColorWHITE);
+
   recorder.canvas()->DrawRoundRect(white_ring_bounds, white_ring_border_radius,
-                                   flags);
+                                   white_ring_flags);
 
-  // Draw the innermost solid ring
-  flags.setColor(highlight_color);
-  recorder.canvas()->DrawRoundRect(bounds, border_radius, flags);
-}
-
-void AccessibilityFocusHighlight::OnDeviceScaleFactorChanged(
-    float old_device_scale_factor,
-    float new_device_scale_factor) {
-  // The layer will automatically be invalildated, we don't need to do it
-  // explicitly.
-  device_scale_factor_ = new_device_scale_factor;
+  // Finally, draw the inner ring
+  recorder.canvas()->DrawRoundRect(bounds, kBorderRadius, original_flags);
 }
 
 void AccessibilityFocusHighlight::OnAnimationStep(base::TimeTicks timestamp) {
@@ -350,15 +343,12 @@ void AccessibilityFocusHighlight::OnAnimationStep(base::TimeTicks timestamp) {
   float opacity = 1.0f;
   if (time_since_layer_create < fade_in_time_) {
     // We're fading in.
-    opacity = time_since_layer_create.InSecondsF() / fade_in_time_.InSecondsF();
+    opacity = time_since_layer_create / fade_in_time_;
   } else if (time_since_focus_move > persist_time_) {
     // Fading out.
-    float time_since_began_fading =
-        time_since_focus_move.InSecondsF() -
-        (fade_in_time_.InSecondsF() + persist_time_.InSecondsF());
-    float fade_out_time_float = fade_out_time_.InSecondsF();
-
-    opacity = 1.0f - (time_since_began_fading / fade_out_time_float);
+    base::TimeDelta time_since_began_fading =
+        time_since_focus_move - (fade_in_time_ + persist_time_);
+    opacity = 1.0f - (time_since_began_fading / fade_out_time_);
   }
 
   // Layer::SetOpacity will throw an error if we're not within 0...1.

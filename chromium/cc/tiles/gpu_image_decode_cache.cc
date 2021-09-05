@@ -41,7 +41,7 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkYUVAIndex.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/skia_util.h"
@@ -187,6 +187,7 @@ void SetYuvPixmapsFromSizeInfo(SkPixmap* pixmap_y,
                                const SkYUVASizeInfo& yuva_size_info,
                                void* planes[SkYUVASizeInfo::kMaxCount],
                                const SkImageInfo& info,
+                               SkColorType color_type,
                                void* memory_ptr) {
   DCHECK(pixmap_y);
   DCHECK(pixmap_u);
@@ -204,48 +205,13 @@ void SetYuvPixmapsFromSizeInfo(SkPixmap* pixmap_y,
   const size_t v_width = yuva_size_info.fSizes[SkYUVAIndex::kV_Index].width();
   const size_t v_height = yuva_size_info.fSizes[SkYUVAIndex::kV_Index].height();
   const SkImageInfo y_decode_info =
-      info.makeColorType(kGray_8_SkColorType).makeWH(y_width, y_height);
+      info.makeColorType(color_type).makeWH(y_width, y_height);
   const SkImageInfo u_decode_info = y_decode_info.makeWH(u_width, u_height);
   const SkImageInfo v_decode_info = y_decode_info.makeWH(v_width, v_height);
   yuva_size_info.computePlanes(memory_ptr, planes);
   pixmap_y->reset(y_decode_info, planes[SkYUVAIndex::kY_Index], y_width_bytes);
   pixmap_u->reset(u_decode_info, planes[SkYUVAIndex::kU_Index], u_width_bytes);
   pixmap_v->reset(v_decode_info, planes[SkYUVAIndex::kV_Index], v_width_bytes);
-}
-
-// Helper method to fill in |scaled_u_size| and |scaled_v_size| by computing
-// the mip level for each plane given the final raster dimensions and the
-// unscaled U and V plane sizes. Also takes in |draw_image| to compute the Y
-// plane mip level and DCHECK that the computed mip levels for U and V are
-// reasonable.
-//
-// TODO(crbug.com/915972): Assumes 420 subsampling and DCHECKs the size ratios.
-void ComputeMippedUVPlaneSizes(const gfx::Size& target_raster_size,
-                               const gfx::Size& unscaled_u_size,
-                               const gfx::Size& unscaled_v_size,
-                               const DrawImage& draw_image,
-                               gfx::Size* scaled_u_size,
-                               gfx::Size* scaled_v_size) {
-  DCHECK(scaled_u_size);
-  DCHECK(scaled_v_size);
-  DCHECK_EQ(unscaled_u_size, unscaled_v_size);
-  DCHECK_EQ((draw_image.paint_image().width() + 1) / 2,
-            unscaled_u_size.width());
-  const int uv_mip_level =
-      MipMapUtil::GetLevelForSize(unscaled_u_size, target_raster_size);
-  // Check that the chroma planes do not shrink *more* than the luma.
-  // At least for YUV420, they will shrink at most one mip level below luma,
-  // which avoids blurriness.
-  DCHECK_GE(uv_mip_level, 0);
-  if (CalculateUploadScaleMipLevel(draw_image) == 0) {
-    // If Y is not scaled, then U and V shouldn't be either.
-    DCHECK_EQ(uv_mip_level, 0);
-  } else {
-    DCHECK_EQ(CalculateUploadScaleMipLevel(draw_image) - 1, uv_mip_level);
-  }
-
-  *scaled_u_size = MipMapUtil::GetSizeForLevel(unscaled_u_size, uv_mip_level);
-  *scaled_v_size = *scaled_u_size;
 }
 
 // Estimates the byte size of the decoded data for an image that goes through
@@ -302,11 +268,13 @@ size_t EstimateHardwareDecodedDataSize(
 //
 // The |do_yuv_decode| parameter indicates whether YUV decoding can and should
 // be done, which is a combination of the underlying data requesting YUV and the
-// cache mode (i.e. OOP-R or not) supporting it.
+// cache mode (i.e. OOP-R or not) supporting it. The |yuva_color_type| field
+// indicates which SkColorType should be used for each plane.
 bool DrawAndScaleImage(const DrawImage& draw_image,
                        SkPixmap* target_pixmap,
                        PaintImage::GeneratorClientId client_id,
                        const bool do_yuv_decode,
+                       const SkColorType yuva_color_type = kGray_8_SkColorType,
                        SkPixmap* pixmap_y = nullptr,
                        SkPixmap* pixmap_u = nullptr,
                        SkPixmap* pixmap_v = nullptr) {
@@ -332,6 +300,7 @@ bool DrawAndScaleImage(const DrawImage& draw_image,
   SkYUVASizeInfo yuva_size_info;
   SkYUVAIndex plane_indices[SkYUVAIndex::kIndexCount];
   if (do_yuv_decode) {
+    // If |do_yuv_decode| is true, IsYuv() must be true.
     const bool yuva_info_initialized =
         paint_image.IsYuv(&yuva_size_info, plane_indices);
     DCHECK(yuva_info_initialized);
@@ -348,9 +317,11 @@ bool DrawAndScaleImage(const DrawImage& draw_image,
     if (do_yuv_decode) {
       void* planes[SkYUVASizeInfo::kMaxCount];
       SetYuvPixmapsFromSizeInfo(pixmap_y, pixmap_u, pixmap_v, yuva_size_info,
-                                planes, info, pixmap.writable_addr());
+                                planes, info, yuva_color_type,
+                                pixmap.writable_addr());
       return paint_image.DecodeYuv(planes, draw_image.frame_index(), client_id,
-                                   yuva_size_info, plane_indices);
+                                   yuva_size_info, yuva_color_type,
+                                   plane_indices);
     }
     return paint_image.Decode(pixmap.writable_addr(), &info, color_space,
                               draw_image.frame_index(), client_id);
@@ -373,7 +344,8 @@ bool DrawAndScaleImage(const DrawImage& draw_image,
     // We temporarily abuse the dimensions of the pixmap to ensure we allocate
     // the proper number of bytes, but the actual plane dimensions are stored in
     // |yuva_size_info| and accessed within PaintImage::DecodeYuv() and below.
-    decode_info = info.makeColorType(kGray_8_SkColorType).makeWH(yuva_bytes, 1);
+
+    decode_info = info.makeColorType(yuva_color_type).makeWH(yuva_bytes, 1);
   } else {
     SkISize decode_size =
         is_nearest_neighbor
@@ -398,12 +370,12 @@ bool DrawAndScaleImage(const DrawImage& draw_image,
     yuva_size_info.computePlanes(decode_pixmap.writable_addr(), planes);
   }
   bool initial_decode_failed =
-      do_yuv_decode
-          ? !paint_image.DecodeYuv(planes, draw_image.frame_index(), client_id,
-                                   yuva_size_info, plane_indices)
-          : !paint_image.Decode(decode_pixmap.writable_addr(), &decode_info,
-                                color_space, draw_image.frame_index(),
-                                client_id);
+      do_yuv_decode ? !paint_image.DecodeYuv(planes, draw_image.frame_index(),
+                                             client_id, yuva_size_info,
+                                             yuva_color_type, plane_indices)
+                    : !paint_image.Decode(decode_pixmap.writable_addr(),
+                                          &decode_info, color_space,
+                                          draw_image.frame_index(), client_id);
   if (initial_decode_failed)
     return false;
 
@@ -417,26 +389,25 @@ bool DrawAndScaleImage(const DrawImage& draw_image,
     SkPixmap unscaled_pixmap_v;
     SetYuvPixmapsFromSizeInfo(&unscaled_pixmap_y, &unscaled_pixmap_u,
                               &unscaled_pixmap_v, yuva_size_info, planes,
-                              decode_info, decode_pixmap.writable_addr());
+                              decode_info, yuva_color_type,
+                              decode_pixmap.writable_addr());
 
-    const SkImageInfo y_info_scaled = info.makeColorType(kGray_8_SkColorType);
-    // The target raster dimensions get passed through:
-    // |target_pixmap|.info() -> |pixmap|->info() -> |info| -> |y_info_scaled|
-    const gfx::Size target_raster_size(y_info_scaled.width(),
-                                       y_info_scaled.height());
-    gfx::Size unscaled_u_size(unscaled_pixmap_u.width(),
-                              unscaled_pixmap_u.height());
-    gfx::Size unscaled_v_size(unscaled_pixmap_v.width(),
-                              unscaled_pixmap_v.height());
-    gfx::Size scaled_u_size;
-    gfx::Size scaled_v_size;
-    ComputeMippedUVPlaneSizes(target_raster_size, unscaled_u_size,
-                              unscaled_v_size, draw_image, &scaled_u_size,
-                              &scaled_v_size);
-    const SkImageInfo u_info_scaled =
-        y_info_scaled.makeWH(scaled_u_size.width(), scaled_u_size.height());
-    const SkImageInfo v_info_scaled =
-        y_info_scaled.makeWH(scaled_v_size.width(), scaled_v_size.height());
+    const SkImageInfo y_info_scaled = info.makeColorType(yuva_color_type);
+    const auto& yuva_sizes = yuva_size_info.fSizes;
+    DCHECK(yuva_sizes[SkYUVAIndex::kU_Index] ==
+           yuva_sizes[SkYUVAIndex::kV_Index]);
+
+    // Always promote scaled images to 4:4:4 to avoid blurriness. By using the
+    // same dimensions for the UV planes, we can avoid scaling them completely
+    // or at least avoid scaling the width.
+    //
+    // E.g., consider an original (100, 100) image scaled to mips level 1 (50%),
+    // the Y plane size will be (50, 50), but unscaled UV planes are already
+    // (50, 50) for 4:2:0, and (50, 100) for 4:2:2, so leaving them completely
+    // unscaled or only scaling the height for 4:2:2 has superior quality.
+    SkImageInfo u_info_scaled = y_info_scaled;
+    SkImageInfo v_info_scaled = y_info_scaled;
+
     const size_t y_plane_bytes = y_info_scaled.computeMinByteSize();
     const size_t u_plane_bytes = u_info_scaled.computeMinByteSize();
     DCHECK(!SkImageInfo::ByteSizeOverflowed(y_plane_bytes));
@@ -459,7 +430,7 @@ bool DrawAndScaleImage(const DrawImage& draw_image,
 
 // Takes ownership of the backing texture of an SkImage. This allows us to
 // delete this texture under Skia (via discardable).
-sk_sp<SkImage> TakeOwnershipOfSkImageBacking(GrContext* context,
+sk_sp<SkImage> TakeOwnershipOfSkImageBacking(GrDirectContext* context,
                                              sk_sp<SkImage> image) {
   // If the image is not texture backed, it has no backing, just return it.
   if (!image->isTextureBacked()) {
@@ -519,7 +490,8 @@ sk_sp<SkImage> MakeTextureImage(viz::RasterContextProvider* context,
   // Step 2: Apply a color-space conversion if necessary.
   if (uploaded_image && target_color_space) {
     sk_sp<SkImage> pre_converted_image = uploaded_image;
-    uploaded_image = uploaded_image->makeColorSpace(target_color_space);
+    uploaded_image = uploaded_image->makeColorSpace(target_color_space,
+                                                    context->GrContext());
 
     if (uploaded_image != pre_converted_image)
       DeleteSkImageAndPreventCaching(context, std::move(pre_converted_image));
@@ -594,7 +566,8 @@ class GpuImageDecodeTaskImpl : public TileTask {
                          const DrawImage& draw_image,
                          const ImageDecodeCache::TracingInfo& tracing_info,
                          GpuImageDecodeCache::DecodeTaskType task_type)
-      : TileTask(true),
+      : TileTask(TileTask::SupportsConcurrentExecution::kYes,
+                 TileTask::SupportsBackgroundThreadPriority::kYes),
         cache_(cache),
         image_(draw_image),
         tracing_info_(tracing_info),
@@ -646,7 +619,8 @@ class ImageUploadTaskImpl : public TileTask {
                       const DrawImage& draw_image,
                       scoped_refptr<TileTask> decode_dependency,
                       const ImageDecodeCache::TracingInfo& tracing_info)
-      : TileTask(false),
+      : TileTask(TileTask::SupportsConcurrentExecution::kNo,
+                 TileTask::SupportsBackgroundThreadPriority::kYes),
         cache_(cache),
         image_(draw_image),
         tracing_info_(tracing_info) {
@@ -932,7 +906,8 @@ GpuImageDecodeCache::ImageData::ImageData(
     bool can_do_hardware_accelerated_decode,
     bool do_hardware_accelerated_decode,
     bool is_yuv_format,
-    SkYUVColorSpace yuv_cs)
+    SkYUVColorSpace yuv_cs,
+    SkColorType yuv_ct)
     : paint_image_id(paint_image_id),
       mode(mode),
       size(size),
@@ -950,6 +925,7 @@ GpuImageDecodeCache::ImageData::ImageData(
   if (is_yuv) {
     DCHECK_LE(yuv_cs, SkYUVColorSpace::kLastEnum_SkYUVColorSpace);
     yuv_color_space = yuv_cs;
+    yuv_color_type = yuv_ct;
   }
 }
 
@@ -1038,6 +1014,18 @@ GpuImageDecodeCache::GpuImageDecodeCache(
       use_transfer_cache &&
       context_->ContextSupport()->IsWebPDecodeAccelerationSupported() &&
       base::FeatureList::IsEnabled(features::kVaapiWebPImageDecodeAcceleration);
+
+  {
+    // TODO(crbug.com/1110007): We shouldn't need to lock to get capabilities.
+    base::Optional<viz::RasterContextProvider::ScopedRasterContextLock>
+        context_lock;
+    if (context_->GetLock())
+      context_lock.emplace(context_);
+    const auto& caps = context_->ContextCapabilities();
+    allow_yuv_r16_ext_decoding_ = caps.texture_norm16;
+    allow_yuv_luminance_f16_decoding_ = caps.texture_half_float_linear;
+  }
+
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
   if (base::ThreadTaskRunnerHandle::IsSet()) {
@@ -1183,7 +1171,7 @@ void GpuImageDecodeCache::UnrefImage(const DrawImage& draw_image) {
 
 bool GpuImageDecodeCache::UseCacheForDrawImage(
     const DrawImage& draw_image) const {
-  if (draw_image.paint_image().GetSkImage()->isTextureBacked())
+  if (draw_image.paint_image().IsTextureBacked())
     return false;
 
   return true;
@@ -1929,7 +1917,7 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
       NOTREACHED();
     } else {
       image_data->decode.SetBitmapImage(
-          draw_image.paint_image().GetRasterSkImage());
+          draw_image.paint_image().GetSwSkImage());
     }
     return;
   }
@@ -1972,8 +1960,9 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(const DrawImage& draw_image,
       SkPixmap pixmap_u;
       SkPixmap pixmap_v;
       if (!DrawAndScaleImage(draw_image, &pixmap, generator_client_id_,
-                             image_data->is_yuv, &pixmap_y, &pixmap_u,
-                             &pixmap_v)) {
+                             image_data->is_yuv,
+                             image_data->yuv_color_type.value(), &pixmap_y,
+                             &pixmap_u, &pixmap_v)) {
         DLOG(ERROR) << "DrawAndScaleImage failed.";
         backing_memory->Unlock();
         backing_memory.reset();
@@ -2082,6 +2071,12 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
     color_space = nullptr;
   }
 
+  // Will be nullptr for non-HDR images or when we're using the default level.
+  const bool needs_adjusted_color_space =
+      NeedsColorSpaceAdjustedForUpload(draw_image);
+  if (needs_adjusted_color_space)
+    decoded_target_colorspace = ColorSpaceForImageUpload(draw_image);
+
   if (image_data->mode == DecodedDataMode::kTransferCache) {
     DCHECK(use_transfer_cache_);
     if (image_data->decode.do_hardware_accelerated_decode()) {
@@ -2093,7 +2088,7 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
 
       // Get the encoded data in a contiguous form.
       sk_sp<SkData> encoded_data =
-          draw_image.paint_image().GetRasterSkImage()->refEncodedData();
+          draw_image.paint_image().GetSwSkImage()->refEncodedData();
       DCHECK(encoded_data);
       const uint32_t transfer_cache_id =
           ClientImageTransferCacheEntry::GetNextId();
@@ -2143,6 +2138,9 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
       SkPixmap pixmap;
       if (!image_data->decode.image()->peekPixels(&pixmap))
         return;
+      if (needs_adjusted_color_space)
+        pixmap.setColorSpace(decoded_target_colorspace);
+
       ClientImageTransferCacheEntry image_entry(&pixmap, color_space.get(),
                                                 image_data->needs_mips);
       InsertTransferCacheEntry(image_entry, image_data);
@@ -2245,6 +2243,12 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
     return;
   }
 
+  // TODO(crbug.com/1120719): The RGBX path is broken for HDR images.
+  if (needs_adjusted_color_space) {
+    uploaded_image =
+        uploaded_image->reinterpretColorSpace(decoded_target_colorspace);
+  }
+
   // RGBX decoding is below.
   // For kGpu, we upload and color convert (if necessary).
   if (image_data->mode == DecodedDataMode::kGpu) {
@@ -2339,7 +2343,6 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image,
   // - The caller allows hardware decodes.
   // - We are using the transfer cache (OOP-R).
   // - The image does not require downscaling for uploading (see TODO below).
-  // - The image does not require subsetting.
   // - The image is supported according to the profiles advertised by the GPU
   //   service.
   //
@@ -2352,7 +2355,6 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image,
   bool do_hardware_accelerated_decode = false;
   if (allow_hardware_decode && mode == DecodedDataMode::kTransferCache &&
       upload_scale_mip_level == 0 &&
-      draw_image.paint_image().subset_rect().IsEmpty() &&
       context_->ContextSupport()->CanDecodeWithHardwareAcceleration(
           image_metadata)) {
     DCHECK(image_metadata);
@@ -2373,40 +2375,43 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image,
   }
 
   SkYUVASizeInfo target_yuva_size_info;
-  // We fill out a default value for |yuv_color_space| but only fill out the
-  // base::Optional member in ImageData if it is YUV.
+  // We fill out a default value for |yuv_color_space| and |yuv_color_type| but
+  // only fill out the base::Optional members in ImageData if it is YUV.
   SkYUVColorSpace yuv_color_space = SkYUVColorSpace::kIdentity_SkYUVColorSpace;
+  SkColorType yuv_color_type = kGray_8_SkColorType;
+  uint8_t yuv_bit_depth = 8;
   const bool is_yuv =
       !do_hardware_accelerated_decode &&
       draw_image.paint_image().IsYuv(&target_yuva_size_info,
                                      nullptr /* plane_indices */,
-                                     &yuv_color_space) &&
-      mode != DecodedDataMode::kCpu && !image_larger_than_max_texture;
+                                     &yuv_color_space, &yuv_bit_depth) &&
+      mode != DecodedDataMode::kCpu && !image_larger_than_max_texture &&
+      (yuv_bit_depth == 8 || allow_yuv_r16_ext_decoding_ ||
+       allow_yuv_luminance_f16_decoding_);
+
   // TODO(crbug.com/910276): Change after alpha support.
   if (is_yuv) {
-    const gfx::Size target_raster_size(image_info.width(), image_info.height());
-    gfx::Size unscaled_u_size(
-        target_yuva_size_info.fSizes[SkYUVAIndex::kU_Index].width(),
-        target_yuva_size_info.fSizes[SkYUVAIndex::kU_Index].height());
-    gfx::Size unscaled_v_size(
-        target_yuva_size_info.fSizes[SkYUVAIndex::kV_Index].width(),
-        target_yuva_size_info.fSizes[SkYUVAIndex::kV_Index].height());
-    gfx::Size scaled_u_size;
-    gfx::Size scaled_v_size;
-    ComputeMippedUVPlaneSizes(target_raster_size, unscaled_u_size,
-                              unscaled_v_size, draw_image, &scaled_u_size,
-                              &scaled_v_size);
+    DCHECK_GE(yuv_bit_depth, 8u);
+    DCHECK_LE(yuv_bit_depth, 16);
+    if (yuv_bit_depth == 8)
+      yuv_color_type = kGray_8_SkColorType;
+    else if (allow_yuv_r16_ext_decoding_)
+      yuv_color_type = kA16_unorm_SkColorType;
+    else if (allow_yuv_luminance_f16_decoding_)
+      yuv_color_type = kA16_float_SkColorType;
 
-    size_t y_size_bytes =
-        target_yuva_size_info.fWidthBytes[SkYUVAIndex::kY_Index] *
-        target_yuva_size_info.fSizes[SkYUVAIndex::kY_Index].height();
-    size_t u_size_bytes =
-        target_yuva_size_info.fWidthBytes[SkYUVAIndex::kU_Index] *
-        target_yuva_size_info.fSizes[SkYUVAIndex::kU_Index].height();
-    size_t v_size_bytes =
-        target_yuva_size_info.fWidthBytes[SkYUVAIndex::kV_Index] *
-        target_yuva_size_info.fSizes[SkYUVAIndex::kV_Index].height();
-    data_size = y_size_bytes + u_size_bytes + v_size_bytes;
+    if (upload_scale_mip_level > 0) {
+      // Scaled decode. We always promote to 4:4:4 when scaling YUV to avoid
+      // blurriness. See comment in DrawAndScaleImage() for details.
+      const base::CheckedNumeric<size_t> y_plane_size =
+          image_info.makeColorType(yuv_color_type).computeMinByteSize();
+      DCHECK(!SkImageInfo::ByteSizeOverflowed(y_plane_size.ValueOrDie()));
+      data_size = (3 * y_plane_size).ValueOrDie();
+    } else {
+      // Original size decode.
+      data_size = target_yuva_size_info.computeTotalBytes();
+      DCHECK(!SkImageInfo::ByteSizeOverflowed(data_size));
+    }
   }
 
   return base::WrapRefCounted(new ImageData(
@@ -2414,7 +2419,7 @@ GpuImageDecodeCache::CreateImageData(const DrawImage& draw_image,
       draw_image.target_color_space(),
       CalculateDesiredFilterQuality(draw_image), upload_scale_mip_level,
       needs_mips, is_bitmap_backed, can_do_hardware_accelerated_decode,
-      do_hardware_accelerated_decode, is_yuv, yuv_color_space));
+      do_hardware_accelerated_decode, is_yuv, yuv_color_space, yuv_color_type));
 }
 
 void GpuImageDecodeCache::WillAddCacheEntry(const DrawImage& draw_image) {
@@ -2605,7 +2610,19 @@ SkImageInfo GpuImageDecodeCache::CreateImageInfoForDrawImage(
     int upload_scale_mip_level) const {
   gfx::Size mip_size =
       CalculateSizeForMipLevel(draw_image, upload_scale_mip_level);
-  return SkImageInfo::Make(mip_size.width(), mip_size.height(), color_type_,
+
+  // Decode HDR images to half float when targeting HDR.
+  //
+  // TODO(crbug.com/1076568): Once we have access to the display's buffer format
+  // via gfx::DisplayColorSpaces, we should also do this for HBD images.
+  auto color_type = color_type_;
+  if (draw_image.paint_image().GetContentColorUsage() ==
+          gfx::ContentColorUsage::kHDR &&
+      draw_image.target_color_space().IsHDR()) {
+    color_type = kRGBA_F16_SkColorType;
+  }
+
+  return SkImageInfo::Make(mip_size.width(), mip_size.height(), color_type,
                            kPremul_SkAlphaType);
 }
 
@@ -2791,6 +2808,8 @@ sk_sp<SkImage> GpuImageDecodeCache::GetUploadedPlaneForTesting(
   base::AutoLock lock(lock_);
   ImageData* image_data = GetImageDataForDrawImage(
       draw_image, InUseCacheKey::FromDrawImage(draw_image));
+  if (!image_data->is_yuv)
+    return nullptr;
   switch (index) {
     case SkYUVAIndex::kY_Index:
       return image_data->upload.y_image();
@@ -2842,6 +2861,21 @@ sk_sp<SkColorSpace> GpuImageDecodeCache::ColorSpaceForImageDecode(
   return sk_ref_sp(image.paint_image().color_space());
 }
 
+bool GpuImageDecodeCache::NeedsColorSpaceAdjustedForUpload(
+    const DrawImage& image) const {
+  return image.sdr_white_level() != gfx::ColorSpace::kDefaultSDRWhiteLevel &&
+         image.paint_image().GetContentColorUsage() ==
+             gfx::ContentColorUsage::kHDR;
+}
+
+sk_sp<SkColorSpace> GpuImageDecodeCache::ColorSpaceForImageUpload(
+    const DrawImage& image) const {
+  DCHECK(NeedsColorSpaceAdjustedForUpload(image));
+  return gfx::ColorSpace(*image.paint_image().color_space())
+      .GetWithSDRWhiteLevel(image.sdr_white_level())
+      .ToSkColorSpace();
+}
+
 void GpuImageDecodeCache::CheckContextLockAcquiredIfNecessary() {
   if (!context_->GetLock())
     return;
@@ -2882,7 +2916,8 @@ sk_sp<SkImage> GpuImageDecodeCache::CreateImageFromYUVATexturesInternal(
       SkISize::Make(image_width, image_height), origin_temp,
       std::move(decoded_color_space));
   if (target_color_space)
-    return yuva_image->makeColorSpace(target_color_space);
+    return yuva_image->makeColorSpace(target_color_space,
+                                      context_->GrContext());
 
   return yuva_image;
 }
@@ -2962,15 +2997,17 @@ void GpuImageDecodeCache::UpdateMipsIfNeeded(const DrawImage& draw_image,
                 draw_image.target_color_space().IsValid()
             ? draw_image.target_color_space().ToSkColorSpace()
             : nullptr;
-    sk_sp<SkColorSpace> decoded_color_space =
-        ColorSpaceForImageDecode(draw_image, image_data->mode);
+    sk_sp<SkColorSpace> upload_color_space =
+        NeedsColorSpaceAdjustedForUpload(draw_image)
+            ? ColorSpaceForImageUpload(draw_image)
+            : ColorSpaceForImageDecode(draw_image, image_data->mode);
     DCHECK(image_data->yuv_color_space.has_value());
     sk_sp<SkImage> yuv_image_with_mips_owned =
         CreateImageFromYUVATexturesInternal(
             image_y_with_mips_owned.get(), image_u_with_mips_owned.get(),
             image_v_with_mips_owned.get(), width, height,
             image_data->yuv_color_space.value(), color_space,
-            decoded_color_space);
+            upload_color_space);
     // In case of lost context
     if (!yuv_image_with_mips_owned) {
       DLOG(WARNING) << "TODO(crbug.com/740737): Context was lost. Early out.";
@@ -3002,6 +3039,15 @@ void GpuImageDecodeCache::UpdateMipsIfNeeded(const DrawImage& draw_image,
   // Need to generate mips. Take a reference on the image we're about to
   // delete, delaying deletion.
   sk_sp<SkImage> previous_image = image_data->upload.image();
+
+#if DCHECK_IS_ON()
+  // For already uploaded images, the correct color space should already have
+  // been set during the upload process.
+  if (NeedsColorSpaceAdjustedForUpload(draw_image)) {
+    DCHECK(SkColorSpace::Equals(previous_image->colorSpace(),
+                                ColorSpaceForImageUpload(draw_image).get()));
+  }
+#endif
 
   // Generate a new image from the previous, adding mips.
   sk_sp<SkImage> image_with_mips = previous_image->makeTextureImage(

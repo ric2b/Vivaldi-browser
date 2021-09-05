@@ -564,7 +564,7 @@ AccessibilityMatchPredicate PredicateForSearchKey(NSString* searchKey) {
     };
   } else if ([searchKey isEqualToString:@"AXStaticTextSearchKey"]) {
     return [](BrowserAccessibility* start, BrowserAccessibility* current) {
-      return current->IsTextOnlyObject();
+      return current->IsText();
     };
   } else if ([searchKey isEqualToString:@"AXStyleChangeSearchKey"]) {
     // TODO(dmazzoni): implement this.
@@ -707,6 +707,20 @@ bool IsSelectedStateRelevant(BrowserAccessibility* item) {
 
 }  // namespace
 
+namespace content {
+
+AXTextEdit::AXTextEdit() = default;
+AXTextEdit::AXTextEdit(base::string16 inserted_text,
+                       base::string16 deleted_text,
+                       id edit_text_marker)
+    : inserted_text(inserted_text),
+      deleted_text(deleted_text),
+      edit_text_marker(edit_text_marker, base::scoped_policy::RETAIN) {}
+AXTextEdit::AXTextEdit(const AXTextEdit& other) = default;
+AXTextEdit::~AXTextEdit() = default;
+
+}  // namespace content
+
 #if defined(MAC_OS_X_VERSION_10_12) && \
     (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12)
 #warning NSAccessibilityRequiredAttributeChrome \
@@ -763,6 +777,12 @@ id content::AXTextMarkerFrom(const BrowserAccessibilityCocoa* anchor,
   BrowserAccessibilityPositionInstance position =
       CreateTextPosition(*anchor_node, offset, affinity);
   return CreateTextMarker(std::move(position));
+}
+
+id content::AXTextMarkerRangeFrom(id anchor_textmarker, id focus_textmarker) {
+  AXTextMarkerRangeRef cf_marker_range = AXTextMarkerRangeCreate(
+      kCFAllocatorDefault, anchor_textmarker, focus_textmarker);
+  return [static_cast<id>(cf_marker_range) autorelease];
 }
 
 @implementation BrowserAccessibilityCocoa
@@ -1871,10 +1891,11 @@ id content::AXTextMarkerFrom(const BrowserAccessibilityCocoa* anchor,
     if (size_t{sel_start} == newValue.length() &&
         size_t{sel_end} == newValue.length()) {
       // Don't include oldValue as it would be announced -- very confusing.
-      return content::AXTextEdit(newValue, base::string16());
+      return content::AXTextEdit(newValue, base::string16(), nil);
     }
   }
-  return content::AXTextEdit(insertedText, deletedText);
+  return content::AXTextEdit(insertedText, deletedText,
+                             CreateTextMarker(_owner->CreatePositionAt(i)));
 }
 
 - (BOOL)instanceActive {
@@ -2244,7 +2265,9 @@ id content::AXTextMarkerFrom(const BrowserAccessibilityCocoa* anchor,
 - (id)selectedTextMarkerRange {
   if (![self instanceActive])
     return nil;
-  return CreateTextMarkerRange(GetSelectedRange(*_owner));
+  // Voiceover expects this range to be backwards in order to read the selected
+  // words correctly.
+  return CreateTextMarkerRange(GetSelectedRange(*_owner).AsBackwardRange());
 }
 
 - (NSValue*)size {
@@ -2607,7 +2630,7 @@ id content::AXTextMarkerFrom(const BrowserAccessibilityCocoa* anchor,
   NSMutableAttributedString* attributedInnerText =
       [[[NSMutableAttributedString alloc]
           initWithString:base::SysUTF16ToNSString(innerText)] autorelease];
-  if (!_owner->IsTextOnlyObject()) {
+  if (!_owner->IsText()) {
     AXPlatformRange ax_range(_owner->CreatePositionAt(0),
                              _owner->CreatePositionAt(int{innerText.length()}));
     AddMisspelledTextAttributes(ax_range, attributedInnerText);
@@ -3033,7 +3056,7 @@ id content::AXTextMarkerFrom(const BrowserAccessibilityCocoa* anchor,
 
   if ([attribute isEqualToString:
                      NSAccessibilityBoundsForRangeParameterizedAttribute]) {
-    if ([self internalRole] != ax::mojom::Role::kStaticText)
+    if (!_owner->IsText())
       return nil;
     NSRange range = [(NSValue*)parameter rangeValue];
     gfx::Rect rect = _owner->GetUnclippedScreenInnerTextRangeBoundsRect(

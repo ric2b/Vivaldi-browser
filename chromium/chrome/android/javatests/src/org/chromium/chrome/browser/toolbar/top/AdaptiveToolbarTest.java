@@ -31,7 +31,6 @@ import androidx.test.filters.MediumTest;
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
@@ -69,9 +68,6 @@ public class AdaptiveToolbarTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
-
     @After
     public void tearDown() {
         CachedFeatureFlags.setForTesting(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, null);
@@ -86,10 +82,8 @@ public class AdaptiveToolbarTest {
                 ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, isGridTabSwitcherEnabled);
         CachedFeatureFlags.setForTesting(ChromeFeatureList.CHROME_DUET, isBottomToolbarEnabled);
         mActivityTestRule.startMainActivityOnBlankPage();
-        CriteriaHelper.pollUiThread(mActivityTestRule.getActivity()
-                                            .getTabModelSelector()
-                                            .getTabModelFilterProvider()
-                                            .getCurrentTabModelFilter()::isTabModelRestored);
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
     }
 
     @Test

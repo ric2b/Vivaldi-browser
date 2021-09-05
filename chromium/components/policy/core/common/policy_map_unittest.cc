@@ -4,11 +4,13 @@
 
 #include "components/policy/core/common/policy_map.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/policy/core/common/external_data_manager.h"
@@ -36,9 +38,7 @@ const char kTestPolicyName8[] = "policy.test.8";
 const char kTestError[] = "Test error message";
 
 // Utility functions for the tests.
-void SetPolicy(PolicyMap* map,
-               const char* name,
-               std::unique_ptr<base::Value> value) {
+void SetPolicy(PolicyMap* map, const char* name, base::Value value) {
   map->Set(name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
            std::move(value), nullptr);
 }
@@ -47,7 +47,7 @@ void SetPolicy(PolicyMap* map,
                const char* name,
                std::unique_ptr<ExternalDataFetcher> external_data_fetcher) {
   map->Set(name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-           nullptr, std::move(external_data_fetcher));
+           base::nullopt, std::move(external_data_fetcher));
 }
 
 template <class T>
@@ -74,10 +74,10 @@ std::unique_ptr<ExternalDataFetcher> PolicyMapTest::CreateExternalDataFetcher(
 
 TEST_F(PolicyMapTest, SetAndGet) {
   PolicyMap map;
-  SetPolicy(&map, kTestPolicyName1, std::make_unique<base::Value>("aaa"));
+  SetPolicy(&map, kTestPolicyName1, base::Value("aaa"));
   base::Value expected("aaa");
   EXPECT_TRUE(expected.Equals(map.GetValue(kTestPolicyName1)));
-  SetPolicy(&map, kTestPolicyName1, std::make_unique<base::Value>("bbb"));
+  SetPolicy(&map, kTestPolicyName1, base::Value("bbb"));
   base::Value expected_b("bbb");
   EXPECT_TRUE(expected_b.Equals(map.GetValue(kTestPolicyName1)));
   SetPolicy(&map, kTestPolicyName1, CreateExternalDataFetcher("dummy"));
@@ -95,7 +95,7 @@ TEST_F(PolicyMapTest, SetAndGet) {
       ExternalDataFetcher::Equals(entry->external_data_fetcher.get(),
                                   CreateExternalDataFetcher("dummy").get()));
   map.Set(kTestPolicyName1, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-          POLICY_SOURCE_ENTERPRISE_DEFAULT, nullptr, nullptr);
+          POLICY_SOURCE_ENTERPRISE_DEFAULT, base::nullopt, nullptr);
   EXPECT_FALSE(map.GetValue(kTestPolicyName1));
   entry = map.Get(kTestPolicyName1);
   ASSERT_TRUE(entry != nullptr);
@@ -108,7 +108,7 @@ TEST_F(PolicyMapTest, SetAndGet) {
 
 TEST_F(PolicyMapTest, AddError) {
   PolicyMap map;
-  SetPolicy(&map, kTestPolicyName1, std::make_unique<base::Value>(0));
+  SetPolicy(&map, kTestPolicyName1, base::Value(0));
   PolicyMap::Entry* entry = map.GetMutable(kTestPolicyName1);
   PolicyMap::Entry::L10nLookupFunction lookup = base::BindRepeating(
       static_cast<base::string16 (*)(int)>(&base::NumberToString16));
@@ -124,14 +124,14 @@ TEST_F(PolicyMapTest, AddError) {
 
 TEST_F(PolicyMapTest, Equals) {
   PolicyMap a;
-  SetPolicy(&a, kTestPolicyName1, std::make_unique<base::Value>("aaa"));
+  SetPolicy(&a, kTestPolicyName1, base::Value("aaa"));
   PolicyMap a2;
-  SetPolicy(&a2, kTestPolicyName1, std::make_unique<base::Value>("aaa"));
+  SetPolicy(&a2, kTestPolicyName1, base::Value("aaa"));
   PolicyMap b;
-  SetPolicy(&b, kTestPolicyName1, std::make_unique<base::Value>("bbb"));
+  SetPolicy(&b, kTestPolicyName1, base::Value("bbb"));
   PolicyMap c;
-  SetPolicy(&c, kTestPolicyName1, std::make_unique<base::Value>("aaa"));
-  SetPolicy(&c, kTestPolicyName2, std::make_unique<base::Value>(true));
+  SetPolicy(&c, kTestPolicyName1, base::Value("aaa"));
+  SetPolicy(&c, kTestPolicyName2, base::Value(true));
   PolicyMap d;
   SetPolicy(&d, kTestPolicyName1, CreateExternalDataFetcher("ddd"));
   PolicyMap d2;
@@ -172,11 +172,11 @@ TEST_F(PolicyMapTest, Equals) {
 
 TEST_F(PolicyMapTest, Swap) {
   PolicyMap a;
-  SetPolicy(&a, kTestPolicyName1, std::make_unique<base::Value>("aaa"));
+  SetPolicy(&a, kTestPolicyName1, base::Value("aaa"));
   SetPolicy(&a, kTestPolicyName2, CreateExternalDataFetcher("dummy"));
   PolicyMap b;
-  SetPolicy(&b, kTestPolicyName1, std::make_unique<base::Value>("bbb"));
-  SetPolicy(&b, kTestPolicyName3, std::make_unique<base::Value>(true));
+  SetPolicy(&b, kTestPolicyName1, base::Value("bbb"));
+  SetPolicy(&b, kTestPolicyName3, base::Value(true));
 
   a.Swap(&b);
   base::Value expected("bbb");
@@ -205,49 +205,42 @@ TEST_F(PolicyMapTest, Swap) {
 TEST_F(PolicyMapTest, MergeFrom) {
   PolicyMap a;
   a.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com"), nullptr);
   a.Set(kTestPolicyName2, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
   a.Set(kTestPolicyName3, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_ENTERPRISE_DEFAULT, nullptr,
+        POLICY_SOURCE_ENTERPRISE_DEFAULT, base::nullopt,
         CreateExternalDataFetcher("a"));
   a.Set(kTestPolicyName4, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(false), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(false), nullptr);
   a.Set(kTestPolicyName5, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com/q={x}"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com/q={x}"), nullptr);
   a.Set(kTestPolicyName7, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_ENTERPRISE_DEFAULT, std::make_unique<base::Value>(false),
-        nullptr);
+        POLICY_SOURCE_ENTERPRISE_DEFAULT, base::Value(false), nullptr);
   a.Set(kTestPolicyName8, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_ACTIVE_DIRECTORY,
-        std::make_unique<base::Value>("blocked AD policy"), nullptr);
+        POLICY_SOURCE_ACTIVE_DIRECTORY, base::Value("blocked AD policy"),
+        nullptr);
   a.GetMutable(kTestPolicyName8)->SetBlocked();
 
   PolicyMap b;
   b.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("chromium.org"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("chromium.org"), nullptr);
   b.Set(kTestPolicyName2, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(false), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(false), nullptr);
   b.Set(kTestPolicyName3, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_ENTERPRISE_DEFAULT, nullptr,
+        POLICY_SOURCE_ENTERPRISE_DEFAULT, base::nullopt,
         CreateExternalDataFetcher("b"));
   b.Set(kTestPolicyName4, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_DEVICE_LOCAL_ACCOUNT_OVERRIDE,
-        std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_DEVICE_LOCAL_ACCOUNT_OVERRIDE, base::Value(true),
+        nullptr);
   b.Set(kTestPolicyName5, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>(std::string()),
-        nullptr);
+        POLICY_SOURCE_PLATFORM, base::Value(std::string()), nullptr);
   b.Set(kTestPolicyName6, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
   b.Set(kTestPolicyName7, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_ACTIVE_DIRECTORY, std::make_unique<base::Value>(true),
-        nullptr);
+        POLICY_SOURCE_ACTIVE_DIRECTORY, base::Value(true), nullptr);
   b.Set(kTestPolicyName8, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD,
-        std::make_unique<base::Value>("non blocked cloud policy"), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("non blocked cloud policy"), nullptr);
 
   auto conflicted_policy_1 = a.Get(kTestPolicyName1)->DeepCopy();
   auto conflicted_policy_4 = a.Get(kTestPolicyName4)->DeepCopy();
@@ -261,49 +254,46 @@ TEST_F(PolicyMapTest, MergeFrom) {
   PolicyMap c;
   // POLICY_SCOPE_MACHINE over POLICY_SCOPE_USER.
   c.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("chromium.org"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("chromium.org"), nullptr);
   c.GetMutable(kTestPolicyName1)->AddWarning(IDS_POLICY_CONFLICT_DIFF_VALUE);
   c.GetMutable(kTestPolicyName1)
       ->AddConflictingPolicy(std::move(conflicted_policy_1));
   // |a| has precedence over |b|.
   c.Set(kTestPolicyName2, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
   c.GetMutable(kTestPolicyName2)->AddWarning(IDS_POLICY_CONFLICT_DIFF_VALUE);
   c.GetMutable(kTestPolicyName2)
       ->AddConflictingPolicy(b.Get(kTestPolicyName2)->DeepCopy());
   c.Set(kTestPolicyName3, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_ENTERPRISE_DEFAULT, nullptr,
+        POLICY_SOURCE_ENTERPRISE_DEFAULT, base::nullopt,
         CreateExternalDataFetcher("a"));
   c.GetMutable(kTestPolicyName3)->AddWarning(IDS_POLICY_CONFLICT_DIFF_VALUE);
   c.GetMutable(kTestPolicyName3)
       ->AddConflictingPolicy(b.Get(kTestPolicyName3)->DeepCopy());
   // POLICY_SCOPE_MACHINE over POLICY_SCOPE_USER for POLICY_LEVEL_RECOMMENDED.
   c.Set(kTestPolicyName4, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_DEVICE_LOCAL_ACCOUNT_OVERRIDE,
-        std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_DEVICE_LOCAL_ACCOUNT_OVERRIDE, base::Value(true),
+        nullptr);
   c.GetMutable(kTestPolicyName4)->AddWarning(IDS_POLICY_CONFLICT_DIFF_VALUE);
   c.GetMutable(kTestPolicyName4)
       ->AddConflictingPolicy(std::move(conflicted_policy_4));
   // POLICY_LEVEL_MANDATORY over POLICY_LEVEL_RECOMMENDED.
   c.Set(kTestPolicyName5, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>(std::string()),
-        nullptr);
+        POLICY_SOURCE_PLATFORM, base::Value(std::string()), nullptr);
   c.GetMutable(kTestPolicyName5)->AddWarning(IDS_POLICY_CONFLICT_DIFF_VALUE);
   c.GetMutable(kTestPolicyName5)
       ->AddConflictingPolicy(std::move(conflicted_policy_5));
   // Merge new ones.
   c.Set(kTestPolicyName6, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
   // POLICY_SOURCE_ACTIVE_DIRECTORY over POLICY_SOURCE_ENTERPRISE_DEFAULT.
   c.Set(kTestPolicyName7, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_ACTIVE_DIRECTORY, std::make_unique<base::Value>(true),
-        nullptr);
+        POLICY_SOURCE_ACTIVE_DIRECTORY, base::Value(true), nullptr);
   c.GetMutable(kTestPolicyName7)->SetBlocked();
 
   c.Set(kTestPolicyName8, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_ACTIVE_DIRECTORY,
-        std::make_unique<base::Value>("blocked AD policy"), nullptr);
+        POLICY_SOURCE_ACTIVE_DIRECTORY, base::Value("blocked AD policy"),
+        nullptr);
   c.GetMutable(kTestPolicyName8)->AddWarning(IDS_POLICY_CONFLICT_DIFF_VALUE);
   c.GetMutable(kTestPolicyName8)
       ->AddConflictingPolicy(std::move(conflicted_policy_8));
@@ -746,7 +736,7 @@ TEST_F(PolicyMapTest, MergeValuesGroup) {
       POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
       POLICY_SOURCE_ENTERPRISE_DEFAULT, base::Value(ef), nullptr));
 
-  // Case 2 - policy::key::kExtensionInstallBlacklist
+  // Case 2 - policy::key::kExtensionInstallBlocklist
   // This policy is part of the atomic group "Extensions" and has the highest
   // source in its group, its value should remain the same.
   PolicyMap::Entry cloud_machine_mandatory(
@@ -757,9 +747,9 @@ TEST_F(PolicyMapTest, MergeValuesGroup) {
       PolicyMap::Entry(POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
                        POLICY_SOURCE_PLATFORM, base::Value(cd), nullptr));
 
-  // Case 3 - policy::key::kExtensionInstallWhitelist
+  // Case 3 - policy::key::kExtensionInstallAllowlist
   // This policy is part of the atomic group "Extensions" and has a lower
-  // source than policy::key::kExtensionInstallBlacklist from the same group,
+  // source than policy::key::kExtensionInstallBlocklist from the same group,
   // its value should be ignored.
   PolicyMap::Entry ad_machine_mandatory(
       POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
@@ -767,7 +757,7 @@ TEST_F(PolicyMapTest, MergeValuesGroup) {
   auto ad_machine_mandatory_ignored = ad_machine_mandatory.DeepCopy();
   ad_machine_mandatory_ignored.SetIgnoredByPolicyAtomicGroup();
 
-  // Case 4 - policy::key::kExtensionInstallBlacklist
+  // Case 4 - policy::key::kExtensionInstallBlocklist
   // This policy is part of the atomic group "Extensions" and has the highest
   // source in its group, its value should remain the same.
   PolicyMap::Entry cloud_machine_recommended(
@@ -776,9 +766,9 @@ TEST_F(PolicyMapTest, MergeValuesGroup) {
 
   PolicyMap policy_not_merged;
   policy_not_merged.Set(kTestPolicyName1, platform_user_mandatory.DeepCopy());
-  policy_not_merged.Set(policy::key::kExtensionInstallBlacklist,
+  policy_not_merged.Set(policy::key::kExtensionInstallBlocklist,
                         cloud_machine_mandatory.DeepCopy());
-  policy_not_merged.Set(policy::key::kExtensionInstallWhitelist,
+  policy_not_merged.Set(policy::key::kExtensionInstallAllowlist,
                         ad_machine_mandatory.DeepCopy());
   policy_not_merged.Set(policy::key::kExtensionInstallForcelist,
                         cloud_machine_recommended.DeepCopy());
@@ -791,9 +781,9 @@ TEST_F(PolicyMapTest, MergeValuesGroup) {
   PolicyMap expected_group_merged;
   expected_group_merged.Set(kTestPolicyName1,
                             platform_user_mandatory.DeepCopy());
-  expected_group_merged.Set(policy::key::kExtensionInstallBlacklist,
+  expected_group_merged.Set(policy::key::kExtensionInstallBlocklist,
                             cloud_machine_mandatory.DeepCopy());
-  expected_group_merged.Set(policy::key::kExtensionInstallWhitelist,
+  expected_group_merged.Set(policy::key::kExtensionInstallAllowlist,
                             ad_machine_mandatory_ignored.DeepCopy());
   expected_group_merged.Set(policy::key::kExtensionInstallForcelist,
                             cloud_machine_recommended.DeepCopy());
@@ -804,39 +794,35 @@ TEST_F(PolicyMapTest, MergeValuesGroup) {
 TEST_F(PolicyMapTest, GetDifferingKeys) {
   PolicyMap a;
   a.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com"), nullptr);
   a.Set(kTestPolicyName2, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, nullptr, CreateExternalDataFetcher("dummy"));
+        POLICY_SOURCE_CLOUD, base::nullopt, CreateExternalDataFetcher("dummy"));
   a.Set(kTestPolicyName3, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
   a.Set(kTestPolicyName4, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, nullptr, CreateExternalDataFetcher("a"));
+        POLICY_SOURCE_CLOUD, base::nullopt, CreateExternalDataFetcher("a"));
   a.Set(kTestPolicyName5, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(false), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(false), nullptr);
   a.Set(kTestPolicyName6, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com/q={x}"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com/q={x}"), nullptr);
   a.Set(kTestPolicyName7, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
 
   PolicyMap b;
   b.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com"), nullptr);
   b.Set(kTestPolicyName2, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, nullptr, CreateExternalDataFetcher("dummy"));
+        POLICY_SOURCE_CLOUD, base::nullopt, CreateExternalDataFetcher("dummy"));
   b.Set(kTestPolicyName3, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(false), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(false), nullptr);
   b.Set(kTestPolicyName4, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, nullptr, CreateExternalDataFetcher("b"));
+        POLICY_SOURCE_CLOUD, base::nullopt, CreateExternalDataFetcher("b"));
   b.Set(kTestPolicyName5, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(false), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(false), nullptr);
   b.Set(kTestPolicyName6, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com/q={x}"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com/q={x}"), nullptr);
   b.Set(kTestPolicyName8, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
 
   std::set<std::string> diff;
   std::set<std::string> diff2;
@@ -877,14 +863,11 @@ TEST_F(PolicyMapTest, LoadFromSetsLevelScopeAndSource) {
 
   PolicyMap expected;
   expected.Set("TestPolicy1", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_PLATFORM,
-               std::make_unique<base::Value>("google.com"), nullptr);
+               POLICY_SOURCE_PLATFORM, base::Value("google.com"), nullptr);
   expected.Set("TestPolicy2", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>(true),
-               nullptr);
+               POLICY_SOURCE_PLATFORM, base::Value(true), nullptr);
   expected.Set("TestPolicy3", POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_PLATFORM, std::make_unique<base::Value>(-12321),
-               nullptr);
+               POLICY_SOURCE_PLATFORM, base::Value(-12321), nullptr);
   EXPECT_TRUE(loaded.Equals(expected));
 }
 
@@ -895,17 +878,15 @@ bool IsMandatory(const PolicyMap::PolicyMapType::const_iterator iter) {
 TEST_F(PolicyMapTest, EraseNonmatching) {
   PolicyMap a;
   a.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com"), nullptr);
   a.Set(kTestPolicyName2, POLICY_LEVEL_RECOMMENDED, POLICY_SCOPE_MACHINE,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true), nullptr);
+        POLICY_SOURCE_CLOUD, base::Value(true), nullptr);
 
   a.EraseNonmatching(base::BindRepeating(&IsMandatory));
 
   PolicyMap b;
   b.Set(kTestPolicyName1, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD, std::make_unique<base::Value>("google.com"),
-        nullptr);
+        POLICY_SOURCE_CLOUD, base::Value("google.com"), nullptr);
   EXPECT_TRUE(a.Equals(b));
 }
 

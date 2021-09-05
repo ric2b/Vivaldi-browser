@@ -13,6 +13,7 @@ import android.view.ViewGroup;
 import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
@@ -22,17 +23,22 @@ import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+
+// Vivaldi
+import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * Abstract representation of an OpenGL layout tailored to draw tabs. It is a framework used as an
@@ -115,6 +121,9 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     // The ratio of dp to px.
     protected final float mDpToPx;
     protected final float mPxToDp;
+
+    // Vivaldi
+    private float mEventOffset;
 
     /**
      * The {@link Layout} is not usable until sizeChanged is called.
@@ -284,13 +293,13 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * Update snapping to pixel. To be called once every frame.
      *
      * TODO(crbug.com/1070281): Temporary placement. This is some Mediator logic and should move to
-     * the appropriate location when doing MVC.
+     * the appropriate location when doing MVC. Maybe move to {@link LayoutMediator}.
      *
      * @param dt The delta time between update frames in ms.
      * @param layoutTab The {@link LayoutTab} that needs to be updating.
      * @return   True if the snapping requests to render at least one more frame.
      */
-    protected boolean updateSnap(long dt, LayoutTab layoutTab) {
+    protected boolean updateSnap(long dt, PropertyModel layoutTab) {
         final float step = dt * SNAP_SPEED / 1000.0f;
         final float renderX = layoutTab.get(LayoutTab.RENDER_X);
         final float renderY = layoutTab.get(LayoutTab.RENDER_Y);
@@ -380,6 +389,14 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
             notifySizeChanged(width, height, orientation);
         }
 
+        // Note(david@vivaldi.com): When toolbar is at the bottom we consider the
+        // visibleViewportPx.bottom
+        if (!VivaldiUtils.isTopToolbarOn()) {
+            for (int i = 0; i < mSceneOverlays.size(); i++) {
+                mSceneOverlays.get(i).onSizeChanged(
+                        width, height, visibleViewportPx.bottom, orientation);
+            }
+        } else
         // 5. TODO(dtrainor): Notify the overlay objects.
         for (int i = 0; i < mSceneOverlays.size(); i++) {
             mSceneOverlays.get(i).onSizeChanged(width, height, visibleViewportPx.top, orientation);
@@ -394,18 +411,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @param orientation The new orientation.
      */
     protected void notifySizeChanged(float width, float height, @Orientation int orientation) {}
-
-    /**
-     * Notify the a title has changed.
-     *
-     * @param tabId The id of the tab that has changed.
-     * @param title The new title.
-     */
-    public void tabTitleChanged(int tabId, String title) {
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).tabTitleChanged(tabId, title);
-        }
-    }
 
     /**
      * Sets the managers needed to for the layout to get information from outside. The managers
@@ -455,9 +460,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
         mUpdateHost.startHiding(nextTabId, hintAtTabSelection);
         mIsHiding = true;
         mNextTabId = nextTabId;
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).onHideLayout();
-        }
     }
 
     /**
@@ -667,9 +669,6 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     public void onTabCreated(long time, int tabId, int tabIndex, int sourceTabId,
             boolean newIsIncognito, boolean background, float originX, float originY) {
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).tabCreated(time, newIsIncognito, tabId, sourceTabId, !background);
-        }
     }
 
     /**
@@ -680,23 +679,11 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
     public void onTabRestored(long time, int tabId) { }
 
     /**
-     * Called when the TabModelSelector has been initialized with an accurate tab count.
-     */
-    public void onTabStateInitialized() {
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).tabStateInitialized();
-        }
-    }
-
-    /**
      * Called when the current tabModel switched (e.g. standard -> incognito).
      *
      * @param incognito True if the new model is incognito.
      */
     public void onTabModelSwitched(boolean incognito) {
-        for (int i = 0; i < mSceneOverlays.size(); i++) {
-            mSceneOverlays.get(i).tabModelSwitched(incognito);
-        }
     }
 
     /**
@@ -818,6 +805,16 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
             EventFilter eventFilter = mSceneOverlays.get(i).getEventFilter();
             if (eventFilter == null) continue;
             if (offsets != null) eventFilter.setCurrentMotionEventOffsets(offsets.x, offsets.y);
+            // Note(david@vivaldi.com): When the toolbar is at the bottom we need to consider the
+            // |mEventOffset| in order to consume the events.
+            if (mSceneOverlays.get(i) instanceof StripLayoutHelperManager) {
+                if (((StripLayoutHelperManager) mSceneOverlays.get(i)).isSceneOffScreen()) continue;
+                if (!VivaldiUtils.isTopToolbarOn()) {
+                    MotionEvent changedEvent = MotionEvent.obtain(e.getDownTime(), e.getEventTime(),
+                            e.getAction(), e.getX(), mEventOffset - e.getY(), e.getMetaState());
+                    e = changedEvent;
+                }
+            }
             if (eventFilter.onInterceptTouchEvent(e, isKeyboardShowing)) return eventFilter;
         }
 
@@ -841,17 +838,17 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      * @param layerTitleCache   A layer title cache.
      * @param tabContentManager A tab content manager.
      * @param resourceManager   A resource manager.
-     * @param fullscreenManager A fullscreen manager.
+     * @param browserControls   A browser controls state provider.
      * @return                  A {@link SceneLayer} that represents the content for this
      *                          {@link Layout}.
      */
     public final SceneLayer getUpdatedSceneLayer(RectF viewport, RectF visibleViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
-            ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
+            ResourceManager resourceManager, BrowserControlsStateProvider browserControls) {
         updateSceneLayer(viewport, visibleViewport, layerTitleCache, tabContentManager,
-                resourceManager, fullscreenManager);
+                resourceManager, browserControls);
 
-        float offsetPx = fullscreenManager != null ? fullscreenManager.getTopControlOffset() : 0.f;
+        float offsetPx = browserControls != null ? browserControls.getTopControlOffset() : 0.f;
         float dpToPx = getContext().getResources().getDisplayMetrics().density;
         float offsetDp = offsetPx / dpToPx;
 
@@ -866,6 +863,9 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
             overlayLayer.setContentTree(content);
             content = overlayLayer;
         }
+
+        // Note(david@vivaldi.com): This is used when the toolbar is at the bottom.
+        mEventOffset = viewport.height();
 
         return content;
     }
@@ -907,7 +907,7 @@ public abstract class Layout implements TabContentManager.ThumbnailChangeListene
      */
     protected void updateSceneLayer(RectF viewport, RectF contentViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
-            ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {}
+            ResourceManager resourceManager, BrowserControlsStateProvider browserControls) {}
 
     // Vivaldi: Removes the {@link SceneOverlay}.
     public void removeSceneOverlay(SceneOverlay helper) {

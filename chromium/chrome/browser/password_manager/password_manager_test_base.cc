@@ -26,7 +26,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/sync/driver/test_sync_service.h"
@@ -40,8 +39,6 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/transport_security_state.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace {
@@ -83,7 +80,7 @@ class CustomManagePasswordsUIController : public ManagePasswordsUIController {
   bool OnChooseCredentials(
       std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
       const url::Origin& origin,
-      const ManagePasswordsState::CredentialsCallback& callback) override;
+      ManagePasswordsState::CredentialsCallback callback) override;
   void OnPasswordAutofilled(
       const std::vector<const autofill::PasswordForm*>& password_forms,
       const url::Origin& origin,
@@ -94,7 +91,7 @@ class CustomManagePasswordsUIController : public ManagePasswordsUIController {
 
   // ManagePasswordsUIController:
   void NotifyUnsyncedCredentialsWillBeDeleted(
-      const std::vector<autofill::PasswordForm>& unsynced_credentials) override;
+      std::vector<autofill::PasswordForm> unsynced_credentials) override;
 
   // Should not be used for manual fallback events.
   bool IsTargetStateObserved(
@@ -211,10 +208,10 @@ void CustomManagePasswordsUIController::OnHideManualFallbackForSaving() {
 bool CustomManagePasswordsUIController::OnChooseCredentials(
     std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
     const url::Origin& origin,
-    const ManagePasswordsState::CredentialsCallback& callback) {
+    ManagePasswordsState::CredentialsCallback callback) {
   ProcessStateExpectations(password_manager::ui::CREDENTIAL_REQUEST_STATE);
   return ManagePasswordsUIController::OnChooseCredentials(
-      std::move(local_credentials), origin, callback);
+      std::move(local_credentials), origin, std::move(callback));
 }
 
 void CustomManagePasswordsUIController::OnPasswordAutofilled(
@@ -238,9 +235,9 @@ void CustomManagePasswordsUIController::DidFinishNavigation(
 }
 
 void CustomManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
-    const std::vector<autofill::PasswordForm>& unsynced_credentials) {
+    std::vector<autofill::PasswordForm> unsynced_credentials) {
   ManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
-      unsynced_credentials);
+      std::move(unsynced_credentials));
   was_prompt_automatically_shown_ = true;
   ProcessStateExpectations(
       password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
@@ -355,14 +352,6 @@ void BubbleObserver::AcceptSavePrompt() const {
   EXPECT_FALSE(IsSavePromptAvailable());
 }
 
-void BubbleObserver::AcceptSaveUnsyncedCredentialsPrompt() const {
-  ASSERT_EQ(password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE,
-            passwords_ui_controller_->GetState());
-  passwords_ui_controller_->SaveUnsyncedCredentialsInProfileStore();
-  EXPECT_NE(password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE,
-            passwords_ui_controller_->GetState());
-}
-
 void BubbleObserver::AcceptUpdatePrompt() const {
   ASSERT_TRUE(IsUpdatePromptAvailable());
   passwords_ui_controller_->SavePassword(
@@ -455,29 +444,11 @@ void PasswordManagerBrowserTestBase::SetUpOnMainThread() {
   verify_result.verified_cert = cert;
   mock_cert_verifier()->AddResultForCert(cert.get(), verify_result, net::OK);
 
-  SetUpOnMainThreadAndGetNewTab(browser(), &web_contents_);
+  GetNewTab(browser(), &web_contents_);
 }
 
 void PasswordManagerBrowserTestBase::TearDownOnMainThread() {
   ASSERT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
-}
-
-// static
-void PasswordManagerBrowserTestBase::SetUpOnMainThreadAndGetNewTab(
-    Browser* browser,
-    content::WebContents** web_contents) {
-  // Use TestPasswordStore to remove a possible race. Normally the
-  // PasswordStore does its database manipulation on a background thread, which
-  // creates a possible race during navigation. Specifically the
-  // PasswordManager will ignore any forms in a page if the load from the
-  // PasswordStore has not completed.
-  PasswordStoreFactory::GetInstance()->SetTestingFactory(
-      browser->profile(),
-      base::BindRepeating(
-          &password_manager::BuildPasswordStore<
-              content::BrowserContext, password_manager::TestPasswordStore>));
-
-  GetNewTab(browser, web_contents);
 }
 
 // static
@@ -689,20 +660,21 @@ void PasswordManagerBrowserTestBase::CheckElementValue(
 
 void PasswordManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
   CertVerifierBrowserTest::SetUpInProcessBrowserTestFixture();
-  will_create_browser_context_services_subscription_ =
+  create_services_subscription_ =
       BrowserContextDependencyManager::GetInstance()
-          ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-              base::BindRepeating(&PasswordManagerBrowserTestBase::
-                                      OnWillCreateBrowserContextServices));
-}
-
-// static
-void PasswordManagerBrowserTestBase::OnWillCreateBrowserContextServices(
-    content::BrowserContext* context) {
-  // Set up a TestSyncService which will happily return "everything is active"
-  // so that password generation is considered enabled.
-  ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(
-      context, base::BindRepeating(&BuildTestSyncService));
+          ->RegisterCreateServicesCallbackForTesting(
+              base::BindRepeating([](content::BrowserContext* context) {
+                // Set up a TestSyncService which will happily return
+                // "everything is active" so that password generation is
+                // considered enabled.
+                ProfileSyncServiceFactory::GetInstance()->SetTestingFactory(
+                    context, base::BindRepeating(&BuildTestSyncService));
+                PasswordStoreFactory::GetInstance()->SetTestingFactory(
+                    context,
+                    base::BindRepeating(&password_manager::BuildPasswordStore<
+                                        content::BrowserContext,
+                                        password_manager::TestPasswordStore>));
+              }));
 }
 
 void PasswordManagerBrowserTestBase::AddHSTSHost(const std::string& host) {

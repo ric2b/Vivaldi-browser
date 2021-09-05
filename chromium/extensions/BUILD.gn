@@ -2,7 +2,6 @@
 # found in the LICENSE file.
 
 import("//build/config/chromecast_build.gni")
-import("//build/config/jumbo.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
@@ -60,7 +59,7 @@ grit("extensions_renderer_resources") {
   ]
 }
 
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "browser/api/declarative/test_rules_registry.cc",
@@ -125,6 +124,8 @@ jumbo_static_library("test_support") {
     "test/result_catcher.h",
     "test/test_background_page_first_load_observer.cc",
     "test/test_background_page_first_load_observer.h",
+    "test/test_background_page_ready_observer.cc",
+    "test/test_background_page_ready_observer.h",
     "test/test_content_utility_client.cc",
     "test/test_content_utility_client.h",
     "test/test_extension_dir.cc",
@@ -206,6 +207,10 @@ repack("shell_and_test_pak") {
 }
 
 test("extensions_unittests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   sources = [
     "test/extensions_unittests_main.cc",
     "test/logging_timer_unittest.cc",
@@ -240,6 +245,10 @@ test("extensions_unittests") {
 }
 
 test("extensions_browsertests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   data = [
     "//extensions/test/data/",
     "//net/tools/testserver/",
@@ -313,7 +322,6 @@ source_set("chrome_extensions_browsertests") {
     "//testing/gtest",
     "//testing/perf",
     "//third_party/blink/public:blink",
-    "//third_party/cacheinvalidation",
     "//third_party/icu",
     "//third_party/leveldatabase",
     "//third_party/libaddressinput",

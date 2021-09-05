@@ -11,6 +11,7 @@
 #include "base/path_service.h"
 #include "base/test/scoped_command_line.h"
 #include "build/build_config.h"
+#include "google_apis/gaia/gaia_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -44,8 +45,10 @@ class GaiaUrlsTest : public ::testing::Test {
 
   // Lazily constructs |gaia_urls_|.
   GaiaUrls* gaia_urls() {
-    if (!gaia_urls_)
+    if (!gaia_urls_) {
+      GaiaConfig::ResetInstanceForTesting();
       gaia_urls_ = new GaiaUrls();
+    }
     return gaia_urls_;
   }
 
@@ -68,6 +71,10 @@ TEST_F(GaiaUrlsTest, InitializeDefault_AllUrls) {
             "https://accounts.google.com/ServiceLogin");
   EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_url(2U).spec(),
             "https://accounts.google.com/embedded/setup/v2/chromeos");
+  EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_kid_signup_url().spec(),
+            "https://accounts.google.com/embedded/setup/kidsignup/chromeos");
+  EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_kid_signin_url().spec(),
+            "https://accounts.google.com/embedded/setup/kidsignin/chromeos");
   EXPECT_EQ(gaia_urls()->embedded_setup_windows_url().spec(),
             "https://accounts.google.com/embedded/setup/windows");
   EXPECT_EQ(gaia_urls()->signin_chrome_sync_dice().spec(),
@@ -152,6 +159,10 @@ TEST_F(GaiaUrlsTest, InitializeDefault_URLSwitches) {
             "https://test-gaia.com/ServiceLogin");
   EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_url(2U).spec(),
             "https://test-gaia.com/embedded/setup/v2/chromeos");
+  EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_kid_signup_url().spec(),
+            "https://test-gaia.com/embedded/setup/kidsignup/chromeos");
+  EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_kid_signin_url().spec(),
+            "https://test-gaia.com/embedded/setup/kidsignin/chromeos");
   EXPECT_EQ(gaia_urls()->embedded_setup_windows_url().spec(),
             "https://test-gaia.com/embedded/setup/windows");
   EXPECT_EQ(gaia_urls()->signin_chrome_sync_dice().spec(),
@@ -274,6 +285,10 @@ TEST_F(GaiaUrlsTest, InitializeFromConfig_AllUrls) {
             "https://accounts.example.com/ServiceLogin");
   EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_url(2U).spec(),
             "https://accounts.example.com/embedded/setup/v2/chromeos");
+  EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_kid_signup_url().spec(),
+            "https://accounts.example.com/embedded/setup/kidsignup/chromeos");
+  EXPECT_EQ(gaia_urls()->embedded_setup_chromeos_kid_signin_url().spec(),
+            "https://accounts.example.com/embedded/setup/kidsignin/chromeos");
   EXPECT_EQ(gaia_urls()->embedded_setup_windows_url().spec(),
             "https://accounts.example.com/embedded/setup/windows");
   EXPECT_EQ(gaia_urls()->signin_chrome_sync_dice().spec(),
@@ -330,7 +345,7 @@ TEST_F(GaiaUrlsTest, InitializeFromConfig_AllUrls) {
   EXPECT_EQ(gaia_urls()->reauth_api_url().spec(),
             "https://www.exampleapis.com/reauth/v1beta/users/");
   EXPECT_EQ(gaia_urls()->gaia_login_form_realm().spec(),
-            "https://accounts.example.com/");
+            "https://accounts.example.com/LoginFormRealm");
 }
 
 TEST_F(GaiaUrlsTest, InitializeFromConfig_AllBaseUrls) {

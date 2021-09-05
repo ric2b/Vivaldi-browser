@@ -25,10 +25,10 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.KeyboardShortcuts;
 import org.chromium.chrome.browser.WarmupManager;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.ui.controller.Verifier;
 import org.chromium.chrome.browser.browserservices.ui.trustedwebactivity.TrustedWebActivityCoordinator;
@@ -150,7 +150,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     @Override
     protected RootUiCoordinator createRootUiCoordinator() {
         return new BaseCustomTabRootUiCoordinator(this, getShareDelegateSupplier(),
-                mToolbarCoordinator, mNavigationController, getActivityTabProvider(),
+                () -> mToolbarCoordinator, () -> mNavigationController, getActivityTabProvider(),
                 mTabModelProfileSupplier, mBookmarkBridgeSupplier, mOverviewModeBehaviorSupplier,
                 this::getContextualSearchManager);
     }

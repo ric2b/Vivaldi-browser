@@ -181,48 +181,6 @@ bool InSameTreePosition(FrameTreeNode* frame_tree_node,
   return true;
 }
 
-void InitRestoredTreeNode(BrowserContext* browser_context,
-                          NavigationEntryImpl::TreeNode* node) {
-  DCHECK(browser_context);
-  DCHECK(node);
-
-  // Check that this is a freshly restored entry.
-  FrameNavigationEntry* frame_entry = node->frame_entry.get();
-  DCHECK(!frame_entry->site_instance());
-
-  // Check that the entry has been already populated with required information.
-  DCHECK(frame_entry->page_state().IsValid());
-
-  // For about:blank and data: URLs create a SiteInstance based on the initiator
-  // origin.  See also https://crbug.com/1026474.
-  if (frame_entry->url().IsAboutBlank() ||
-      frame_entry->url().SchemeIs(url::kDataScheme)) {
-    // TODO(lukasza): We should consider also creating a SiteInstance if there
-    // is no initiator origin.  Doing this would allow us to
-    // 1) remove special-casing of data URLs in
-    //    SiteInstanceImpl::GetSiteForURLInternal where sometimes we use the
-    //    whole data URL as a site URL to avoid session restore trouble.
-    // 2) start asserting that an initialized FrameNavigationEntry should always
-    //    have a non-null SiteInstance.
-    if (frame_entry->initiator_origin().has_value()) {
-      url::SchemeHostPort initiator_tuple =
-          frame_entry->initiator_origin()->GetTupleOrPrecursorTupleIfOpaque();
-      frame_entry->set_site_instance(SiteInstanceImpl::CreateForURL(
-          browser_context, initiator_tuple.GetURL()));
-    }
-  }
-}
-
-void RecursivelyInitRestoredTreeNode(BrowserContext* browser_context,
-                                     NavigationEntryImpl::TreeNode* node) {
-  DCHECK(browser_context);
-  DCHECK(node);
-
-  InitRestoredTreeNode(browser_context, node);
-  for (const auto& child : node->children)
-    RecursivelyInitRestoredTreeNode(browser_context, child.get());
-}
-
 void RegisterOriginsRecursive(NavigationEntryImpl::TreeNode* node,
                               const url::Origin& origin) {
   if (node->frame_entry->committed_origin().has_value()) {
@@ -689,11 +647,6 @@ int64_t NavigationEntryImpl::GetMainFrameDocumentSequenceNumber() {
   return frame_tree_->frame_entry->document_sequence_number();
 }
 
-void NavigationEntryImpl::InitRestoredEntry(BrowserContext* browser_context) {
-  DCHECK(browser_context);
-  RecursivelyInitRestoredTreeNode(browser_context, root_node());
-}
-
 void NavigationEntryImpl::SetCanLoadLocalResources(bool allow) {
   can_load_local_resources_ = allow;
 }
@@ -761,7 +714,7 @@ NavigationEntryImpl::ConstructCommonNavigationParams(
     const GURL& dest_url,
     blink::mojom::ReferrerPtr dest_referrer,
     mojom::NavigationType navigation_type,
-    PreviewsState previews_state,
+    blink::PreviewsState previews_state,
     base::TimeTicks navigation_start,
     base::TimeTicks input_start) {
   NavigationDownloadPolicy download_policy;
@@ -775,7 +728,8 @@ NavigationEntryImpl::ConstructCommonNavigationParams(
       previews_state, navigation_start, frame_entry.method(),
       post_body ? post_body : post_data_, network::mojom::SourceLocation::New(),
       has_started_from_context_menu(), has_user_gesture(),
-      CreateInitiatorCSPInfo(), std::vector<int>(), std::string(),
+      false /* has_text_fragment_token */, CreateInitiatorCSPInfo(),
+      std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */, input_start);
 }
 
@@ -830,7 +784,12 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
           GURL() /* web_bundle_physical_url */,
           GURL() /* base_url_override_for_web_bundle */, frame_policy,
           std::vector<std::string>() /* force_enabled_origin_trials */,
-          false /* origin_isolation_restricted */);
+          false /* origin_isolated */,
+          std::vector<
+              network::mojom::WebClientHintsType>() /* enabled_client_hints */,
+          false /* is_cross_browsing_instance */,
+          std::vector<std::string>() /* forced_content_security_policies */,
+          nullptr /* old_page_info */);
 #if defined(OS_ANDROID)
   if (NavigationControllerImpl::ValidateDataURLAsString(GetDataURLAsString())) {
     commit_params->data_url_as_string = GetDataURLAsString()->data();

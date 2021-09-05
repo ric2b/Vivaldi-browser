@@ -108,6 +108,7 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
  public:
   TSFTextStore();
   virtual ~TSFTextStore();
+  HRESULT Initialize();
 
   // ITextStoreACP:
   IFACEMETHODIMP_(ULONG) AddRef() override;
@@ -299,6 +300,9 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
                             const TfEditCookie read_only_edit_cookie,
                             size_t* committed_size,
                             ImeTextSpans* spans);
+
+  // Reset all cached flags when |TSFTextStore::RequestLock| returns.
+  void ResetCacheAfterEditSession();
 
   // Gets the style information from the display attribute for the actively
   // composed text.

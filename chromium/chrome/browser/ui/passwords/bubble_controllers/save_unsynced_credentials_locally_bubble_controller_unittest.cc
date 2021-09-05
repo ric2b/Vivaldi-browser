@@ -39,19 +39,26 @@ TEST_F(SaveUnsyncedCredentialsLocallyBubbleControllerTest,
       .WillOnce(ReturnRef(unsynced_credentials_));
   SaveUnsyncedCredentialsLocallyBubbleController controller(
       model_delegate_mock_.AsWeakPtr());
-  EXPECT_EQ(controller.GetUnsyncedCredentials(), unsynced_credentials_);
+  EXPECT_EQ(controller.unsynced_credentials(), unsynced_credentials_);
 }
 
 TEST_F(SaveUnsyncedCredentialsLocallyBubbleControllerTest,
-       ShouldSaveCredentialsInProfileStoreOnSaveButtonClicked) {
+       ShouldSaveSelectedCredentialsInProfileStoreOnSaveButtonClicked) {
+  EXPECT_CALL(model_delegate_mock_, GetUnsyncedCredentials())
+      .WillOnce(ReturnRef(unsynced_credentials_));
   SaveUnsyncedCredentialsLocallyBubbleController controller(
       model_delegate_mock_.AsWeakPtr());
-  EXPECT_CALL(model_delegate_mock_, SaveUnsyncedCredentialsInProfileStore);
-  controller.OnSaveClicked();
+  EXPECT_CALL(
+      model_delegate_mock_,
+      SaveUnsyncedCredentialsInProfileStore(
+          std::vector<autofill::PasswordForm>{unsynced_credentials_[1]}));
+  controller.OnSaveClicked({false, true});
 }
 
 TEST_F(SaveUnsyncedCredentialsLocallyBubbleControllerTest,
        ShouldDiscardCredentialsInProfileStoreOnCancelButtonClicked) {
+  EXPECT_CALL(model_delegate_mock_, GetUnsyncedCredentials())
+      .WillOnce(ReturnRef(unsynced_credentials_));
   SaveUnsyncedCredentialsLocallyBubbleController controller(
       model_delegate_mock_.AsWeakPtr());
   EXPECT_CALL(model_delegate_mock_, DiscardUnsyncedCredentials);

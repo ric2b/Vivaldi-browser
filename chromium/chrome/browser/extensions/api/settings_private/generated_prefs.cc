@@ -9,6 +9,7 @@
 #include "chrome/browser/content_settings/generated_cookie_prefs.h"
 #include "chrome/browser/extensions/api/settings_private/generated_pref.h"
 #include "chrome/browser/extensions/api/settings_private/prefs_util_enums.h"
+#include "chrome/browser/password_manager/generated_password_leak_detection_pref.h"
 #include "chrome/browser/safe_browsing/generated_safe_browsing_pref.h"
 #include "chrome/common/extensions/api/settings_private.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -21,31 +22,16 @@
 namespace extensions {
 namespace settings_private {
 
-GeneratedPrefs::GeneratedPrefs(Profile* profile) {
-#if defined(OS_CHROMEOS)
-  prefs_[kResolveTimezoneByGeolocationOnOff] =
-      CreateGeneratedResolveTimezoneByGeolocationOnOff(profile);
-  prefs_[kResolveTimezoneByGeolocationMethodShort] =
-      CreateGeneratedResolveTimezoneByGeolocationMethodShort(profile);
-#endif
-  prefs_[content_settings::kCookiePrimarySetting] =
-      std::make_unique<content_settings::GeneratedCookiePrimarySettingPref>(
-          profile);
-  prefs_[content_settings::kCookieSessionOnly] =
-      std::make_unique<content_settings::GeneratedCookieSessionOnlyPref>(
-          profile);
-  prefs_[safe_browsing::kGeneratedSafeBrowsingPref] =
-      std::make_unique<safe_browsing::GeneratedSafeBrowsingPref>(profile);
-}
+GeneratedPrefs::GeneratedPrefs(Profile* profile) : profile_(profile) {}
 
 GeneratedPrefs::~GeneratedPrefs() = default;
 
-bool GeneratedPrefs::HasPref(const std::string& pref_name) const {
+bool GeneratedPrefs::HasPref(const std::string& pref_name) {
   return FindPrefImpl(pref_name) != nullptr;
 }
 
 std::unique_ptr<api::settings_private::PrefObject> GeneratedPrefs::GetPref(
-    const std::string& pref_name) const {
+    const std::string& pref_name) {
   GeneratedPref* impl = FindPrefImpl(pref_name);
   if (!impl)
     return nullptr;
@@ -79,13 +65,40 @@ void GeneratedPrefs::RemoveObserver(const std::string& pref_name,
   impl->RemoveObserver(observer);
 }
 
-GeneratedPref* GeneratedPrefs::FindPrefImpl(
-    const std::string& pref_name) const {
+void GeneratedPrefs::Shutdown() {
+  // Clear preference map so generated prefs are destroyed before services they
+  // may depend on are shutdown.
+  prefs_.clear();
+}
+
+GeneratedPref* GeneratedPrefs::FindPrefImpl(const std::string& pref_name) {
+  if (prefs_.empty())
+    CreatePrefs();
+
   const PrefsMap::const_iterator it = prefs_.find(pref_name);
   if (it == prefs_.end())
     return nullptr;
 
   return it->second.get();
+}
+
+void GeneratedPrefs::CreatePrefs() {
+#if defined(OS_CHROMEOS)
+  prefs_[kResolveTimezoneByGeolocationOnOff] =
+      CreateGeneratedResolveTimezoneByGeolocationOnOff(profile_);
+  prefs_[kResolveTimezoneByGeolocationMethodShort] =
+      CreateGeneratedResolveTimezoneByGeolocationMethodShort(profile_);
+#endif
+  prefs_[content_settings::kCookiePrimarySetting] =
+      std::make_unique<content_settings::GeneratedCookiePrimarySettingPref>(
+          profile_);
+  prefs_[content_settings::kCookieSessionOnly] =
+      std::make_unique<content_settings::GeneratedCookieSessionOnlyPref>(
+          profile_);
+  prefs_[kGeneratedPasswordLeakDetectionPref] =
+      std::make_unique<GeneratedPasswordLeakDetectionPref>(profile_);
+  prefs_[safe_browsing::kGeneratedSafeBrowsingPref] =
+      std::make_unique<safe_browsing::GeneratedSafeBrowsingPref>(profile_);
 }
 
 }  // namespace settings_private

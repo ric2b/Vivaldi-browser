@@ -61,7 +61,7 @@ static NSString* const kFeedbackContext = @"SideMenuFeedbackContext";
                      NSString* message =
                          [NSString stringWithFormat:@"Using WebRTC: %s",
                                                     newValue ? "Yes" : "No"];
-                     [MDCSnackbarManager
+                     [MDCSnackbarManager.defaultManager
                          showMessage:[MDCSnackbarMessage
                                          messageWithText:message]];
                    }],
@@ -81,20 +81,6 @@ static NSString* const kFeedbackContext = @"SideMenuFeedbackContext";
                    action:^{
                      [AppDelegate.instance presentHelpCenter];
                    }],
-      ],
-      @[
-        [[SideMenuItem alloc]
-            initWithTitle:l10n_util::GetNSString(IDS_TERMS_OF_SERVICE)
-                     icon:nil
-                   action:^{
-                     [AppDelegate.instance presentTermsOfService];
-                   }],
-        [[SideMenuItem alloc]
-            initWithTitle:l10n_util::GetNSString(IDS_PRIVACY_POLICY)
-                     icon:nil
-                   action:^{
-                     [AppDelegate.instance presentPrivacyPolicy];
-                   }]
       ]
     ];
   });

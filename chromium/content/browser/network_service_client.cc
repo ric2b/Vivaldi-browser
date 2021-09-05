@@ -36,8 +36,8 @@
 #include "base/android/content_uri_utils.h"
 #endif
 
-#if defined(OS_MACOSX)
-#include "base/message_loop/message_loop_current.h"
+#if defined(OS_MAC)
+#include "base/task/current_thread.h"
 #endif
 
 namespace content {
@@ -64,8 +64,8 @@ NetworkServiceClient::NetworkServiceClient(
 #endif
 {
 
-#if defined(OS_MACOSX)
-  if (base::MessageLoopCurrentForUI::IsSet())  // Not set in some unit tests.
+#if defined(OS_MAC)
+  if (base::CurrentUIThread::IsSet())  // Not set in some unit tests.
     net::CertDatabase::GetInstance()->StartListeningForKeychainEvents();
 #endif
 
@@ -222,12 +222,12 @@ void NetworkServiceClient::OnRawResponse(
     int32_t process_id,
     int32_t routing_id,
     const std::string& devtools_request_id,
-    const net::CookieAndLineStatusList& cookies_with_status,
+    const net::CookieAndLineAccessResultList& cookies_with_access_result,
     std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
     const base::Optional<std::string>& raw_response_headers) {
   devtools_instrumentation::OnResponseReceivedExtraInfo(
-      process_id, routing_id, devtools_request_id, cookies_with_status, headers,
-      raw_response_headers);
+      process_id, routing_id, devtools_request_id, cookies_with_access_result,
+      headers, raw_response_headers);
 }
 
 void NetworkServiceClient::OnCorsPreflightRequest(

@@ -17,6 +17,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 
 namespace base {
 
@@ -71,8 +72,8 @@ class BASE_EXPORT SysInfo {
   // Returns a descriptive string for the current machine model or an empty
   // string if the machine model is unknown or an error occurred.
   // e.g. "MacPro1,1" on Mac, "iPhone9,3" on iOS or "Nexus 5" on Android. Only
-  // implemented on OS X, iOS, and Android. This returns an empty string on
-  // other platforms.
+  // implemented on OS X, iOS, Android and Chrome OS. This returns an empty
+  // string on other platforms.
   static std::string HardwareModelName();
 
   struct HardwareInfo {
@@ -127,7 +128,7 @@ class BASE_EXPORT SysInfo {
   // allocate.
   static size_t VMAllocationGranularity();
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   // Set |value| and return true if LsbRelease contains information about |key|.
   static bool GetLsbReleaseValue(const std::string& key, std::string* value);
 
@@ -164,7 +165,7 @@ class BASE_EXPORT SysInfo {
   // Crashes if running on Chrome OS non-test image. Use only for really
   // sensitive and risky use cases.
   static void CrashIfChromeOSNonTestImage();
-#endif  // defined(OS_CHROMEOS)
+#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
 #if defined(OS_ANDROID)
   // Returns the Android build's codename.

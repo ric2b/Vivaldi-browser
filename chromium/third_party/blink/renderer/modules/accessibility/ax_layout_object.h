@@ -96,6 +96,7 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   AccessibilityGrabbedState IsGrabbed() const override;
   AccessibilitySelectedState IsSelected() const override;
   bool IsSelectedFromFocus() const override;
+  bool IsNotUserSelectable() const override;
 
   // Whether objects are ignored, i.e. not included in the tree.
   AXObjectInclusion DefaultObjectInclusion(
@@ -105,7 +106,7 @@ class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
   // Properties of static elements.
   ax::mojom::blink::ListStyle GetListStyle() const final;
   String GetText() const override;
-  ax::mojom::blink::TextDirection GetTextDirection() const final;
+  ax::mojom::blink::WritingDirection GetTextDirection() const final;
   ax::mojom::blink::TextPosition GetTextPosition() const final;
   void GetTextStyleAndTextDecorationStyle(
       int32_t* text_style,

@@ -175,6 +175,20 @@ static inline void ConvertCanvasStyleToUnionType(
   return_value.SetString(style->GetColor());
 }
 
+void BaseRenderingContext2D::IdentifiabilityMaybeUpdateForStyleUnion(
+    const StringOrCanvasGradientOrCanvasPattern& style) {
+  if (style.IsString()) {
+    identifiability_study_helper_.MaybeUpdateBuilder(
+        IdentifiabilityBenignStringToken(style.GetAsString()));
+  } else if (style.IsCanvasPattern()) {
+    identifiability_study_helper_.MaybeUpdateBuilder(
+        style.GetAsCanvasPattern()->GetIdentifiableToken());
+  } else if (style.IsCanvasGradient()) {
+    identifiability_study_helper_.MaybeUpdateBuilder(
+        style.GetAsCanvasGradient()->GetIdentifiableToken());
+  }
+}
+
 void BaseRenderingContext2D::strokeStyle(
     StringOrCanvasGradientOrCanvasPattern& return_value) const {
   ConvertCanvasStyleToUnionType(GetState().StrokeStyle(), return_value);
@@ -183,6 +197,8 @@ void BaseRenderingContext2D::strokeStyle(
 void BaseRenderingContext2D::setStrokeStyle(
     const StringOrCanvasGradientOrCanvasPattern& style) {
   DCHECK(!style.IsNull());
+  identifiability_study_helper_.MaybeUpdateBuilder(CanvasOps::kSetStrokeStyle);
+  IdentifiabilityMaybeUpdateForStyleUnion(style);
 
   String color_string;
   CanvasStyle* canvas_style = nullptr;
@@ -226,6 +242,9 @@ void BaseRenderingContext2D::setFillStyle(
     const StringOrCanvasGradientOrCanvasPattern& style) {
   DCHECK(!style.IsNull());
   ValidateStateStack();
+  identifiability_study_helper_.MaybeUpdateBuilder(CanvasOps::kSetFillStyle);
+  IdentifiabilityMaybeUpdateForStyleUnion(style);
+
   String color_string;
   CanvasStyle* canvas_style = nullptr;
   if (style.IsString()) {
@@ -706,8 +725,13 @@ void BaseRenderingContext2D::fillRect(double x,
   if (IsAccelerated() &&
       GetState().HasPattern(CanvasRenderingContext2DState::kFillPaintType) &&
       !GetState().PatternIsAccelerated(
-          CanvasRenderingContext2DState::kFillPaintType))
+          CanvasRenderingContext2DState::kFillPaintType)) {
     DisableAcceleration();
+    base::UmaHistogramEnumeration(
+        "Blink.Canvas.GPUFallbackToCPU",
+        GPUFallbackToCPUScenario::kLargePatternDrawnToGPU);
+  }
+
   SkRect rect = SkRect::MakeXYWH(fx, fy, fwidth, fheight);
   Draw([&rect](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
        { c->drawRect(rect, *flags); },
@@ -1382,6 +1406,22 @@ CanvasGradient* BaseRenderingContext2D::createRadialGradient(
   return gradient;
 }
 
+CanvasGradient* BaseRenderingContext2D::createConicGradient(double startAngle,
+                                                            double centerX,
+                                                            double centerY) {
+  if (!std::isfinite(startAngle) || !std::isfinite(centerX) ||
+      !std::isfinite(centerY))
+    return nullptr;
+
+  // clamp to float to avoid float cast overflow
+  float a = clampTo<float>(startAngle);
+  float x = clampTo<float>(centerX);
+  float y = clampTo<float>(centerY);
+
+  auto* gradient = MakeGarbageCollected<CanvasGradient>(a, FloatPoint(x, y));
+  return gradient;
+}
+
 CanvasPattern* BaseRenderingContext2D::createPattern(
     ScriptState* script_state,
     const CanvasImageSourceUnion& image_source,
@@ -1624,9 +1664,19 @@ ImageData* BaseRenderingContext2D::getImageData(
   FinalizeFrame();
   scoped_refptr<StaticBitmapImage> snapshot = GetImage();
 
-  // GetImagedata is faster in Unaccelerated canvases
-  if (IsAccelerated())
-    DisableAcceleration();
+  // TODO(crbug.com/1101055): Remove the check for NewCanvas2DAPI flag once
+  // released.
+  // New Canvas2D API utilizes willReadFrequently attribute that let the users
+  // indicate if a canvas will be read frequently through getImageData, thus
+  // uses CPU rendering from the start in such cases. (crbug.com/1090180)
+  if (!RuntimeEnabledFeatures::NewCanvas2DAPIEnabled()) {
+    // GetImagedata is faster in Unaccelerated canvases
+    if (IsAccelerated()) {
+      DisableAcceleration();
+      base::UmaHistogramEnumeration("Blink.Canvas.GPUFallbackToCPU",
+                                    GPUFallbackToCPUScenario::kGetImageData);
+    }
+  }
 
   size_t size_in_bytes;
   if (!StaticBitmapImage::GetSizeInBytes(image_data_rect, color_params)
@@ -1991,6 +2041,8 @@ String BaseRenderingContext2D::textAlign() const {
 }
 
 void BaseRenderingContext2D::setTextAlign(const String& s) {
+  identifiability_study_helper_.MaybeUpdateBuilder(
+      CanvasOps::kSetTextAlign, IdentifiabilityBenignStringToken(s));
   TextAlign align;
   if (!ParseTextAlign(s, align))
     return;
@@ -2004,6 +2056,8 @@ String BaseRenderingContext2D::textBaseline() const {
 }
 
 void BaseRenderingContext2D::setTextBaseline(const String& s) {
+  identifiability_study_helper_.MaybeUpdateBuilder(
+      CanvasOps::kSetTextBaseline, IdentifiabilityBenignStringToken(s));
   TextBaseline baseline;
   if (!ParseTextBaseline(s, baseline))
     return;

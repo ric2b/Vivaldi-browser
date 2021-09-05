@@ -99,7 +99,8 @@ void ValidationMessageOverlayDelegate::PaintFrameOverlay(
   if (DrawingRecorder::UseCachedDrawingIfPossible(context, overlay,
                                                   DisplayItem::kFrameOverlay))
     return;
-  DrawingRecorder recorder(context, overlay, DisplayItem::kFrameOverlay);
+  DrawingRecorder recorder(context, overlay, DisplayItem::kFrameOverlay,
+                           IntRect(IntPoint(), view_size));
 
   const_cast<ValidationMessageOverlayDelegate*>(this)->UpdateFrameViewState(
       overlay, view_size);
@@ -161,7 +162,7 @@ void ValidationMessageOverlayDelegate::CreatePage(const FrameOverlay& overlay) {
       MakeGarbageCollected<EmptyLocalFrameClient>(), *page_, nullptr,
       base::UnguessableToken::Create(), nullptr, nullptr);
   frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame, view_size));
-  frame->Init();
+  frame->Init(nullptr);
   frame->View()->SetCanHaveScrollbars(false);
   frame->View()->SetBaseBackgroundColor(Color::kTransparent);
   page_->GetVisualViewport().SetSize(view_size);

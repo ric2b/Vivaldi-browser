@@ -31,8 +31,6 @@ namespace blink {
 class InspectorResourceContentLoader::ResourceClient final
     : public GarbageCollected<InspectorResourceContentLoader::ResourceClient>,
       private RawResourceClient {
-  USING_GARBAGE_COLLECTED_MIXIN(ResourceClient);
-
  public:
   explicit ResourceClient(InspectorResourceContentLoader* loader)
       : loader_(loader) {}
@@ -71,6 +69,8 @@ void InspectorResourceContentLoader::Start() {
   InspectedFrames* inspected_frames =
       MakeGarbageCollected<InspectedFrames>(inspected_frame_);
   for (LocalFrame* frame : *inspected_frames) {
+    if (!frame->Loader().StateMachine()->CommittedFirstRealDocumentLoad())
+      continue;
     documents.push_back(frame->GetDocument());
     documents.AppendVector(InspectorPageAgent::ImportsForFrame(frame));
   }
@@ -101,9 +101,12 @@ void InspectorResourceContentLoader::Start() {
       // CompleteURL() to use imported Documents' base URLs.
       fetcher = document->GetExecutionContext()->Fetcher();
     }
+
+    scoped_refptr<const DOMWrapperWorld> world =
+        document->GetExecutionContext()->GetCurrentWorld();
     if (!resource_request.Url().GetString().IsEmpty()) {
       urls_to_fetch.insert(resource_request.Url().GetString());
-      ResourceLoaderOptions options;
+      ResourceLoaderOptions options(world);
       options.initiator_info.name = fetch_initiator_type_names::kInternal;
       FetchParameters params(std::move(resource_request), options);
       ResourceClient* resource_client =
@@ -125,7 +128,7 @@ void InspectorResourceContentLoader::Start() {
       urls_to_fetch.insert(url);
       ResourceRequest resource_request(url);
       resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
-      ResourceLoaderOptions options;
+      ResourceLoaderOptions options(world);
       options.initiator_info.name = fetch_initiator_type_names::kInternal;
       FetchParameters params(std::move(resource_request), options);
       ResourceClient* resource_client =
@@ -157,7 +160,7 @@ void InspectorResourceContentLoader::Start() {
                           : network::mojom::CredentialsMode::kOmit);
       manifest_request.SetRequestContext(
           mojom::blink::RequestContextType::MANIFEST);
-      ResourceLoaderOptions manifest_options;
+      ResourceLoaderOptions manifest_options(world);
       manifest_options.initiator_info.name =
           fetch_initiator_type_names::kInternal;
       FetchParameters manifest_params(std::move(manifest_request),

@@ -236,7 +236,7 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
       InitDataReductionProxySettings(profile_prefs, std::move(service));
 
   data_reduction_proxy::DataReductionProxySettings::
-      SetCallbackToRegisterSyntheticFieldTrial(base::Bind(
+      SetCallbackToRegisterSyntheticFieldTrial(base::BindRepeating(
           &ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial));
   // In M35 and earlier, the Data Reduction Proxy enabled/disabled setting was
   // stored in prefs, so this setting needs to be migrated to the new way of
@@ -251,18 +251,6 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
                                                               this);
     https_image_compression_bypass_decider_ =
         std::make_unique<HttpsImageCompressionBypassDecider>();
-  }
-}
-
-void DataReductionProxyChromeSettings::SetIgnoreLongTermBlockListRules(
-    bool ignore_long_term_block_list_rules) {
-  // |previews_service| is null if |profile_| is off the record.
-  PreviewsService* previews_service =
-      PreviewsServiceFactory::GetForProfile(profile_);
-  if (previews_service && previews_service->previews_ui_service()) {
-    previews_service->previews_ui_service()
-        ->SetIgnoreLongTermBlockListForServerPreviews(
-            ignore_long_term_block_list_rules);
   }
 }
 
@@ -297,11 +285,11 @@ DataReductionProxyChromeSettings::CreateDataFromNavigationHandle(
 data_reduction_proxy::Client DataReductionProxyChromeSettings::GetClient() {
 #if defined(OS_ANDROID)
   return data_reduction_proxy::Client::CHROME_ANDROID;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   return data_reduction_proxy::Client::CHROME_MAC;
 #elif defined(OS_CHROMEOS)
   return data_reduction_proxy::Client::CHROME_CHROMEOS;
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
   return data_reduction_proxy::Client::CHROME_LINUX;
 #elif defined(OS_WIN)
   return data_reduction_proxy::Client::CHROME_WINDOWS;

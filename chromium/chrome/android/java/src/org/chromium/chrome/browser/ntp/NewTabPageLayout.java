@@ -22,13 +22,13 @@ import android.widget.LinearLayout;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.CallbackController;
 import org.chromium.base.MathUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
-import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
+import org.chromium.chrome.browser.cryptids.ProbabilisticCryptidRenderer;
 import org.chromium.chrome.browser.download.DownloadOpenSource;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.explore_sites.ExperimentalExploreSitesSection;
@@ -79,6 +79,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     private View mTileGridPlaceholder;
     private View mNoSearchLogoSpacer;
     private QueryTileSection mQueryTileSection;
+    private ImageView mCryptidHolder;
 
     @Nullable
     private View mExploreSectionView; // View is null if explore flag is disabled.
@@ -93,6 +94,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     private TileGroup mTileGroup;
     private UiConfig mUiConfig;
     private Supplier<Tab> mTabProvider;
+    private CallbackController mCallbackController = new CallbackController();
 
     /**
      * Whether the tiles shown in the layout have finished loading.
@@ -105,10 +107,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
      * With {@link #mTilesLoaded}, it's one of the 2 flags used to track initialization progress.
      */
     private boolean mHasShownView;
-
-    /** Observer for overview mode. */
-    private EmptyOverviewModeObserver mOverviewObserver;
-    private OverviewModeBehavior mOverviewModeBehavior;
 
     private boolean mSearchProviderHasLogo = true;
     private boolean mSearchProviderIsGoogle;
@@ -202,7 +200,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     /**
      * Initializes the NewTabPageLayout. This must be called immediately after inflation, before
      * this object is used in any other way.
-     *
      * @param manager NewTabPageManager used to perform various actions when the user interacts
      *                with the page.
      * @param activity The activity that currently owns the new tab page
@@ -214,15 +211,13 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
      * @param uiConfig UiConfig that provides display information about this view.
      * @param tabProvider Provides the current active tab.
      * @param lifecycleDispatcher Activity lifecycle dispatcher.
-     * @param overviewModeBehavior Overview mode to observe for mode changes.
      * @param uma {@link NewTabPageUma} object recording user metrics.
      */
     public void initialize(NewTabPageManager manager, Activity activity,
             TileGroup.Delegate tileGroupDelegate, boolean searchProviderHasLogo,
             boolean searchProviderIsGoogle, ScrollDelegate scrollDelegate,
             ContextMenuManager contextMenuManager, UiConfig uiConfig, Supplier<Tab> tabProvider,
-            ActivityLifecycleDispatcher lifecycleDispatcher,
-            @Nullable OverviewModeBehavior overviewModeBehavior, NewTabPageUma uma) {
+            ActivityLifecycleDispatcher lifecycleDispatcher, NewTabPageUma uma) {
         TraceEvent.begin(TAG + ".initialize()");
         mScrollDelegate = scrollDelegate;
         mManager = manager;
@@ -277,18 +272,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
 
         VrModuleProvider.registerVrModeObserver(this);
         if (VrModuleProvider.getDelegate().isInVr()) onEnterVr();
-
-        mOverviewModeBehavior = overviewModeBehavior;
-        if (overviewModeBehavior != null && overviewModeBehavior.overviewVisible()) {
-            mOverviewObserver = new EmptyOverviewModeObserver() {
-                @Override
-                public void onOverviewModeFinishedHiding() {
-                    overviewModeBehavior.removeOverviewModeObserver(mOverviewObserver);
-                    mOverviewObserver = null;
-                }
-            };
-            overviewModeBehavior.addOverviewModeObserver(mOverviewObserver);
-        }
 
         manager.addDestructionObserver(NewTabPageLayout.this::onDestroy);
 
@@ -509,7 +492,28 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         mSearchProviderLogoView.showSearchProviderInitialView();
 
         mLogoDelegate.getSearchProviderLogo((logo, fromCache) -> {
-            if (logo == null && fromCache) return;
+            if (logo == null) {
+                if (mSearchProviderIsGoogle) {
+                    // We received a null logo and the provider is Google; this means there's no
+                    // doodle.
+                    ProbabilisticCryptidRenderer renderer =
+                            ProbabilisticCryptidRenderer.getInstance();
+                    renderer.getCryptidForLogo(Profile.getLastUsedRegularProfile(),
+                            mCallbackController.makeCancelable((drawable) -> {
+                                if (drawable == null || mCryptidHolder != null) {
+                                    return;
+                                }
+                                ViewStub stub = findViewById(R.id.logo_holder)
+                                                        .findViewById(R.id.cryptid_holder);
+                                ImageView view = (ImageView) stub.inflate();
+                                view.setImageDrawable(drawable);
+                                mCryptidHolder = view;
+                                renderer.recordRenderEvent();
+                            }));
+                }
+
+                if (fromCache) return;
+            }
 
             mSearchProviderLogoView.setDelegate(mLogoDelegate);
             mSearchProviderLogoView.updateLogo(logo);
@@ -866,14 +870,13 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     }
 
     private void onDestroy() {
+        if (mCallbackController != null) {
+            mCallbackController.destroy();
+            mCallbackController = null;
+        }
+
         if (mExploreOfflineCard != null) mExploreOfflineCard.destroy();
         VrModuleProvider.unregisterVrModeObserver(this);
-        // Need to null-check compositor view holder and layout manager since they might've
-        // been cleared by now.
-        if (mOverviewObserver != null) {
-            mOverviewModeBehavior.removeOverviewModeObserver(mOverviewObserver);
-            mOverviewObserver = null;
-        }
 
         if (mSearchProviderLogoView != null) {
             mSearchProviderLogoView.destroy();

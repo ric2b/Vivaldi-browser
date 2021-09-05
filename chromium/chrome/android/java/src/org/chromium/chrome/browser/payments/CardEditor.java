@@ -18,7 +18,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.BackgroundOnlyAsyncTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.autofill.CreditCardScanner;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -29,8 +29,8 @@ import org.chromium.chrome.browser.autofill.prefeditor.EditorFieldModel.EditorFi
 import org.chromium.chrome.browser.autofill.prefeditor.EditorFieldModel.EditorValueIconGenerator;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorModel;
 import org.chromium.chrome.browser.autofill.settings.AutofillProfileBridge.DropdownKeyValue;
-import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentRequestServiceObserverForTest;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.components.payments.ComponentPaymentRequestImpl;
 import org.chromium.components.payments.MethodStrings;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentMethodData;
@@ -109,9 +109,6 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
     /** Used for verifying billing address completeness and also editing billing addresses. */
     private final AddressEditor mAddressEditor;
 
-    /** An optional observer used by tests. */
-    @Nullable private final PaymentRequestServiceObserverForTest mObserverForTest;
-
     /**
      * A mapping from all card issuer networks recognized in Chrome to information about these
      * networks. The networks (e.g., "visa") are defined in:
@@ -167,16 +164,14 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
      *                        billing addresses.
      * @param includeOrgLabel Whether the labels in the billing address dropdown should include the
      *                        organization name.
-     * @param observerForTest Optional observer for test.
      */
-    public CardEditor(WebContents webContents, AddressEditor addressEditor, boolean includeOrgLabel,
-            @Nullable PaymentRequestServiceObserverForTest observerForTest) {
+    public CardEditor(
+            WebContents webContents, AddressEditor addressEditor, boolean includeOrgLabel) {
         assert webContents != null;
         assert addressEditor != null;
 
         mWebContents = webContents;
         mAddressEditor = addressEditor;
-        mObserverForTest = observerForTest;
 
         List<AutofillProfile> profiles =
                 PersonalDataManager.getInstance().getBillingAddressesToSuggest(includeOrgLabel);
@@ -544,11 +539,12 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
                           R.string.payments_card_expiration_invalid_validation_message));
             mMonthField.setIsFullLine(false);
 
-            if (mObserverForTest != null) {
+            if (ComponentPaymentRequestImpl.getObserverForTest() != null) {
                 mMonthField.setDropdownCallback(new Callback<Pair<String, Runnable>>() {
                     @Override
                     public void onResult(final Pair<String, Runnable> eventData) {
-                        mObserverForTest.onPaymentRequestServiceExpirationMonthChange();
+                        ComponentPaymentRequestImpl.getObserverForTest()
+                                .onPaymentRequestServiceExpirationMonthChange();
                     }
                 });
             }
@@ -675,8 +671,9 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
                 final boolean isSelectingIncompleteAddress =
                         mIncompleteProfilesForBillingAddress.containsKey(eventData.first);
                 if (!isAddingNewAddress && !isSelectingIncompleteAddress) {
-                    if (mObserverForTest != null) {
-                        mObserverForTest.onPaymentRequestServiceBillingAddressChangeProcessed();
+                    if (ComponentPaymentRequestImpl.getObserverForTest() != null) {
+                        ComponentPaymentRequestImpl.getObserverForTest()
+                                .onPaymentRequestServiceBillingAddressChangeProcessed();
                     }
                     return;
                 }

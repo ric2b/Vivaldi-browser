@@ -13,7 +13,6 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/url_constants.h"
 #include "components/datasource/css_mods_data_source.h"
 #include "components/datasource/local_image_data_source.h"
 #include "components/datasource/notes_attachment_data_source.h"
@@ -27,8 +26,8 @@
 #include "components/datasource/desktop_data_source_win.h"
 #endif  // defined(OS_WIN)
 
-VivaldiDataSource::VivaldiDataSource(Profile* profile) {
-  profile = profile->GetOriginalProfile();
+VivaldiDataSource::VivaldiDataSource(Profile* profile) :
+profile_(profile->GetOriginalProfile()) {
 
   std::vector<std::pair<PathType, std::unique_ptr<VivaldiDataClassHandler>>>
       handlers;
@@ -37,19 +36,17 @@ VivaldiDataSource::VivaldiDataSource(Profile* profile) {
       PathType::kDesktopWallpaper,
       std::make_unique<DesktopWallpaperDataClassHandlerWin>());
 #endif  // defined(OS_WIN)
-  handlers.emplace_back(
-      PathType::kLocalPath,
-      std::make_unique<LocalImageDataClassHandler>(
-          profile, extensions::VivaldiDataSourcesAPI::PATH_MAPPING_URL));
-  handlers.emplace_back(
-      PathType::kThumbnail,
-      std::make_unique<LocalImageDataClassHandler>(
-          profile, extensions::VivaldiDataSourcesAPI::THUMBNAIL_URL));
+  handlers.emplace_back(PathType::kLocalPath,
+                        std::make_unique<LocalImageDataClassHandler>(
+                            VivaldiDataSourcesAPI::PATH_MAPPING_URL));
+  handlers.emplace_back(PathType::kThumbnail,
+                        std::make_unique<LocalImageDataClassHandler>(
+                            VivaldiDataSourcesAPI::THUMBNAIL_URL));
   handlers.emplace_back(
       PathType::kNotesAttachment,
-      std::make_unique<NotesAttachmentDataClassHandler>(profile));
+      std::make_unique<NotesAttachmentDataClassHandler>());
   handlers.emplace_back(PathType::kCSSMod,
-                        std::make_unique<CSSModsDataClassHandler>(profile));
+                        std::make_unique<CSSModsDataClassHandler>());
 
   data_class_handlers_ =
       base::flat_map<PathType, std::unique_ptr<VivaldiDataClassHandler>>(
@@ -74,7 +71,7 @@ void VivaldiDataSource::StartDataRequest(
   if (type) {
     auto it = data_class_handlers_.find(*type);
     if (it != data_class_handlers_.end()) {
-      it->second->GetData(data, std::move(callback));
+      it->second->GetData(profile_, data, std::move(callback));
       return;
     }
   }

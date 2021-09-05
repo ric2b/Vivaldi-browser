@@ -48,7 +48,6 @@
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/crx_file/id_util.h"
 #include "components/permissions/chooser_context_base.h"
@@ -139,9 +138,8 @@ void AddExceptionsGrantedByHostedApps(
 
     const extensions::URLPatternSet& web_extent = (*extension)->web_extent();
     // Add patterns from web extent.
-    for (auto pattern = web_extent.begin(); pattern != web_extent.end();
-         ++pattern) {
-      std::string url_pattern = pattern->GetAsString();
+    for (const auto& pattern : web_extent) {
+      std::string url_pattern = pattern.GetAsString();
       site_settings::AddExceptionForHostedApp(url_pattern, *extension->get(),
                                               exceptions);
     }
@@ -292,6 +290,18 @@ bool IsPatternValidForType(const std::string& pattern_string,
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
 
+  // Don't allow patterns for WebUI schemes, even though it's a valid pattern.
+  // WebUI permissions are controlled by ContentSettingsRegistry
+  // WhitelistedSchemes and WebUIAllowlist. Users shouldn't be able to grant
+  // extra permissions or revoke existing permissions.
+  if (pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROME ||
+      pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROMEUNTRUSTED ||
+      pattern.GetScheme() == ContentSettingsPattern::SCHEME_DEVTOOLS ||
+      pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROMESEARCH) {
+    *out_error = l10n_util::GetStringUTF8(IDS_SETTINGS_NOT_VALID_WEB_ADDRESS);
+    return false;
+  }
+
   // Don't allow an input of '*', even though it's a valid pattern. This
   // changes the default setting.
   if (!pattern.IsValid() || pattern == ContentSettingsPattern::Wildcard()) {
@@ -361,10 +371,8 @@ std::string GetCookieSettingDescription(Profile* profile) {
   } else if (block_third_party) {
     return l10n_util::GetStringUTF8(
         IDS_SETTINGS_SITE_SETTINGS_COOKIES_BLOCK_THIRD_PARTY);
-  } else if (base::FeatureList::IsEnabled(
-                 content_settings::kImprovedCookieControls) &&
-             control_mode ==
-                 content_settings::CookieControlsMode::kIncognitoOnly) {
+  } else if (control_mode ==
+             content_settings::CookieControlsMode::kIncognitoOnly) {
     return l10n_util::GetStringUTF8(
         IDS_SETTINGS_SITE_SETTINGS_COOKIES_BLOCK_THIRD_PARTY_INCOGNITO);
   } else {

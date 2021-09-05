@@ -11,7 +11,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/win/windows_types.h"
-#include "chrome/credential_provider/gaiacp/os_user_manager.h"
 #include "url/gurl.h"
 
 namespace credential_provider {
@@ -78,6 +77,10 @@ extern const wchar_t kRegUpdateCredentialsOnChange[];
 // Maximum allowed time delta after which user policies should be refreshed
 // again.
 extern const base::TimeDelta kMaxTimeDeltaSinceLastUserPolicyRefresh;
+
+// Registry key that indicates account name for an unassociated Windows account
+// should be in shorter form.
+extern const wchar_t kRegUseShorterAccountName[];
 
 // Class used in tests to force either a successful on unsuccessful enrollment
 // to google MDM.

@@ -29,7 +29,7 @@ class VIEWS_EXPORT ImageButton : public Button {
   // An enum describing the vertical alignment of images on Buttons.
   enum VerticalAlignment { ALIGN_TOP = 0, ALIGN_MIDDLE, ALIGN_BOTTOM };
 
-  explicit ImageButton(ButtonListener* listener);
+  explicit ImageButton(ButtonListener* listener = nullptr);
   ~ImageButton() override;
 
   // Returns the image for a given |state|.
@@ -122,6 +122,8 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   explicit ToggleImageButton(ButtonListener* listener);
   ~ToggleImageButton() override;
 
+  bool toggled() const { return toggled_; }
+
   // Change the toggled state.
   void SetToggled(bool toggled);
 
@@ -133,6 +135,9 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   // Set the tooltip text displayed when the button is toggled.
   void SetToggledTooltipText(const base::string16& tooltip);
 
+  // Set the accessible text used when the button is toggled.
+  void SetToggledAccessibleName(const base::string16& name);
+
   // Overridden from ImageButton:
   const gfx::ImageSkia& GetImage(ButtonState state) const override;
   void SetImage(ButtonState state, const gfx::ImageSkia& image) override;
@@ -140,8 +145,6 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   // Overridden from View:
   base::string16 GetTooltipText(const gfx::Point& p) const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-
-  bool toggled_for_testing() const;
 
  private:
   // The parent class's images_ member is used for the current images,
@@ -155,6 +158,10 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   // The parent class's tooltip_text_ is displayed when not toggled, and
   // this one is shown when toggled.
   base::string16 toggled_tooltip_text_;
+
+  // The parent class's accessibility data is used when not toggled, and this
+  // one is used when toggled.
+  base::string16 toggled_accessible_name_;
 
   DISALLOW_COPY_AND_ASSIGN(ToggleImageButton);
 };

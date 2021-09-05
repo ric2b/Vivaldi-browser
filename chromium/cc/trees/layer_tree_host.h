@@ -80,7 +80,7 @@ class TaskGraphRunner;
 class UIResourceManager;
 class UkmRecorderFactory;
 struct RenderingStats;
-struct ScrollAndScaleSet;
+struct CompositorCommitData;
 
 // Returned from LayerTreeHost::DeferMainFrameUpdate. Automatically un-defers on
 // destruction.
@@ -183,6 +183,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   std::unique_ptr<EventsMetricsManager::ScopedMonitor>
   GetScopedEventMetricsMonitor(std::unique_ptr<EventMetrics> event_metrics);
   void ClearEventsMetrics();
+
+  size_t saved_events_metrics_count_for_testing() const {
+    return events_metrics_manager_.saved_events_metrics_count_for_testing();
+  }
 
   // Visibility and LayerTreeFrameSink -------------------------------
 
@@ -392,6 +396,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
     return event_listener_properties_[static_cast<size_t>(event_class)];
   }
 
+  // Indicates that its acceptable to throttle the frame rate for this content
+  // to prioritize lower power/CPU use.
+  void SetEnableFrameRateThrottling(bool enable_frame_rate_throttling);
+
   void SetViewportRectAndScale(const gfx::Rect& device_viewport_rect,
                                float device_scale_factor,
                                const viz::LocalSurfaceIdAllocation&
@@ -461,9 +469,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
     return new_local_surface_id_request_;
   }
 
-  void SetRasterColorSpace(const gfx::ColorSpace& raster_color_space);
-  const gfx::ColorSpace& raster_color_space() const {
-    return raster_color_space_;
+  void SetDisplayColorSpaces(
+      const gfx::DisplayColorSpaces& display_color_spaces);
+  const gfx::DisplayColorSpaces& display_color_spaces() const {
+    return display_color_spaces_;
   }
 
   bool HasCompositorDrivenScrollAnimationForTesting() const {
@@ -599,7 +608,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
       const gfx::PresentationFeedback& feedback);
   // Called when the compositor completed page scale animation.
   void DidCompletePageScaleAnimation();
-  void ApplyScrollAndScale(ScrollAndScaleSet* info);
+  void ApplyCompositorChanges(CompositorCommitData* commit_data);
   void ApplyMutatorEvents(std::unique_ptr<MutatorEvents> events);
   void RecordStartOfFrameMetrics();
   void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
@@ -760,16 +769,23 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // free of slow-paths before toggling the flag.
   enum { kNumFramesToConsiderBeforeRemovingSlowPathFlag = 60 };
 
-  void ApplyViewportChanges(const ScrollAndScaleSet& info);
-  void RecordManipulationTypeCounts(const ScrollAndScaleSet& scroll_info);
+  void ApplyViewportChanges(const CompositorCommitData& commit_data);
+  void RecordManipulationTypeCounts(const CompositorCommitData& commit_data);
   void SendOverscrollAndScrollEndEventsFromImplSide(
-      const ScrollAndScaleSet& info);
+      const CompositorCommitData& commit_data);
   void ApplyPageScaleDeltaFromImplSide(float page_scale_delta);
   void InitializeProxy(std::unique_ptr<Proxy> proxy);
 
   bool DoUpdateLayers();
 
   void UpdateDeferMainFrameUpdateInternal();
+
+  // Preemptively applies the scroll offset and delta before sending it to the
+  // client. This lets the client skip a commit if the value does not change.
+  void UpdateScrollOffsetFromImpl(
+      const ElementId&,
+      const gfx::ScrollOffset& delta,
+      const base::Optional<TargetSnapAreaElementIds>&);
 
   const CompositorMode compositor_mode_;
 
@@ -837,7 +853,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // Used to track the out-bound state for ApplyViewportChanges.
   bool is_pinch_gesture_active_from_impl_ = false;
 
-  gfx::ColorSpace raster_color_space_;
+  gfx::DisplayColorSpaces display_color_spaces_;
 
   bool clear_caches_on_next_commit_ = false;
   viz::LocalSurfaceIdAllocation local_surface_id_allocation_from_parent_;

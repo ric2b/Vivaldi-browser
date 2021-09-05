@@ -24,7 +24,6 @@ class FileSystemHandlePermissionDescriptor;
 class NativeFileSystemHandle : public ScriptWrappable,
                                public ExecutionContextClient {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(NativeFileSystemHandle);
 
  public:
   NativeFileSystemHandle(ExecutionContext* execution_context,
@@ -35,6 +34,7 @@ class NativeFileSystemHandle : public ScriptWrappable,
 
   virtual bool isFile() const { return false; }
   virtual bool isDirectory() const { return false; }
+  const String kind() const { return isFile() ? "file" : "directory"; }
   const String& name() const { return name_; }
 
   ScriptPromise queryPermission(ScriptState*,

@@ -66,11 +66,13 @@ component("fido") {
     "//services/device/public/mojom",
   ]
 
-  libs = []  # Extended for mac.
-
   # Android implementation of FIDO is delegated to GMSCore.
   if (!is_android) {
     sources += [
+      "aoa/android_accessory_device.cc",
+      "aoa/android_accessory_device.h",
+      "aoa/android_accessory_discovery.cc",
+      "aoa/android_accessory_discovery.h",
       "attestation_object.cc",
       "attestation_object.h",
       "attestation_statement.cc",
@@ -109,6 +111,10 @@ component("fido") {
       "cable/fido_cable_discovery.h",
       "cable/fido_cable_handshake_handler.cc",
       "cable/fido_cable_handshake_handler.h",
+      "cable/fido_tunnel_device.cc",
+      "cable/fido_tunnel_device.h",
+      "cable/websocket_adapter.cc",
+      "cable/websocket_adapter.h",
       "client_data.cc",
       "client_data.h",
       "credential_management.cc",
@@ -185,7 +191,10 @@ component("fido") {
 
     deps += [
       "//services/device/public/cpp/hid",
+      "//services/device/public/cpp/usb",
       "//services/device/public/mojom",
+      "//services/device/public/mojom:usb",
+      "//services/network/public/mojom",
     ]
   }
 
@@ -213,7 +222,7 @@ component("fido") {
       "mac/util.mm",
     ]
 
-    libs += [
+    frameworks = [
       "Foundation.framework",
       "LocalAuthentication.framework",
       "Security.framework",
@@ -322,8 +331,8 @@ fuzzer_test("fido_cable_handshake_handler_fuzzer") {
   libfuzzer_options = [ "max_len=2048" ]
 }
 
-fuzzer_test("fido_cable_handshake_handler_v2_fuzzer") {
-  sources = [ "cable/fido_cable_handshake_handler_v2_fuzzer.cc" ]
+fuzzer_test("v2_handshake_fuzzer") {
+  sources = [ "cable/v2_handshake_fuzzer.cc" ]
   deps = [
     ":fido",
     "//base",
@@ -335,7 +344,7 @@ fuzzer_test("fido_cable_handshake_handler_v2_fuzzer") {
   libfuzzer_options = [ "max_len=2048" ]
 }
 
-is_linux_without_udev = is_linux && !use_udev
+is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
 
 source_set("test_support") {
   testonly = true

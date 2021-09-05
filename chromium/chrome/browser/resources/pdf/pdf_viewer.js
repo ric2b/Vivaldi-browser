@@ -4,35 +4,38 @@
 
 import './elements/viewer-error-screen.js';
 import './elements/viewer-password-screen.js';
+import './elements/viewer-pdf-sidenav.js';
 import './elements/viewer-pdf-toolbar.js';
-import './elements/viewer-pdf-toolbar-new.js';
+import './elements/viewer-zoom-toolbar.js';
 import './elements/shared-vars.js';
 // <if expr="chromeos">
 import './elements/viewer-ink-host.js';
 import './elements/viewer-form-warning.js';
 // </if>
 import './pdf_viewer_shared_style.js';
+import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-import {hasKeyModifiers, isRTL} from 'chrome://resources/js/util.m.js';
+import {hasKeyModifiers} from 'chrome://resources/js/util.m.js';
 import {html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {Bookmark} from './bookmark_type.js';
 import {BrowserApi} from './browser_api.js';
-import {FittingType, SaveRequestType, TwoUpViewAction} from './constants.js';
+import {FittingType, Point, SaveRequestType} from './constants.js';
+import {ViewerPdfToolbarNewElement} from './elements/viewer-pdf-toolbar-new.js';
+// <if expr="chromeos">
+import {InkController} from './ink_controller.js';
+//</if>
+import {LocalStorageProxyImpl} from './local_storage_proxy.js';
 import {PDFMetrics} from './metrics.js';
-import {NavigatorDelegate, PdfNavigator} from './navigator.js';
+import {NavigatorDelegateImpl, PdfNavigator} from './navigator.js';
 import {OpenPdfParamsParser} from './open_pdf_params_parser.js';
 import {DeserializeKeyEvent, LoadState, SerializeKeyEvent} from './pdf_scripting_api.js';
 import {PDFViewerBaseElement} from './pdf_viewer_base.js';
 import {DestinationMessageData, DocumentDimensionsMessageData, shouldIgnoreKeyEvents} from './pdf_viewer_utils.js';
 import {ToolbarManager} from './toolbar_manager.js';
-import {Point} from './viewport.js';
-
-// <if expr="chromeos">
-import {InkController} from './ink_controller.js';
-// </if>
 
 
 /**
@@ -84,7 +87,10 @@ export function getFilenameFromURL(url) {
   }
 }
 
-class PDFViewerElement extends PDFViewerBaseElement {
+/** @type {string} */
+const LOCAL_STORAGE_SIDENAV_COLLAPSED_KEY = 'sidenavCollapsed';
+
+export class PDFViewerElement extends PDFViewerBaseElement {
   static get is() {
     return 'pdf-viewer';
   }
@@ -108,6 +114,11 @@ class PDFViewerElement extends PDFViewerBaseElement {
 
       bookmarks_: Array,
 
+      documentHasFocus_: {
+        type: Boolean,
+        value: false,
+      },
+
       hasEdits_: {
         type: Boolean,
         value: false,
@@ -128,14 +139,18 @@ class PDFViewerElement extends PDFViewerBaseElement {
 
       isFormFieldFocused_: Boolean,
 
-      /** @private */
-      pdfViewerUpdateEnabled_: {
-        type: Boolean,
-        value: function() {
-          return document.documentElement.hasAttribute(
-              'pdf-viewer-update-enabled');
-        },
-      },
+      pdfViewerUpdateEnabled_: Boolean,
+
+      docLength_: Number,
+      // <if expr="chromeos">
+      inkController_: Object,
+      // </if>
+      loadProgress_: Number,
+      pageNo_: Number,
+      pdfFormSaveEnabled_: Boolean,
+      pdfAnnotationsEnabled_: Boolean,
+      printingEnabled_: Boolean,
+      viewportZoom_: Number,
     };
   }
 
@@ -151,6 +166,9 @@ class PDFViewerElement extends PDFViewerBaseElement {
 
     /** @private {!Array<!Bookmark>} */
     this.bookmarks_ = [];
+
+    /** @private {boolean} */
+    this.documentHasFocus_ = false;
 
     /** @private {boolean} */
     this.hasEdits_ = false;
@@ -173,21 +191,33 @@ class PDFViewerElement extends PDFViewerBaseElement {
     /** @private {boolean} */
     this.isFormFieldFocused_ = false;
 
-    // Non-Polymer properties
+    // <if expr="chromeos">
+    /** @private {?InkController} */
+    this.inkController_ = null;
+    // </if>
+
+    /** @private {boolean} */
+    this.pdfAnnotationsEnabled_ = false;
+
+    /** @private {boolean} */
+    this.pdfFormSaveEnabled_ = false;
+
+    /** @private {boolean} */
+    this.printingEnabled_ = false;
 
     /** @private {number} */
-    this.beepCount_ = 0;
+    this.viewportZoom_ = 1;
+
+    // Non-Polymer properties
+
+    /** @type {number} */
+    this.beepCount = 0;
 
     /** @private {boolean} */
     this.hadPassword_ = false;
 
     /** @private {boolean} */
     this.toolbarEnabled_ = false;
-
-    // <if expr="chromeos">
-    /** @private {?InkController} */
-    this.inkController_ = null;
-    // </if>
 
     /** @private {?ToolbarManager} */
     this.toolbarManager_ = null;
@@ -198,8 +228,38 @@ class PDFViewerElement extends PDFViewerBaseElement {
     /** @private {string} */
     this.title_ = '';
 
+    /**
+     * The number of pages in the PDF document.
+     * @private {number}
+     */
+    this.docLength_;
+
+    /**
+     * The number of the page being viewed (1-based).
+     * @private {number}
+     */
+    this.pageNo_;
+
+    /**
+     * The current loading progress of the PDF document (0 - 100).
+     * @private {number}
+     */
+    this.loadProgress_;
+
     /** @private {boolean} */
-    this.pdfViewerUpdateEnabled_;
+    this.pdfViewerUpdateEnabled_ =
+        document.documentElement.hasAttribute('pdf-viewer-update-enabled');
+
+    /** @private {boolean} */
+    this.sidenavCollapsed_ = false;
+
+    if (this.pdfViewerUpdateEnabled_) {
+      // TODO(dpapad): Add tests after crbug.com/1111459 is fixed.
+      this.sidenavCollapsed_ = Boolean(Number.parseInt(
+          LocalStorageProxyImpl.getInstance().getItem(
+              LOCAL_STORAGE_SIDENAV_COLLAPSED_KEY),
+          10));
+    }
   }
 
   /** @override */
@@ -207,7 +267,19 @@ class PDFViewerElement extends PDFViewerBaseElement {
     assert(this.paramsParser);
     this.toolbarEnabled_ =
         this.paramsParser.shouldShowToolbar(this.originalUrl);
+
+    // The toolbar does not need to be manually accounted in the
+    // PDFViewerUpdate UI.
+    if (this.pdfViewerUpdateEnabled_) {
+      return 0;
+    }
+
     return this.toolbarEnabled_ ? MATERIAL_TOOLBAR_HEIGHT : 0;
+  }
+
+  /** @override */
+  hasFixedToolbar() {
+    return this.pdfViewerUpdateEnabled_;
   }
 
   /** @override */
@@ -218,11 +290,6 @@ class PDFViewerElement extends PDFViewerBaseElement {
   /** @override */
   getSizer() {
     return /** @type {!HTMLDivElement} */ (this.$$('#sizer'));
-  }
-
-  /** @override */
-  getZoomToolbar() {
-    return /** @type {!ViewerZoomToolbarElement} */ (this.$$('#zoom-toolbar'));
   }
 
   /** @override */
@@ -238,6 +305,23 @@ class PDFViewerElement extends PDFViewerBaseElement {
     return /** @type {!ViewerPdfToolbarElement} */ (this.$$('#toolbar'));
   }
 
+  /**
+   * @return {!ViewerPdfToolbarNewElement}
+   * @private
+   */
+  getToolbarNew_() {
+    assert(this.pdfViewerUpdateEnabled_);
+    return /** @type {!ViewerPdfToolbarNewElement} */ (this.$$('#toolbar'));
+  }
+
+  /**
+   * @return {!ViewerZoomToolbarElement}
+   * @private
+   */
+  getZoomToolbar_() {
+    return /** @type {!ViewerZoomToolbarElement} */ (this.$$('#zoom-toolbar'));
+  }
+
   /** @override */
   getBackgroundColor() {
     return BACKGROUND_COLOR;
@@ -251,11 +335,8 @@ class PDFViewerElement extends PDFViewerBaseElement {
     this.inkController_ = new InkController(
         this.viewport, /** @type {!HTMLDivElement} */ (this.getContent()));
     this.tracker.add(
-        this.inkController_.getEventTarget(), 'stroke-added',
+        this.inkController_.getEventTarget(), 'has-unsaved-changes',
         () => chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(true));
-    this.tracker.add(
-        this.inkController_.getEventTarget(), 'set-annotation-undo-state',
-        e => this.setAnnotationUndoState_(e));
     // </if>
 
     this.title_ = getFilenameFromURL(this.originalUrl);
@@ -263,36 +344,10 @@ class PDFViewerElement extends PDFViewerBaseElement {
       this.getToolbar_().hidden = false;
     }
 
-    document.body.addEventListener('change-page', e => {
-      this.viewport.goToPage(e.detail.page);
-      if (e.detail.origin === 'bookmark') {
-        PDFMetrics.record(PDFMetrics.UserAction.FOLLOW_BOOKMARK);
-      } else if (e.detail.origin === 'pageselector') {
-        PDFMetrics.record(PDFMetrics.UserAction.PAGE_SELECTOR_NAVIGATE);
-      }
-    });
-
-    document.body.addEventListener('change-page-and-xy', e => {
-      const point = this.viewport.convertPageToScreen(e.detail.page, e.detail);
-      this.goToPageAndXY_(e.detail.origin, e.detail.page, point);
-    });
-
-    document.body.addEventListener('navigate', e => {
-      const disposition = e.detail.newtab ?
-          PdfNavigator.WindowOpenDisposition.NEW_BACKGROUND_TAB :
-          PdfNavigator.WindowOpenDisposition.CURRENT_TAB;
-      this.navigator_.navigate(e.detail.uri, disposition);
-    });
-
-    document.body.addEventListener('dropdown-opened', e => {
-      if (e.detail === 'bookmarks') {
-        PDFMetrics.record(PDFMetrics.UserAction.OPEN_BOOKMARKS_PANEL);
-      }
-    });
-
-    this.toolbarManager_ = new ToolbarManager(
-        window, this.pdfViewerUpdateEnabled_ ? null : this.getToolbar_(),
-        this.getZoomToolbar());
+    if (!this.pdfViewerUpdateEnabled_) {
+      this.toolbarManager_ = new ToolbarManager(
+          window, this.getToolbar_(), this.getZoomToolbar_());
+    }
 
     // Setup the keyboard event listener.
     document.addEventListener(
@@ -303,11 +358,52 @@ class PDFViewerElement extends PDFViewerBaseElement {
     this.navigator_ = new PdfNavigator(
         this.originalUrl, this.viewport,
         /** @type {!OpenPdfParamsParser} */ (this.paramsParser),
-        new NavigatorDelegate(tabId));
+        new NavigatorDelegateImpl(tabId));
 
     // Listen for save commands from the browser.
     if (chrome.mimeHandlerPrivate && chrome.mimeHandlerPrivate.onSave) {
       chrome.mimeHandlerPrivate.onSave.addListener(url => this.onSave_(url));
+    }
+  }
+
+  /**
+   * Helper for handleKeyEvent_ dealing with events that control toolbars.
+   * @param {!KeyboardEvent} e the event to handle.
+   * @private
+   */
+  handleToolbarKeyEvent_(e) {
+    if (this.pdfViewerUpdateEnabled_) {
+      if (e.key === '\\' && e.ctrlKey) {
+        this.getToolbarNew_().fitToggle();
+      }
+      // TODO: Add handling for additional relevant hotkeys for the new unified
+      // toolbar.
+      return;
+    }
+
+    switch (e.key) {
+      case 'Tab':
+        this.toolbarManager_.showToolbarsForKeyboardNavigation();
+        return;
+      case 'Escape':
+        this.toolbarManager_.hideSingleToolbarLayer();
+        return;
+      case 'g':
+        if (this.toolbarEnabled_ && (e.ctrlKey || e.metaKey) && e.altKey) {
+          this.toolbarManager_.showToolbars();
+          this.getToolbar_().selectPageNumber();
+        }
+        return;
+      case '\\':
+        if (e.ctrlKey) {
+          this.getZoomToolbar_().fitToggleFromHotKey();
+        }
+        return;
+    }
+
+    // Show toolbars as a fallback.
+    if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
+      this.toolbarManager_.showToolbars();
     }
   }
 
@@ -322,7 +418,9 @@ class PDFViewerElement extends PDFViewerBaseElement {
       return;
     }
 
-    this.toolbarManager_.hideToolbarsAfterTimeout();
+    if (!this.pdfViewerUpdateEnabled_) {
+      this.toolbarManager_.hideToolbarsAfterTimeout();
+    }
 
     // Let the viewport handle directional key events.
     if (this.viewport.handleDirectionalKeyEvent(e, this.isFormFieldFocused_)) {
@@ -330,12 +428,6 @@ class PDFViewerElement extends PDFViewerBaseElement {
     }
 
     switch (e.key) {
-      case 'Tab':
-        this.toolbarManager_.showToolbarsForKeyboardNavigation();
-        return;
-      case 'Escape':
-        this.toolbarManager_.hideSingleToolbarLayer();
-        return;
       case 'a':
         if (e.ctrlKey || e.metaKey) {
           this.pluginController.selectAll();
@@ -343,20 +435,9 @@ class PDFViewerElement extends PDFViewerBaseElement {
           e.preventDefault();
         }
         return;
-      case 'g':
-        if (this.toolbarEnabled_ && (e.ctrlKey || e.metaKey) && e.altKey) {
-          this.toolbarManager_.showToolbars();
-          this.getToolbar_().selectPageNumber();
-        }
-        return;
       case '[':
         if (e.ctrlKey) {
           this.rotateCounterclockwise();
-        }
-        return;
-      case '\\':
-        if (e.ctrlKey) {
-          this.getZoomToolbar().fitToggleFromHotKey();
         }
         return;
       case ']':
@@ -366,19 +447,18 @@ class PDFViewerElement extends PDFViewerBaseElement {
         return;
     }
 
-    // Show toolbars as a fallback.
-    if (!(e.shiftKey || e.ctrlKey || e.altKey)) {
-      this.toolbarManager_.showToolbars();
-    }
+    // Handle toolbar related key events.
+    this.handleToolbarKeyEvent_(e);
   }
 
+  // <if expr="chromeos">
   /**
    * Handles the annotation mode being toggled on or off.
-   * @param {!CustomEvent<{value: boolean}>} e
+   * @param {!CustomEvent<boolean>} e
    * @private
    */
   async onAnnotationModeToggled_(e) {
-    const annotationMode = e.detail.value;
+    const annotationMode = e.detail;
     this.annotationMode_ = annotationMode;
     if (annotationMode) {
       // Enter annotation mode.
@@ -407,8 +487,6 @@ class PDFViewerElement extends PDFViewerBaseElement {
       // TODO(dstockwell): feed real progress data from the Ink component
       this.updateProgress(50);
       await this.inkController_.load(result.fileName, result.dataToSave);
-      this.inkController_.setAnnotationTool(
-          assert(this.getToolbar_().annotationTool));
       this.currentController = this.inkController_;
       this.pluginController.unload();
       this.updateProgress(100);
@@ -447,13 +525,34 @@ class PDFViewerElement extends PDFViewerBaseElement {
     this.annotationMode_ = false;
     await this.loaded;
   }
+  // </if>
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onDisplayAnnotationsChanged_(e) {
+    this.currentController.setDisplayAnnotations(e.detail);
+  }
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onScroll_(e) {
+    this.pluginController.updateScroll(e.target.scrollLeft, e.target.scrollTop);
+  }
 
   /** @override */
   onFitToChanged(e) {
     super.onFitToChanged(e);
 
-    if (e.detail.fittingType === FittingType.FIT_TO_PAGE ||
-        e.detail.fittingType === FittingType.FIT_TO_HEIGHT) {
+    if (this.pdfViewerUpdateEnabled_) {
+      return;
+    }
+
+    if (e.detail === FittingType.FIT_TO_PAGE ||
+        e.detail === FittingType.FIT_TO_HEIGHT) {
       this.toolbarManager_.forceHideTopToolbar();
     }
   }
@@ -461,17 +560,17 @@ class PDFViewerElement extends PDFViewerBaseElement {
   /**
    * Changes two up view mode for the controller. Controller will trigger
    * layout update later, which will update the viewport accordingly.
-   * @param {!CustomEvent<!TwoUpViewAction>} e
+   * @param {!CustomEvent<boolean>} e
    * @private
    */
   onTwoUpViewChanged_(e) {
-    this.currentController.setTwoUpView(
-        e.detail === TwoUpViewAction.TWO_UP_VIEW_ENABLE);
-    this.toolbarManager_.forceHideTopToolbar();
-    this.getToolbar_().annotationAvailable =
-        (e.detail !== TwoUpViewAction.TWO_UP_VIEW_ENABLE);
-
-    PDFMetrics.recordTwoUpView(e.detail);
+    const twoUpViewEnabled = e.detail;
+    this.currentController.setTwoUpView(twoUpViewEnabled);
+    if (!this.pdfViewerUpdateEnabled_) {
+      this.toolbarManager_.forceHideTopToolbar();
+    }
+    this.getToolbar_().annotationAvailable = !twoUpViewEnabled;
+    PDFMetrics.recordTwoUpViewEnabled(twoUpViewEnabled);
   }
 
   /**
@@ -511,10 +610,10 @@ class PDFViewerElement extends PDFViewerBaseElement {
   /** @override */
   updateProgress(progress) {
     if (this.toolbarEnabled_) {
-      this.getToolbar_().loadProgress = progress;
+      this.loadProgress_ = progress;
     }
     super.updateProgress(progress);
-    if (progress === 100) {
+    if (progress === 100 && !this.pdfViewerUpdateEnabled_) {
       this.toolbarManager_.hideToolbarsAfterTimeout();
     }
   }
@@ -531,38 +630,28 @@ class PDFViewerElement extends PDFViewerBaseElement {
 
   /** @override */
   updateUIForViewportChange() {
-    // Offset the toolbar position so that it doesn't move if scrollbars appear.
-    const hasScrollbars = this.viewport.documentHasScrollbars();
-    const scrollbarWidth = this.viewport.scrollbarWidth;
-    const verticalScrollbarWidth = hasScrollbars.vertical ? scrollbarWidth : 0;
-    const horizontalScrollbarWidth =
-        hasScrollbars.horizontal ? scrollbarWidth : 0;
-
-    // Shift the zoom toolbar to the left by half a scrollbar width. This
-    // gives a compromise: if there is no scrollbar visible then the toolbar
-    // will be half a scrollbar width further left than the spec but if there
-    // is a scrollbar visible it will be half a scrollbar width further right
-    // than the spec. In RTL layout normally, the zoom toolbar is on the left
-    // left side, but the scrollbar is still on the right, so this is not
-    // necessary.
-    const zoomToolbar = this.getZoomToolbar();
-    if (!isRTL()) {
-      zoomToolbar.style.right =
-          -verticalScrollbarWidth + (scrollbarWidth / 2) + 'px';
+    if (!this.pdfViewerUpdateEnabled_) {
+      this.getZoomToolbar_().shiftForScrollbars(
+          this.viewport.documentHasScrollbars(), this.viewport.scrollbarWidth);
     }
-    // Having a horizontal scrollbar is much rarer so we don't offset the
-    // toolbar from the bottom any more than what the spec says. This means
-    // that when there is a scrollbar visible, it will be a full scrollbar
-    // width closer to the bottom of the screen than usual, but this is ok.
-    zoomToolbar.style.bottom = -horizontalScrollbarWidth + 'px';
 
     // Update the page indicator.
-    const visiblePage = this.viewport.getMostVisiblePage();
     if (this.toolbarEnabled_) {
-      this.getToolbar_().pageNo = visiblePage + 1;
+      const visiblePage = this.viewport.getMostVisiblePage();
+      this.pageNo_ = visiblePage + 1;
     }
 
     this.currentController.viewportChanged();
+  }
+
+  /** @override */
+  handleStrings(strings) {
+    super.handleStrings(strings);
+
+    this.pdfAnnotationsEnabled_ =
+        loadTimeData.getBoolean('pdfAnnotationsEnabled');
+    this.pdfFormSaveEnabled_ = loadTimeData.getBoolean('pdfFormSaveEnabled');
+    this.printingEnabled_ = loadTimeData.getBoolean('printingEnabled');
   }
 
   /** @override */
@@ -575,7 +664,8 @@ class PDFViewerElement extends PDFViewerBaseElement {
 
     switch (message.data.type.toString()) {
       case 'getSelectedText':
-        this.pluginController.getSelectedText();
+        this.pluginController.getSelectedText().then(
+            this.handleSelectedTextReply.bind(this));
         break;
       case 'print':
         this.pluginController.print();
@@ -599,10 +689,6 @@ class PDFViewerElement extends PDFViewerBaseElement {
         return;
       case 'getPassword':
         this.handlePasswordRequest_();
-        return;
-      case 'getSelectedTextReply':
-        this.handleSelectedTextReply(
-            /** @type {{ selectedText: string }} */ (data).selectedText);
         return;
       case 'loadProgress':
         this.updateProgress(
@@ -631,10 +717,6 @@ class PDFViewerElement extends PDFViewerBaseElement {
         this.viewportScroller.setEnableScrolling(
             /** @type {{ isSelecting: boolean }} */ (data).isSelecting);
         return;
-      case 'getNamedDestinationReply':
-        this.paramsParser.onNamedDestinationReceived(
-            /** @type {{ pageNumber: number }} */ (data).pageNumber);
-        return;
       case 'formFocusChange':
         this.isFormFieldFocused_ =
             /** @type {{ focused: boolean }} */ (data).focused;
@@ -645,10 +727,29 @@ class PDFViewerElement extends PDFViewerBaseElement {
         });
         return;
       case 'documentFocusChanged':
-        // TODO(crbug.com/1069370): Draw a focus rect around plugin.
+        this.documentHasFocus_ =
+            /** @type {{ hasFocus: boolean }} */ (data).hasFocus;
         return;
     }
     assertNotReached('Unknown message type received: ' + data.type);
+  }
+
+  /** @override */
+  forceFit(view) {
+    if (!this.pdfViewerUpdateEnabled_) {
+      if (view === FittingType.FIT_TO_PAGE ||
+          view === FittingType.FIT_TO_HEIGHT) {
+        this.toolbarManager_.forceHideTopToolbar();
+      }
+      this.getZoomToolbar_().forceFit(view);
+    } else {
+      this.getToolbarNew_().forceFit(view);
+    }
+  }
+
+  /** @override */
+  afterZoom(viewportZoom) {
+    this.viewportZoom_ = viewportZoom;
   }
 
   /** @override */
@@ -662,8 +763,7 @@ class PDFViewerElement extends PDFViewerBaseElement {
     }
 
     if (this.toolbarEnabled_) {
-      this.getToolbar_().docLength =
-          this.documentDimensions.pageDimensions.length;
+      this.docLength_ = this.documentDimensions.pageDimensions.length;
     }
   }
 
@@ -673,7 +773,7 @@ class PDFViewerElement extends PDFViewerBaseElement {
    */
   handleBeep_() {
     // Beeps are annoying, so just track count for now.
-    this.beepCount_ += 1;
+    this.beepCount += 1;
   }
 
   /**
@@ -750,6 +850,58 @@ class PDFViewerElement extends PDFViewerBaseElement {
   }
 
   /**
+   * @param {!CustomEvent<!{page: number, origin: string}>} e
+   * @private
+   */
+  onChangePage_(e) {
+    this.viewport.goToPage(e.detail.page);
+    if (e.detail.origin === 'bookmark') {
+      PDFMetrics.record(PDFMetrics.UserAction.FOLLOW_BOOKMARK);
+    } else if (e.detail.origin === 'pageselector') {
+      PDFMetrics.record(PDFMetrics.UserAction.PAGE_SELECTOR_NAVIGATE);
+    }
+  }
+
+  /**
+   * @param {!CustomEvent<!{
+   *   page: number, origin: string, x: number, y: number}>} e
+   * @private
+   */
+  onChangePageAndXy_(e) {
+    const point = this.viewport.convertPageToScreen(e.detail.page, e.detail);
+    this.goToPageAndXY_(e.detail.origin, e.detail.page, point);
+  }
+
+  /**
+   * @param {!CustomEvent<string>} e
+   * @private
+   */
+  onDropdownOpened_(e) {
+    if (e.detail === 'bookmarks') {
+      PDFMetrics.record(PDFMetrics.UserAction.OPEN_BOOKMARKS_PANEL);
+    }
+  }
+
+  /**
+   * @param {!CustomEvent<!{newtab: boolean, uri: string}>} e
+   * @private
+   */
+  onNavigate_(e) {
+    const disposition = e.detail.newtab ?
+        PdfNavigator.WindowOpenDisposition.NEW_BACKGROUND_TAB :
+        PdfNavigator.WindowOpenDisposition.CURRENT_TAB;
+    this.navigator_.navigate(e.detail.uri, disposition);
+  }
+
+  /** @private */
+  onSidenavToggleClick_() {
+    assert(this.pdfViewerUpdateEnabled_);
+    this.sidenavCollapsed_ = !this.sidenavCollapsed_;
+    LocalStorageProxyImpl.getInstance().setItem(
+        LOCAL_STORAGE_SIDENAV_COLLAPSED_KEY, this.sidenavCollapsed_ ? 1 : 0);
+  }
+
+  /**
    * Saves the current PDF document to disk.
    * @param {SaveRequestType} requestType The type of save request.
    * @private
@@ -770,11 +922,13 @@ class PDFViewerElement extends PDFViewerBaseElement {
     if (requestType !== SaveRequestType.ORIGINAL || !this.annotationMode_) {
       result = await this.currentController.save(requestType);
     } else {
+      // <if expr="chromeos">
       // Request type original in annotation mode --> need to exit annotation
       // mode before saving. See https://crbug.com/919364.
       await this.exitAnnotationMode_();
       assert(!this.annotationMode_);
       result = await this.currentController.save(SaveRequestType.ORIGINAL);
+      // </if>
     }
     if (result == null) {
       // The content controller handled the save internally.
@@ -811,14 +965,18 @@ class PDFViewerElement extends PDFViewerBaseElement {
           });
         });
 
+    // <if expr="chromeos">
     // Saving in Annotation mode is destructive: crbug.com/919364
     this.exitAnnotationMode_();
+    // </if>
   }
 
   /** @private */
   async onPrint_() {
     PDFMetrics.record(PDFMetrics.UserAction.PRINT);
+    // <if expr="chromeos">
     await this.exitAnnotationMode_();
+    // </if>
     this.currentController.print();
   }
 
@@ -831,35 +989,6 @@ class PDFViewerElement extends PDFViewerBaseElement {
   computeAnnotationAvailable_() {
     return this.canSerializeDocument_ && !this.rotated_ && !this.hadPassword_;
   }
-
-  /** @private */
-  onUndo_() {
-    this.currentController.undo();
-  }
-
-  /** @private */
-  onRedo_() {
-    this.currentController.redo();
-  }
-
-  /**
-   * @param {!CustomEvent<{value: AnnotationTool}>} e
-   * @private
-   */
-  onAnnotationToolChanged_(e) {
-    this.inkController_.setAnnotationTool(e.detail.value);
-  }
-
-  // <if expr="chromeos">
-  /**
-   * @param {!CustomEvent<{canUndo: boolean, canRedo: boolean}>} e
-   * @private
-   */
-  setAnnotationUndoState_(e) {
-    this.getToolbar_().canUndoAnnotation = e.detail.canUndo;
-    this.getToolbar_().canRedoAnnotation = e.detail.canRedo;
-  }
-  // </if>
 
   /** @override */
   rotateClockwise() {

@@ -21,6 +21,23 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
         "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
       },
@@ -160,23 +177,6 @@
         },
         "test": "boringssl_ssl_tests",
         "test_id_prefix": "ninja://third_party/boringssl:boringssl_ssl_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -870,6 +870,23 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "angle_unittests",
         "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
       },
@@ -1009,23 +1026,6 @@
         },
         "test": "boringssl_ssl_tests",
         "test_id_prefix": "ninja://third_party/boringssl:boringssl_ssl_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -1757,6 +1757,25 @@
     ],
     "gtest_tests": [
       {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "inside_docker": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
+      {
         "args": [
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
@@ -1955,28 +1974,6 @@
         },
         "test": "blink_unittests",
         "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests/"
-      },
-      {
-        "args": [
-          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "arm64",
-              "inside_docker": "1",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
       },
       {
         "args": [
@@ -2889,8 +2886,25 @@
     ],
     "gtest_tests": [
       {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
+      {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2912,7 +2926,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2935,7 +2948,6 @@
       {
         "args": [
           "--child-arg=--ozone-platform=headless",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2957,7 +2969,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2979,7 +2990,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3001,7 +3011,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3023,7 +3032,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3045,7 +3053,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3068,7 +3075,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.blink_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3090,7 +3096,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3112,7 +3117,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3134,29 +3138,6 @@
       },
       {
         "args": [
-          "--device=aemu",
-          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
-      },
-      {
-        "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3178,7 +3159,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3200,7 +3180,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3222,7 +3201,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3244,7 +3222,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3268,7 +3245,6 @@
       {
         "args": [
           "--child-arg=--ozone-platform=headless",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3291,7 +3267,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.content_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3313,7 +3288,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3335,7 +3309,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3357,7 +3330,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3379,7 +3351,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3401,7 +3372,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3423,7 +3393,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3445,7 +3414,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3467,7 +3435,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3489,7 +3456,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3510,9 +3476,6 @@
         "test_id_prefix": "ninja://google_apis:google_apis_unittests/"
       },
       {
-        "args": [
-          "--device=aemu"
-        ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -3533,7 +3496,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.headless_browsertests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3555,7 +3517,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3577,7 +3538,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3599,7 +3559,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3621,7 +3580,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3643,7 +3601,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3665,7 +3622,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3688,7 +3644,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.mojo_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3710,7 +3665,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3733,7 +3687,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.net_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3756,7 +3709,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3778,7 +3730,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3801,7 +3752,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.services_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3823,7 +3773,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3845,7 +3794,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3868,7 +3816,6 @@
       {
         "args": [
           "--child-arg=--ozone-platform=headless",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3890,7 +3837,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3913,7 +3859,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.storage_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3936,7 +3881,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.ui_base_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3958,7 +3902,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3981,7 +3924,6 @@
       {
         "args": [
           "--test-launcher-filter-file=../../testing/buildbot/filters/fuchsia.viz_unittests.filter",
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -4003,7 +3945,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -4024,9 +3965,6 @@
         "test_id_prefix": "ninja://fuchsia/engine:web_engine_browsertests/"
       },
       {
-        "args": [
-          "--device=aemu"
-        ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4046,7 +3984,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -4067,9 +4004,6 @@
         "test_id_prefix": "ninja://fuchsia/engine:web_engine_unittests/"
       },
       {
-        "args": [
-          "--device=aemu"
-        ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4089,7 +4023,6 @@
       },
       {
         "args": [
-          "--device=aemu",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -4113,13 +4046,38 @@
     "isolated_scripts": [
       {
         "args": [
+          "--num-retries=3",
+          "--platform=fuchsia"
+        ],
+        "isolate_name": "blink_web_tests",
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "name": "blink_web_tests",
+        "results_handler": "layout tests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://:blink_web_tests/"
+      },
+      {
+        "args": [
           "depth_capture",
           "--show-stdout",
           "--browser=web-engine-shell",
           "--passthrough",
           "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--device=aemu"
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
         ],
         "isolate_name": "fuchsia_telemetry_gpu_integration_test",
         "merge": {
@@ -4139,7 +4097,7 @@
           "idempotent": false,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/depth_capture_tests/"
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
       },
       {
         "args": [
@@ -4148,8 +4106,7 @@
           "--browser=web-engine-shell",
           "--passthrough",
           "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--device=aemu"
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
         ],
         "isolate_name": "fuchsia_telemetry_gpu_integration_test",
         "merge": {
@@ -4169,7 +4126,7 @@
           "idempotent": false,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/gpu_process_launch_tests/"
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
       },
       {
         "args": [
@@ -4178,8 +4135,7 @@
           "--browser=web-engine-shell",
           "--passthrough",
           "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
-          "--device=aemu"
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
         ],
         "isolate_name": "fuchsia_telemetry_gpu_integration_test",
         "merge": {
@@ -4199,7 +4155,7 @@
           "idempotent": false,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/hardware_accelerated_feature_tests/"
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
       },
       {
         "args": [
@@ -4212,8 +4168,7 @@
           "--expected-vendor-id",
           "0",
           "--expected-device-id",
-          "0",
-          "--device=aemu"
+          "0"
         ],
         "isolate_name": "fuchsia_telemetry_gpu_integration_test",
         "merge": {
@@ -4233,7 +4188,7 @@
           "idempotent": false,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/info_collection_tests/"
+        "test_id_prefix": "ninja://content/test:fuchsia_telemetry_gpu_integration_test/"
       }
     ]
   },
@@ -4306,7 +4261,8 @@
       {
         "args": [
           "--no-xvfb",
-          "--ozone-platform=headless"
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4328,7 +4284,8 @@
       {
         "args": [
           "--no-xvfb",
-          "--ozone-platform=headless"
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4350,7 +4307,8 @@
       {
         "args": [
           "--no-xvfb",
-          "--ozone-platform=headless"
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4372,7 +4330,8 @@
       {
         "args": [
           "--no-xvfb",
-          "--ozone-platform=headless"
+          "--ozone-platform=headless",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4399,7 +4358,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4422,7 +4382,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4446,9 +4407,9 @@
           "--no-xvfb",
           "--use-weston",
           "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform",
           "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.wayland_browser_tests.filter"
         ],
-        "experiment_percentage": 100,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4471,7 +4432,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4495,6 +4457,7 @@
           "--no-xvfb",
           "--use-weston",
           "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform",
           "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.wayland_content_browsertests.filter"
         ],
         "merge": {
@@ -4519,7 +4482,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4542,7 +4506,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4565,7 +4530,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4588,7 +4554,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4612,6 +4579,7 @@
           "--no-xvfb",
           "--use-weston",
           "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform",
           "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.wayland_views_unittests.filter"
         ],
         "merge": {
@@ -4635,7 +4603,8 @@
         "args": [
           "--no-xvfb",
           "--use-weston",
-          "--ozone-platform=wayland"
+          "--ozone-platform=wayland",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4660,7 +4629,8 @@
     "gtest_tests": [
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4681,7 +4651,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4703,9 +4674,9 @@
       {
         "args": [
           "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform",
           "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_browser_tests.filter"
         ],
-        "experiment_percentage": 100,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -4726,7 +4697,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4748,6 +4720,7 @@
       {
         "args": [
           "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform",
           "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_content_browsertests.filter"
         ],
         "merge": {
@@ -4770,7 +4743,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4791,7 +4765,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4812,7 +4787,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4833,7 +4809,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4854,7 +4831,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4876,6 +4854,7 @@
       {
         "args": [
           "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform",
           "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_views_unittests.filter"
         ],
         "merge": {
@@ -4897,7 +4876,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4918,7 +4898,8 @@
       },
       {
         "args": [
-          "--ozone-platform=x11"
+          "--ozone-platform=x11",
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4941,6 +4922,24 @@
   },
   "Linux Tests": {
     "gtest_tests": [
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
       {
         "isolate_profile_data": true,
         "merge": {
@@ -5196,24 +5195,6 @@
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
       },
       {
-        "isolate_profile_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
-      },
-      {
         "args": [
           "--gtest_filter=-*UsingRealWebcam*"
         ],
@@ -5388,7 +5369,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_content_browsertests",
+        "name": "storage_service_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -5591,7 +5572,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_extensions_browsertests",
+        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -5812,7 +5793,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_interactive_ui_tests",
+        "name": "storage_service_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -6710,6 +6691,25 @@
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
       },
       {
+        "isolate_name": "extension_docserver_python_unittests",
+        "isolate_profile_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "extension_docserver_python_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
+      },
+      {
         "isolate_name": "flatbuffers_unittests",
         "isolate_profile_data": true,
         "merge": {
@@ -6818,8 +6818,7 @@
         "args": [
           "--additional-driver-flag",
           "--disable-site-isolation-trials",
-          "--additional-expectations",
-          "src/third_party/blink/web_tests/FlagExpectations/disable-site-isolation-trials",
+          "--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/disable-site-isolation-trials",
           "--num-retries=3",
           "--additional-env-var=LLVM_PROFILE_FILE=${ISOLATED_OUTDIR}/profraw/default-%2m.profraw"
         ],
@@ -7013,6 +7012,23 @@
   },
   "Linux Tests (dbg)(1)": {
     "gtest_tests": [
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
       {
         "merge": {
           "args": [],
@@ -7254,23 +7270,6 @@
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
       },
       {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
-      },
-      {
         "args": [
           "--gtest_filter=-*UsingRealWebcam*"
         ],
@@ -7435,7 +7434,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_content_browsertests",
+        "name": "storage_service_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7627,7 +7626,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_extensions_browsertests",
+        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7836,7 +7835,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_interactive_ui_tests",
+        "name": "storage_service_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8648,6 +8647,24 @@
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
       },
       {
+        "isolate_name": "extension_docserver_python_unittests",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "extension_docserver_python_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
+      },
+      {
         "isolate_name": "flatbuffers_unittests",
         "merge": {
           "args": [],
@@ -8900,38 +8917,17 @@
       "all"
     ]
   },
-  "linux-blink-cors-rel": {
+  "linux-bfcache-rel": {
     "gtest_tests": [
       {
         "args": [
-          "--disable-features=OutOfBlinkCors"
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance"
         ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "blink_cors_blink_platform_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_platform_unittests",
-        "test_id_prefix": "ninja://third_party/blink/renderer/platform:blink_platform_unittests/"
-      },
-      {
-        "args": [
-          "--disable-features=OutOfBlinkCors"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "blink_cors_browser_tests",
+        "name": "bf_cache_browser_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8947,13 +8943,13 @@
       },
       {
         "args": [
-          "--disable-features=OutOfBlinkCors"
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance"
         ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "blink_cors_content_browsertests",
+        "name": "bf_cache_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8961,20 +8957,21 @@
               "os": "Ubuntu-16.04"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 20
         },
         "test": "content_browsertests",
         "test_id_prefix": "ninja://content/test:content_browsertests/"
       },
       {
         "args": [
-          "--disable-features=OutOfBlinkCors"
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance"
         ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "blink_cors_content_unittests",
+        "name": "bf_cache_content_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8982,20 +8979,22 @@
               "os": "Ubuntu-16.04"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 10
         },
         "test": "content_unittests",
         "test_id_prefix": "ninja://content/test:content_unittests/"
       },
       {
         "args": [
-          "--disable-features=OutOfBlinkCors"
+          "--enable-features=BackForwardCache,BackForwardCacheNoTimeEviction,ServiceWorkerOnUI,ProactivelySwapBrowsingInstance",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/bfcache.unit_tests.filter"
         ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "blink_cors_extensions_browsertests",
+        "name": "bf_cache_unit_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9003,60 +9002,19 @@
               "os": "Ubuntu-16.04"
             }
           ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 10
         },
-        "test": "extensions_browsertests",
-        "test_id_prefix": "ninja://extensions:extensions_browsertests/"
-      },
-      {
-        "args": [
-          "--disable-features=OutOfBlinkCors"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "blink_cors_extensions_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "extensions_unittests",
-        "test_id_prefix": "ninja://extensions:extensions_unittests/"
-      },
-      {
-        "args": [
-          "--disable-features=OutOfBlinkCors"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "blink_cors_services_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "services_unittests",
-        "test_id_prefix": "ninja://services:services_unittests/"
+        "test": "unit_tests",
+        "test_id_prefix": "ninja://chrome/test:unit_tests/"
       }
     ],
     "isolated_scripts": [
       {
         "args": [
           "--num-retries=3",
-          "--additional-driver-flag=--disable-features=OutOfBlinkCors",
-          "--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/disable-features=OutOfBlinkCors"
+          "--additional-driver-flag=--enable-features=BackForwardCache",
+          "--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/enable-features=BackForwardCache"
         ],
         "isolate_name": "blink_web_tests",
         "merge": {
@@ -9093,6 +9051,23 @@
   },
   "linux-trusty-rel": {
     "gtest_tests": [
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "absl_hardening_tests",
+        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
+      },
       {
         "merge": {
           "args": [],
@@ -9337,23 +9312,6 @@
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
       },
       {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-14.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cacheinvalidation_unittests",
-        "test_id_prefix": "ninja://third_party/cacheinvalidation:cacheinvalidation_unittests/"
-      },
-      {
         "args": [
           "--gtest_filter=-*UsingRealWebcam*"
         ],
@@ -9518,7 +9476,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_content_browsertests",
+        "name": "storage_service_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9710,7 +9668,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_extensions_browsertests",
+        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9919,7 +9877,7 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "name": "storage_service_unsandboxed_interactive_ui_tests",
+        "name": "storage_service_interactive_ui_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -10768,6 +10726,24 @@
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
       },
       {
+        "isolate_name": "extension_docserver_python_unittests",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "extension_docserver_python_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
+      },
+      {
         "isolate_name": "flatbuffers_unittests",
         "merge": {
           "args": [],
@@ -10871,8 +10847,7 @@
         "args": [
           "--additional-driver-flag",
           "--disable-site-isolation-trials",
-          "--additional-expectations",
-          "src/third_party/blink/web_tests/FlagExpectations/disable-site-isolation-trials",
+          "--additional-expectations=../../third_party/blink/web_tests/FlagExpectations/disable-site-isolation-trials",
           "--num-retries=3"
         ],
         "isolate_name": "blink_web_tests",

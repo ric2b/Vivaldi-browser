@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">անհայտ անուն</translation>
 <translation id="1089439967362294234">Փոխել գաղտնաբառը</translation>
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" />. ընտրեք թույլտվությունը</translation>
-<translation id="1152921474424827756">Բացել <ph name="URL" /> էջի <ph name="BEGIN_LINK" />քեշի պատճենը<ph name="END_LINK" /></translation>
 <translation id="1158211211994409885">Միացումն անսպասելիորեն փակվեց <ph name="HOST_NAME" />-ի կողմից։</translation>
 <translation id="1161325031994447685">Վերամիանալ WiFi-ին</translation>
 <translation id="1175364870820465910">&amp;Տպել…</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Այս կայքը պարունակում է վնասակար ծրագրեր</translation>
 <translation id="1916770123977586577">Ձեր նոր կարգավորումները կայքի վրա ի կատար ածելու համար թարմացրեք այս էջը</translation>
 <translation id="1919345977826869612">Գովազդ</translation>
-<translation id="194030505837763158">Անցնել <ph name="LINK" /> էջին</translation>
 <translation id="1974060860693918893">Մանրամասներ</translation>
-<translation id="2030481566774242610">Դուք սա՞ նկատի ունեիք՝ <ph name="LINK" />։</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Ստուգել պրոքսին և հրապատը<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Ձայն</translation>
 <translation id="2119505898009119320">Ում է տրված. <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -128,7 +125,6 @@
 <translation id="5287240709317226393">Ցույց տալ քուքիները</translation>
 <translation id="5355557959165512791">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ դրա հավաստագիրը հետ է կանչվել։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="5386426401304769735">Այս կայքի հավաստագրերի շյթայում առկա է SHA-1 ալգորիթմով ստորագրված հավաստագիր։</translation>
-<translation id="5431657950005405462">Ձեր ֆայլը չի գտնվել</translation>
 <translation id="5452270690849572955">Այս՝ <ph name="HOST_NAME" /> էջը չի գտնվել</translation>
 <translation id="5457113250005438886">Անվավեր</translation>
 <translation id="5492298309214877701">Այս կայքի URL-ը ընկերության, ձեռնարկության կամ դպրոցի ինտրանետում համընկնում է արտաքին վեբ կայքի URL-ի հետ։
@@ -174,7 +170,6 @@
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Արգելափակել</translation>
 <translation id="7079718277001814089">Այս կայքը վնասագրեր է պարունակում</translation>
-<translation id="7090678807593890770">Որոնել Google-ում <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Թույլատրված է ընդլայնման կողմից</translation>
 <translation id="7111012039238467737">(վավեր)</translation>
 <translation id="7113310725918019676">Թույլատրել <ph name="BLOCKED_TYPE" /> <ph name="DOMAIN" />-ից</translation>
@@ -198,7 +193,6 @@
 <translation id="7716424297397655342">Այս կայքը չի կարող բեռնվել քեշից</translation>
 <translation id="7758069387465995638">Միացումը հնարավոր է արգելափակված լինի հրապատի կամ հակավիրուսային ծրագրի կողմից։</translation>
 <translation id="7800304661137206267">Միացումը գաղտնագրված է <ph name="CIPHER" />-ով, օգտագործելով <ph name="MAC" /> հաղորդագրությունների վավերացման համար և <ph name="KX" /> որպես բանալիների փոխանակման մեխանիզմ։</translation>
-<translation id="7802523362929240268">Կայքը վստահելի է</translation>
 <translation id="7834399512844817676">Սովորաբար <ph name="SITE" /> կայքն օգտագործում է գաղտնագրում՝ Ձեր տվյալները պաշտպանելու համար։ Սակայն այս անգամ Vivaldi-ն, փորձելով կապվել <ph name="SITE" /> կայքին, ստացավ ոչ սովորական և սխալ վկայագրեր։ Սա կարող է տեղի ունենալ, երբ հարձակվողը փորձում է իրեն ներկայացնել իբրև <ph name="SITE" />, կամ Wi-Fi-ի մուտքի պատուհանն ընդհատել է միացումը։ Ձեր տվյալները շարունակում են լինել պաշտպանված, քանի որ Vivaldi-ն ընդհատեց միացումը, մինչ տվյալների փոխանակվելը։</translation>
 <translation id="7878562273885520351">Ձեր գաղտնաբառը կարող է հափշտակվել</translation>
 <translation id="7951415247503192394">(32 բիթ)</translation>

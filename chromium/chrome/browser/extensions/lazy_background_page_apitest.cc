@@ -83,7 +83,7 @@ class LoadedIncognitoObserver : public ExtensionRegistryObserver {
                            UnloadedExtensionReason reason) override {
     original_complete_.reset(new LazyBackgroundObserver(profile_));
     incognito_complete_.reset(
-        new LazyBackgroundObserver(profile_->GetOffTheRecordProfile()));
+        new LazyBackgroundObserver(profile_->GetPrimaryOTRProfile()));
   }
 
   Profile* profile_;
@@ -159,9 +159,11 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, BrowserActionCreateTab) {
   // Background page created a new tab before it closed.
   EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
   EXPECT_EQ(num_tabs_before + 1, browser()->tab_strip_model()->count());
-  EXPECT_EQ(std::string(chrome::kChromeUIExtensionsURL),
-            browser()->tab_strip_model()->GetActiveWebContents()->
-                GetURL().spec());
+  content::WebContents* active_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::WaitForLoadStop(active_tab));
+  EXPECT_EQ(GURL(chrome::kChromeUIExtensionsURL),
+            active_tab->GetLastCommittedURL());
 }
 
 IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest,
@@ -284,10 +286,12 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForView) {
   ASSERT_TRUE(extension);
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
 
+  content::WebContents* active_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::WaitForLoadStop(active_tab));
   // The extension should've opened a new tab to an extension page.
-  EXPECT_EQ(extension->GetResourceURL("extension_page.html").spec(),
-            browser()->tab_strip_model()->GetActiveWebContents()->
-                GetURL().spec());
+  EXPECT_EQ(extension->GetResourceURL("extension_page.html"),
+            active_tab->GetLastCommittedURL());
 
   // Lazy Background Page still exists, because the extension created a new tab
   // to an extension page.
@@ -384,9 +388,11 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaClInView) {
     const Extension* extension = LoadExtension(extdir);
     ASSERT_TRUE(extension);
     EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
-    EXPECT_EQ(
-        extension->GetResourceURL("popup.html").spec(),
-        browser()->tab_strip_model()->GetActiveWebContents()->GetURL().spec());
+    EXPECT_EQ(extension->GetResourceURL("popup.html"),
+              browser()
+                  ->tab_strip_model()
+                  ->GetActiveWebContents()
+                  ->GetLastCommittedURL());
     EXPECT_TRUE(IsBackgroundPageAlive(last_loaded_extension_id()));
   }
 
@@ -407,7 +413,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, NaClInView) {
 // Tests that the lazy background page stays alive until all visible views are
 // closed.
 // http://crbug.com/175778; test fails frequently on OS X
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_WaitForNTP DISABLED_WaitForNTP
 #else
 #define MAYBE_WaitForNTP WaitForNTP
@@ -421,9 +427,12 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, MAYBE_WaitForNTP) {
   ASSERT_TRUE(extension);
   EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
 
+  content::WebContents* active_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::WaitForLoadStop(active_tab));
   // The extension should've opened a new tab to an extension page.
   EXPECT_EQ(GURL(chrome::kChromeUINewTabURL),
-            browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
+            active_tab->GetLastCommittedURL());
 
   // Lazy Background Page still exists, because the extension created a new tab
   // to an extension page.

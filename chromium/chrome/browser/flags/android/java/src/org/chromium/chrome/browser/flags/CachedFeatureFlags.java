@@ -47,12 +47,13 @@ public class CachedFeatureFlags {
      */
     private static Map<String, Boolean> sDefaults = new HashMap<String, Boolean>() {
         {
-            put(ChromeFeatureList.ANDROID_PARTNER_CUSTOMIZATION_PHENOTYPE, false);
+            put(ChromeFeatureList.ANDROID_MANAGED_BY_MENU_ITEM, true);
+            put(ChromeFeatureList.ANDROID_PARTNER_CUSTOMIZATION_PHENOTYPE, true);
             put(ChromeFeatureList.CONDITIONAL_TAB_STRIP_ANDROID, false);
             put(ChromeFeatureList.HOMEPAGE_LOCATION_POLICY, false);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_DOWNLOAD, false);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH, false);
-            put(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS, false);
+            put(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS, true);
             put(ChromeFeatureList.CHROME_DUET, false);
             put(ChromeFeatureList.COMMAND_LINE_ON_NON_ROOTED, false);
             put(ChromeFeatureList.CHROME_DUET_ADAPTIVE, true);
@@ -64,17 +65,23 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.START_SURFACE_ANDROID, false);
             put(ChromeFeatureList.PAINT_PREVIEW_DEMO, false);
             put(ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP, false);
+            put(ChromeFeatureList.PREFETCH_NOTIFICATION_SCHEDULING_INTEGRATION, false);
             put(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, true); // Vivaldi default value override.
             put(ChromeFeatureList.TAB_GROUPS_ANDROID, false);
             put(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, false);
             put(ChromeFeatureList.DUET_TABSTRIP_INTEGRATION_ANDROID, false);
             put(ChromeFeatureList.CLOSE_TAB_SUGGESTIONS, false);
+            put(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA, false);
             put(ChromeFeatureList.INSTANT_START, false);
             put(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, false);
             put(ChromeFeatureList.TAB_TO_GTS_ANIMATION, false);
             put(ChromeFeatureList.OMNIBOX_SUGGESTIONS_RECYCLER_VIEW, false);
             put(ChromeFeatureList.TEST_DEFAULT_DISABLED, false);
             put(ChromeFeatureList.TEST_DEFAULT_ENABLED, true);
+            put(ChromeFeatureList.REPORT_FEED_USER_ACTIONS, false);
+            put(ChromeFeatureList.INTEREST_FEED_V2, false);
+            put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS, false);
+            put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP, false);
         }
     };
 

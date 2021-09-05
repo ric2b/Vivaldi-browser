@@ -25,6 +25,7 @@
 
 #include <memory>
 #include "base/memory/weak_ptr.h"
+#include "services/network/public/mojom/referrer_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -39,6 +40,7 @@
 namespace blink {
 
 class ContainerNode;
+class DOMWrapperWorld;
 class Element;
 class ExceptionState;
 class IncrementLoadEventDelayCount;
@@ -71,11 +73,6 @@ class CORE_EXPORT ImageLoader : public GarbageCollected<ImageLoader>,
     // This force the image to refetch and reload the image source, even if it
     // has not changed.
     kUpdateForcedReload
-  };
-
-  enum BypassMainWorldBehavior {
-    kBypassMainWorldCSP,
-    kDoNotBypassMainWorldCSP
   };
 
   void UpdateFromElement(UpdateFromElementBehavior = kUpdateNormal,
@@ -169,7 +166,7 @@ class CORE_EXPORT ImageLoader : public GarbageCollected<ImageLoader>,
 
   // Called from the task or from updateFromElement to initiate the load.
   void DoUpdateFromElement(
-      BypassMainWorldBehavior,
+      scoped_refptr<const DOMWrapperWorld> world,
       UpdateFromElementBehavior,
       network::mojom::ReferrerPolicy = network::mojom::ReferrerPolicy::kDefault,
       UpdateType = UpdateType::kAsync);

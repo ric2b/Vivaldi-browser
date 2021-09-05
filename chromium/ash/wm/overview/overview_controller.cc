@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "ash/frame_throttler/frame_throttling_controller.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/window_properties.h"
@@ -369,10 +370,12 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
       observer.OnOverviewModeEnded();
     if (!should_end_immediately && delayed_animations_.empty())
       OnEndingAnimationComplete(/*canceled=*/false);
+    Shell::Get()->frame_throttling_controller()->EndThrottling();
   } else {
     DCHECK(CanEnterOverview());
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ui", "OverviewController::EnterOverview",
                                       this);
+    Shell::Get()->frame_throttling_controller()->StartThrottling(windows);
 
     // Clear any animations that may be running from last overview end.
     for (const auto& animation : delayed_animations_)
@@ -437,7 +440,7 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
     // the overview immediately, so delaying blur start until start animations
     // finish looks janky.
     overview_wallpaper_controller_->Blur(
-        /*animate_only=*/new_type == OverviewEnterExitType::kFadeInEnter);
+        /*animate=*/new_type == OverviewEnterExitType::kFadeInEnter);
 
     // For app dragging, there are no start animations so add a delay to delay
     // animations observing when the start animation ends, such as the shelf,
@@ -505,7 +508,7 @@ void OverviewController::OnStartingAnimationComplete(bool canceled) {
   // so it doesn't have to be requested again on starting animation end.
   if (!canceled && overview_session_->enter_exit_overview_type() !=
                        OverviewEnterExitType::kFadeInEnter) {
-    overview_wallpaper_controller_->Blur(/*animate_only=*/true);
+    overview_wallpaper_controller_->Blur(/*animate=*/true);
   }
 
   for (auto& observer : observers_)

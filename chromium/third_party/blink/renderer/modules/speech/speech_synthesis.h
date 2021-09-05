@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
 namespace blink {
@@ -48,7 +47,6 @@ class MODULES_EXPORT SpeechSynthesis final
       public Supplement<LocalDOMWindow>,
       public mojom::blink::SpeechSynthesisVoiceListObserver {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(SpeechSynthesis);
 
  public:
   static const char kSupplementName[];
@@ -126,16 +124,12 @@ class MODULES_EXPORT SpeechSynthesis final
 
   void SetMojomSynthesisForTesting(
       mojo::PendingRemote<mojom::blink::SpeechSynthesis>);
-  void InitializeMojomSynthesis();
-  void InitializeMojomSynthesisIfNeeded();
+  mojom::blink::SpeechSynthesis* TryEnsureMojomSynthesis();
 
   HeapMojoReceiver<mojom::blink::SpeechSynthesisVoiceListObserver,
-                   SpeechSynthesis,
-                   HeapMojoWrapperMode::kForceWithoutContextObserver>
+                   SpeechSynthesis>
       receiver_;
-  HeapMojoRemote<mojom::blink::SpeechSynthesis,
-                 HeapMojoWrapperMode::kForceWithoutContextObserver>
-      mojom_synthesis_;
+  HeapMojoRemote<mojom::blink::SpeechSynthesis> mojom_synthesis_;
   HeapVector<Member<SpeechSynthesisVoice>> voice_list_;
   HeapDeque<Member<SpeechSynthesisUtterance>> utterance_queue_;
   bool is_paused_ = false;

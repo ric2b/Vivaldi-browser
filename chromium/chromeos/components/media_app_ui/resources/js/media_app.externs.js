@@ -29,6 +29,12 @@ mediaApp.AbstractFile.prototype.blob;
  */
 mediaApp.AbstractFile.prototype.name;
 /**
+ * A unique number that represents this file, used to communicate the file in
+ * IPC with a parent frame.
+ * @type {number|undefined}
+ */
+mediaApp.AbstractFile.prototype.token;
+/**
  * Size of the file, e.g., from the HTML5 File API.
  * @type {number}
  */
@@ -57,7 +63,7 @@ mediaApp.AbstractFile.prototype.error;
  * rejects. Upon success, `size` will reflect the new file size.
  * If null, then in-place overwriting is not supported for this file.
  * Note the "overwrite" may be simulated with a download operation.
- * @type {function(!Blob): Promise<undefined>|undefined}
+ * @type {function(!Blob): !Promise<undefined>|undefined}
  */
 mediaApp.AbstractFile.prototype.overwriteOriginal;
 /**
@@ -76,6 +82,14 @@ mediaApp.AbstractFile.prototype.deleteOriginalFile;
  * @type {function(string): !Promise<number>|undefined}
  */
 mediaApp.AbstractFile.prototype.renameOriginalFile;
+/**
+ * A function that will save the provided blob in the file pointed to by
+ * pickedFileToken. Once saved the new file takes over this.token and becomes
+ * currently writable. The original file is given a new token
+ * and pushed forward in the navigation order.
+ * @type {function(!Blob, number): !Promise<undefined>|undefined}
+ */
+mediaApp.AbstractFile.prototype.saveAs;
 
 /**
  * Wraps an HTML FileList object.
@@ -96,15 +110,19 @@ mediaApp.AbstractFileList.prototype.item = function(index) {};
  */
 mediaApp.AbstractFileList.prototype.getCurrentlyWritable = function() {};
 /**
- * Loads in the next file in the list as a writable.
+ * Loads the next file in the navigation order into the media app.
+ * @param {number=} currentFileToken the token of the file that is currently
+ *     loaded into the media app.
  * @return {!Promise<undefined>}
  */
-mediaApp.AbstractFileList.prototype.loadNext = function() {};
+mediaApp.AbstractFileList.prototype.loadNext = function(currentFileToken) {};
 /**
- * Loads in the previous file in the list as a writable.
+ * Loads the previous file in the navigation order into the media app.
+ * @param {number=} currentFileToken the token of the file that is currently
+ *     loaded into the media app.
  * @return {!Promise<undefined>}
  */
-mediaApp.AbstractFileList.prototype.loadPrev = function() {};
+mediaApp.AbstractFileList.prototype.loadPrev = function(currentFileToken) {};
 /**
  * @param {function(!mediaApp.AbstractFileList): void} observer invoked when the
  *     size or contents of the file list changes.
@@ -126,12 +144,28 @@ mediaApp.ClientApiDelegate = function() {};
  */
 mediaApp.ClientApiDelegate.prototype.openFeedbackDialog = function() {};
 /**
- * Saves a copy of `file` in a custom location with a custom
- * name which the user is prompted for via a native save file dialog.
- * @param {!mediaApp.AbstractFile} file
+ * Request for the user to be prompted with a save file dialog. Once the user
+ * selects a location a new file handle is created and a unique token to that
+ * file will be returned. This token can be then used with saveCopy(). The file
+ * extension on `suggestedName` and the provided `mimeType` are used to inform
+ * the save as dialog what file should be created. Once the Native Filesystem
+ * API allows, this save as dialog will additionally have the filename input be
+ * pre-filled with `suggestedName`.
+ * TODO(b/161087799): Update function description once Native Filesystem API
+ * supports suggestedName.
+ * @param {string} suggestedName
+ * @param {string} mimeType
+ * @return {!Promise<number>}
+ */
+mediaApp.ClientApiDelegate.prototype.requestSaveFile = function(
+    suggestedName, mimeType) {};
+/**
+ * Request for the user to be prompted with a open file picker. Once the user
+ * selects a file, the file is inserted into the navigation order after the
+ * current file and navigated to.
  * @return {!Promise<undefined>}
  */
-mediaApp.ClientApiDelegate.prototype.saveCopy = function(file) {};
+mediaApp.ClientApiDelegate.prototype.openFile = function() {};
 
 /**
  * The client Api for interacting with the media app instance.

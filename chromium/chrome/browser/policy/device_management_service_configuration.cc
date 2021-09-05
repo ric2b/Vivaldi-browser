@@ -17,8 +17,8 @@
 #include "chromeos/system/statistics_provider.h"
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
-    (defined(OS_LINUX) && !defined(OS_ANDROID))
+#if defined(OS_WIN) || defined(OS_MAC) || \
+    ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && !defined(OS_ANDROID))
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #endif
@@ -62,7 +62,7 @@ std::string DeviceManagementServiceConfiguration::GetPlatformParameter() {
 #endif
 
   std::string os_version("-");
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_CHROMEOS)
   int32_t os_major_version = 0;
   int32_t os_minor_version = 0;
   int32_t os_bugfix_version = 0;
@@ -85,8 +85,8 @@ std::string DeviceManagementServiceConfiguration::GetReportingServerUrl() {
 
 std::string
 DeviceManagementServiceConfiguration::GetReportingConnectorServerUrl() {
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
-    (defined(OS_LINUX) && !defined(OS_ANDROID))
+#if defined(OS_WIN) || defined(OS_MAC) || \
+    ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && !defined(OS_ANDROID))
   auto settings =
       enterprise_connectors::ConnectorsManager::GetInstance()
           ->GetReportingSettings(

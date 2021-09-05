@@ -22,7 +22,7 @@
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
-#include "chrome/browser/password_manager/account_storage/account_password_store_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -38,6 +38,7 @@
 #include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
+#include "chrome/browser/sync/sync_invalidations_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
@@ -81,10 +82,6 @@
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #include "chromeos/constants/chromeos_features.h"
 #endif  // defined(OS_CHROMEOS)
-
-#if defined(OS_WIN)
-#include "chrome/browser/sync/roaming_profile_directory_deleter_win.h"
-#endif  // defined(OS_WIN)
 
 #include "app/vivaldi_apptools.h"
 #include "sync/vivaldi_profile_sync_service.h"
@@ -164,6 +161,7 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(invalidation::ProfileInvalidationProviderFactory::GetInstance());
+  DependsOn(SyncInvalidationsServiceFactory::GetInstance());
   DependsOn(ModelTypeStoreServiceFactory::GetInstance());
   DependsOn(PasswordStoreFactory::GetInstance());
   DependsOn(SecurityEventRecorderFactory::GetInstance());
@@ -283,12 +281,6 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
 
   auto pss =
       std::make_unique<syncer::ProfileSyncService>(std::move(init_params));
-
-#if defined(OS_WIN)
-  if (!local_sync_backend_enabled)
-    DeleteRoamingUserDataDirectoryLater();
-#endif
-
   pss->Initialize();
 
   // Hook PSS into PersonalDataManager (a circular dependency).

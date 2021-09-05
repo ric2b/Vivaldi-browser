@@ -120,8 +120,7 @@ void SetAppIsDefaultForTest(Profile* profile, const std::string& id) {
 bool IsUnRemovableDefaultApp(const std::string& id) {
   return id == extension_misc::kChromeAppId ||
          id == extensions::kWebStoreAppId ||
-         id == file_manager::kFileManagerAppId ||
-         id == extension_misc::kGeniusAppId;
+         id == file_manager::kFileManagerAppId;
 }
 
 void UninstallExtension(extensions::ExtensionService* service,
@@ -246,6 +245,9 @@ class AppListSyncableService::ModelUpdaterObserver
  private:
   // ChromeAppListModelUpdaterObserver
   void OnAppListItemAdded(ChromeAppListItem* item) override {
+    // Only sync folders and page breaks which are added from Ash.
+    if (!item->is_folder() && !item->is_page_break())
+      return;
     DCHECK(adding_item_id_.empty());
     adding_item_id_ = item->id();  // Ignore updates while adding an item.
     VLOG(2) << owner_ << " OnAppListItemAdded: " << item->ToDebugString();
@@ -1070,6 +1072,8 @@ base::Optional<syncer::ModelError> AppListSyncableService::ProcessSyncChanges(
   }
 
   HandleUpdateFinished(false /* clean_up_after_init_sync */);
+
+  GetModelUpdater()->NotifyProcessSyncChangesFinished();
 
   return base::nullopt;
 }

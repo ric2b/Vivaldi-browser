@@ -22,16 +22,13 @@
 #include "media/base/media_permission.h"
 #include "media/media_buildflags.h"
 #include "media/video/gpu_video_accelerator_factories.h"
+#include "net/net_buildflags.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/peerconnection/webrtc_ip_handling_policy.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_media_stream.h"
-#include "third_party/blink/public/platform/web_media_stream_source.h"
-#include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection_handler.h"
@@ -183,7 +180,7 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
   webrtc::DisableRtcUseH264();
 #endif  // BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 
-  base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
+  base::CurrentThread::Get()->AddDestructionObserver(this);
   // To allow sending to the signaling/worker threads.
   jingle_glue::JingleThreadWrapper::EnsureForCurrentMessageLoop();
   jingle_glue::JingleThreadWrapper::current()->set_send_allowed(true);

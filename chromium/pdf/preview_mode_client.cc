@@ -6,6 +6,10 @@
 
 #include <stdint.h>
 
+#include <string>
+#include <utility>
+
+#include "base/callback.h"
 #include "base/notreached.h"
 #include "pdf/document_layout.h"
 
@@ -22,7 +26,7 @@ void PreviewModeClient::Invalidate(const pp::Rect& rect) {
   NOTREACHED();
 }
 
-void PreviewModeClient::DidScroll(const pp::Point& point) {
+void PreviewModeClient::DidScroll(const gfx::Vector2d& point) {
   NOTREACHED();
 }
 
@@ -35,7 +39,7 @@ void PreviewModeClient::ScrollToY(int y_in_screen_coords,
   NOTREACHED();
 }
 
-void PreviewModeClient::ScrollBy(const pp::Point& point) {
+void PreviewModeClient::ScrollBy(const gfx::Vector2d& scroll_delta) {
   NOTREACHED();
 }
 
@@ -68,8 +72,8 @@ void PreviewModeClient::NotifySelectedFindResultChanged(
 }
 
 void PreviewModeClient::GetDocumentPassword(
-    pp::CompletionCallbackWithOutput<pp::Var> callback) {
-  callback.Run(PP_ERROR_FAILED);
+    base::OnceCallback<void(const std::string&)> callback) {
+  std::move(callback).Run("");
 }
 
 void PreviewModeClient::Alert(const std::string& message) {

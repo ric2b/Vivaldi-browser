@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">選択</translation>
 <translation id="1859234291848436338">文章の方向</translation>
 <translation id="1860796786778352021">通知を閉じる</translation>
+<translation id="186476001994626254">ウェブのスマート貼り付けコンテンツ</translation>
 <translation id="1871244248791675517">Insert</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" />%</translation>
 <translation id="1901303067676059328">すべて選択(&amp;A)</translation>
+<translation id="19085484004813472">これは新しい機能です</translation>
 <translation id="2006524834898217237">このデバイスがインターネットに接続されているかご確認ください。</translation>
 <translation id="208586643495776849">もう一度お試しください</translation>
 <translation id="2090963878406559571"><ph name="ORIGIN" /> から Android スマートフォンに番号を送信するには、設定で両方のデバイスの<ph name="TROUBLESHOOT_LINK" />にしてください。</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">設定を管理</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1時間}other{#時間}}</translation>
 <translation id="2583543531130364912">タッチスクリーンのキャリブレーション</translation>
+<translation id="2586657967955657006">クリップボード</translation>
 <translation id="2666092431469916601">一番上</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> から共有しました</translation>
 <translation id="271033894570825754">新しいファイル</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />、<ph name="PRICE" /></translation>
 <translation id="2803313416453193357">フォルダを開く</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 年前}other{# 年前}}</translation>
+<translation id="2878511608894704031">すべて削除</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{1日}other{#日}}</translation>
 <translation id="2931838996092594335">クリック</translation>
 <translation id="2981684127883932071">候補を表示しています</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">読み上げを開始</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> をフォルダ <ph name="FOLDER_NAME" /> に移動しました。</translation>
 <translation id="4316910396681052118">すべてのアプリ</translation>
+<translation id="4491109536499578614">画像</translation>
 <translation id="4588090240171750605">右にスクロール</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />、評価 <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />、おすすめのアプリ</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 日と }other{# 日と }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1年}other{#年}}</translation>
+<translation id="588258955323874662">全画面表示</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{残り 1 秒}other{残り # 秒}}</translation>
 <translation id="5941711191222866238">最小化</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 時間}other{# 時間}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google アシスタント</translation>
 <translation id="6430678249303439055">このアプリからのすべての通知をブロックする</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 秒前}other{# 秒前}}</translation>
+<translation id="6503257047630241175">RTF コンテンツ</translation>
 <translation id="6539092367496845964">エラーが発生しました。しばらくしてからもう一度お試しください。</translation>
 <translation id="654149438358937226">通知をすべてブロックする</translation>
 <translation id="6567071839949112727">上位要素をクリック</translation>

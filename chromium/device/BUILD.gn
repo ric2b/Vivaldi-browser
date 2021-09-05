@@ -15,7 +15,7 @@ if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
 }
 
-is_linux_without_udev = is_linux && !use_udev
+is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
 
 test("device_unittests") {
   sources = [
@@ -41,6 +41,8 @@ test("device_unittests") {
     "bluetooth/bluetooth_task_manager_win_unittest.cc",
     "bluetooth/device_unittest.cc",
     "bluetooth/public/cpp/bluetooth_uuid_unittest.cc",
+    "bluetooth/server_socket_unittest.cc",
+    "bluetooth/socket_unittest.cc",
     "bluetooth/string_util_icu_unittest.cc",
     "bluetooth/test/bluetooth_gatt_server_test.cc",
     "bluetooth/test/bluetooth_gatt_server_test.h",
@@ -70,7 +72,6 @@ test("device_unittests") {
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
     "bluetooth/test/test_pairing_delegate.cc",
     "bluetooth/test/test_pairing_delegate.h",
-    "bluetooth/uribeacon/uri_encoder_unittest.cc",
     "gamepad/abstract_haptic_gamepad_unittest.cc",
     "gamepad/dualshock4_controller_unittest.cc",
     "gamepad/gamepad_blocklist_unittest.cc",
@@ -101,8 +102,8 @@ test("device_unittests") {
     "//device/base/synchronization",
     "//device/bluetooth",
     "//device/bluetooth:deprecated_experimental_mojo",
+    "//device/bluetooth:fake_bluetooth",
     "//device/bluetooth:mocks",
-    "//device/bluetooth/uribeacon",
     "//device/fido",
     "//device/fido:test_support",
     "//device/gamepad",
@@ -229,7 +230,7 @@ test("device_unittests") {
     }
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     if (is_chromecast) {
       # Cast does not support GATT server mode.
       sources -= [
@@ -257,7 +258,7 @@ test("device_unittests") {
   if (is_mac) {
     deps += [ "//third_party/ocmock" ]
     ldflags = [ "-ObjC" ]
-    libs = [
+    frameworks = [
       "CoreBluetooth.framework",
       "IOBluetooth.framework",
       "IOKit.framework",
@@ -402,6 +403,7 @@ if (is_android) {
       "//device/gamepad:java",
       "//mojo/public/java:bindings_java",
       "//third_party/android_deps:androidx_annotation_annotation_java",
+      "//third_party/hamcrest:hamcrest_java",
     ]
     srcjar_deps = [ "//device/gamepad:java_enums_srcjar" ]
   }

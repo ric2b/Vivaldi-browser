@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">neznámé jméno</translation>
 <translation id="1089439967362294234">Změnit heslo</translation>
 <translation id="1110994991967754504">Vyberte oprávnění pro <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Otevřete <ph name="BEGIN_LINK" />archivovanou kopii<ph name="END_LINK" /> stránky <ph name="URL" /></translation>
 <translation id="1158211211994409885">Web <ph name="HOST_NAME" /> neočekávaně ukončil připojení.</translation>
 <translation id="1161325031994447685">obnovit připojení k síti Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Tisk…</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Tento web obsahuje škodlivé programy</translation>
 <translation id="1916770123977586577">Chcete-li pro tento web použít nová nastavení, načtěte tuto stránku znovu</translation>
 <translation id="1919345977826869612">Reklamy</translation>
-<translation id="194030505837763158">Přejít na odkaz <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Rozšířené informace</translation>
-<translation id="2030481566774242610">Měli jste na mysli <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />zkontrolovat proxy server a firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Zvuk</translation>
 <translation id="2119505898009119320">Vydáno organizaci <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -42,6 +39,7 @@
 <translation id="2359808026110333948">Pokračovat</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />spustit diagnostiku sítě<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Oznámení</translation>
+<translation id="2501278716633472235">Přejít zpět</translation>
 <translation id="2539524384386349900">Rozpoznat</translation>
 <translation id="255002559098805027">Web <ph name="HOST_NAME" /> vrátil neplatnou odpověď.</translation>
 <translation id="2586657967955657006">Schránka</translation>
@@ -67,6 +65,7 @@
 <translation id="3226128629678568754">Klikněte na tlačítko znovu načíst současnou stránku k opětovnému načtení stránky.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3234666976984236645">Vždy na tomto webu zjišťovat důležitý obsah</translation>
+<translation id="3308738399950580893">reklamy</translation>
 <translation id="3422472998109090673">Web <ph name="HOST_NAME" /> momentálně není dostupný.</translation>
 <translation id="3427092606871434483">Povolit (výchozí)</translation>
 <translation id="3447661539832366887">Vlastník tohoto zařízení hru s dinosaurem vypnul.</translation>
@@ -81,6 +80,7 @@
 <translation id="3681007416295224113">Informace o certifikátu</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />zkontrolovat proxy server, firewall a konfiguraci DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Pokud používáte proxy server…</translation>
+<translation id="3894751534882749287">Pokud chcete stránku zobrazit, můžete pro ni změnit úroveň ochrany proti sledování ve vyskakovacím panelu blokování sledování nebo kliknutím na tlačítko Povolit.</translation>
 <translation id="3950820424414687140">Přihlaste se</translation>
 <translation id="3973234410852337861">Web <ph name="HOST_NAME" /> je blokován</translation>
 <translation id="3987940399970879459">Méně než 1 MB</translation>
@@ -107,6 +107,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Připojení bylo přerušeno</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />spustit diagnostiku sítě systému Windows<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">ochranou proti sledování</translation>
 <translation id="4744603770635761495">Spustitelná cesta</translation>
 <translation id="4750917950439032686">Vaše údaje (například hesla nebo čísla platebních karet) jsou při odesílání na tento web skryté.</translation>
 <translation id="4764776831041365478">Webové stránky na adrese <ph name="URL" /> jsou možná dočasně nedostupné nebo mohly být přemístěny na novou webovou adresu.</translation>
@@ -120,7 +121,6 @@
 <translation id="5287240709317226393">Zobrazit položky cookie</translation>
 <translation id="5355557959165512791">Web <ph name="SITE" /> nyní nemůžete navštívit, protože jeho certifikát byl zrušen. Síťové chyby a útoky jsou obvykle dočasné, tato stránka pravděpodobně později bude fungovat.</translation>
 <translation id="5386426401304769735">Řetězec certifikátů tohoto webu obsahuje certifikát podepsaný algoritmem SHA-1.</translation>
-<translation id="5431657950005405462">Soubor nebyl nalezen</translation>
 <translation id="5452270690849572955">Tuto stránku na webu <ph name="HOST_NAME" /> nelze najít</translation>
 <translation id="5457113250005438886">neplatný</translation>
 <translation id="5492298309214877701">Tato stránka v intranetu společnosti, organizace nebo školy má stejnou adresu URL jako externí web.
@@ -165,13 +165,14 @@ Kontaktujte administrátora systému.</translation>
 <translation id="6897140037006041989">Totožnost (UA)</translation>
 <translation id="7053983685419859001">Zamezit</translation>
 <translation id="7079718277001814089">Tento web obsahuje škodlivý kód</translation>
-<translation id="7090678807593890770">Vyhledejte na Googlu <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Povoleno rozšířením</translation>
 <translation id="7111012039238467737">(platný)</translation>
+<translation id="7113310725918019676">Povolit <ph name="BLOCKED_TYPE" /> z <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">Web <ph name="HOST_NAME" /> nevyhovuje bezpečnostním standardům.</translation>
 <translation id="7219179957768738017">Připojení používá protokol <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Zrušit přístup</translation>
 <translation id="7353601530677266744">Parametry spuštění</translation>
+<translation id="7364115444476960850">Stránka, kterou se pokoušíte navštívit, byla zablokována <ph name="BLOCKER_NAME" /> prohlížeče Vivaldi.</translation>
 <translation id="7419106976560586862">Cesta k profilu</translation>
 <translation id="7445762425076701745">Totožnost serveru, k němuž jste připojeni, nelze plně ověřit. Jste připojeni k serveru, který používá název platný pouze v rámci vaší sítě. Externí certifikační autorita nemůže vlastnictví názvu nijak ověřit. Některé certifikační autority však vydají certifikát i pro takové názvy, a nelze tedy zaručit, že jste připojeni k požadovanému webu a nikoli k webu útočníka.</translation>
 <translation id="7455133967321480974">Použít předvolenou hodnotu (zamezit)</translation>
@@ -187,7 +188,6 @@ Kontaktujte administrátora systému.</translation>
 <translation id="7716424297397655342">Tento web nelze načíst z mezipaměti</translation>
 <translation id="7758069387465995638">Připojení mohlo být zablokováno firewallem nebo antivirovým softwarem.</translation>
 <translation id="7800304661137206267">Připojení je šifrováno pomocí standardu <ph name="CIPHER" /> s algoritmem <ph name="MAC" /> pro ověřování zpráv a mechanizmem výměny klíčů <ph name="KX" />.</translation>
-<translation id="7802523362929240268">Web je důvěryhodný</translation>
 <translation id="7834399512844817676">Web <ph name="SITE" /> vaše informace běžně chrání šifrováním. Když se prohlížeč Vivaldi k webu <ph name="SITE" /> pokusil připojit tentokrát, web vrátil neobvyklé a nesprávné identifikační údaje. K tomuto problému může dojít, pokud se za web <ph name="SITE" /> pokouší vydávat nějaký útočník nebo pokud bylo připojení přerušeno přihlašovací obrazovkou sítě Wi-Fi. Vaše informace jsou i nadále v bezpečí, protože prohlížeč Vivaldi připojení přerušil dříve, než došlo k odeslání jakýchkoliv dat.</translation>
 <translation id="7878562273885520351">Vaše heslo může být prolomeno</translation>
 <translation id="7951415247503192394">(32bitové)</translation>
@@ -195,6 +195,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="8037357227543935929">Zeptat se (výchozí)</translation>
 <translation id="8041940743680923270">Použít předvolenou hodnotu (zeptat se)</translation>
 <translation id="808894953321890993">Změnit heslo</translation>
+<translation id="8119307142152921512">sledovače a reklamy</translation>
 <translation id="8142868475871995937">Na stránce &lt;strong&gt;vivaldi://policy&lt;/strong&gt; naleznete seznam zakázaných adres URL a další zásady vynucené vaším správcem systému.</translation>
 <translation id="8149426793427495338">Počítač přešel do režimu spánku.</translation>
 <translation id="8150722005171944719">Soubor na adrese <ph name="URL" /> nelze načíst. Možná byl odstraněn, přesunut nebo mohou přístupu bránit oprávnění souboru.</translation>
@@ -212,6 +213,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="8703575177326907206">Vaše spojení se serverem <ph name="DOMAIN" /> není šifrované.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;Překlad názvu na DNS serveru&lt;/abbr&gt; pro webovou stránku <ph name="HOST_NAME" /> nelze najít. Diagnostikování problému…</translation>
 <translation id="8820817407110198400">Záložky</translation>
+<translation id="8940028675168378100">Zablokováno <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">Proxy <ph name="DOMAIN" /> vyžaduje uživatelské jméno a heslo.</translation>
 <translation id="9008201768610948239">Opomíjet</translation>
 <translation id="9011424611726486705">Otevřít nastavení webu</translation>
@@ -219,6 +221,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="9039213469156557790">Tato stránka obsahuje ještě další nezabezpečené zdroje. Tyto zdroje budou během přenosu moci zobrazit jiní uživatelé a případní útočníci je mohou upravit a změnit tak chování stránky.</translation>
 <translation id="9069693763241529744">Zamezeno rozšířením</translation>
 <translation id="9169664750068251925">Zamezit vždy na tomto webu</translation>
+<translation id="9180553614777056266">blokováním reklam</translation>
 <translation id="9183425211371246419">Web <ph name="HOST_NAME" /> používá nepodporovaný protokol.</translation>
 <translation id="9219103736887031265">Obrázky</translation>
 <translation id="936602727769022409">Mohli byste ztratit přístup ke svému Google účtu. Chromium doporučuje okamžitě změnit heslo. Budete vyzváni k přihlášení.</translation>

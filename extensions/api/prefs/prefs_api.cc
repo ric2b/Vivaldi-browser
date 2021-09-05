@@ -294,7 +294,7 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
     if (!prefs->FindPreference(path)) {
       // This is a Chromium property that was not registered on a particular
       // platform.
-      DCHECK(!base::StringPiece(path).starts_with("vivaldi."));
+      DCHECK(!base::StartsWith(path, "vivaldi."));
       continue;
     }
 

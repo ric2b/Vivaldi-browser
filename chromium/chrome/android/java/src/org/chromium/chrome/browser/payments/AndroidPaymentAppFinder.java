@@ -14,13 +14,17 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.payments.PaymentManifestVerifier.ManifestVerifyCallback;
+import org.chromium.components.payments.ErrorStrings;
 import org.chromium.components.payments.MethodStrings;
 import org.chromium.components.payments.PackageManagerDelegate;
 import org.chromium.components.payments.PaymentFeatureList;
 import org.chromium.components.payments.PaymentManifestDownloader;
 import org.chromium.components.payments.PaymentManifestParser;
+import org.chromium.components.payments.PaymentManifestWebDataService;
+import org.chromium.components.payments.PaymentOptionsUtils;
+import org.chromium.components.payments.SupportedDelegations;
 import org.chromium.components.payments.intent.WebPaymentIntentHelper;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentMethodData;
@@ -186,11 +190,9 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
         mIsIncognito = activity != null && activity.getCurrentTabModel().isIncognito();
     }
 
-    private void findAppStoreBillingApp(
-            ChromeActivity activity, List<ResolveInfo> allInstalledPaymentApps) {
-        assert activity != null;
-        String twaPackageName = mTwaPackageManagerDelegate.getTwaPackageName(activity);
-        if (twaPackageName == null) return;
+    private void findAppStoreBillingApp(List<ResolveInfo> allInstalledPaymentApps) {
+        String twaPackageName = mFactoryDelegate.getParams().getTwaPackageName();
+        if (TextUtils.isEmpty(twaPackageName)) return;
         ResolveInfo twaApp = findAppWithPackageName(allInstalledPaymentApps, twaPackageName);
         if (twaApp == null) return;
 
@@ -223,6 +225,9 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
                 onValidPaymentAppForPaymentMethodName(twaApp, appStoreMethod);
             }
         }
+
+        AndroidPaymentApp app = mValidApps.get(twaPackageName);
+        if (app != null) app.setIsPreferred(true);
     }
 
     private boolean paymentAppSupportsUriMethod(ResolveInfo app, GURL urlMethod) {
@@ -289,16 +294,11 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
             }
         }
 
-        // WebContents is possible to attach to different activities on {@link PaymentRequest}
-        // created and shown. Ideally {@link #findAppStoreBillingApp} should have based on the
-        // activity that is used when PaymentRequest is shown. But we intentionally not do that for
-        // the sake of simple design and better performance. Plus, for app store billing case in
-        // particular, it's unusual for a TWA to switch to CCT without destroying JavaScript context
-        // and, consequently, the {@link PaymentRequest} object.
-        ChromeActivity activity =
-                ChromeActivity.fromWebContents(mFactoryDelegate.getParams().getWebContents());
-        if (!mFactoryDelegate.getParams().requestShippingOrPayerContact() && activity != null) {
-            findAppStoreBillingApp(activity, allInstalledPaymentApps);
+        if (!PaymentOptionsUtils.requestAnyInformation(
+                    mFactoryDelegate.getParams().getPaymentOptions())
+                && PaymentFeatureList.isEnabled(
+                        PaymentFeatureList.WEB_PAYMENTS_APP_STORE_BILLING)) {
+            findAppStoreBillingApp(allInstalledPaymentApps);
         }
 
         // All URL methods for which manifests should be downloaded. For example, if merchant
@@ -348,6 +348,14 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
             GURL defaultUrlMethod = null;
             if (!TextUtils.isEmpty(defaultMethod)) {
                 defaultUrlMethod = new GURL(defaultMethod);
+
+                // Do not download any manifests for the app whose default payment method identifier
+                // is an app store payment method identifier, because app store method URLs are used
+                // only for identification and do not host manifest files.
+                if (mAppStores.values().contains(defaultUrlMethod)) {
+                    continue;
+                }
+
                 if (UrlUtils.isURLValid(defaultUrlMethod)) {
                     defaultMethod = urlToStringWithoutTrailingSlash(defaultUrlMethod);
                 }
@@ -380,6 +388,12 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
                 GURL supportedUrlMethod = new GURL(supportedMethod);
                 if (!UrlUtils.isURLValid(supportedUrlMethod)) supportedUrlMethod = null;
                 if (supportedUrlMethod != null && supportedUrlMethod.equals(defaultUrlMethod)) {
+                    continue;
+                }
+
+                // Ignore payment method identifiers of app stores, because app store method URLs
+                // are used only for identification and do not host manifest files.
+                if (mAppStores.values().contains(supportedUrlMethod)) {
                     continue;
                 }
 
@@ -581,7 +595,7 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
                     mFactoryDelegate.getParams().getTopLevelOrigin(),
                     mFactoryDelegate.getParams().getPaymentRequestOrigin(),
                     mFactoryDelegate.getParams().getCertificateChain(),
-                    filterModifiersForApp(mFactoryDelegate.getParams().getModifiers(),
+                    filterModifiersForApp(mFactoryDelegate.getParams().getUnmodifiableModifiers(),
                             app.getInstrumentMethodNames()),
                     this::onIsReadyToPayResponse);
         }
@@ -629,6 +643,20 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
      */
     private void onValidPaymentAppForPaymentMethodName(ResolveInfo resolveInfo, String methodName) {
         String packageName = resolveInfo.activityInfo.packageName;
+
+        SupportedDelegations appSupportedDelegations =
+                getAppsSupportedDelegations(resolveInfo.activityInfo);
+        // Allow-lists the Play Billing method for this feature in order for the Play Billing case
+        // to skip the sheet in this case.
+        if (PaymentFeatureList.isEnabled(PaymentFeatureList.ENFORCE_FULL_DELEGATION)
+                || methodName.equals(MethodStrings.GOOGLE_PLAY_BILLING)) {
+            if (!appSupportedDelegations.providesAll(
+                        mFactoryDelegate.getParams().getPaymentOptions())) {
+                Log.e(TAG, ErrorStrings.SKIP_APP_FOR_PARTIAL_DELEGATION.replace("$", packageName));
+                return;
+            }
+        }
+
         AndroidPaymentApp app = mValidApps.get(packageName);
         if (app == null) {
             CharSequence label = mPackageManagerDelegate.getAppLabel(resolveInfo);
@@ -648,7 +676,7 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
                     packageName, resolveInfo.activityInfo.name,
                     mIsReadyToPayServices.get(packageName), label.toString(),
                     mPackageManagerDelegate.getAppIcon(resolveInfo), mIsIncognito,
-                    webAppIdCanDeduped, getAppsSupportedDelegations(resolveInfo.activityInfo));
+                    webAppIdCanDeduped, appSupportedDelegations);
             mValidApps.put(packageName, app);
         }
 

@@ -44,7 +44,7 @@
 
 #if defined(OS_LINUX)
 #include "content/public/common/sandbox_init.h"
-#include "services/service_manager/sandbox/linux/sandbox_linux.h"
+#include "sandbox/policy/linux/sandbox_linux.h"
 #endif
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
@@ -121,10 +121,10 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
 #endif
 
 #if defined(OS_LINUX)
-  service_manager::SandboxLinux::GetInstance()->InitializeSandbox(
-      service_manager::SandboxTypeFromCommandLine(command_line),
-      service_manager::SandboxLinux::PreSandboxHook(),
-      service_manager::SandboxLinux::Options());
+  sandbox::policy::SandboxLinux::GetInstance()->InitializeSandbox(
+      sandbox::policy::SandboxTypeFromCommandLine(command_line),
+      sandbox::policy::SandboxLinux::PreSandboxHook(),
+      sandbox::policy::SandboxLinux::Options());
 #endif
 
   ChildProcess ppapi_process;
@@ -133,14 +133,14 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
                                                 parameters.command_line,
                                                 false /* Not a broker */));
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MAC)
   // Startup tracing is usually enabled earlier, but if we forked from a zygote,
   // we can only enable it after mojo IPC support is brought up by PpapiThread,
   // because the mojo broker has to create the tracing SMB on our behalf due to
   // the zygote sandbox.
   if (parameters.zygote_child)
     tracing::EnableStartupTracingIfNeeded();
-#endif  // OS_POSIX && !OS_ANDROID && !!OS_MACOSX
+#endif  // OS_POSIX && !OS_ANDROID && !OS_MAC
 
 #if defined(OS_WIN)
   if (!base::win::IsUser32AndGdi32Available())

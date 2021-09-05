@@ -18,12 +18,14 @@ android_library("java") {
     "//components/browser_ui/widget/android:java",
     "//content/public/android:content_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//ui/android:ui_java",
   ]
+  resources_package = "org.chromium.components.browser_ui.modaldialog"
 }
 
 android_resources("java_resources") {
-  custom_package = "org.chromium.components.browser_ui.modaldialog"
+  create_srcjar = false
   sources = [
     "java/res/layout/modal_dialog_container.xml",
     "java/res/layout/modal_dialog_title.xml",
@@ -55,7 +57,9 @@ android_library("javatests") {
     ":java_test_resources",
     "//base:base_java_test_support",
     "//content/public/test/android:content_java_test_support",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_core_core_java",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_deps:espresso_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
@@ -64,12 +68,13 @@ android_library("javatests") {
     "//ui/android:ui_java",
     "//ui/android:ui_java_test_support",
   ]
+  resources_package = "org.chromium.components.browser_ui.modaldialog.test"
 }
 
 android_resources("java_test_resources") {
   testonly = true
 
-  custom_package = "org.chromium.components.browser_ui.modaldialog.test"
+  create_srcjar = false
   sources = [
     "test/java/res/drawable/ic_add.xml",
     "test/java/res/values/ids.xml",

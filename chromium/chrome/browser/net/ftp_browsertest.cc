@@ -4,6 +4,8 @@
 
 #include <vector>
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
@@ -67,10 +69,8 @@ void WaitForTitle(content::WebContents* contents, const char* expected_title) {
 class FakeDefaultProtocolClientWorker
     : public shell_integration::DefaultProtocolClientWorker {
  public:
-  FakeDefaultProtocolClientWorker(
-      const shell_integration::DefaultWebClientWorkerCallback& callback,
-      const std::string& protocol)
-      : DefaultProtocolClientWorker(callback, protocol) {}
+  explicit FakeDefaultProtocolClientWorker(const std::string& protocol)
+      : DefaultProtocolClientWorker(protocol) {}
 
  private:
   ~FakeDefaultProtocolClientWorker() override = default;
@@ -78,9 +78,9 @@ class FakeDefaultProtocolClientWorker
     return shell_integration::DefaultWebClientState::NOT_DEFAULT;
   }
 
-  void SetAsDefaultImpl(const base::Closure& on_finished_callback) override {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                     on_finished_callback);
+  void SetAsDefaultImpl(base::OnceClosure on_finished_callback) override {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, std::move(on_finished_callback));
   }
 
   DISALLOW_COPY_AND_ASSIGN(FakeDefaultProtocolClientWorker);
@@ -98,11 +98,8 @@ class FakeProtocolHandlerDelegate : public ExternalProtocolHandler::Delegate {
 
  private:
   scoped_refptr<shell_integration::DefaultProtocolClientWorker>
-  CreateShellWorker(
-      const shell_integration::DefaultWebClientWorkerCallback& callback,
-      const std::string& protocol) override {
-    return base::MakeRefCounted<FakeDefaultProtocolClientWorker>(callback,
-                                                                 protocol);
+  CreateShellWorker(const std::string& protocol) override {
+    return base::MakeRefCounted<FakeDefaultProtocolClientWorker>(protocol);
   }
 
   ExternalProtocolHandler::BlockState GetBlockState(const std::string& scheme,

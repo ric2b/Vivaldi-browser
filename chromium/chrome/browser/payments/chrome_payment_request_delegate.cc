@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/web_data_service_factory.h"
+#include "components/autofill/content/browser/webauthn/internal_authenticator_impl.h"
 #include "components/autofill/core/browser/address_normalizer_impl.h"
 #include "components/autofill/core/browser/geo/region_data_loader_impl.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
@@ -39,9 +40,9 @@
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/chromium/chrome_storage_impl.h"
 
-#if defined(CHROME_OS)
+#if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/apps/apk_web_app_service.h"
-#endif  // CHROME_OS
+#endif  // OS_CHROMEOS
 
 namespace payments {
 
@@ -69,7 +70,19 @@ ChromePaymentRequestDelegate::~ChromePaymentRequestDelegate() {}
 
 void ChromePaymentRequestDelegate::ShowDialog(PaymentRequest* request) {
   DCHECK_EQ(nullptr, shown_dialog_.get());
-  shown_dialog_ = PaymentRequestDialogView::Create(request, nullptr);
+  DCHECK_EQ(nullptr, spc_dialog_.get());
+
+  switch (dialog_type_) {
+    case DialogType::PAYMENT_REQUEST:
+      shown_dialog_ = PaymentRequestDialogView::Create(request, nullptr);
+      break;
+    case DialogType::SECURE_PAYMENT_CONFIRMATION:
+      spc_dialog_ = std::make_unique<SecurePaymentConfirmationController>(
+          request->GetWeakPtr());
+      shown_dialog_ = spc_dialog_->GetWeakPtr();
+      break;
+  }
+
   shown_dialog_->ShowDialog();
 }
 
@@ -83,6 +96,8 @@ void ChromePaymentRequestDelegate::CloseDialog() {
     shown_dialog_->CloseDialog();
     shown_dialog_ = nullptr;
   }
+
+  spc_dialog_.reset();
 }
 
 void ChromePaymentRequestDelegate::ShowErrorMessage() {
@@ -167,6 +182,17 @@ bool ChromePaymentRequestDelegate::IsBrowserWindowActive() const {
   return browser && browser->window() && browser->window()->IsActive();
 }
 
+std::unique_ptr<autofill::InternalAuthenticator>
+ChromePaymentRequestDelegate::CreateInternalAuthenticator() const {
+  // This authenticator can be used in a cross-origin iframe only if the
+  // top-level frame allowed it with Feature Policy, e.g., with allow="payment"
+  // iframe attribute. The secure payment confirmation dialog displays the
+  // top-level origin in its UI before the user can click on the [Verify] button
+  // to invoke this authenticator.
+  return std::make_unique<content::InternalAuthenticatorImpl>(
+      web_contents_->GetMainFrame());
+}
+
 scoped_refptr<PaymentManifestWebDataService>
 ChromePaymentRequestDelegate::GetPaymentManifestWebDataService() const {
   return WebDataServiceFactory::GetPaymentManifestWebDataForProfile(
@@ -207,19 +233,24 @@ bool ChromePaymentRequestDelegate::SkipUiForBasicCard() const {
 }
 
 std::string ChromePaymentRequestDelegate::GetTwaPackageName() const {
-#if defined(CHROME_OS)
-  auto* apk_web_service = chromeos::ApkWebService::Get(
+#if defined(OS_CHROMEOS)
+  auto* apk_web_app_service = chromeos::ApkWebAppService::Get(
       Profile::FromBrowserContext(web_contents_->GetBrowserContext()));
-  if (!apk_web_service)
+  if (!apk_web_app_service)
     return "";
 
   base::Optional<std::string> twa_package_name =
-      apk_web_service->GetPackageNameForWebApp(top_level_url);
+      apk_web_app_service->GetPackageNameForWebApp(
+          web_contents_->GetLastCommittedURL());
 
   return twa_package_name.has_value() ? twa_package_name.value() : "";
 #else
   return "";
-#endif  // CHROME_OS
+#endif  // OS_CHROMEOS
+}
+
+PaymentRequestDialog* ChromePaymentRequestDelegate::GetDialogForTesting() {
+  return shown_dialog_.get();
 }
 
 }  // namespace payments

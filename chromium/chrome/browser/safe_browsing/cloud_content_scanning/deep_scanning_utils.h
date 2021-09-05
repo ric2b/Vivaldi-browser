@@ -21,6 +21,10 @@ namespace enterprise_connectors {
 class ContentAnalysisResponse;
 }  // namespace enterprise_connectors
 
+namespace signin {
+class IdentityManager;
+}  // namespace signin
+
 namespace safe_browsing {
 
 // Represents a trigger that caused a a content analysis request to report a
@@ -76,9 +80,30 @@ enum class DeepScanAccessPoint {
 };
 std::string DeepScanAccessPointToString(DeepScanAccessPoint access_point);
 
+// The resulting action that chrome performed in response to a scan request.
+// This maps to the event result in the real-time reporting.
+enum class EventResult {
+  UNKNOWN,
+
+  // The user was allowed to use the data without restriction.
+  ALLOWED,
+
+  // The user was allowed to use the data but was warned that it may violate
+  // enterprise rules.
+  WARNED,
+
+  // The user was not allowed to use the data.
+  BLOCKED,
+
+  // The user has chosen to use the data even though it violated enterprise
+  // rules.
+  BYPASSED,
+};
+
 // Helper function to examine a DeepScanningClientResponse and report the
 // appropriate events to the enterprise admin. |download_digest_sha256| must be
-// encoded using base::HexEncode.
+// encoded using base::HexEncode.  |event_result| indicates whether the user was
+// ultimately allowed to access the text or file.
 void MaybeReportDeepScanningVerdict(Profile* profile,
                                     const GURL& url,
                                     const std::string& file_name,
@@ -88,11 +113,13 @@ void MaybeReportDeepScanningVerdict(Profile* profile,
                                     DeepScanAccessPoint access_point,
                                     const int64_t content_size,
                                     BinaryUploadService::Result result,
-                                    const DeepScanningClientResponse& response);
+                                    const DeepScanningClientResponse& response,
+                                    EventResult event_result);
 
 // Helper function to examine a ContentAnalysisResponse and report the
 // appropriate events to the enterprise admin. |download_digest_sha256| must be
-// encoded using base::HexEncode.
+// encoded using base::HexEncode.  |event_result| indicates whether the user was
+// ultimately allowed to access the text or file.
 void MaybeReportDeepScanningVerdict(
     Profile* profile,
     const GURL& url,
@@ -103,7 +130,8 @@ void MaybeReportDeepScanningVerdict(
     DeepScanAccessPoint access_point,
     const int64_t content_size,
     BinaryUploadService::Result result,
-    const enterprise_connectors::ContentAnalysisResponse& response);
+    const enterprise_connectors::ContentAnalysisResponse& response,
+    EventResult event_result);
 
 // Helper function to report the user bypassed a warning to the enterprise
 // admin. This is split from MaybeReportDeepScanningVerdict since it happens
@@ -160,6 +188,10 @@ DeepScanningClientResponse SimpleDeepScanningClientResponseForTesting(
     base::Optional<bool> dlp_success,
     base::Optional<bool> malware_success);
 
+// Helper function to convert a EventResult to a string that.  The format of
+// string returned is processed by the sever.
+std::string EventResultToString(EventResult result);
+
 // Helper function to convert a BinaryUploadService::Result to a CamelCase
 // string.
 std::string BinaryUploadServiceResultToString(
@@ -178,6 +210,12 @@ ContentAnalysisScanResult MalwareVerdictToResult(
     const safe_browsing::MalwareDeepScanningVerdict& verdict);
 std::vector<ContentAnalysisScanResult> ContentAnalysisResponseToResults(
     const enterprise_connectors::ContentAnalysisResponse& response);
+
+// Returns the email address of the unconsented account signed in to the profile
+// or an empty string if no account is signed in.  If either |profile| or
+// |identity_manager| is null then the empty string is returned.
+std::string GetProfileEmail(Profile* profile);
+std::string GetProfileEmail(signin::IdentityManager* identity_manager);
 
 }  // namespace safe_browsing
 

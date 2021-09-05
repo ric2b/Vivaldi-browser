@@ -62,6 +62,8 @@
 #import "ios/chrome/browser/first_run/first_run.h"
 #include "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
 #include "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/main/browser_list.h"
+#import "ios/chrome/browser/main/browser_list_factory.h"
 #import "ios/chrome/browser/memory/memory_debugger_manager.h"
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
 #import "ios/chrome/browser/metrics/previous_session_info.h"
@@ -70,6 +72,7 @@
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #import "ios/chrome/browser/omaha/omaha_service.h"
 #include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/screenshot/screenshot_metrics_recorder.h"
 #import "ios/chrome/browser/search_engines/extension_search_engine_data_updater.h"
 #include "ios/chrome/browser/search_engines/search_engines_util.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -77,8 +80,8 @@
 #import "ios/chrome/browser/share_extension/share_extension_service_factory.h"
 #include "ios/chrome/browser/signin/authentication_service_delegate.h"
 #include "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
-#import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #include "ios/chrome/browser/system_flags.h"
 #import "ios/chrome/browser/ui/appearance/appearance_customization.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
@@ -88,6 +91,7 @@
 #import "ios/chrome/browser/ui/main/browser_view_wrangler.h"
 #import "ios/chrome/browser/ui/main/scene_controller_guts.h"
 #import "ios/chrome/browser/ui/main/scene_delegate.h"
+#import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/webui/chrome_web_ui_ios_controller_factory.h"
@@ -264,6 +268,10 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 // The ChromeBrowserState associated with the main (non-OTR) browsing mode.
 @property(nonatomic, assign) ChromeBrowserState* mainBrowserState;  // Weak.
+
+// Handles collecting metrics on user triggered screenshots
+@property(nonatomic, strong)
+    ScreenshotMetricsRecorder* screenshotMetricsRecorder;
 
 // Returns whether the restore infobar should be displayed.
 - (bool)mustShowRestoreInfobar;
@@ -559,13 +567,16 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
   // Now that everything is properly set up, run the tests.
   tests_hook::RunTestsIfPresent();
+
+  self.screenshotMetricsRecorder = [[ScreenshotMetricsRecorder alloc] init];
+  [self.screenshotMetricsRecorder startRecordingMetrics];
 }
 
 - (void)startUpBrowserForegroundInitialization {
-  BOOL postCrashLaunch = [self mustShowRestoreInfobar];
-  BOOL needRestore =
+  self.appState.postCrashLaunch = [self mustShowRestoreInfobar];
+  self.appState.sessionRestorationRequired =
       [self startUpBeforeFirstWindowCreatedAndPrepareForRestorationPostCrash:
-                postCrashLaunch];
+                self.appState.postCrashLaunch];
 
   if (@available(iOS 13, *)) {
     if (IsSceneStartupSupported()) {
@@ -575,8 +586,8 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
     }
   }
 
-  [self.sceneController startUpChromeUIPostCrash:postCrashLaunch
-                                 needRestoration:needRestore];
+  SceneState* sceneState = self.appState.connectedScenes.firstObject;
+  [sceneState.controller startUpChromeUI];
   [self startUpAfterFirstWindowCreated];
 }
 
@@ -594,7 +605,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
               object:nil];
 
   [self markEulaAsAccepted];
-  self.appState.sceneShowingBlockingUI = nil;
 }
 
 - (void)handleFirstRunUIDidFinish {
@@ -634,7 +644,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
         base::mac::ObjCCastStrict<UIWindowScene>(notification.object);
     SceneDelegate* sceneDelegate =
         base::mac::ObjCCastStrict<SceneDelegate>(scene.delegate);
-    self.sceneController = sceneDelegate.sceneController;
     sceneDelegate.sceneController.mainController = self;
   }
 }
@@ -684,12 +693,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 }
 
 - (void)stopChromeMain {
-  // Teardown UI state that is associated with scenes.
-  for (SceneState* sceneState in self.appState.connectedScenes) {
-    sceneState.activationLevel = SceneActivationLevelUnattached;
-  }
-  // End of per-window code.
-
   OmahaService::Stop();
 
   [_spotlightManager shutdown];
@@ -715,6 +718,14 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   // indirectly by _chromeMain (through the ChromeBrowserState).
   // Unregister the observer before the service is destroyed.
   _localStatePrefChangeRegistrar.RemoveAll();
+
+  // Under the UIScene API, the scene delegate does not receive
+  // sceneDidDisconnect: notifications on app termination. We mark remaining
+  // connected scene states as diconnected in order to allow services to
+  // properly unregister their observers and tear down remaining UI.
+  for (SceneState* sceneState in self.appState.connectedScenes) {
+    sceneState.activationLevel = SceneActivationLevelUnattached;
+  }
 
   _chromeMain.reset();
 }
@@ -963,6 +974,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
         BreadcrumbManagerKeyedServiceFactory::GetForBrowserState(
             strongSelf.mainBrowserState)
             ->SetPreviousEvents(events);
+        breakpad::SetPreviousSessionEvents(events);
 
         // Notify persistent breadcrumb service to clear old breadcrumbs and
         // start storing breadcrumbs for this session.
@@ -974,7 +986,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)scheduleLowPriorityStartupTasks {
   [_startupTasks initializeOmaha];
-  [_startupTasks donateIntents];
 
   // Deferred tasks.
   [self schedulePrefObserverInitialization];
@@ -1076,9 +1087,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
          selector:@selector(handleFirstRunUIDidFinish)
              name:kChromeFirstRunUIDidFinishNotification
            object:nil];
-
-  // Update the AppState.
-  self.appState.sceneShowingBlockingUI = presentingScene;
 }
 
 - (void)crashIfRequested {
@@ -1139,20 +1147,35 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   return result;
 }
 
-- (void)purgeSnapshots {
-  NSMutableSet* liveSessions =
-      [self liveSessionsForWebStateList:self.mainBrowser->GetWebStateList()];
-  [liveSessions
-      unionSet:[self liveSessionsForWebStateList:self.otrBrowser
-                                                     ->GetWebStateList()]];
-
+- (void)purgeUnusedSnapshots:(NSSet*)liveSnapshotIDs {
   // Keep snapshots that are less than one minute old, to prevent a concurrency
   // issue if they are created while the purge is running.
   const base::Time oneMinuteAgo =
       base::Time::Now() - base::TimeDelta::FromMinutes(1);
-  [SnapshotCacheFactory::GetForBrowserState([self currentBrowserState])
-      purgeCacheOlderThan:oneMinuteAgo
-                  keeping:liveSessions];
+  if (self.currentBrowser) {
+    [SnapshotBrowserAgent::FromBrowser(self.currentBrowser)->GetSnapshotCache()
+        purgeCacheOlderThan:oneMinuteAgo
+                    keeping:liveSnapshotIDs];
+  }
+}
+
+- (void)purgeSnapshots {
+  // TODO(crbug.com/1116496): Browsers for disconnected scenes are not in the
+  // BrowserList, so this may not reach all folders.
+  BrowserList* browser_list =
+      BrowserListFactory::GetForBrowserState(self.mainBrowserState);
+
+  NSMutableSet* liveSnapshotIDs = [[NSMutableSet alloc] init];
+  for (Browser* browser : browser_list->AllRegularBrowsers()) {
+    [liveSnapshotIDs
+        unionSet:[self liveSessionsForWebStateList:browser->GetWebStateList()]];
+  }
+  for (Browser* browser : browser_list->AllIncognitoBrowsers()) {
+    [liveSnapshotIDs
+        unionSet:[self liveSessionsForWebStateList:browser->GetWebStateList()]];
+  }
+
+  [self purgeUnusedSnapshots:liveSnapshotIDs];
 }
 
 - (void)markEulaAsAccepted {
@@ -1246,24 +1269,12 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
 - (void)activateBlockingScene:(UIScene*)requestingScene
     API_AVAILABLE(ios(13.0)) {
-  if (@available(iOS 13, *)) {
-    UISceneActivationRequestOptions* options =
-        [[UISceneActivationRequestOptions alloc] init];
-    options.requestingScene = requestingScene;
-    UIScene* blockingScene = self.appState.sceneShowingBlockingUI.scene;
-    if (!blockingScene) {
-      return;
-    }
-    [[UIApplication sharedApplication]
-        requestSceneSessionActivation:blockingScene.session
-                         userActivity:nil
-                              options:options
-                         errorHandler:^(NSError* error) {
-                           LOG(ERROR) << base::SysNSStringToUTF8(
-                               error.localizedDescription);
-                           NOTREACHED();
-                         }];
+  id<UIBlockerTarget> uiBlocker = self.appState.currentUIBlocker;
+  if (!uiBlocker) {
+    return;
   }
+
+  [uiBlocker bringBlockerToFront:requestingScene];
 }
 
 @end
@@ -1273,9 +1284,9 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 @implementation MainController (TestingOnly)
 
 - (void)setStartupParametersWithURL:(const GURL&)launchURL {
-  DCHECK(!IsSceneStartupSupported());
   NSString* sourceApplication = @"Fake App";
-  self.sceneController.startupParameters = [ChromeAppStartupParameters
+  SceneState* sceneState = self.appState.foregroundActiveScene;
+  sceneState.controller.startupParameters = [ChromeAppStartupParameters
       newChromeAppStartupParametersWithURL:net::NSURLWithGURL(launchURL)
                      fromSourceApplication:sourceApplication];
 }

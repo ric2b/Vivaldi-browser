@@ -116,7 +116,8 @@ CSSValue* ComputedStyleUtils::CurrentColorOrValidColor(
     const StyleColor& color) {
   // This function does NOT look at visited information, so that computed style
   // doesn't expose that.
-  return cssvalue::CSSColorValue::Create(color.Resolve(style.GetColor()).Rgb());
+  return cssvalue::CSSColorValue::Create(
+      color.Resolve(style.GetCurrentColor(), style.UsedColorScheme()).Rgb());
 }
 
 const blink::Color ComputedStyleUtils::BorderSideColor(
@@ -124,16 +125,20 @@ const blink::Color ComputedStyleUtils::BorderSideColor(
     const StyleColor& color,
     EBorderStyle border_style,
     bool visited_link) {
-  if (!color.IsCurrentColor())
-    return color.GetColor();
-  // FIXME: Treating styled borders with initial color differently causes
-  // problems, see crbug.com/316559, crbug.com/276231
-  if (!visited_link && (border_style == EBorderStyle::kInset ||
-                        border_style == EBorderStyle::kOutset ||
-                        border_style == EBorderStyle::kRidge ||
-                        border_style == EBorderStyle::kGroove))
-    return blink::Color(238, 238, 238);
-  return visited_link ? style.InternalVisitedColor() : style.GetColor();
+  Color current_color;
+  if (visited_link) {
+    current_color = style.GetInternalVisitedCurrentColor();
+  } else if (border_style == EBorderStyle::kInset ||
+             border_style == EBorderStyle::kOutset ||
+             border_style == EBorderStyle::kRidge ||
+             border_style == EBorderStyle::kGroove) {
+    // FIXME: Treating styled borders with initial color differently causes
+    // problems, see crbug.com/316559, crbug.com/276231
+    current_color = blink::Color(238, 238, 238);
+  } else {
+    current_color = style.GetCurrentColor();
+  }
+  return color.Resolve(current_color, style.UsedColorScheme());
 }
 
 const CSSValue* ComputedStyleUtils::BackgroundImageOrWebkitMaskImage(
@@ -1166,6 +1171,9 @@ class OrderedNamedLinesCollector {
         ordered_named_auto_repeat_grid_lines_(
             is_row_axis ? style.AutoRepeatOrderedNamedGridColumnLines()
                         : style.AutoRepeatOrderedNamedGridRowLines()) {}
+  OrderedNamedLinesCollector(const OrderedNamedLinesCollector&) = delete;
+  OrderedNamedLinesCollector& operator=(const OrderedNamedLinesCollector&) =
+      delete;
   virtual ~OrderedNamedLinesCollector() = default;
 
   bool IsEmpty() const {
@@ -1183,7 +1191,6 @@ class OrderedNamedLinesCollector {
 
   const OrderedNamedGridLines& ordered_named_grid_lines_;
   const OrderedNamedGridLines& ordered_named_auto_repeat_grid_lines_;
-  DISALLOW_COPY_AND_ASSIGN(OrderedNamedLinesCollector);
 };
 
 class OrderedNamedLinesCollectorInsideRepeat
@@ -1309,7 +1316,8 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackSizeList(
     GridTrackSizingDirection direction,
     const ComputedStyle& style) {
   const Vector<GridTrackSize>& auto_track_sizes =
-      direction == kForColumns ? style.GridAutoColumns() : style.GridAutoRows();
+      direction == kForColumns ? style.GridAutoColumns().LegacyTrackList()
+                               : style.GridAutoRows().LegacyTrackList();
 
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   for (auto& track_size : auto_track_sizes) {
@@ -1354,7 +1362,8 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
     const ComputedStyle& style) {
   bool is_row_axis = direction == kForColumns;
   const Vector<GridTrackSize>& track_sizes =
-      is_row_axis ? style.GridTemplateColumns() : style.GridTemplateRows();
+      is_row_axis ? style.GridTemplateColumns().LegacyTrackList()
+                  : style.GridTemplateRows().LegacyTrackList();
   const Vector<GridTrackSize>& auto_repeat_track_sizes =
       is_row_axis ? style.GridAutoRepeatColumns() : style.GridAutoRepeatRows();
   bool is_layout_grid = layout_object && layout_object->IsLayoutGrid();
@@ -2226,27 +2235,23 @@ CSSValue* ComputedStyleUtils::StrokeDashArrayToCSSValueList(
   return list;
 }
 
-CSSValue* ComputedStyleUtils::AdjustSVGPaintForCurrentColor(
-    const SVGPaint& paint,
-    const Color& current_color) {
+CSSValue* ComputedStyleUtils::ValueForSVGPaint(const SVGPaint& paint,
+                                               const ComputedStyle& style) {
   if (paint.type >= SVG_PAINTTYPE_URI_NONE) {
     CSSValueList* values = CSSValueList::CreateSpaceSeparated();
     values->Append(
         *MakeGarbageCollected<cssvalue::CSSURIValue>(paint.GetUrl()));
-    if (paint.type == SVG_PAINTTYPE_URI_NONE)
+    if (paint.type == SVG_PAINTTYPE_URI_NONE) {
       values->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
-    else if (paint.type == SVG_PAINTTYPE_URI_CURRENTCOLOR)
-      values->Append(*cssvalue::CSSColorValue::Create(current_color.Rgb()));
-    else if (paint.type == SVG_PAINTTYPE_URI_RGBCOLOR)
-      values->Append(*cssvalue::CSSColorValue::Create(paint.GetColor().Rgb()));
+    } else if (paint.type == SVG_PAINTTYPE_URI_COLOR) {
+      values->Append(*CurrentColorOrValidColor(style, paint.GetColor()));
+    }
     return values;
   }
   if (paint.type == SVG_PAINTTYPE_NONE)
     return CSSIdentifierValue::Create(CSSValueID::kNone);
-  if (paint.type == SVG_PAINTTYPE_CURRENTCOLOR)
-    return cssvalue::CSSColorValue::Create(current_color.Rgb());
 
-  return cssvalue::CSSColorValue::Create(paint.GetColor().Rgb());
+  return CurrentColorOrValidColor(style, paint.GetColor());
 }
 
 CSSValue* ComputedStyleUtils::ValueForSVGResource(

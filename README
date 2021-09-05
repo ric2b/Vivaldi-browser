@@ -14,5 +14,7 @@
 export PATH="$PATH":$PWD/chromium/third_party/depot_tools/
 # Uncomment for proprietary media codecs support.
 #export GN_DEFINES="ffmpeg_branding=Chrome"
+# some chromium scripts require a git repo to work
+git init
 python scripts/runhooks.py
 ninja -C out/Release vivaldi

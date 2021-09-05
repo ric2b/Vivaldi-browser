@@ -44,7 +44,6 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_crypto_algorithm_params.h"
-#include "third_party/blink/public/platform/web_media_stream.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -531,6 +530,11 @@ bool ContainsLegacySimulcast(String sdp) {
   return sdp.Find("\na=ssrc-group:SIM") != kNotFound;
 }
 
+bool ContainsLegacyRtpDataChannel(String sdp) {
+  // Looks for the non-spec legacy RTP data channel.
+  return sdp.Find("google-data/90000") != kNotFound;
+}
+
 enum class SdpFormat {
   kSimple,
   kComplexPlanB,
@@ -650,8 +654,7 @@ RTCPeerConnection* RTCPeerConnection::Create(
   }
 
   // Count number of PeerConnections that could potentially be impacted by CSP
-  auto& security_context = context->GetSecurityContext();
-  auto* content_security_policy = security_context.GetContentSecurityPolicy();
+  auto* content_security_policy = context->GetContentSecurityPolicy();
   if (content_security_policy &&
       content_security_policy->IsActiveForConnections()) {
     UseCounter::Count(context, WebFeature::kRTCPeerConnectionWithActiveCsp);
@@ -1489,6 +1492,10 @@ ScriptPromise RTCPeerConnection::setRemoteDescription(
 
   NoteCallSetupStateEventPending(SetSdpOperationType::kSetRemoteDescription,
                                  *session_description_init);
+  if (ContainsLegacyRtpDataChannel(session_description_init->sdp())) {
+    ExecutionContext* context = ExecutionContext::From(script_state);
+    UseCounter::Count(context, WebFeature::kRTCLegacyRtpDataChannelNegotiated);
+  }
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
   auto* request = MakeGarbageCollected<RTCVoidRequestPromiseImpl>(
@@ -1519,7 +1526,6 @@ ScriptPromise RTCPeerConnection::setRemoteDescription(
                       session_description_init);
   }
   ExecutionContext* context = ExecutionContext::From(script_state);
-  CHECK(context);
   if (success_callback && error_callback) {
     UseCounter::Count(
         context,
@@ -1535,6 +1541,9 @@ ScriptPromise RTCPeerConnection::setRemoteDescription(
           context,
           WebFeature::
               kRTCPeerConnectionSetRemoteDescriptionLegacyNoFailureCallback);
+  }
+  if (ContainsLegacyRtpDataChannel(session_description_init->sdp())) {
+    UseCounter::Count(context, WebFeature::kRTCLegacyRtpDataChannelNegotiated);
   }
 
   if (CallErrorCallbackIfSignalingStateClosed(signaling_state_, error_callback))
@@ -2378,13 +2387,13 @@ RTCRtpSender* RTCPeerConnection::addTrack(MediaStreamTrack* track,
     }
   }
 
-  Vector<WebMediaStream> web_streams(streams.size());
+  MediaStreamDescriptorVector descriptors(streams.size());
   for (wtf_size_t i = 0; i < streams.size(); ++i) {
-    web_streams[i] = streams[i]->Descriptor();
+    descriptors[i] = streams[i]->Descriptor();
   }
   webrtc::RTCErrorOr<std::unique_ptr<RTCRtpTransceiverPlatform>>
       error_or_transceiver =
-          peer_handler_->AddTrack(track->Component(), web_streams);
+          peer_handler_->AddTrack(track->Component(), descriptors);
   if (!error_or_transceiver.ok()) {
     ThrowExceptionFromRTCError(error_or_transceiver.error(), exception_state);
     return nullptr;
@@ -2551,8 +2560,8 @@ RTCDataChannel* RTCPeerConnection::createDataChannel(
 }
 
 MediaStreamTrack* RTCPeerConnection::GetTrack(
-    const WebMediaStreamTrack& web_track) const {
-  return tracks_.at(static_cast<MediaStreamComponent*>(web_track));
+    MediaStreamComponent* component) const {
+  return tracks_.at(component);
 }
 
 RTCRtpSender* RTCPeerConnection::FindSenderForTrackAndStream(
@@ -2597,34 +2606,32 @@ RTCPeerConnection::FindTransceiver(
 }
 
 RTCRtpSender* RTCPeerConnection::CreateOrUpdateSender(
-    std::unique_ptr<RTCRtpSenderPlatform> web_sender,
+    std::unique_ptr<RTCRtpSenderPlatform> rtp_sender_platform,
     String kind) {
   // The track corresponding to |web_track| must already be known to us by being
   // in |tracks_|, as is a prerequisite of CreateOrUpdateSender().
-  WebMediaStreamTrack web_track = web_sender->Track();
-  MediaStreamTrack* track;
-  if (web_track.IsNull()) {
-    track = nullptr;
-  } else {
-    track = tracks_.at(web_track);
+  MediaStreamComponent* component = rtp_sender_platform->Track();
+  MediaStreamTrack* track = nullptr;
+  if (component) {
+    track = tracks_.at(component);
     DCHECK(track);
   }
 
   // Create or update sender. If the web sender has stream IDs the sender's
   // streams need to be set separately outside of this method.
-  auto* sender_it = FindSender(*web_sender);
+  auto* sender_it = FindSender(*rtp_sender_platform);
   RTCRtpSender* sender;
   if (sender_it == rtp_senders_.end()) {
     // Create new sender (with empty stream set).
     sender = MakeGarbageCollected<RTCRtpSender>(
-        this, std::move(web_sender), kind, track, MediaStreamVector(),
+        this, std::move(rtp_sender_platform), kind, track, MediaStreamVector(),
         force_encoded_audio_insertable_streams(),
         force_encoded_video_insertable_streams());
     rtp_senders_.push_back(sender);
   } else {
     // Update existing sender (not touching the stream set).
     sender = *sender_it;
-    DCHECK_EQ(sender->web_sender()->Id(), web_sender->Id());
+    DCHECK_EQ(sender->web_sender()->Id(), rtp_sender_platform->Id());
     sender->SetTrack(track);
   }
   sender->set_transport(CreateOrUpdateDtlsTransport(
@@ -2711,18 +2718,15 @@ RTCDtlsTransport* RTCPeerConnection::CreateOrUpdateDtlsTransport(
   if (!native_transport.get()) {
     return nullptr;
   }
-  auto transport_locator =
-      dtls_transports_by_native_transport_.find(native_transport);
-  if (transport_locator != dtls_transports_by_native_transport_.end()) {
-    auto transport = transport_locator->value;
-    transport->ChangeState(information);
-    return transport;
+  auto& transport = dtls_transports_by_native_transport_
+                        .insert(native_transport.get(), nullptr)
+                        .stored_value->value;
+  if (!transport) {
+    RTCIceTransport* ice_transport =
+        CreateOrUpdateIceTransport(native_transport->ice_transport());
+    transport = MakeGarbageCollected<RTCDtlsTransport>(
+        GetExecutionContext(), std::move(native_transport), ice_transport);
   }
-  RTCDtlsTransport* transport = MakeGarbageCollected<RTCDtlsTransport>(
-      GetExecutionContext(), native_transport,
-      CreateOrUpdateIceTransport(native_transport->ice_transport()));
-  dtls_transports_by_native_transport_.insert(native_transport.get(),
-                                              transport);
   transport->ChangeState(information);
   return transport;
 }
@@ -2732,14 +2736,13 @@ RTCIceTransport* RTCPeerConnection::CreateOrUpdateIceTransport(
   if (!ice_transport.get()) {
     return nullptr;
   }
-  auto transport_locator =
-      ice_transports_by_native_transport_.find(ice_transport);
-  if (transport_locator != ice_transports_by_native_transport_.end()) {
-    return transport_locator->value;
+  auto& transport =
+      ice_transports_by_native_transport_.insert(ice_transport, nullptr)
+          .stored_value->value;
+  if (!transport) {
+    transport = RTCIceTransport::Create(GetExecutionContext(),
+                                        std::move(ice_transport), this);
   }
-  RTCIceTransport* transport =
-      RTCIceTransport::Create(GetExecutionContext(), ice_transport, this);
-  ice_transports_by_native_transport_.insert(ice_transport.get(), transport);
   return transport;
 }
 
@@ -3219,11 +3222,10 @@ void RTCPeerConnection::DidAddRemoteDataChannel(
 void RTCPeerConnection::DidNoteInterestingUsage(int usage_pattern) {
   if (!GetExecutionContext())
     return;
-  LocalDOMWindow* window = To<LocalDOMWindow>(GetExecutionContext());
-  ukm::SourceId source_id = window->UkmSourceID();
+  ukm::SourceId source_id = GetExecutionContext()->UkmSourceID();
   ukm::builders::WebRTC_AddressHarvesting(source_id)
       .SetUsagePattern(usage_pattern)
-      .Record(window->UkmRecorder());
+      .Record(GetExecutionContext()->UkmRecorder());
 }
 
 void RTCPeerConnection::UnregisterPeerConnectionHandler() {

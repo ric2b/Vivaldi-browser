@@ -15,6 +15,8 @@ namespace content {
 
 // Represents the result whether the page could be stored in the back-forward
 // cache with the reasons.
+// TODO(rakina): Rename this to use "Page" instead of "Document", to follow
+// the naming of BackForwardCacheImpl::CanStorePageNow().
 class BackForwardCacheCanStoreDocumentResult {
  public:
   using NotStoredReasons =
@@ -33,6 +35,9 @@ class BackForwardCacheCanStoreDocumentResult {
   void NoDueToFeatures(uint64_t features);
   void NoDueToRelatedActiveContents(base::Optional<ShouldSwapBrowsingInstance>
                                         browsing_instance_not_swapped_reason);
+
+  // TODO(hajimehoshi): Replace the arbitrary strings with base::Location /
+  // FROM_HERE for privacy reasons.
   void NoDueToDisableForRenderFrameHostCalled(
       const std::set<std::string>& reasons);
 

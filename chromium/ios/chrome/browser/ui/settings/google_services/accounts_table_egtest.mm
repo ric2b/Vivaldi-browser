@@ -5,12 +5,12 @@
 #import <UIKit/UIKit.h>
 
 #import "base/test/scoped_feature_list.h"
+#import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui.h"
-#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
-#import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils_app_interface.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -26,10 +26,10 @@
 
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
+using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SettingsAccountButton;
 using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SignOutAccountsButton;
-using chrome_test_util::PrimarySignInButton;
 
 namespace {
 
@@ -76,7 +76,7 @@ id<GREYMatcher> NoBookmarksLabel() {
 // Tests that the Sync and Account Settings screen are correctly popped if the
 // signed in account is removed.
 - (void)testSignInPopUpAccountOnSyncSettings {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
 
   // Sign In |identity|, then open the Sync Settings.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
@@ -84,12 +84,12 @@ id<GREYMatcher> NoBookmarksLabel() {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Forget |fakeIdentity|, screens should be popped back to the Main Settings.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
-  [SigninEarlGreyUtils forgetFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI waitForAppToIdle];
+  [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
 
   [[EarlGrey selectElementWithMatcher:PrimarySignInButton()]
       assertWithMatcher:grey_sufficientlyVisible()];
-  [SigninEarlGreyUtils checkSignedOut];
+  [SigninEarlGrey verifySignedOut];
 
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -98,8 +98,8 @@ id<GREYMatcher> NoBookmarksLabel() {
 // Tests that the Account Settings screen is correctly popped if the signed in
 // account is removed while the "Disconnect Account" dialog is up.
 - (void)testSignInPopUpAccountOnDisconnectAccount {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
-  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity];
 
   // Sign In |fakeIdentity|, then open the Account Settings.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
@@ -108,12 +108,12 @@ id<GREYMatcher> NoBookmarksLabel() {
   [ChromeEarlGreyUI tapAccountsMenuButton:SignOutAccountsButton()];
 
   // Forget |fakeIdentity|, screens should be popped back to the Main Settings.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
-  [SigninEarlGreyUtils forgetFakeIdentity:fakeIdentity];
+  [ChromeEarlGreyUI waitForAppToIdle];
+  [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
 
   [[EarlGrey selectElementWithMatcher:PrimarySignInButton()]
       assertWithMatcher:grey_sufficientlyVisible()];
-  [SigninEarlGreyUtils checkSignedOut];
+  [SigninEarlGrey verifySignedOut];
 
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -122,9 +122,9 @@ id<GREYMatcher> NoBookmarksLabel() {
 // Tests that the Account Settings screen is correctly reloaded when one of
 // the non-primary account is removed.
 - (void)testSignInReloadOnRemoveAccount {
-  FakeChromeIdentity* fakeIdentity1 = [SigninEarlGreyUtils fakeIdentity1];
-  FakeChromeIdentity* fakeIdentity2 = [SigninEarlGreyUtils fakeIdentity2];
-  [SigninEarlGreyUtils addFakeIdentity:fakeIdentity2];
+  FakeChromeIdentity* fakeIdentity1 = [SigninEarlGrey fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity2 = [SigninEarlGrey fakeIdentity2];
+  [SigninEarlGrey addFakeIdentity:fakeIdentity2];
 
   // Sign In |fakeIdentity|, then open the Account Settings.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity1];
@@ -132,11 +132,15 @@ id<GREYMatcher> NoBookmarksLabel() {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Remove |fakeIdentity2| from the device.
-  [[EarlGrey selectElementWithMatcher:ButtonWithFakeIdentity(fakeIdentity2)]
-      performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:ButtonWithAccessibilityLabel(@"Remove account")]
-      performAction:grey_tap()];
+  if (base::FeatureList::IsEnabled(kEnableMyGoogle)) {
+    [SigninEarlGreyUI tapRemoveAccountFromDeviceWithFakeIdentity:fakeIdentity2];
+  } else {
+    [[EarlGrey selectElementWithMatcher:ButtonWithFakeIdentity(fakeIdentity2)]
+        performAction:grey_tap()];
+    [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(
+                                            @"Remove account")]
+        performAction:grey_tap()];
+  }
 
   // Check that |fakeIdentity2| isn't available anymore on the Account Settings.
   [[EarlGrey
@@ -144,7 +148,7 @@ id<GREYMatcher> NoBookmarksLabel() {
                                               fakeIdentity2.userEmail),
                                           grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_nil()];
-  [SigninEarlGreyUtils checkSignedInWithFakeIdentity:fakeIdentity1];
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity1];
 
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -153,7 +157,7 @@ id<GREYMatcher> NoBookmarksLabel() {
 // Tests that the Account Settings screen is popped and the user signed out
 // when the account is removed.
 - (void)testSignOutOnRemoveAccount {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
 
   // Sign In |fakeIdentity|, then open the Account Settings.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
@@ -161,16 +165,19 @@ id<GREYMatcher> NoBookmarksLabel() {
   [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Remove |fakeIdentity| from the device.
-  [[EarlGrey selectElementWithMatcher:ButtonWithFakeIdentity(fakeIdentity)]
-      performAction:grey_tap()];
-  [[EarlGrey
-      selectElementWithMatcher:ButtonWithAccessibilityLabel(@"Remove account")]
-      performAction:grey_tap()];
-
+  if (base::FeatureList::IsEnabled(kEnableMyGoogle)) {
+    [SigninEarlGreyUI tapRemoveAccountFromDeviceWithFakeIdentity:fakeIdentity];
+  } else {
+    [[EarlGrey selectElementWithMatcher:ButtonWithFakeIdentity(fakeIdentity)]
+        performAction:grey_tap()];
+    [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(
+                                            @"Remove account")]
+        performAction:grey_tap()];
+  }
   // Check that the user is signed out and the Main Settings screen is shown.
   [[EarlGrey selectElementWithMatcher:PrimarySignInButton()]
       assertWithMatcher:grey_sufficientlyVisible()];
-  [SigninEarlGreyUtils checkSignedOut];
+  [SigninEarlGrey verifySignedOut];
 
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
@@ -179,7 +186,7 @@ id<GREYMatcher> NoBookmarksLabel() {
 // Tests that selecting sign-out from a non-managed account keeps the user's
 // synced data.
 - (void)testSignOutFromNonManagedAccountKeepsData {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
 
   // Sign In |fakeIdentity|.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
@@ -187,26 +194,24 @@ id<GREYMatcher> NoBookmarksLabel() {
   // Add a bookmark after sync is initialized.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
   [ChromeEarlGrey waitForBookmarksToFinishLoading];
-  [SigninEarlGreyUtilsAppInterface addBookmark:@"http://youtube.com"
-                                     withTitle:@"cats"];
+  [BookmarkEarlGrey setupStandardBookmarks];
 
   // Sign out.
-  [SigninEarlGreyUI
-      signOutWithSignOutConfirmation:SignOutConfirmationNonManagedUser];
+  [SigninEarlGreyUI signOut];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];
   [BookmarkEarlGreyUI openMobileBookmarks];
 
-  // Assert that the 'cats' bookmark is displayed.
-  [[EarlGrey selectElementWithMatcher:grey_text(@"cats")]
-      assertWithMatcher:grey_notNil()];
+  // Assert that the no bookmarks label is not present.
+  [[EarlGrey selectElementWithMatcher:NoBookmarksLabel()]
+      assertWithMatcher:grey_nil()];
 }
 
 // Tests that selecting sign-out and clear data from a non-managed user account
 // clears the user's synced data.
 - (void)testSignOutAndClearDataFromNonManagedAccountClearsData {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
 
   // Sign In |fakeIdentity|.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
@@ -214,12 +219,10 @@ id<GREYMatcher> NoBookmarksLabel() {
   // Add a bookmark after sync is initialized.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
   [ChromeEarlGrey waitForBookmarksToFinishLoading];
-  [SigninEarlGreyUtilsAppInterface addBookmark:@"http://youtube.com"
-                                     withTitle:@"cats"];
+  [BookmarkEarlGrey setupStandardBookmarks];
 
   // Sign out.
-  [SigninEarlGreyUI signOutWithSignOutConfirmation:
-                        SignOutConfirmationNonManagedUserWithClearedData];
+  [SigninEarlGreyUI signOutAndClearDataFromDevice];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];
@@ -232,20 +235,17 @@ id<GREYMatcher> NoBookmarksLabel() {
 
 // Tests that signing out from a managed user account clears the user's data.
 - (void)testsSignOutFromManagedAccount {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeManagedIdentity];
-
-  // Sign In |fakeIdentity|.
-  [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity isManagedAccount:YES];
+  // Sign In |fakeManagedIdentity|.
+  [SigninEarlGreyUI
+      signinWithFakeIdentity:[SigninEarlGrey fakeManagedIdentity]];
 
   // Add a bookmark after sync is initialized.
   [ChromeEarlGrey waitForSyncInitialized:YES syncTimeout:kSyncOperationTimeout];
   [ChromeEarlGrey waitForBookmarksToFinishLoading];
-  [SigninEarlGreyUtilsAppInterface addBookmark:@"http://youtube.com"
-                                     withTitle:@"cats"];
+  [BookmarkEarlGrey setupStandardBookmarks];
 
   // Sign out.
-  [SigninEarlGreyUI
-      signOutWithSignOutConfirmation:SignOutConfirmationManagedUser];
+  [SigninEarlGreyUI signOutAndClearDataFromDevice];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];
@@ -266,7 +266,7 @@ id<GREYMatcher> NoBookmarksLabel() {
 #define MAYBE_testSignInDisconnectCancelled testSignInDisconnectCancelled
 #endif
 - (void)MAYBE_testSignInDisconnectCancelled {
-  FakeChromeIdentity* fakeIdentity = [SigninEarlGreyUtils fakeIdentity1];
+  FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
 
   // Sign In |fakeIdentity|, then open the Account Settings.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
@@ -286,7 +286,7 @@ id<GREYMatcher> NoBookmarksLabel() {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::
                                           SettingsAccountsCollectionView()]
       assertWithMatcher:grey_sufficientlyVisible()];
-  [SigninEarlGreyUtils checkSignedInWithFakeIdentity:fakeIdentity];
+  [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 
   [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];

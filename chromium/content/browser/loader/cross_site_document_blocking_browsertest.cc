@@ -47,7 +47,7 @@
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/network/cross_origin_read_blocking.h"
+#include "services/network/public/cpp/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/cpp/network_switches.h"
@@ -775,9 +775,14 @@ IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest, BackToAboutBlank) {
   }
 }
 
+#if defined(OS_ANDROID)
 // Test is flaky on Android, see crbug.com/1075663
+#define MAYBE_BlockForVariousTargets DISABLED_BlockForVariousTargets
+#else
+#define MAYBE_BlockForVariousTargets BlockForVariousTargets
+#endif
 IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest,
-                       DISABLED_BlockForVariousTargets) {
+                       MAYBE_BlockForVariousTargets) {
   // This webpage loads a cross-site HTML page in different targets such as
   // <img>,<link>,<embed>, etc. Since the requested document is blocked, and one
   // character string (' ') is returned instead, this tests that the renderer
@@ -1422,9 +1427,9 @@ IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest, PrefetchIsNotImpacted) {
 
 // This test covers a scenario where foo.com document HTML-Imports a bar.com
 // document.  Because of historical reasons, bar.com fetches use foo.com's
-// URLLoaderFactory.  This means that |request_initiator_site_lock| enforcement
-// can incorrectly classify such fetches as malicious (kIncorrectLock).
-// This test ensures that UMAs properly detect such mishaps.
+// URLLoaderFactory.  This means that |request_initiator_origin_lock|
+// enforcement can incorrectly classify such fetches as malicious
+// (kIncorrectLock). This test ensures that UMAs properly detect such mishaps.
 //
 // TODO(lukasza, yoichio): https://crbug.com/766694: Remove this test once HTML
 // Imports are removed from the codebase.
@@ -1450,7 +1455,7 @@ IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest,
   // perform a fetch of nosniff.json same-origin (bar.com) via <script> element.
   // CORB should normally allow such fetch (request_initiator == bar.com ==
   // origin_of_fetch_target), but here the fetch will be blocked, because
-  // request_initiator_site_lock (a.com) will differ from request_initiator.
+  // request_initiator_origin_lock (a.com) will differ from request_initiator.
   // Such mishap is okay, because CORB only blocks HTML/XML/JSON and such
   // content type wouldn't have worked in <script> (or other non-XHR/fetch
   // context) anyway.
@@ -1469,7 +1474,7 @@ IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest,
     ExecuteScriptAsync(shell()->web_contents(), script);
     interceptor.WaitForRequestCompletion();
 
-    // NetworkService enforices |request_initiator_site_lock| for CORB,
+    // NetworkService enforces |request_initiator_origin_lock| for CORB,
     // which means that legitimate fetches from HTML Imported scripts may get
     // incorrectly blocked.
     interceptor.Verify(CorbExpectations::kShouldBeBlockedWithoutSniffing,
@@ -1486,8 +1491,8 @@ IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest,
 //    - CORB sees that the request was made from bar.com and blocks it.
 //
 // The test helps show that the bug above means that in XHR/fetch scenarios
-// request_initiator is accidentally compatible with request_initiator_site_lock
-// and therefore the lock can be safely enforced.
+// request_initiator is accidentally compatible with
+// request_initiator_origin_lock and therefore the lock can be safely enforced.
 //
 // There are 2 almost identical tests here:
 // - HtmlImports_CompatibleLock1
@@ -1553,8 +1558,8 @@ IN_PROC_BROWSER_TEST_P(CrossSiteDocumentBlockingTest,
 //    - CORB sees that the request was made from bar.com and blocks it.
 //
 // The test helps show that the bug above means that in XHR/fetch scenarios
-// request_initiator is accidentally compatible with request_initiator_site_lock
-// and therefore the lock can be safely enforced.
+// request_initiator is accidentally compatible with
+// request_initiator_origin_lock and therefore the lock can be safely enforced.
 //
 // There are 2 almost identical tests here:
 // - HtmlImports_CompatibleLock1

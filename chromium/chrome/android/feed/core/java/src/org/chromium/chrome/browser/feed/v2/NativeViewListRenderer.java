@@ -55,22 +55,22 @@ public class NativeViewListRenderer extends RecyclerView.Adapter<NativeViewListR
 
     @Override
     public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        // viewType is same as position.
-        int position = viewType;
-        if (mManager.isNativeView(position)) {
-            View v = mManager.getNativeView(position, parent);
-            return new ViewHolder(v);
+        View v;
+        if (viewType >= 0) {
+            v = mManager.getNativeView(viewType, parent);
         } else {
-            TextView v = new TextView(ContextUtils.getApplicationContext());
+            TextView textView = new TextView(ContextUtils.getApplicationContext());
             String message = "Unable to render external view";
-            v.setText(message);
-            return new ViewHolder(v);
+            textView.setText(message);
+            v = textView;
         }
+        return new ViewHolder(v);
     }
 
     @Override
     public int getItemViewType(int position) {
-        return position;
+        if (!mManager.isNativeView(position)) return -1;
+        return mManager.getViewType(position);
     }
 
     /* HybridListRenderer methods */

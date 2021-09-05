@@ -59,7 +59,6 @@
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_finalizer_utils.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
-#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/buildflags.h"
@@ -226,15 +225,17 @@ void AppLauncherHandler::CreateWebAppInfo(const web_app::AppId& app_id,
   base::Optional<std::string> icon_big;
   base::Optional<std::string> icon_small;
 
-  if (HasMatchingOrGreaterThanIcon(registrar.GetAppDownloadedIconSizes(app_id),
-                                   kWebAppIconLargeNonDefault)) {
+  if (HasMatchingOrGreaterThanIcon(
+          registrar.GetAppDownloadedIconSizesAny(app_id),
+          kWebAppIconLargeNonDefault)) {
     icon_big =
         apps::AppIconSource::GetIconURL(app_id, kWebAppIconLargeNonDefault)
             .spec();
   }
 
-  if (HasMatchingOrGreaterThanIcon(registrar.GetAppDownloadedIconSizes(app_id),
-                                   kWebAppIconSmallNonDefault)) {
+  if (HasMatchingOrGreaterThanIcon(
+          registrar.GetAppDownloadedIconSizesAny(app_id),
+          kWebAppIconSmallNonDefault)) {
     icon_small =
         apps::AppIconSource::GetIconURL(app_id, kWebAppIconSmallNonDefault)
             .spec();
@@ -772,7 +773,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
     params.override_url = override_url;
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(params);
+        ->LaunchAppWithParams(params);
   } else {
     // To give a more "launchy" experience when using the NTP launcher, we close
     // it automatically.
@@ -791,7 +792,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
     WebContents* new_contents =
         apps::AppServiceProxyFactory::GetForProfile(profile)
             ->BrowserAppLauncher()
-            .LaunchAppWithParams(params);
+            ->LaunchAppWithParams(params);
 
     // This will also destroy the handler, so do not perform any actions after.
     if (new_contents != old_contents && browser &&
@@ -974,9 +975,16 @@ void AppLauncherHandler::HandleInstallAppLocally(const base::ListValue* args) {
                                                                     true);
   web_app_provider_->registry_controller().SetAppInstallTime(app_id,
                                                              base::Time::Now());
+  web_app::InstallOsHooksOptions options;
+  options.add_to_applications_menu = true;
+  options.add_to_desktop = true;
+  options.add_to_quick_launch_bar = false;
+  options.run_on_os_login = false;
   web_app_provider_->os_integration_manager().InstallOsHooks(
-      app_id, base::BindOnce(&AppLauncherHandler::OnOsHooksInstalled,
-                             weak_ptr_factory_.GetWeakPtr(), app_id));
+      app_id,
+      base::BindOnce(&AppLauncherHandler::OnOsHooksInstalled,
+                     weak_ptr_factory_.GetWeakPtr(), app_id),
+      /*web_application_info=*/nullptr, std::move(options));
 
   // Use the appAdded to update the app icon's color to no longer be
   // greyscale.
@@ -1133,7 +1141,7 @@ void AppLauncherHandler::OnFaviconForApp(
   web_app->app_url = install_info->app_url;
 
   if (!image_result.image.IsEmpty()) {
-    web_app->icon_bitmaps[image_result.image.Width()] =
+    web_app->icon_bitmaps_any[image_result.image.Width()] =
         image_result.image.AsBitmap();
   }
 
@@ -1198,10 +1206,11 @@ void AppLauncherHandler::PromptToEnableApp(const std::string& extension_id) {
   extension_enable_flow_->StartForWebContents(web_ui()->GetWebContents());
 }
 
-void AppLauncherHandler::OnOsHooksInstalled(const web_app::AppId& app_id,
-                                            bool shortcuts_created) {
+void AppLauncherHandler::OnOsHooksInstalled(
+    const web_app::AppId& app_id,
+    const web_app::OsHooksResults os_hooks_results) {
   LOCAL_HISTOGRAM_BOOLEAN("Apps.Launcher.InstallLocallyShortcutsCreated",
-                          shortcuts_created);
+                          os_hooks_results[web_app::OsHookType::kShortcuts]);
 }
 
 void AppLauncherHandler::OnExtensionUninstallDialogClosed(

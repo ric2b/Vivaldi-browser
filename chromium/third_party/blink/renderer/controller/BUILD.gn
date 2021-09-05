@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//third_party/blink/renderer/bindings/bindings.gni")
@@ -12,10 +11,11 @@ import("//third_party/blink/renderer/modules/modules.gni")
 
 visibility = [ "//third_party/blink/*" ]
 
-jumbo_component("controller") {
+component("controller") {
   output_name = "blink_controller"
 
   deps = [
+    "//components/performance_manager/public/mojom:mojom_blink",
     "//skia",
     "//third_party/blink/renderer/core",
     "//third_party/blink/renderer/modules",
@@ -43,9 +43,11 @@ jumbo_component("controller") {
     "dev_tools_frontend_impl.h",
     "memory_usage_monitor.cc",
     "memory_usage_monitor.h",
+    "performance_manager/renderer_resource_coordinator_impl.cc",
+    "performance_manager/renderer_resource_coordinator_impl.h",
   ]
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "memory_usage_monitor_posix.cc",
       "memory_usage_monitor_posix.h",
@@ -61,6 +63,13 @@ jumbo_component("controller") {
       "oom_intervention_impl.cc",
       "oom_intervention_impl.h",
     ]
+  } else {
+    sources += [
+      "performance_manager/v8_per_frame_memory_reporter_impl.cc",
+      "performance_manager/v8_per_frame_memory_reporter_impl.h",
+      "performance_manager/v8_worker_memory_reporter.cc",
+      "performance_manager/v8_worker_memory_reporter.h",
+    ]
   }
   if (is_win) {
     sources += [
@@ -73,7 +82,7 @@ jumbo_component("controller") {
       "memory_usage_monitor_mac.cc",
       "memory_usage_monitor_mac.h",
     ]
-    libs = [
+    frameworks = [
       "AppKit.framework",
       "Foundation.framework",
     ]
@@ -81,7 +90,7 @@ jumbo_component("controller") {
 
   # HighestPmfReporter depends on MemoryUsageMonitor and MemoryUsageMonitor
   # depends on platform specific code. Explicitly specify supported platforms.
-  if (is_linux || is_win || is_android || is_mac) {
+  if (is_linux || is_chromeos || is_win || is_android || is_mac) {
     sources += [
       "highest_pmf_reporter.cc",
       "highest_pmf_reporter.h",
@@ -137,7 +146,7 @@ test("blink_perf_tests") {
   deps = [ ":blink_perf_tests_sources" ]
 }
 
-jumbo_source_set("blink_perf_tests_sources") {
+source_set("blink_perf_tests_sources") {
   visibility = []  # Allow re-assignment of list.
   visibility = [ "*" ]
   testonly = true
@@ -158,14 +167,14 @@ jumbo_source_set("blink_perf_tests_sources") {
   ]
 }
 
-jumbo_source_set("blink_unittests_sources") {
+source_set("blink_unittests_sources") {
   visibility = []  # Allow re-assignment of list.
   visibility = [ "*" ]
   testonly = true
 
   sources = [ "tests/run_all_tests.cc" ]
   sources += bindings_unittest_files
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [ "memory_usage_monitor_posix_test.cc" ]
   }
   if (is_android) {
@@ -174,9 +183,14 @@ jumbo_source_set("blink_unittests_sources") {
       "oom_intervention_impl_test.cc",
       "user_level_memory_pressure_signal_generator_test.cc",
     ]
+  } else {
+    sources += [
+      "performance_manager/v8_per_frame_memory_reporter_impl_test.cc",
+      "performance_manager/v8_worker_memory_reporter_test.cc",
+    ]
   }
 
-  if (is_linux || is_android || is_mac || is_win) {
+  if (is_linux || is_chromeos || is_android || is_mac || is_win) {
     sources += [
       "highest_pmf_reporter_test.cc",
       "memory_usage_monitor_test.cc",

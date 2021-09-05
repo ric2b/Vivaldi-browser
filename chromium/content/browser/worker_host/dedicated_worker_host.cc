@@ -11,6 +11,7 @@
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/loader/content_security_notifier.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/storage_partition_impl.h"
@@ -30,13 +31,14 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "net/base/isolation_info.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom.h"
 
 namespace content {
 
 DedicatedWorkerHost::DedicatedWorkerHost(
     DedicatedWorkerServiceImpl* service,
-    DedicatedWorkerId id,
+    const blink::DedicatedWorkerToken& token,
     RenderProcessHost* worker_process_host,
     base::Optional<GlobalFrameRoutingId> creator_render_frame_host_id,
     GlobalFrameRoutingId ancestor_render_frame_host_id,
@@ -45,7 +47,7 @@ DedicatedWorkerHost::DedicatedWorkerHost(
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
         coep_reporter)
     : service_(service),
-      id_(id),
+      token_(token),
       worker_process_host_(worker_process_host),
       scoped_process_host_observer_(this),
       creator_render_frame_host_id_(creator_render_frame_host_id),
@@ -63,12 +65,12 @@ DedicatedWorkerHost::DedicatedWorkerHost(
 
   scoped_process_host_observer_.Add(worker_process_host_);
 
-  service_->NotifyWorkerCreated(id_, worker_process_host_->GetID(),
+  service_->NotifyWorkerCreated(token_, worker_process_host_->GetID(),
                                 ancestor_render_frame_host_id_);
 }
 
 DedicatedWorkerHost::~DedicatedWorkerHost() {
-  service_->NotifyBeforeWorkerDestroyed(id_, ancestor_render_frame_host_id_);
+  service_->NotifyBeforeWorkerDestroyed(token_, ancestor_render_frame_host_id_);
 }
 
 void DedicatedWorkerHost::BindBrowserInterfaceBrokerReceiver(
@@ -78,6 +80,21 @@ void DedicatedWorkerHost::BindBrowserInterfaceBrokerReceiver(
   broker_receiver_.Bind(std::move(receiver));
   broker_receiver_.set_disconnect_handler(base::BindOnce(
       &DedicatedWorkerHost::OnMojoDisconnect, base::Unretained(this)));
+}
+
+void DedicatedWorkerHost::CreateContentSecurityNotifier(
+    mojo::PendingReceiver<blink::mojom::ContentSecurityNotifier> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  auto* ancestor_render_frame_host =
+      RenderFrameHostImpl::FromID(ancestor_render_frame_host_id_);
+  if (!ancestor_render_frame_host) {
+    // The ancestor frame may have already been closed. In that case, the worker
+    // will soon be terminated too, so abort the connection.
+    return;
+  }
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<ContentSecurityNotifier>(ancestor_render_frame_host_id_),
+      std::move(receiver));
 }
 
 void DedicatedWorkerHost::OnMojoDisconnect() {
@@ -118,14 +135,6 @@ void DedicatedWorkerHost::StartScriptLoad(
     return;
   }
 
-  // Get a storage domain.
-  SiteInstance* site_instance =
-      nearest_ancestor_render_frame_host->GetSiteInstance();
-  auto storage_partition_config =
-      GetContentClient()->browser()->GetStoragePartitionConfigForSite(
-          storage_partition_impl->browser_context(),
-          site_instance->GetSiteURL());
-
   scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory;
   if (script_url.SchemeIsBlob()) {
     if (!blob_url_token) {
@@ -157,8 +166,11 @@ void DedicatedWorkerHost::StartScriptLoad(
   const AppCacheNavigationHandle* appcache_handle =
       nearest_ancestor_render_frame_host->GetAppCacheNavigationHandle();
   if (appcache_handle) {
-    appcache_host = storage_partition_impl->GetAppCacheService()->GetHost(
-        appcache_handle->appcache_host_id());
+    auto* appcache_service = storage_partition_impl->GetAppCacheService();
+    if (appcache_service) {
+      appcache_host =
+          appcache_service->GetHost(appcache_handle->appcache_host_id());
+    }
   }
 
   // Set if the subresource loader factories support file URLs so that we can
@@ -172,8 +184,13 @@ void DedicatedWorkerHost::StartScriptLoad(
   service_worker_handle_ = std::make_unique<ServiceWorkerMainResourceHandle>(
       storage_partition_impl->GetServiceWorkerContext(), base::DoNothing());
 
+  // Get a storage domain.
+  auto partition_domain =
+      nearest_ancestor_render_frame_host->GetSiteInstance()->GetPartitionDomain(
+          storage_partition_impl);
+
   WorkerScriptFetchInitiator::Start(
-      worker_process_host_->GetID(), id_, SharedWorkerId(), script_url,
+      worker_process_host_->GetID(), token_, script_url,
       creator_render_frame_host,
       nearest_ancestor_render_frame_host->ComputeSiteForCookies(),
       creator_origin_,
@@ -184,7 +201,7 @@ void DedicatedWorkerHost::StartScriptLoad(
       service_worker_handle_.get(),
       appcache_host ? appcache_host->GetWeakPtr() : nullptr,
       std::move(blob_url_loader_factory), nullptr, storage_partition_impl,
-      storage_partition_config.partition_domain(),
+      partition_domain,
       base::BindOnce(&DedicatedWorkerHost::DidStartScriptLoad,
                      weak_factory_.GetWeakPtr()));
 }
@@ -212,7 +229,7 @@ void DedicatedWorkerHost::DidStartScriptLoad(
 
   // TODO(https://crbug.com/986188): Check if the main script's final response
   // URL is committable.
-  service_->NotifyWorkerFinalResponseURLDetermined(id_, final_response_url);
+  service_->NotifyWorkerFinalResponseURLDetermined(token_, final_response_url);
 
   // TODO(cammie): Change this approach when we support shared workers
   // creating dedicated workers, as there might be no ancestor frame.
@@ -413,17 +430,8 @@ void DedicatedWorkerHost::CreateIdleManager(
     // will soon be terminated too, so abort the connection.
     return;
   }
-  if (!ancestor_render_frame_host->IsFeatureEnabled(
-          blink::mojom::FeaturePolicyFeature::kIdleDetection)) {
-    mojo::ReportBadMessage("Feature policy blocks access to IdleDetection.");
-    return;
-  }
-  static_cast<StoragePartitionImpl*>(
-      ancestor_render_frame_host->GetProcess()->GetStoragePartition())
-      ->GetIdleManager()
-      ->CreateService(
-          std::move(receiver),
-          ancestor_render_frame_host->GetMainFrame()->GetLastCommittedOrigin());
+
+  ancestor_render_frame_host->BindIdleManager(std::move(receiver));
 }
 
 void DedicatedWorkerHost::BindSmsReceiverReceiver(
@@ -483,13 +491,10 @@ void DedicatedWorkerHost::UpdateSubresourceLoaderFactories() {
   if (!ancestor_render_frame_host)
     return;
 
-  SiteInstance* site_instance = ancestor_render_frame_host->GetSiteInstance();
-
   // Get a storage domain.
-  auto storage_partition_config =
-      GetContentClient()->browser()->GetStoragePartitionConfigForSite(
-          storage_partition_impl->browser_context(),
-          site_instance->GetSiteURL());
+  auto partition_domain =
+      ancestor_render_frame_host->GetSiteInstance()->GetPartitionDomain(
+          storage_partition_impl);
 
   // Start observing Network Service crash again.
   ObserveNetworkServiceCrash(storage_partition_impl);
@@ -501,7 +506,7 @@ void DedicatedWorkerHost::UpdateSubresourceLoaderFactories() {
           WorkerScriptFetchInitiator::CreateFactoryBundle(
               WorkerScriptFetchInitiator::LoaderType::kSubResource,
               worker_process_host_->GetID(), storage_partition_impl,
-              storage_partition_config.partition_domain(), file_url_support_,
+              partition_domain, file_url_support_,
               /*filesystem_url_support=*/true);
 
   bool bypass_redirect_checks = false;

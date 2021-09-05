@@ -19,6 +19,7 @@
 #import "ios/chrome/browser/ui/overlays/infobar_banner/confirm/confirm_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/passwords/save_password_infobar_banner_overlay_mediator.h"
+#import "ios/chrome/browser/ui/overlays/infobar_banner/passwords/update_password_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/save_card/save_card_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/translate/translate_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/overlay_request_coordinator+subclassing.h"
@@ -29,14 +30,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-// The banner dismissal timeout for all Infobar Messages Overlays in M85. This
-// is temporary since M85 does not have support for high-priority banner
-// dismissal timeouts.
-const NSTimeInterval kInfobarBannerTemporaryPresentationDurationInSeconds =
-    11.0;
-}  // namespace
 
 @interface InfobarBannerOverlayCoordinator () <InfobarBannerPositioner>
 // The list of supported mediator classes.
@@ -55,6 +48,7 @@ const NSTimeInterval kInfobarBannerTemporaryPresentationDurationInSeconds =
 + (NSArray<Class>*)supportedMediatorClasses {
   return @[
     [SavePasswordInfobarBannerOverlayMediator class],
+    [UpdatePasswordInfobarBannerOverlayMediator class],
     [ConfirmInfobarBannerOverlayMediator class],
     [TranslateInfobarBannerOverlayMediator class],
     [SaveCardInfobarBannerOverlayMediator class],
@@ -118,9 +112,13 @@ const NSTimeInterval kInfobarBannerTemporaryPresentationDurationInSeconds =
   if (!UIAccessibilityIsVoiceOverRunning()) {
     // Auto-dismiss the banner after timeout if VoiceOver is off (banner should
     // persist until user explicitly swipes it away).
+    NSTimeInterval timeout =
+        config->is_high_priority()
+            ? kInfobarBannerLongPresentationDurationInSeconds
+            : kInfobarBannerDefaultPresentationDurationInSeconds;
     [self performSelector:@selector(dismissBannerIfReady)
                withObject:nil
-               afterDelay:kInfobarBannerTemporaryPresentationDurationInSeconds];
+               afterDelay:timeout];
   }
 }
 
@@ -154,6 +152,9 @@ const NSTimeInterval kInfobarBannerTemporaryPresentationDurationInSeconds =
 
 // Called when the dismissal of the banner UI is finished.
 - (void)finishDismissal {
+  InfobarBannerOverlayMediator* mediator =
+      base::mac::ObjCCast<InfobarBannerOverlayMediator>(self.mediator);
+  [mediator finishDismissal];
   self.bannerViewController = nil;
   self.mediator = nil;
   // Notify the presentation context that the dismissal has finished.  This

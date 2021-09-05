@@ -208,7 +208,7 @@ PpapiPluginProcessHost* PluginServiceImpl::FindOrStartPpapiPluginProcess(
     // https://www.chromium.org/flash-roadmap).
     RenderProcessHostImpl::AddCorbExceptionForPlugin(render_process_id);
   } else if (info->permissions & ppapi::PERMISSION_PDF) {
-    // We want to limit ability to bypass |request_initiator_site_lock| to
+    // We want to limit ability to bypass |request_initiator_origin_lock| to
     // trustworthy renderers.  PDF plugin is okay, because it is always hosted
     // by the PDF extension (mhjfbmdgcfjbbpaeojofohoefgiehjai) or
     // chrome://print, both of which we assume are trustworthy (the extension
@@ -218,8 +218,9 @@ PpapiPluginProcessHost* PluginServiceImpl::FindOrStartPpapiPluginProcess(
     // web-controlled content.  This is a defense-in-depth for verifying that
     // ShouldAllowPluginCreation called above is doing the right thing.
     auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
-    GURL renderer_lock = policy->GetOriginLock(render_process_id);
-    CHECK(!renderer_lock.SchemeIsHTTPOrHTTPS());
+    ProcessLock renderer_lock = policy->GetProcessLock(render_process_id);
+    CHECK(!renderer_lock.matches_scheme(url::kHttpScheme) &&
+          !renderer_lock.matches_scheme(url::kHttpsScheme));
     CHECK(embedder_origin.scheme() != url::kHttpScheme);
     CHECK(embedder_origin.scheme() != url::kHttpsScheme);
     CHECK(!embedder_origin.opaque());
@@ -389,14 +390,14 @@ base::string16 PluginServiceImpl::GetPluginDisplayNameByPath(
   if (PluginService::GetInstance()->GetPluginInfoByPath(path, &info) &&
       !info.name.empty()) {
     plugin_name = info.name;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Many plugins on the Mac have .plugin in the actual name, which looks
     // terrible, so look for that and strip it off if present.
     static const char kPluginExtension[] = ".plugin";
     if (base::EndsWith(plugin_name, base::ASCIIToUTF16(kPluginExtension),
                        base::CompareCase::SENSITIVE))
       plugin_name.erase(plugin_name.length() - strlen(kPluginExtension));
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
   }
   return plugin_name;
 }

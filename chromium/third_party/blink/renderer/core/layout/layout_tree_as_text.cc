@@ -517,8 +517,7 @@ static void WritePaintProperties(WTF::TextStream& ts,
     WriteIndent(ts, indent);
     if (has_fragments)
       ts << " " << fragment_index << ":";
-    ts << " paint_offset=(" << fragment->PaintOffset().ToString()
-       << ") visual_rect=(" << fragment->VisualRect().ToString() << ")";
+    ts << " paint_offset=(" << fragment->PaintOffset().ToString() << ")";
     if (fragment->HasLocalBorderBoxProperties()) {
       // To know where they point into the paint property tree, you can dump
       // the tree using ShowAllPropertyTrees(frame_view).
@@ -604,16 +603,17 @@ void Write(WTF::TextStream& ts,
         continue;
       Write(ts, *child, indent + 1, behavior);
     }
-  }
 
-  if (o.IsLayoutEmbeddedContent()) {
-    FrameView* frame_view = ToLayoutEmbeddedContent(o).ChildFrameView();
-    if (auto* local_frame_view = DynamicTo<LocalFrameView>(frame_view)) {
-      if (auto* layout_view = local_frame_view->GetLayoutView()) {
-        layout_view->GetDocument().UpdateStyleAndLayout(
-            DocumentUpdateReason::kTest);
-        if (auto* layer = layout_view->Layer()) {
-          LayoutTreeAsText::WriteLayers(ts, layer, layer, indent + 1, behavior);
+    if (o.IsLayoutEmbeddedContent()) {
+      FrameView* frame_view = ToLayoutEmbeddedContent(o).ChildFrameView();
+      if (auto* local_frame_view = DynamicTo<LocalFrameView>(frame_view)) {
+        if (auto* layout_view = local_frame_view->GetLayoutView()) {
+          layout_view->GetDocument().UpdateStyleAndLayout(
+              DocumentUpdateReason::kTest);
+          if (auto* layer = layout_view->Layer()) {
+            LayoutTreeAsText::WriteLayers(ts, layer, layer, indent + 1,
+                                          behavior);
+          }
         }
       }
     }
@@ -772,6 +772,10 @@ void LayoutTreeAsText::WriteLayers(WTF::TextStream& ts,
   }
 #endif
 
+  bool should_paint_children =
+      !layer->GetLayoutObject().LayoutBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren);
+
   const auto& neg_list = ChildLayers(layer, kNegativeZOrderChildren);
   bool paints_background_separately = !neg_list.IsEmpty();
   if (should_paint && paints_background_separately) {
@@ -780,7 +784,7 @@ void LayoutTreeAsText::WriteLayers(WTF::TextStream& ts,
           behavior, marked_layer);
   }
 
-  if (!neg_list.IsEmpty()) {
+  if (should_paint_children && !neg_list.IsEmpty()) {
     int curr_indent = indent;
     if (behavior & kLayoutAsTextShowLayerNesting) {
       WriteIndent(ts, indent);
@@ -800,7 +804,7 @@ void LayoutTreeAsText::WriteLayers(WTF::TextStream& ts,
   }
 
   const auto& normal_flow_list = ChildLayers(layer, kNormalFlowChildren);
-  if (!normal_flow_list.IsEmpty()) {
+  if (should_paint_children && !normal_flow_list.IsEmpty()) {
     int curr_indent = indent;
     if (behavior & kLayoutAsTextShowLayerNesting) {
       WriteIndent(ts, indent);
@@ -812,7 +816,7 @@ void LayoutTreeAsText::WriteLayers(WTF::TextStream& ts,
   }
 
   const auto& pos_list = ChildLayers(layer, kPositiveZOrderChildren);
-  if (!pos_list.IsEmpty()) {
+  if (should_paint_children && !pos_list.IsEmpty()) {
     int curr_indent = indent;
     if (behavior & kLayoutAsTextShowLayerNesting) {
       WriteIndent(ts, indent);
@@ -981,14 +985,11 @@ String MarkerTextForListItem(Element* element) {
   element->GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
 
   LayoutObject* layout_object = element->GetLayoutObject();
-  if (layout_object) {
-    if (layout_object->IsListItem())
-      return ToLayoutListItem(layout_object)->MarkerText();
-    if (layout_object->IsLayoutNGListItem()) {
-      if (LayoutObject* marker = ToLayoutNGListItem(layout_object)->Marker())
-        return ListMarker::Get(marker)->MarkerTextWithoutSuffix(*marker);
-    }
-  }
+  LayoutObject* marker = ListMarker::MarkerFromListItem(layout_object);
+  if (ListMarker* list_marker = ListMarker::Get(marker))
+    return list_marker->MarkerTextWithoutSuffix(*marker);
+  if (marker && marker->IsListMarkerForNormalContent())
+    return ToLayoutListMarker(marker)->GetText();
   return String();
 }
 

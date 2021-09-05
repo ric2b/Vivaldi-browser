@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/embedded_content_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 
@@ -181,13 +182,13 @@ bool LayoutEmbeddedContent::NodeAtPoint(
   if (local_frame_view->ShouldThrottleRendering() ||
       !local_frame_view->GetFrame().GetDocument() ||
       local_frame_view->GetFrame().GetDocument()->Lifecycle().GetState() <
-          DocumentLifecycle::kCompositingClean) {
+          DocumentLifecycle::kPrePaintClean) {
     return NodeAtPointOverEmbeddedContentView(result, hit_test_location,
                                               accumulated_offset, action);
   }
 
   DCHECK_GE(GetDocument().Lifecycle().GetState(),
-            DocumentLifecycle::kCompositingClean);
+            DocumentLifecycle::kPrePaintClean);
 
   if (action == kHitTestForeground) {
     auto* child_layout_view = local_frame_view->GetLayoutView();

@@ -15,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -63,6 +64,7 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_features.h"
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -153,16 +155,19 @@ class AsyncFunctionRunner {
     return function->GetError();
   }
 
-  base::Value* WaitForSingleResult(ExtensionFunction* function) {
+  void WaitForTwoResults(ExtensionFunction* function,
+                         base::Value* first_result,
+                         base::Value* second_result) {
     RunMessageLoopUntilResponse();
     EXPECT_TRUE(function->GetError().empty())
         << "Unexpected error: " << function->GetError();
-    const base::Value* single_result = NULL;
-    if (function->GetResultList() != NULL &&
-        function->GetResultList()->Get(0, &single_result)) {
-      return single_result->DeepCopy();
-    }
-    return NULL;
+    EXPECT_NE(nullptr, function->GetResultList());
+
+    const auto& result_list = function->GetResultList()->GetList();
+    EXPECT_EQ(2ul, result_list.size());
+
+    *first_result = result_list[0].Clone();
+    *second_result = result_list[1].Clone();
   }
 
  private:
@@ -187,8 +192,11 @@ class AsyncExtensionBrowserTest : public ExtensionBrowserTest {
     return async_function_runner_->WaitForError(function);
   }
 
-  base::Value* WaitForSingleResult(ExtensionFunction* function) {
-    return async_function_runner_->WaitForSingleResult(function);
+  void WaitForTwoResults(ExtensionFunction* function,
+                         base::Value* first_result,
+                         base::Value* second_result) {
+    return async_function_runner_->WaitForTwoResults(function, first_result,
+                                                     second_result);
   }
 
  private:
@@ -218,9 +226,11 @@ class TestOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
   };
 
   TestOAuth2MintTokenFlow(ResultType result,
+                          const std::set<std::string>& granted_scopes,
                           OAuth2MintTokenFlow::Delegate* delegate)
       : OAuth2MintTokenFlow(delegate, OAuth2MintTokenFlow::Parameters()),
         result_(result),
+        granted_scopes_(granted_scopes),
         delegate_(delegate) {}
 
   void Start(scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -237,7 +247,7 @@ class TestOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
         break;
       }
       case MINT_TOKEN_SUCCESS: {
-        delegate_->OnMintTokenSuccess(kAccessToken, 3600);
+        delegate_->OnMintTokenSuccess(kAccessToken, granted_scopes_, 3600);
         break;
       }
       case MINT_TOKEN_FAILURE: {
@@ -262,6 +272,7 @@ class TestOAuth2MintTokenFlow : public OAuth2MintTokenFlow {
 
  private:
   ResultType result_;
+  const std::set<std::string>& granted_scopes_;
   OAuth2MintTokenFlow::Delegate* delegate_;
 };
 
@@ -274,7 +285,7 @@ class WaitForGURLAndCloseWindow : public content::WindowedNotificationObserver {
       : WindowedNotificationObserver(
             content::NOTIFICATION_LOAD_STOP,
             content::NotificationService::AllSources()),
-        url_(url),
+        url_(std::move(url)),
         embedder_web_contents_(nullptr) {}
 
   // NotificationObserver:
@@ -286,7 +297,7 @@ class WaitForGURLAndCloseWindow : public content::WindowedNotificationObserver {
     content::WebContents* web_contents =
         web_auth_flow_controller->GetWebContents();
 
-    if (web_contents->GetURL() == url_) {
+    if (web_contents->GetLastCommittedURL() == url_) {
       // It is safe to keep the pointer here, because we know in a test, that
       // the WebContents won't go away before CloseEmbedderWebContents is
       // called. Don't copy this code to production.
@@ -340,8 +351,14 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
   }
 
   void push_mint_token_result(TestOAuth2MintTokenFlow::ResultType result_type) {
-    push_mint_token_flow(
-        std::make_unique<TestOAuth2MintTokenFlow>(result_type, this));
+    const ExtensionTokenKey* token_key = GetExtensionTokenKeyForTest();
+    push_mint_token_result(result_type, token_key->scopes);
+  }
+
+  void push_mint_token_result(TestOAuth2MintTokenFlow::ResultType result_type,
+                              const std::set<std::string>& granted_scopes) {
+    push_mint_token_flow(std::make_unique<TestOAuth2MintTokenFlow>(
+        result_type, granted_scopes, this));
   }
 
   // Sets scope UI to not complete immediately. Call
@@ -506,6 +523,10 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
     return flow;
   }
 
+  bool enable_granular_permissions() const {
+    return IdentityGetAuthTokenFunction::enable_granular_permissions();
+  }
+
  private:
   ~FakeGetAuthTokenFunction() override {}
   bool login_access_token_result_;
@@ -537,12 +558,11 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
   void SetUpInProcessBrowserTestFixture() override {
     AsyncExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
 
-    will_create_browser_context_services_subscription_ =
+    create_services_subscription_ =
         BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-                base::Bind(
-                    &IdentityTestWithSignin::OnWillCreateBrowserContextServices,
-                    base::Unretained(this)));
+            ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+                &IdentityTestWithSignin::OnWillCreateBrowserContextServices,
+                base::Unretained(this)));
   }
 
   void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
@@ -598,8 +618,8 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
       identity_test_env_profile_adaptor_;
 
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
+      create_services_subscription_;
 };
 
 class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
@@ -846,6 +866,16 @@ class GetAuthTokenFunctionTest
     : public IdentityTestWithSignin,
       public signin::IdentityManager::DiagnosticsObserver {
  public:
+  explicit GetAuthTokenFunctionTest(bool is_return_scopes_enabled = true) {
+    if (is_return_scopes_enabled) {
+      feature_list_.InitAndEnableFeature(
+          extensions_features::kReturnScopesInGetAuthToken);
+    } else {
+      feature_list_.InitAndDisableFeature(
+          extensions_features::kReturnScopesInGetAuthToken);
+    }
+  }
+
   std::string IssueLoginAccessTokenForAccount(const CoreAccountId& account_id) {
     std::string access_token = "access_token-" + account_id.ToString();
     identity_test_env()
@@ -906,6 +936,12 @@ class GetAuthTokenFunctionTest
     return identity_test_env()->identity_manager()->GetPrimaryAccountId();
   }
 
+  IdentityTokenCacheValue CreateToken(const std::string& token,
+                                      base::TimeDelta time_to_live) {
+    return IdentityTokenCacheValue::CreateToken(token, oauth_scopes_,
+                                                time_to_live);
+  }
+
   // Sets a cached token for the primary account.
   void SetCachedToken(const IdentityTokenCacheValue& token_data) {
     SetCachedTokenForAccount(GetPrimaryAccountId(), token_data);
@@ -914,7 +950,7 @@ class GetAuthTokenFunctionTest
   void SetCachedTokenForAccount(const CoreAccountId account_id,
                                 const IdentityTokenCacheValue& token_data) {
     ExtensionTokenKey key(extension_id_, account_id, oauth_scopes_);
-    id_api()->SetCachedToken(key, token_data);
+    id_api()->token_cache()->SetToken(key, token_data);
   }
 
   void SetCachedGaiaId(const std::string& gaia_id) {
@@ -922,11 +958,17 @@ class GetAuthTokenFunctionTest
   }
 
   const IdentityTokenCacheValue& GetCachedToken(
-      const CoreAccountId& account_id) {
+      const CoreAccountId& account_id,
+      const std::set<std::string>& scopes) {
     ExtensionTokenKey key(
         extension_id_, account_id.empty() ? GetPrimaryAccountId() : account_id,
-        oauth_scopes_);
-    return id_api()->GetCachedToken(key);
+        scopes);
+    return id_api()->token_cache()->GetToken(key);
+  }
+
+  const IdentityTokenCacheValue& GetCachedToken(
+      const CoreAccountId& account_id) {
+    return GetCachedToken(account_id, oauth_scopes_);
   }
 
   base::Optional<std::string> GetCachedGaiaId() {
@@ -949,6 +991,62 @@ class GetAuthTokenFunctionTest
 
   base::OnceClosure on_access_token_requested_;
 
+  void RunGetAuthTokenFunction(ExtensionFunction* function,
+                               const std::string& args,
+                               Browser* browser,
+                               std::string* access_token,
+                               std::set<std::string>* granted_scopes) {
+    EXPECT_TRUE(
+        utils::RunFunction(function, args, browser, api_test_utils::NONE));
+
+    EXPECT_TRUE(function->GetError().empty())
+        << "Unexpected error: " << function->GetError();
+    EXPECT_NE(nullptr, function->GetResultList());
+
+    const auto& result_list = function->GetResultList()->GetList();
+    EXPECT_EQ(2ul, result_list.size());
+
+    const auto& access_token_value = result_list[0];
+    const auto& granted_scopes_value = result_list[1];
+    EXPECT_TRUE(access_token_value.is_string());
+    EXPECT_TRUE(granted_scopes_value.is_list());
+
+    std::set<std::string> scopes;
+    for (const auto& scope : granted_scopes_value.GetList()) {
+      EXPECT_TRUE(scope.is_string());
+      scopes.insert(scope.GetString());
+    }
+
+    *access_token = access_token_value.GetString();
+    *granted_scopes = std::move(scopes);
+  }
+
+  void WaitForGetAuthTokenResults(
+      ExtensionFunction* function,
+      std::string* access_token,
+      std::set<std::string>* granted_scopes,
+      AsyncFunctionRunner* function_runner = nullptr) {
+    base::Value access_token_value;
+    base::Value granted_scopes_value;
+    if (function_runner == nullptr) {
+      WaitForTwoResults(function, &access_token_value, &granted_scopes_value);
+    } else {
+      function_runner->WaitForTwoResults(function, &access_token_value,
+                                         &granted_scopes_value);
+    }
+    EXPECT_TRUE(access_token_value.is_string());
+    EXPECT_TRUE(granted_scopes_value.is_list());
+
+    std::set<std::string> scopes;
+    for (const auto& scope : granted_scopes_value.GetList()) {
+      EXPECT_TRUE(scope.is_string());
+      scopes.insert(scope.GetString());
+    }
+
+    *access_token = access_token_value.GetString();
+    *granted_scopes = std::move(scopes);
+  }
+
  private:
   // signin::IdentityManager::DiagnosticsObserver:
   void OnAccessTokenRequested(const CoreAccountId& account_id,
@@ -959,6 +1057,7 @@ class GetAuthTokenFunctionTest
     std::move(on_access_token_requested_).Run();
   }
 
+  base::test::ScopedFeatureList feature_list_;
   base::HistogramTester histogram_tester_;
   std::string extension_id_;
   std::set<std::string> oauth_scopes_;
@@ -1184,11 +1283,13 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoOptionsSuccess) {
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_extension(extension.get());
   func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
-  std::unique_ptr<base::Value> value(
-      utils::RunFunctionAndReturnSingleResult(func.get(), "[]", browser()));
+
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{}]", browser(), &access_token,
+                          &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
@@ -1204,11 +1305,13 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NonInteractiveSuccess) {
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_extension(extension.get());
   func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
-  std::unique_ptr<base::Value> value(
-      utils::RunFunctionAndReturnSingleResult(func.get(), "[{}]", browser()));
+
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{}]", browser(), &access_token,
+                          &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
@@ -1319,11 +1422,13 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_login_ui_result(true);
   func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
-  std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func.get(), "[{\"interactive\": true}]", browser()));
+
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"interactive\": true}]", browser(),
+                          &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_TRUE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
   histogram_tester()->ExpectUniqueSample(
@@ -1356,11 +1461,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   func->set_login_ui_result(true);
   func->push_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
 
-  std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func.get(), "[{\"interactive\": true}]", browser()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"interactive\": true}]", browser(),
+                          &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_TRUE(func->login_ui_shown());
   EXPECT_TRUE(func->scope_ui_shown());
   histogram_tester()->ExpectUniqueSample(
@@ -1513,7 +1619,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
     func->set_extension(extension.get());
     // Make sure we don't get a cached issue_advice result, which would cause
     // flow to be leaked.
-    id_api()->EraseAllCachedTokens();
+    id_api()->token_cache()->EraseAllTokens();
     func->push_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
     func->set_scope_ui_oauth_error(test_case.oauth_error);
     std::string error = utils::RunFunctionAndReturnError(
@@ -1533,11 +1639,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveApprovalSuccess) {
   func->set_extension(extension.get());
   func->push_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
 
-  std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func.get(), "[{\"interactive\": true}]", browser()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"interactive\": true}]", browser(),
+                          &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_TRUE(func->scope_ui_shown());
 
@@ -1548,7 +1655,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveApprovalSuccess) {
       1);
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 // Test for http://crbug.com/753014
 //
 // On macOS, closing all browsers does not shut down the browser process.
@@ -1584,7 +1691,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
       kGetAuthTokenResultHistogramName,
       IdentityGetAuthTokenError::State::kGaiaFlowAuthFailure, 1);
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoninteractiveQueue) {
   SignIn("primary@example.com");
@@ -1611,10 +1718,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoninteractiveQueue) {
 
   QueueRequestComplete(type, &queued_request);
 
-  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
   histogram_tester()->ExpectUniqueSample(
@@ -1648,10 +1757,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveQueue) {
   // queued request clears.
   QueueRequestComplete(type, &queued_request);
 
-  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_TRUE(func->scope_ui_shown());
   histogram_tester()->ExpectUniqueSample(
@@ -1747,16 +1858,17 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NonInteractiveCacheHit) {
   func->set_extension(extension.get());
 
   // pre-populate the cache with a token
-  IdentityTokenCacheValue token = IdentityTokenCacheValue::CreateToken(
-      kAccessToken, base::TimeDelta::FromSeconds(3600));
+  IdentityTokenCacheValue token =
+      CreateToken(kAccessToken, base::TimeDelta::FromSeconds(3600));
   SetCachedToken(token);
 
   // Get a token. Should not require a GAIA request.
-  std::unique_ptr<base::Value> value(
-      utils::RunFunctionAndReturnSingleResult(func.get(), "[{}]", browser()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{}]", browser(), &access_token,
+                          &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
   histogram_tester()->ExpectUniqueSample(
@@ -1786,8 +1898,8 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   func->set_extension(extension.get());
 
   // pre-populate the cache with a token
-  IdentityTokenCacheValue token = IdentityTokenCacheValue::CreateToken(
-      kAccessToken, base::TimeDelta::FromSeconds(3600));
+  IdentityTokenCacheValue token =
+      CreateToken(kAccessToken, base::TimeDelta::FromSeconds(3600));
   SetCachedTokenForAccount(account_info.account_id, token);
 
   if (id_api()->AreExtensionsRestrictedToPrimaryAccount()) {
@@ -1800,11 +1912,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
         IdentityGetAuthTokenError::State::kUserNotSignedIn, 1);
   } else {
     // Use the account from Gaia cookies.
-    std::unique_ptr<base::Value> value(
-        utils::RunFunctionAndReturnSingleResult(func.get(), "[{}]", browser()));
     std::string access_token;
-    EXPECT_TRUE(value->GetAsString(&access_token));
+    std::set<std::string> granted_scopes;
+    RunGetAuthTokenFunction(func.get(), "[{}]", browser(), &access_token,
+                            &granted_scopes);
     EXPECT_EQ(std::string(kAccessToken), access_token);
+    EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
     histogram_tester()->ExpectUniqueSample(
         kGetAuthTokenResultHistogramName,
         IdentityGetAuthTokenError::State::kNone, 1);
@@ -1856,21 +1969,23 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveCacheHit) {
   // the blocker.
   func->push_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
   RunFunctionAsync(func.get(), "[{\"interactive\": true}]");
+  base::RunLoop().RunUntilIdle();
 
   // Populate the cache with a token while the request is blocked.
-  IdentityTokenCacheValue token = IdentityTokenCacheValue::CreateToken(
-      kAccessToken, base::TimeDelta::FromSeconds(3600));
+  IdentityTokenCacheValue token =
+      CreateToken(kAccessToken, base::TimeDelta::FromSeconds(3600));
   SetCachedToken(token);
 
   // When we wake up the request, it returns the cached token without
   // displaying a UI, or hitting GAIA.
-
   QueueRequestComplete(type, &queued_request);
 
-  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
   EXPECT_FALSE(func->login_ui_shown());
   EXPECT_FALSE(func->scope_ui_shown());
   histogram_tester()->ExpectUniqueSample(
@@ -1887,8 +2002,8 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, LoginInvalidatesTokenCache) {
   func->set_extension(extension.get());
 
   // pre-populate the cache with a token
-  IdentityTokenCacheValue token = IdentityTokenCacheValue::CreateToken(
-      kAccessToken, base::TimeDelta::FromSeconds(3600));
+  IdentityTokenCacheValue token =
+      CreateToken(kAccessToken, base::TimeDelta::FromSeconds(3600));
   SetCachedToken(token);
 
   // Because the user is not signed in, the token will be removed,
@@ -1896,11 +2011,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, LoginInvalidatesTokenCache) {
   func->set_login_ui_result(true);
   func->push_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
 
-  std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func.get(), "[{\"interactive\": true}]", browser()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"interactive\": true}]", browser(),
+                          &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_TRUE(func->login_ui_shown());
   EXPECT_TRUE(func->scope_ui_shown());
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_NOTFOUND,
@@ -1928,10 +2044,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   // the new flow for the secondary account.
   func->push_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
 
-  std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func.get(), "[{\"interactive\": true}]", browser()));
-  ASSERT_TRUE(value->is_string());
-  EXPECT_EQ(kAccessToken, value->GetString());
+  std::string access_token;
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"interactive\": true}]", browser(),
+                          &access_token, &granted_scopes);
+  EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   EXPECT_TRUE(func->scope_ui_shown());
   EXPECT_FALSE(GetCachedGaiaId().has_value());
   histogram_tester()->ExpectUniqueSample(
@@ -2066,10 +2184,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ManuallyIssueToken) {
   std::string primary_account_access_token =
       IssueLoginAccessTokenForAccount(primary_account_id);
 
-  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
             GetCachedToken(CoreAccountId()).status());
   EXPECT_THAT(func->login_access_tokens(),
@@ -2128,10 +2248,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   std::string primary_account_access_token =
       IssueLoginAccessTokenForAccount(primary_account_id);
 
-  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
             GetCachedToken(CoreAccountId()).status());
   EXPECT_THAT(func->login_access_tokens(),
@@ -2162,10 +2284,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   std::string primary_account_access_token =
       IssueLoginAccessTokenForAccount(primary_account_id);
 
-  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
             GetCachedToken(CoreAccountId()).status());
   EXPECT_THAT(func->login_access_tokens(),
@@ -2213,10 +2337,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   std::string secondary_account_access_token =
       IssueLoginAccessTokenForAccount(secondary_account_id);
 
-  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
             GetCachedToken(secondary_account_id).status());
   EXPECT_THAT(func->login_access_tokens(),
@@ -2372,10 +2498,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
     std::string secondary_account_access_token =
         IssueLoginAccessTokenForAccount(secondary_account.account_id);
 
-    std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
-    EXPECT_TRUE(value->is_string());
-    std::string access_token = value->GetString();
-    EXPECT_EQ(kAccessToken, access_token);
+    std::string access_token;
+    std::set<std::string> granted_scopes;
+    WaitForGetAuthTokenResults(func.get(), &access_token, &granted_scopes);
+    EXPECT_EQ(std::string(kAccessToken), access_token);
+    EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
     EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
               GetCachedToken(secondary_account.account_id).status());
     EXPECT_EQ(secondary_account.gaia,
@@ -2397,11 +2525,13 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
     scoped_refptr<FakeGetAuthTokenFunction> func(
         new FakeGetAuthTokenFunction());
     func->set_extension(extension);
-    std::unique_ptr<base::Value> value(
-        utils::RunFunctionAndReturnSingleResult(func.get(), "[{}]", browser()));
-    EXPECT_TRUE(value->is_string());
-    std::string access_token = value->GetString();
+
+    std::string access_token;
+    std::set<std::string> granted_scopes;
+    RunGetAuthTokenFunction(func.get(), "[{}]", browser(), &access_token,
+                            &granted_scopes);
     EXPECT_EQ(std::string(kAccessToken), access_token);
+    EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
     EXPECT_FALSE(func->login_ui_shown());
     EXPECT_FALSE(func->scope_ui_shown());
     histogram_tester()->ExpectUniqueSample(
@@ -2451,15 +2581,19 @@ IN_PROC_BROWSER_TEST_F(
   scope_ui_shown_loop.Run();
   func1->CompleteRemoteConsentDialog();
 
-  std::unique_ptr<base::Value> value1(
-      func1_runner.WaitForSingleResult(func1.get()));
-  ASSERT_NE(value1, nullptr);
-  EXPECT_EQ(base::Value(kAccessToken), *value1);
+  std::string access_token1;
+  std::set<std::string> granted_scopes1;
+  WaitForGetAuthTokenResults(func1.get(), &access_token1, &granted_scopes1,
+                             &func1_runner);
+  EXPECT_EQ(std::string(kAccessToken), access_token1);
+  EXPECT_EQ(func1->GetExtensionTokenKeyForTest()->scopes, granted_scopes1);
 
-  std::unique_ptr<base::Value> value2(
-      func2_runner.WaitForSingleResult(func2.get()));
-  ASSERT_NE(value2, nullptr);
-  EXPECT_EQ(base::Value(kAccessToken), *value2);
+  std::string access_token2;
+  std::set<std::string> granted_scopes2;
+  WaitForGetAuthTokenResults(func2.get(), &access_token2, &granted_scopes2,
+                             &func2_runner);
+  EXPECT_EQ(std::string(kAccessToken), access_token2);
+  EXPECT_EQ(func2->GetExtensionTokenKeyForTest()->scopes, granted_scopes2);
 
   // Only one consent ui should be shown.
   int total_scope_ui_shown = func1->scope_ui_shown() + func2->scope_ui_shown();
@@ -2519,15 +2653,19 @@ IN_PROC_BROWSER_TEST_F(
   scope_ui_shown_loop.Run();
   func2->CompleteRemoteConsentDialog();
 
-  std::unique_ptr<base::Value> value1(
-      func1_runner.WaitForSingleResult(func1.get()));
-  ASSERT_NE(value1, nullptr);
-  EXPECT_EQ(base::Value(kAccessToken), *value1);
+  std::string access_token1;
+  std::set<std::string> granted_scopes1;
+  WaitForGetAuthTokenResults(func1.get(), &access_token1, &granted_scopes1,
+                             &func1_runner);
+  EXPECT_EQ(std::string(kAccessToken), access_token1);
+  EXPECT_EQ(func1->GetExtensionTokenKeyForTest()->scopes, granted_scopes1);
 
-  std::unique_ptr<base::Value> value2(
-      func2_runner.WaitForSingleResult(func2.get()));
-  ASSERT_NE(value2, nullptr);
-  EXPECT_EQ(base::Value(kAccessToken), *value2);
+  std::string access_token2;
+  std::set<std::string> granted_scopes2;
+  WaitForGetAuthTokenResults(func2.get(), &access_token2, &granted_scopes2,
+                             &func2_runner);
+  EXPECT_EQ(std::string(kAccessToken), access_token2);
+  EXPECT_EQ(func2->GetExtensionTokenKeyForTest()->scopes, granted_scopes2);
 
   // Only one consent ui should be shown.
   int total_scope_ui_shown = func1->scope_ui_shown() + func2->scope_ui_shown();
@@ -2576,11 +2714,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   } else {
     // Extensions can show the login UI for secondary accounts, and get the auth
     // token.
-    std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-        func.get(), kFunctionParams, browser()));
     std::string access_token;
-    EXPECT_TRUE(value->GetAsString(&access_token));
+    std::set<std::string> granted_scopes;
+    RunGetAuthTokenFunction(func.get(), kFunctionParams, browser(),
+                            &access_token, &granted_scopes);
     EXPECT_EQ(std::string(kAccessToken), access_token);
+    EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
     EXPECT_TRUE(func->login_ui_shown());
     EXPECT_TRUE(func->scope_ui_shown());
     histogram_tester()->ExpectUniqueSample(
@@ -2596,13 +2735,15 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesDefault) {
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_extension(extension.get());
   func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
-  std::unique_ptr<base::Value> value(
-      utils::RunFunctionAndReturnSingleResult(func.get(), "[{}]", browser()));
+
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{}]", browser(), &access_token,
+                          &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
 
   const ExtensionTokenKey* token_key = func->GetExtensionTokenKeyForTest();
+  EXPECT_EQ(token_key->scopes, granted_scopes);
   EXPECT_EQ(2ul, token_key->scopes.size());
   EXPECT_TRUE(base::Contains(token_key->scopes, "scope1"));
   EXPECT_TRUE(base::Contains(token_key->scopes, "scope2"));
@@ -2630,16 +2771,19 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesEmail) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_extension(extension.get());
-  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
-  std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func.get(), "[{\"scopes\": [\"email\"]}]", browser()));
+
+  std::set<std::string> scopes = {"email"};
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS,
+                               scopes);
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"scopes\": [\"email\"]}]", browser(),
+                          &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
 
   const ExtensionTokenKey* token_key = func->GetExtensionTokenKeyForTest();
-  EXPECT_EQ(1ul, token_key->scopes.size());
-  EXPECT_TRUE(base::Contains(token_key->scopes, "email"));
+  EXPECT_EQ(token_key->scopes, granted_scopes);
+  EXPECT_EQ(scopes, token_key->scopes);
   histogram_tester()->ExpectUniqueSample(
       kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
       1);
@@ -2650,18 +2794,102 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesEmailFooBar) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_extension(extension.get());
-  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
-  std::unique_ptr<base::Value> value(utils::RunFunctionAndReturnSingleResult(
-      func.get(), "[{\"scopes\": [\"email\", \"foo\", \"bar\"]}]", browser()));
+
+  std::set<std::string> scopes = {"email", "foo", "bar"};
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS,
+                               scopes);
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(),
+                          "[{\"scopes\": [\"email\", \"foo\", \"bar\"]}]",
+                          browser(), &access_token, &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
 
   const ExtensionTokenKey* token_key = func->GetExtensionTokenKeyForTest();
-  EXPECT_EQ(3ul, token_key->scopes.size());
-  EXPECT_TRUE(base::Contains(token_key->scopes, "email"));
-  EXPECT_TRUE(base::Contains(token_key->scopes, "foo"));
-  EXPECT_TRUE(base::Contains(token_key->scopes, "bar"));
+  EXPECT_EQ(token_key->scopes, granted_scopes);
+  EXPECT_EQ(scopes, token_key->scopes);
+  histogram_tester()->ExpectUniqueSample(
+      kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
+      1);
+}
+
+// Ensure that the returned scopes from the function is the cached scopes and
+// not the requested scopes.
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, SubsetMatchCacheHit) {
+  SignIn("primary@example.com");
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+
+  std::set<std::string> scopes = {"email", "foo", "bar"};
+  IdentityTokenCacheValue token = IdentityTokenCacheValue::CreateToken(
+      kAccessToken, scopes, base::TimeDelta::FromSeconds(3600));
+  SetCachedToken(token);
+
+  std::string access_token;
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"scopes\": [\"email\", \"foo\"]}]",
+                          browser(), &access_token, &granted_scopes);
+  EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(scopes, granted_scopes);
+  EXPECT_FALSE(func->login_ui_shown());
+  EXPECT_FALSE(func->scope_ui_shown());
+
+  histogram_tester()->ExpectUniqueSample(
+      kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
+      1);
+}
+
+// Ensure that the newly cached token uses the granted scopes and not the
+// requested scopes.
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, SubsetMatchCachePopulate) {
+  SignIn("primary@example.com");
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+
+  std::set<std::string> scopes = {"foo", "bar"};
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS,
+                               scopes);
+  std::string access_token;
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{\"scopes\": [\"email\", \"foo\"]}]",
+                          browser(), &access_token, &granted_scopes);
+
+  const IdentityTokenCacheValue& token =
+      GetCachedToken(CoreAccountId(), scopes);
+  EXPECT_EQ(std::string(kAccessToken), token.token());
+  EXPECT_EQ(scopes, token.granted_scopes());
+  EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN, token.status());
+
+  histogram_tester()->ExpectUniqueSample(
+      kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
+      1);
+}
+
+// Ensure that the scopes returned by the function reflects the granted scopes
+// and not the requested scopes.
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, GranularPermissionsResponse) {
+  SignIn("primary@example.com");
+  auto func = base::MakeRefCounted<FakeGetAuthTokenFunction>();
+  auto extension = base::WrapRefCounted(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+
+  std::set<std::string> scopes = {"email", "foobar"};
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS,
+                               scopes);
+  std::string access_token;
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(),
+                          "[{\"enableGranularPermissions\": true,"
+                          "\"scopes\": [\"email\", \"bar\"]}]",
+                          browser(), &access_token, &granted_scopes);
+  EXPECT_EQ(kAccessToken, access_token);
+  EXPECT_EQ(scopes, granted_scopes);
+
+  EXPECT_TRUE(func->enable_granular_permissions());
+  EXPECT_FALSE(func->login_ui_shown());
+  EXPECT_FALSE(func->scope_ui_shown());
   histogram_tester()->ExpectUniqueSample(
       kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
       1);
@@ -2732,17 +2960,176 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionPublicSessionTest, Whitelisted) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   func->set_extension(CreateTestExtension("ljacajndfccfgnfohlgkdphmbnpkjflk"));
   func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
-  std::unique_ptr<base::Value> value(
-      utils::RunFunctionAndReturnSingleResult(func.get(), "[{}]", browser()));
+
   std::string access_token;
-  EXPECT_TRUE(value->GetAsString(&access_token));
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{}]", browser(), &access_token,
+                          &granted_scopes);
   EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
   histogram_tester()->ExpectUniqueSample(
       kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
       1);
 }
 
 #endif
+
+// There are two parameters, which are stored in a std::pair, for these tests.
+//
+// std::string: the GetAuthToken arguments
+// bool: the expected value of GetAuthToken's enable_granular_permissions
+class GetAuthTokenFunctionEnableGranularPermissionsTest
+    : public GetAuthTokenFunctionTest,
+      public testing::WithParamInterface<std::pair<std::string, bool>> {};
+
+// Provided with the arguments for GetAuthToken, ensures that GetAuthToken's
+// enable_granular_permissions is some expected value when the
+// 'ReturnScopesInGetAuthToken' feature flag is enabled.
+IN_PROC_BROWSER_TEST_P(GetAuthTokenFunctionEnableGranularPermissionsTest,
+                       EnableGranularPermissions) {
+  const std::string& args = GetParam().first;
+  bool expected_enable_granular_permissions = GetParam().second;
+
+  SignIn("primary@example.com");
+  auto func = base::MakeRefCounted<FakeGetAuthTokenFunction>();
+  auto extension = base::WrapRefCounted(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+
+  std::string access_token;
+  std::set<std::string> granted_scopes;
+  RunGetAuthTokenFunction(func.get(), "[{" + args + "}]", browser(),
+                          &access_token, &granted_scopes);
+  EXPECT_EQ(kAccessToken, access_token);
+  EXPECT_EQ(func->GetExtensionTokenKeyForTest()->scopes, granted_scopes);
+
+  EXPECT_EQ(expected_enable_granular_permissions,
+            func->enable_granular_permissions());
+  EXPECT_FALSE(func->login_ui_shown());
+  EXPECT_FALSE(func->scope_ui_shown());
+  histogram_tester()->ExpectUniqueSample(
+      kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
+      1);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    GetAuthTokenFunctionEnableGranularPermissionsTest,
+    testing::Values(std::make_pair("\"enableGranularPermissions\": true", true),
+                    std::make_pair("\"enableGranularPermissions\": false",
+                                   false),
+                    std::make_pair("", false)));
+
+class GetAuthTokenFunctionReturnScopesDisabledTest
+    : public GetAuthTokenFunctionTest {
+ public:
+  GetAuthTokenFunctionReturnScopesDisabledTest()
+      : GetAuthTokenFunctionTest(false) {}
+
+  void RunGetAuthTokenFunctionReturnScopesDisabled(ExtensionFunction* function,
+                                                   const std::string& args,
+                                                   Browser* browser,
+                                                   std::string* access_token) {
+    EXPECT_TRUE(
+        utils::RunFunction(function, args, browser, api_test_utils::NONE));
+
+    EXPECT_TRUE(function->GetError().empty())
+        << "Unexpected error: " << function->GetError();
+    EXPECT_NE(nullptr, function->GetResultList());
+
+    const auto& result_list = function->GetResultList()->GetList();
+    EXPECT_EQ(1ul, result_list.size());
+
+    const auto& access_token_value = result_list[0];
+    EXPECT_TRUE(access_token_value.is_string());
+
+    *access_token = access_token_value.GetString();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionReturnScopesDisabledTest,
+                       NoOptionsSuccess) {
+  SignIn("primary@example.com");
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+
+  std::string access_token;
+  RunGetAuthTokenFunctionReturnScopesDisabled(func.get(), "[{}]", browser(),
+                                              &access_token);
+  EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_FALSE(func->login_ui_shown());
+  EXPECT_FALSE(func->scope_ui_shown());
+  EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
+            GetCachedToken(CoreAccountId()).status());
+  histogram_tester()->ExpectUniqueSample(
+      kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
+      1);
+}
+
+// Whether or not returning scopes is enabled should not affect error handling.
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionReturnScopesDisabledTest,
+                       NonInteractiveMintFailure) {
+  SignIn("primary@example.com");
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_FAILURE);
+  std::string error =
+      utils::RunFunctionAndReturnError(func.get(), "[{}]", browser());
+  EXPECT_TRUE(base::StartsWith(error, errors::kAuthFailure,
+                               base::CompareCase::INSENSITIVE_ASCII));
+  EXPECT_FALSE(func->login_ui_shown());
+  EXPECT_FALSE(func->scope_ui_shown());
+  histogram_tester()->ExpectUniqueSample(
+      kGetAuthTokenResultHistogramName,
+      IdentityGetAuthTokenError::State::kMintTokenAuthFailure, 1);
+}
+
+// There are two parameters, which are stored in a std::pair, for these tests.
+//
+// std::string: the GetAuthToken arguments
+// bool: the expected value of GetAuthToken's enable_granular_permissions
+class GetAuthTokenFunctionReturnScopesDisabledEnableGranularPermissionsTest
+    : public GetAuthTokenFunctionReturnScopesDisabledTest,
+      public testing::WithParamInterface<std::pair<std::string, bool>> {};
+
+// Provided with the arguments for GetAuthToken, ensures that GetAuthToken's
+// enable_granular_permissions is some expected value when the
+// 'ReturnScopesInGetAuthToken' feature flag is disabled.
+IN_PROC_BROWSER_TEST_P(
+    GetAuthTokenFunctionReturnScopesDisabledEnableGranularPermissionsTest,
+    EnableGranularPermissions) {
+  const std::string& args = GetParam().first;
+  bool expected_enable_granular_permissions = GetParam().second;
+
+  SignIn("primary@example.com");
+  auto func = base::MakeRefCounted<FakeGetAuthTokenFunction>();
+  auto extension = base::WrapRefCounted(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+  func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+
+  std::string access_token;
+  RunGetAuthTokenFunctionReturnScopesDisabled(func.get(), "[{" + args + "}]",
+                                              browser(), &access_token);
+  EXPECT_EQ(kAccessToken, access_token);
+
+  EXPECT_EQ(expected_enable_granular_permissions,
+            func->enable_granular_permissions());
+  EXPECT_FALSE(func->login_ui_shown());
+  EXPECT_FALSE(func->scope_ui_shown());
+  histogram_tester()->ExpectUniqueSample(
+      kGetAuthTokenResultHistogramName, IdentityGetAuthTokenError::State::kNone,
+      1);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    GetAuthTokenFunctionReturnScopesDisabledEnableGranularPermissionsTest,
+    testing::Values(
+        std::make_pair("\"enableGranularPermissions\": true", false),
+        std::make_pair("\"enableGranularPermissions\": false", false),
+        std::make_pair("", false)));
 
 class RemoveCachedAuthTokenFunctionTest : public ExtensionBrowserTest {
  protected:
@@ -2760,16 +3147,22 @@ class RemoveCachedAuthTokenFunctionTest : public ExtensionBrowserTest {
     return IdentityAPI::GetFactoryInstance()->Get(browser()->profile());
   }
 
+  IdentityTokenCacheValue CreateToken(const std::string& token,
+                                      base::TimeDelta time_to_live) {
+    return IdentityTokenCacheValue::CreateToken(
+        token, std::set<std::string>({"foo"}), time_to_live);
+  }
+
   void SetCachedToken(const IdentityTokenCacheValue& token_data) {
     ExtensionTokenKey key(kExtensionId, CoreAccountId("test@example.com"),
-                          std::set<std::string>());
-    id_api()->SetCachedToken(key, token_data);
+                          std::set<std::string>({"foo"}));
+    id_api()->token_cache()->SetToken(key, token_data);
   }
 
   const IdentityTokenCacheValue& GetCachedToken() {
-    return id_api()->GetCachedToken(
-        ExtensionTokenKey(kExtensionId, CoreAccountId("test@example.com"),
-                          std::set<std::string>()));
+    ExtensionTokenKey key(kExtensionId, CoreAccountId("test@example.com"),
+                          std::set<std::string>({"foo"}));
+    return id_api()->token_cache()->GetToken(key);
   }
 };
 
@@ -2790,8 +3183,8 @@ IN_PROC_BROWSER_TEST_F(RemoveCachedAuthTokenFunctionTest, Advice) {
 }
 
 IN_PROC_BROWSER_TEST_F(RemoveCachedAuthTokenFunctionTest, NonMatchingToken) {
-  IdentityTokenCacheValue token = IdentityTokenCacheValue::CreateToken(
-      "non_matching_token", base::TimeDelta::FromSeconds(3600));
+  IdentityTokenCacheValue token =
+      CreateToken("non_matching_token", base::TimeDelta::FromSeconds(3600));
   SetCachedToken(token);
   EXPECT_TRUE(InvalidateDefaultToken());
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
@@ -2800,8 +3193,8 @@ IN_PROC_BROWSER_TEST_F(RemoveCachedAuthTokenFunctionTest, NonMatchingToken) {
 }
 
 IN_PROC_BROWSER_TEST_F(RemoveCachedAuthTokenFunctionTest, MatchingToken) {
-  IdentityTokenCacheValue token = IdentityTokenCacheValue::CreateToken(
-      kAccessToken, base::TimeDelta::FromSeconds(3600));
+  IdentityTokenCacheValue token =
+      CreateToken(kAccessToken, base::TimeDelta::FromSeconds(3600));
   SetCachedToken(token);
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
             GetCachedToken().status());
@@ -2819,7 +3212,7 @@ class LaunchWebAuthFlowFunctionTest : public AsyncExtensionBrowserTest {
   }
 };
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // This test times out on Linux MSan Tests.
 // See https://crbug.com/831848 .
 #define MAYBE_UserCloseWindow DISABLED_UserCloseWindow
@@ -2967,8 +3360,8 @@ class OnSignInChangedEventTest : public IdentityTestWithSignin {
     // JavaScript extension listener and having that listener do the
     // verification, but it's not clear how to set that up.
     id_api()->set_on_signin_changed_callback_for_testing(
-        base::Bind(&OnSignInChangedEventTest::OnSignInEventChanged,
-                   base::Unretained(this)));
+        base::BindRepeating(&OnSignInChangedEventTest::OnSignInEventChanged,
+                            base::Unretained(this)));
 
     IdentityTestWithSignin::SetUpOnMainThread();
   }

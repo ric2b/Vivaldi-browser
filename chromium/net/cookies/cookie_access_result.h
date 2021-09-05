@@ -12,9 +12,15 @@
 namespace net {
 
 struct NET_EXPORT CookieAccessResult {
+  // Creating a CookieAccessResult with out any parameters will create a
+  // CookieInclusionStatus that has no exclusion reasons, therefore
+  // indicates inclusion.
   CookieAccessResult();
   CookieAccessResult(CookieEffectiveSameSite effective_same_site,
-                     CookieInclusionStatus status);
+                     CookieInclusionStatus status,
+                     CookieAccessSemantics access_semantics);
+
+  explicit CookieAccessResult(CookieInclusionStatus status);
 
   CookieAccessResult(const CookieAccessResult& cookie_access_result);
 
@@ -24,9 +30,10 @@ struct NET_EXPORT CookieAccessResult {
 
   ~CookieAccessResult();
 
-  CookieEffectiveSameSite effective_same_site =
-      CookieEffectiveSameSite::LAX_MODE;
   CookieInclusionStatus status;
+  CookieEffectiveSameSite effective_same_site =
+      CookieEffectiveSameSite::UNDEFINED;
+  CookieAccessSemantics access_semantics = CookieAccessSemantics::UNKNOWN;
 };
 
 }  // namespace net

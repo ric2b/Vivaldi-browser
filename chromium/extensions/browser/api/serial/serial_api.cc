@@ -93,7 +93,7 @@ void SerialGetDevicesFunction::OnGotDevices(
       info.display_name = std::make_unique<std::string>(*device->display_name);
     results.push_back(std::move(info));
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     if (device->alternate_path) {
       extensions::api::serial::DeviceInfo alternate_info;
       alternate_info.path = device->alternate_path->AsUTF8Unsafe();
@@ -107,7 +107,7 @@ void SerialGetDevicesFunction::OnGotDevices(
       }
       results.push_back(std::move(alternate_info));
     }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
   }
   Respond(ArgumentList(serial::GetDevices::Results::Create(results)));
 }
@@ -278,12 +278,13 @@ ExtensionFunction::ResponseAction SerialFlushFunction::Run() {
   if (!connection)
     return RespondNow(Error(kErrorSerialConnectionNotFound));
 
-  connection->Flush(base::BindOnce(&SerialFlushFunction::OnFlushed, this));
+  connection->Flush(device::mojom::SerialPortFlushMode::kReceiveAndTransmit,
+                    base::BindOnce(&SerialFlushFunction::OnFlushed, this));
   return RespondLater();
 }
 
-void SerialFlushFunction::OnFlushed(bool success) {
-  Respond(OneArgument(std::make_unique<base::Value>(success)));
+void SerialFlushFunction::OnFlushed() {
+  Respond(OneArgument(std::make_unique<base::Value>(true)));
 }
 
 SerialSetPausedFunction::SerialSetPausedFunction() = default;

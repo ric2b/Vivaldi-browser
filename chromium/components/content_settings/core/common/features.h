@@ -6,7 +6,7 @@
 #define COMPONENTS_CONTENT_SETTINGS_CORE_COMMON_FEATURES_H_
 
 #include "base/component_export.h"
-#include "base/metrics/field_trial_params.h"
+#include "build/build_config.h"
 
 namespace base {
 struct Feature;
@@ -14,21 +14,20 @@ struct Feature;
 
 namespace content_settings {
 
+#if defined(OS_IOS)
 // Feature to enable a better cookie controls ui.
 COMPONENT_EXPORT(CONTENT_SETTINGS_FEATURES)
 extern const base::Feature kImprovedCookieControls;
-
-COMPONENT_EXPORT(CONTENT_SETTINGS_FEATURES)
-extern const base::FeatureParam<bool> kImprovedCookieControlsDefaultInIncognito;
-
-// Feature to enable the improved cookie contronls ui for third-party cookie
-// blocking users.
-COMPONENT_EXPORT(CONTENT_SETTINGS_FEATURES)
-extern const base::Feature kImprovedCookieControlsForThirdPartyCookieBlocking;
+#endif
 
 // Feature to disallow wildcard pattern matching for plugin content settings
 COMPONENT_EXPORT(CONTENT_SETTINGS_FEATURES)
 extern const base::Feature kDisallowWildcardsInPluginContentSettings;
+
+// Feature to remove the chrome.contentSettings.plugins.set() API in extensions
+// for extensions.
+COMPONENT_EXPORT(CONTENT_SETTINGS_FEATURES)
+extern const base::Feature kDisallowExtensionsToSetPluginContentSettings;
 
 }  // namespace content_settings
 

@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "build/build_config.h"
+#include "chrome/browser/apps/platform_apps/shortcut_manager.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -225,11 +226,16 @@ base::FilePath GetFirstNonSigninNonLockScreenAppProfile(
 
 // This file contains tests for the ProfileManager that require a heavyweight
 // InProcessBrowserTest.  These include tests involving profile deletion.
-
-// TODO(jeremy): crbug.com/103355 - These tests should be enabled on all
-// platforms.
 class ProfileManagerBrowserTest : public InProcessBrowserTest {
  protected:
+  void SetUp() override {
+    // Shortcut deletion delays tests shutdown on Win-7 and results in time out.
+    // See crbug.com/1073451.
+#if defined(OS_WIN)
+    AppShortcutManager::SuppressShortcutsForTesting();
+#endif
+    InProcessBrowserTest::SetUp();
+  }
   void SetUpCommandLine(base::CommandLine* command_line) override {
 #if defined(OS_CHROMEOS)
     command_line->AppendSwitch(
@@ -241,15 +247,7 @@ class ProfileManagerBrowserTest : public InProcessBrowserTest {
 // CrOS multi-profiles implementation is too different for these tests.
 #if !defined(OS_CHROMEOS)
 
-// Delete single profile and make sure a new one is created.
-// TODO(https://crbug.com/1073451) flaky on windows bots
-#if defined(OS_WIN)
-#define MAYBE_DeleteSingletonProfile DISABLED_DeleteSingletonProfile
-#else
-#define MAYBE_DeleteSingletonProfile DeleteSingletonProfile
-#endif
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
-                       MAYBE_DeleteSingletonProfile) {
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteSingletonProfile) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
@@ -320,15 +318,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteInactiveProfile) {
   EXPECT_EQ(current_profile_path, last_used->GetPath());
 }
 
-// Delete current profile in a multi profile setup and make sure an existing one
-// is loaded.
-// TODO(https://crbug.com/1073451) flaky on windows.
-#if defined(OS_WIN)
-#define MAYBE_DeleteCurrentProfile DISABLED_DeleteCurrentProfile
-#else
-#define MAYBE_DeleteCurrentProfile DeleteCurrentProfile
-#endif
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeleteCurrentProfile) {
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteCurrentProfile) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
@@ -358,15 +348,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeleteCurrentProfile) {
   EXPECT_EQ(new_path, last_used->GetPath());
 }
 
-// Delete all profiles in a multi profile setup and make sure a new one is
-// created.
-// TODO(https://crbug.com/1073451) flaky on windows bots
-#if defined(OS_WIN)
-#define MAYBE_DeleteAllProfiles DISABLED_DeleteAllProfiles
-#else
-#define MAYBE_DeleteAllProfiles DeleteAllProfiles
-#endif
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeleteAllProfiles) {
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteAllProfiles) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
@@ -410,6 +392,52 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeleteAllProfiles) {
   EXPECT_EQ(new_profile_path, last_used->GetPath());
 }
 #endif  // !defined(OS_CHROMEOS)
+
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, ProfileFromProfileKey) {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  Profile* profile1 = browser()->profile();
+
+  // Create an additional profile.
+  base::FilePath new_path = profile_manager->GenerateNextProfileDirectoryPath();
+  base::RunLoop run_loop;
+  profile_manager->CreateProfileAsync(
+      new_path, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
+      base::string16(), std::string());
+
+  // Run the message loop to allow profile creation to take place; the loop is
+  // terminated by OnUnblockOnProfileCreation when the profile is created.
+  run_loop.Run();
+
+  Profile* profile2 = profile_manager->GetProfile(new_path);
+
+  EXPECT_NE(profile1, profile2);
+  EXPECT_NE(profile1->GetProfileKey(), profile2->GetProfileKey());
+  EXPECT_EQ(profile1, profile_manager->GetProfileFromProfileKey(
+                          profile1->GetProfileKey()));
+  EXPECT_EQ(profile2, profile_manager->GetProfileFromProfileKey(
+                          profile2->GetProfileKey()));
+
+  // Create off-the-record profiles.
+  Profile* otr_1a = profile1->GetPrimaryOTRProfile();
+  Profile* otr_1b =
+      profile1->GetOffTheRecordProfile(Profile::OTRProfileID("profile::otr1"));
+  Profile* otr_1c =
+      profile1->GetOffTheRecordProfile(Profile::OTRProfileID("profile::otr2"));
+  Profile* otr_2a = profile2->GetPrimaryOTRProfile();
+  Profile* otr_2b =
+      profile2->GetOffTheRecordProfile(Profile::OTRProfileID("profile::otr1"));
+
+  EXPECT_EQ(otr_1a,
+            profile_manager->GetProfileFromProfileKey(otr_1a->GetProfileKey()));
+  EXPECT_EQ(otr_1b,
+            profile_manager->GetProfileFromProfileKey(otr_1b->GetProfileKey()));
+  EXPECT_EQ(otr_1c,
+            profile_manager->GetProfileFromProfileKey(otr_1c->GetProfileKey()));
+  EXPECT_EQ(otr_2a,
+            profile_manager->GetProfileFromProfileKey(otr_2a->GetProfileKey()));
+  EXPECT_EQ(otr_2b,
+            profile_manager->GetProfileFromProfileKey(otr_2b->GetProfileKey()));
+}
 
 #if defined(OS_CHROMEOS)
 
@@ -597,7 +625,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeletePasswords) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = base::ASCIIToUTF16("my_username");
   form.password_value = base::ASCIIToUTF16("my_password");
-  form.blacklisted_by_user = false;
+  form.blocked_by_user = false;
 
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(

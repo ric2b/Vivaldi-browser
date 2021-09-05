@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">不明な芸名</translation>
 <translation id="1089439967362294234">パスワード変更</translation>
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /> の権限どれにするん</translation>
-<translation id="1152921474424827756"><ph name="URL" />の<ph name="BEGIN_LINK" />キャッシュコピー<ph name="END_LINK" />にアクセスするわ</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" />、意外やけど途中で接続切ってきたわ。</translation>
 <translation id="1161325031994447685">Wi-Fiにもっかい接ぐ</translation>
 <translation id="1175364870820465910">刷るわ... (&amp;P)</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">このサイト、有害なプログラム入ってるで</translation>
 <translation id="1916770123977586577">さらの設定をこのサイトに適用するんやったら、ページリロードして</translation>
 <translation id="1919345977826869612">チラシ</translation>
-<translation id="194030505837763158"><ph name="LINK" />に行くで</translation>
 <translation id="1974060860693918893">詳細</translation>
-<translation id="2030481566774242610">もしかして: <ph name="LINK" />？</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">音声</translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -101,6 +98,7 @@
 <translation id="4235360514405112390">有効</translation>
 <translation id="4250431568374086873">このサイトへの接続、完全には保護されてへんで</translation>
 <translation id="4265872034478892965">管理者に許可されとる</translation>
+<translation id="4305666528087210886">ファイルにアクセスできへんかったわ</translation>
 <translation id="4312866146174492540">ブロック（デフォルト）</translation>
 <translation id="4356973930735388585">このサイト使ったらな、悪さしよるユーザーに危ないプログラム（写真、パスワード、メッセージ、クレジット カード番号などの情報を盗み取るか削除するやつ）勝手にインストールされる可能性あるで。</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
@@ -128,7 +126,6 @@
 <translation id="5287240709317226393">Cookie出す</translation>
 <translation id="5355557959165512791"><ph name="SITE" />は証明書が失効してるから、今アクセスできへんで。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 使て署名された証明書が含まれてるわ。</translation>
-<translation id="5431657950005405462">ファイルなかったわ</translation>
 <translation id="5452270690849572955">この<ph name="HOST_NAME" />ページ、どこにも見当たらへん</translation>
 <translation id="5457113250005438886">無効</translation>
 <translation id="5492298309214877701">このサイトは企業、団体か学校のイントラネット上にあるんやけどな、外部のウェブサイトと同じURLが使われてるねん。
@@ -174,7 +171,6 @@
 <translation id="6897140037006041989">ユーザーエージェント</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7079718277001814089">このサイト、悪さするソフトウェア入ってるで</translation>
-<translation id="7090678807593890770"><ph name="LINK" /> ググってみて</translation>
 <translation id="7108819624672055576">拡張機能で許可されとる</translation>
 <translation id="7111012039238467737">（有効）</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
@@ -188,7 +184,7 @@
 <translation id="7455133967321480974">グローバルのデフォルト値（つまりブロック）にしとく</translation>
 <translation id="7518003948725431193">次のウェブページアドレス見つからへんかったわ: <ph name="URL" /></translation>
 <translation id="7521387064766892559">Javascript</translation>
-<translation id="7549584377607005141">このウェブページちゃんと表示するんやったら、さっき入れたデータが要るで。データ再送信できるけど、このページでやっきやったこと、もっかいやらなあかんで。</translation>
+<translation id="7549584377607005141">このウェブページちゃんと表示するんやったら、さっき入れたデータが要るで。データ再送信できるけど、このページでさっきやったこと、もっかいやらなあかんで。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" />、今このリクエスト処理できへんねんて。</translation>
 <translation id="7662298039739062396">拡張機能に指定される設定</translation>
 <translation id="7663736086183791259">証明書 <ph name="CERTIFICATE_VALIDITY" /></translation>
@@ -198,7 +194,6 @@
 <translation id="7716424297397655342">このサイト、キャッシュから読み込まれへんわ</translation>
 <translation id="7758069387465995638">ファイアウォールかウイルス対策ソフトウェアが接続ブロックしたかも知れへん。</translation>
 <translation id="7800304661137206267"><ph name="CIPHER" /> で接続が暗号化されてて、メッセージ認証に <ph name="MAC" />、鍵交換メカニズムに <ph name="KX" /> が使われてるわ。</translation>
-<translation id="7802523362929240268">正規のサイトや</translation>
 <translation id="7834399512844817676"><ph name="SITE" />は普段な、暗号化して情報を保護してるねん。今回Vivaldiから<ph name="SITE" />に接続しよう思った時に、いつものとちゃう誤った認証情報が返ってきてん。悪さしよるユーザーが<ph name="SITE" />になりすまそうとしているか、Wi-Fiログイン画面で接続が中断された可能性があるわ。データのやり取りが行われる前にVivaldiが接続止めたから、情報は保護されたままやで。</translation>
 <translation id="7878562273885520351">パスワード、不正利用されるかも知れへんで</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
@@ -230,6 +225,7 @@
 <translation id="9011424611726486705">サイト設定を開くで</translation>
 <translation id="9025348182339809926">（無効）</translation>
 <translation id="9039213469156557790">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの動作も変わるかも知れへん。</translation>
+<translation id="9062620674789239642">他のとこ行ったか、編集されたか、消された可能性あるわ。</translation>
 <translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
 <translation id="9169664750068251925">このサイトではいつもブロック</translation>
 <translation id="9180553614777056266">広告ブロッカー</translation>

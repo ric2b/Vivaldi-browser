@@ -268,12 +268,9 @@ AccessibilityHitTestingBrowserTest::FormatHitTestAccessibilityTree() {
       AccessibilityTreeFormatterBlink::CreateBlink();
   accessibility_tree_formatter->set_show_ids(true);
   accessibility_tree_formatter->SetPropertyFilters(
-      {{base::ASCIIToUTF16("name=*"),
-        AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {base::ASCIIToUTF16("location=*"),
-        AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {base::ASCIIToUTF16("size=*"),
-        AccessibilityTreeFormatter::PropertyFilter::ALLOW}});
+      {{"name=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
+       {"location=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
+       {"size=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW}});
   base::string16 accessibility_tree;
   accessibility_tree_formatter->FormatAccessibilityTreeForTesting(
       GetRootAndAssertNonNull(), &accessibility_tree);
@@ -573,7 +570,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
   }
 }
 
-#if !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#if !defined(OS_ANDROID) && !defined(OS_MAC)
 IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
                        CachingAsyncHitTest_WithPinchZoom) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -665,7 +662,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
 }
 
 // Timeouts on Linux. TODO(crbug.com/1083805): Enable this test.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_CachingAsyncHitTestMissesElement_WithPinchZoom \
   DISABLED_CachingAsyncHitTestMissesElement_WithPinchZoom
 #else
@@ -728,7 +725,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
   }
 }
 
-#endif  // !defined(OS_ANDROID) && !defined(OS_MACOSX)
+#endif  // !defined(OS_ANDROID) && !defined(OS_MAC)
 
 // GetAXPlatformNode is currently only supported on windows and linux (excluding
 // Chrome OS or Chromecast)

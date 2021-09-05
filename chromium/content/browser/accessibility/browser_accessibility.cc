@@ -112,10 +112,6 @@ bool BrowserAccessibility::PlatformIsLeaf() const {
   return IsLeaf();
 }
 
-bool BrowserAccessibility::PlatformIsLeafIncludingIgnored() const {
-  return node()->IsLeafIncludingIgnored();
-}
-
 bool BrowserAccessibility::CanFireEvents() const {
   // Allow events unless this object would be trimmed away.
   return !IsChildOfLeaf();
@@ -205,10 +201,6 @@ bool BrowserAccessibility::IsDocument() const {
 
 bool BrowserAccessibility::IsIgnored() const {
   return node()->IsIgnored();
-}
-
-bool BrowserAccessibility::IsTextOnlyObject() const {
-  return node()->IsText();
 }
 
 bool BrowserAccessibility::IsLineBreakObject() const {
@@ -556,11 +548,11 @@ gfx::Rect BrowserAccessibility::GetRootFrameHypertextRangeBoundsRect(
       // Child objects are of length one, since they are represented by a single
       // embedded object character. The exception is text-only objects.
       int child_length_in_parent = 1;
-      if (child->IsTextOnlyObject())
+      if (child->IsText())
         child_length_in_parent = static_cast<int>(child->GetHypertext().size());
       if (start < child_length_in_parent) {
         gfx::Rect child_rect;
-        if (child->IsTextOnlyObject()) {
+        if (child->IsText()) {
           child_rect = child->GetRootFrameHypertextRangeBoundsRect(
               start, len, clipping_behavior, offscreen_result);
         } else {
@@ -668,25 +660,25 @@ gfx::Rect BrowserAccessibility::GetRootFrameHypertextBoundsPastEndOfText(
   }
 
   // Step 2: correct for the thickness of the caret.
-  auto text_direction = static_cast<ax::mojom::TextDirection>(
+  auto text_direction = static_cast<ax::mojom::WritingDirection>(
       GetIntAttribute(ax::mojom::IntAttribute::kTextDirection));
   constexpr int kCaretThickness = 1;
   switch (text_direction) {
-    case ax::mojom::TextDirection::kNone:
-    case ax::mojom::TextDirection::kLtr: {
+    case ax::mojom::WritingDirection::kNone:
+    case ax::mojom::WritingDirection::kLtr: {
       bounds.set_width(kCaretThickness);
       break;
     }
-    case ax::mojom::TextDirection::kRtl: {
+    case ax::mojom::WritingDirection::kRtl: {
       bounds.set_x(bounds.right() - kCaretThickness);
       bounds.set_width(kCaretThickness);
       break;
     }
-    case ax::mojom::TextDirection::kTtb: {
+    case ax::mojom::WritingDirection::kTtb: {
       bounds.set_height(kCaretThickness);
       break;
     }
-    case ax::mojom::TextDirection::kBtt: {
+    case ax::mojom::WritingDirection::kBtt: {
       bounds.set_y(bounds.bottom() - kCaretThickness);
       bounds.set_height(kCaretThickness);
       break;
@@ -795,25 +787,25 @@ gfx::RectF BrowserAccessibility::GetInlineTextRect(const int start_offset,
   const int location_height = location.height();
 
   gfx::RectF bounds;
-  switch (static_cast<ax::mojom::TextDirection>(
+  switch (static_cast<ax::mojom::WritingDirection>(
       GetIntAttribute(ax::mojom::IntAttribute::kTextDirection))) {
-    case ax::mojom::TextDirection::kNone:
-    case ax::mojom::TextDirection::kLtr:
+    case ax::mojom::WritingDirection::kNone:
+    case ax::mojom::WritingDirection::kLtr:
       bounds =
           gfx::RectF(start_pixel_offset, 0,
                      end_pixel_offset - start_pixel_offset, location_height);
       break;
-    case ax::mojom::TextDirection::kRtl: {
+    case ax::mojom::WritingDirection::kRtl: {
       const int left = max_pixel_offset - end_pixel_offset;
       const int right = max_pixel_offset - start_pixel_offset;
       bounds = gfx::RectF(left, 0, right - left, location_height);
       break;
     }
-    case ax::mojom::TextDirection::kTtb:
+    case ax::mojom::WritingDirection::kTtb:
       bounds = gfx::RectF(0, start_pixel_offset, location_width,
                           end_pixel_offset - start_pixel_offset);
       break;
-    case ax::mojom::TextDirection::kBtt: {
+    case ax::mojom::WritingDirection::kBtt: {
       const int top = max_pixel_offset - end_pixel_offset;
       const int bottom = max_pixel_offset - start_pixel_offset;
       bounds = gfx::RectF(0, top, location_width, bottom - top);
@@ -1228,6 +1220,10 @@ bool BrowserAccessibility::IsMinimized() const {
   return false;
 }
 
+bool BrowserAccessibility::IsText() const {
+  return node()->IsText();
+}
+
 bool BrowserAccessibility::IsWebContent() const {
   return true;
 }
@@ -1500,6 +1496,10 @@ gfx::NativeViewAccessible BrowserAccessibility::ChildAtIndex(int index) {
   return child->GetNativeViewAccessible();
 }
 
+bool BrowserAccessibility::HasModalDialog() const {
+  return false;
+}
+
 gfx::NativeViewAccessible BrowserAccessibility::GetFirstChild() {
   BrowserAccessibility* child = PlatformGetFirstChild();
   if (!child)
@@ -1549,10 +1549,15 @@ bool BrowserAccessibility::IsLeaf() const {
   // children. The only exception to enforce leafiness is when the button has
   // a single text child and to prevent screen readers from double speak.
   if (GetRole() == ax::mojom::Role::kButton) {
-    return InternalChildCount() == 1 &&
-           InternalGetFirstChild()->IsTextOnlyObject();
+    uint32_t child_count = InternalChildCount();
+    return !child_count ||
+           (child_count == 1 && InternalGetFirstChild()->IsText());
   }
   return node()->IsLeaf();
+}
+
+bool BrowserAccessibility::IsToplevelBrowserWindow() {
+  return false;
 }
 
 bool BrowserAccessibility::IsChildOfPlainTextField() const {
@@ -2163,7 +2168,7 @@ std::string BrowserAccessibility::GetInheritedFontFamilyName() const {
 ui::TextAttributeMap BrowserAccessibility::GetSpellingAndGrammarAttributes()
     const {
   ui::TextAttributeMap spelling_attributes;
-  if (IsTextOnlyObject()) {
+  if (IsText()) {
     const std::vector<int32_t>& marker_types =
         GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerTypes);
     const std::vector<int>& marker_starts =
@@ -2263,6 +2268,8 @@ ui::TextAttributeMap BrowserAccessibility::ComputeTextAttributeMap(
     return attributes_map;
   }
 
+  DCHECK(PlatformChildCount());
+
   int start_offset = 0;
   for (BrowserAccessibility::PlatformChildIterator it = PlatformChildrenBegin();
        it != PlatformChildrenEnd(); ++it) {
@@ -2286,7 +2293,7 @@ ui::TextAttributeMap BrowserAccessibility::ComputeTextAttributeMap(
       }
     }
 
-    if (child->IsTextOnlyObject()) {
+    if (child->IsText()) {
       const ui::TextAttributeMap spelling_attributes =
           child->GetSpellingAndGrammarAttributes();
       MergeSpellingAndGrammarIntoTextAttributes(spelling_attributes,

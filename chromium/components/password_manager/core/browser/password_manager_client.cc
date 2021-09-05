@@ -25,9 +25,8 @@ bool PasswordManagerClient::IsFillingFallbackEnabled(const GURL& url) const {
   return true;
 }
 
-void PasswordManagerClient::PostHSTSQueryForHost(const url::Origin& origin,
-                                                 HSTSCallback callback) const {
-  std::move(callback).Run(HSTSResult::kError);
+bool PasswordManagerClient::RequiresReauthToFill() {
+  return false;
 }
 
 void PasswordManagerClient::ShowTouchToFill(PasswordManagerDriver* driver) {}
@@ -54,6 +53,7 @@ void PasswordManagerClient::AutofillHttpAuth(
 
 void PasswordManagerClient::NotifyUserCredentialsWereLeaked(
     password_manager::CredentialLeakType leak_type,
+    password_manager::CompromisedSitesCount saved_sites,
     const GURL& origin,
     const base::string16& username) {}
 
@@ -138,6 +138,11 @@ PasswordManagerClient::GetPasswordRequirementsService() {
 }
 
 favicon::FaviconService* PasswordManagerClient::GetFaviconService() {
+  return nullptr;
+}
+
+network::mojom::NetworkContext* PasswordManagerClient::GetNetworkContext()
+    const {
   return nullptr;
 }
 

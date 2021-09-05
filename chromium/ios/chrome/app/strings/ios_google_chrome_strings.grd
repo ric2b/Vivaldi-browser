@@ -181,6 +181,15 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE" desc="Title of a dialog that informs the user that the deletion of Chrome's browsing data has been completed.">
         Cleared Chrome data
       </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_TITLE" desc="Title of the default browser promotion modal. [iOS only]">
+        Make Chrome Your Default
+      </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_DESCRIPTION" desc="Description of the default browser promotion modal. [iOS only]">
+        To make Chrome your default, Open Settings, tap Default Browser App, and select Chrome.
+      </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_LEARN_MORE_MESSAGE" desc="Message when the user taps the addition information button in the default browser promotion modal. [iOS only]">
+          You can now use Chrome any time you tap links in messages, documents, and other apps.
+      </message>
       <message name="IDS_IOS_DISCONNECT_DIALOG_TITLE" desc="The title of the disconnect dialog [Length: 30em].">
         Sign out of Chrome?
       </message>
@@ -312,6 +321,33 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_UPGRADE_AVAILABLE" desc="Text to inform the user of the presence of a new version of the application">
         Chrome just got better! A new version is available.
+      </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_PAGE_HEADER" desc="Informational header at the top of the safety check page">
+        Chrome can help keep you safe from data breaches, unsafe websites and more.
+      </message>
+      <message name="IDS_IOS_PASSWORD_CHECK_ERROR" desc="Description of the password check cell, explaining that Password Check failed. [iOS only]" meaning="Password Check failed due to some error.">
+        Chrome can't check your passwords
+      </message>
+      <message name="IDS_IOS_PASSWORD_CHECK_ERROR_NO_PASSWORDS" desc="Description text for when password check cannot be run because the user has no saved passwords">
+        No saved passwords. Chrome can check your passwords when you save them.
+      </message>
+      <message name="IDS_IOS_PASSWORD_CHECK_ERROR_OFFLINE" desc="Text inside popover which is shown when the user wants to see detailed information about the error. [iOS only]" meaning="The user has no internet connection and can't check passwords.">
+        Chrome couldn't check your passwords. Try checking your internet connection.
+      </message>
+      <message name="IDS_IOS_PASSWORD_CHECK_ERROR_SIGNED_OUT" desc="Text inside popover which is shown when the user wants to see detailed information about the error. [iOS only]" meaning="The user is not signed in and can't check passwords.">
+        Chrome can check your passwords when you sign in with your Google Account.
+      </message>
+      <message name="IDS_IOS_PASSWORD_CHECK_ERROR_QUOTA_LIMIT" desc="Text inside popover which is shown when the user wants to see detailed information about the error. [iOS only]" meaning="The user has more passwords than allowed for check.">
+        Chrome couldn't check all passwords. Try again tomorrow.
+      </message>
+      <message name="IDS_IOS_PASSWORD_CHECK_ERROR_QUOTA_LIMIT_VISIT_GOOGLE" desc="Text with link inside popover which is shown when the user wants to see detailed information about the error. [iOS only]" meaning="The user has more passwords than allowed for check but he can check in Google Account.">
+        Chrome couldn't check all passwords. Try again tomorrow or <ph name="BEGIN_LINK">BEGIN_LINK</ph>check passwords in your Google Account.<ph name="END_LINK">END_LINK</ph>
+      </message>
+      <message name="IDS_IOS_PASSWORD_CHECK_ERROR_OTHER" desc="Text inside popover which is shown when the user wants to see detailed information about the error. [iOS only]" meaning="Password check failed due to specific reason (out of memory).">
+        Chrome couldn't check all passwords. Try again later.
+      </message>
+      <message name="IDS_IOS_CHANGE_COMPROMISED_PASSWORD_DESCRIPTION" desc="Text inside Password Details screen shown when password was compromised. [iOS only]" meaning="Text which explains the user that current password is compromised and it should be changed.">
+        Your password was exposed in a data breach. Chrome recommends changing the password now.
       </message>
     </messages>
   </release>

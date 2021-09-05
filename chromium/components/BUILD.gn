@@ -45,7 +45,11 @@ if (is_ios) {
 # no tests will run) and add a reference here. You can add more than one unit
 # test target if convenient.
 test("components_unittests") {
-  if (is_android || is_linux || is_mac || is_win) {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
+  if (is_android || is_linux || is_chromeos || is_mac || is_win) {
     data = [ "test/data/" ]
   }
 
@@ -81,11 +85,11 @@ test("components_unittests") {
     "//components/dom_distiller/core:unit_tests",
     "//components/download:unit_tests",
     "//components/encrypted_messages:unit_tests",
+    "//components/enterprise:unit_tests",
     "//components/favicon/core:unit_tests",
     "//components/favicon_base:unit_tests",
     "//components/feature_engagement:unit_tests",
     "//components/federated_learning:unit_tests",
-    "//components/feed:unit_tests",
     "//components/filename_generation:unit_tests",
     "//components/flags_ui:unit_tests",
     "//components/games/core:unit_tests",
@@ -163,6 +167,7 @@ test("components_unittests") {
     "//components/unified_consent:unit_tests",
     "//components/upload_list:unit_tests",
     "//components/url_formatter:unit_tests",
+    "//components/url_formatter/spoof_checks/common_words:unit_tests",
     "//components/url_formatter/spoof_checks/top_domains:unit_tests",
     "//components/url_matcher:unit_tests",
     "//components/url_pattern_index:unit_tests",
@@ -231,6 +236,7 @@ test("components_unittests") {
       "//components/content_settings/browser:unit_tests",
       "//components/contextual_search/core:unit_tests",
       "//components/data_use_measurement/core:unit_tests",
+      "//components/discardable_memory/client:unit_tests",
       "//components/discardable_memory/common:unit_tests",
       "//components/discardable_memory/service:unit_tests",
       "//components/dom_distiller/content/browser:unit_tests",
@@ -238,6 +244,7 @@ test("components_unittests") {
       "//components/drive:unit_tests",
       "//components/embedder_support:unit_tests",
       "//components/favicon/content:unit_tests",
+      "//components/feed:unit_tests",
       "//components/gcm_driver/instance_id:unit_tests",
       "//components/history/content/browser:unit_tests",
       "//components/invalidation/impl:unit_tests",
@@ -264,6 +271,7 @@ test("components_unittests") {
       "//components/performance_manager:unit_tests",
       "//components/permissions:unit_tests",
       "//components/policy/content:unit_tests",
+      "//components/prerender/browser:unit_tests",
       "//components/previews/content:unit_tests",
       "//components/query_tiles:unit_tests",
       "//components/safe_browsing/content/password_protection:password_protection_unittest",
@@ -290,6 +298,7 @@ test("components_unittests") {
       "//components/ukm/content:unit_tests",
       "//components/visitedlink/test:unit_tests",
       "//components/web_cache/browser:unit_tests",
+      "//components/web_package:unit_tests",
       "//components/webcrypto:unit_tests",
     ]
 
@@ -313,7 +322,7 @@ test("components_unittests") {
     deps += [ ":components_tests_pak_bundle_data" ]
   }
 
-  if (is_mac || is_linux) {
+  if (is_mac || is_linux || is_chromeos) {
     data_deps += [ "//content/shell:pak" ]
   }
 
@@ -334,9 +343,9 @@ test("components_unittests") {
       "//components/invalidation/impl",
       "//components/offline_items_collection/core:native_java_unittests_java",
       "//components/paint_preview/browser/android:java",
-      "//components/paint_preview/browser/android:unit_tests",
       "//components/paint_preview/player/android:unit_tests",
       "//components/permissions/android:java",
+      "//components/policy/android:native_test_support_java",
       "//components/policy/android:policy_java",
       "//components/signin/core/browser",
       "//components/signin/core/browser/android:java",
@@ -512,6 +521,7 @@ if (is_android) {
       "test/android/browsertests_apk/src/org/chromium/components_browsertests_apk/ComponentsBrowserTestsActivity.java",
       "test/android/browsertests_apk/src/org/chromium/components_browsertests_apk/ComponentsBrowserTestsApplication.java",
     ]
+    resources_package = "org.chromium.components_browsertests_apk"
   }
 
   jinja_template("components_browsertests_manifest") {
@@ -527,7 +537,7 @@ if (is_android) {
     sources = [
       "//components/test/android/browsertests_apk/res/layout/test_activity.xml",
     ]
-    custom_package = "org.chromium.components_browsertests_apk"
+    create_srcjar = false
   }
 }
 
@@ -535,11 +545,14 @@ if (is_android) {
 # no-op under Fuchsia.
 if (!is_ios && !is_fuchsia) {
   test("components_browsertests") {
+    if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+      use_xvfb = true
+    }
+
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
     sources = [
       "autofill/content/browser/risk/fingerprint_browsertest.cc",
-      "autofill/content/renderer/field_data_manager_browsertest.cc",
       "autofill/content/renderer/form_autofill_util_browsertest.cc",
       "autofill/content/renderer/form_cache_browsertest.cc",
       "autofill/content/renderer/html_based_username_detector_browsertest.cc",
@@ -556,6 +569,7 @@ if (!is_ios && !is_fuchsia) {
       "dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc",
       "dom_distiller/content/browser/test/test_util.cc",
       "dom_distiller/content/browser/test/test_util.h",
+      "metrics/content/subprocess_metrics_provider_browsertest.cc",
       "offline_pages/content/renovations/test/page_renovator_browsertest.cc",
       "paint_preview/renderer/paint_preview_recorder_browsertest.cc",
       "security_state/content/content_utils_browsertest.cc",
@@ -587,6 +601,8 @@ if (!is_ios && !is_fuchsia) {
       "//components/dom_distiller/content/browser",
       "//components/dom_distiller/core",
       "//components/dom_distiller/core:test_support",
+      "//components/error_page/content/browser:browser_tests",
+      "//components/metrics:content",
       "//components/offline_pages/content/renovations",
       "//components/offline_pages/core/renovations",
       "//components/paint_preview/renderer",
@@ -663,7 +679,7 @@ if (!is_ios && !is_fuchsia) {
       ]
     }
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       # content_extractor_browsertest is a standalone content extraction tool built as
       # a MANUAL component_browsertest.
       sources += [ "dom_distiller/standalone/content_extractor_browsertest.cc" ]
@@ -761,6 +777,7 @@ if (is_android) {
       "//components/gcm_driver/android:components_gcm_driver_junit_tests",
       "//components/permissions/android:components_permissions_junit_tests",
       "//components/policy/android:components_policy_junit_tests",
+      "//components/prefs/android:junit",
       "//components/query_tiles:query_tiles_junit_tests",
       "//components/signin/core/browser/android:components_signin_junit_tests",
       "//components/variations/android:components_variations_junit_tests",

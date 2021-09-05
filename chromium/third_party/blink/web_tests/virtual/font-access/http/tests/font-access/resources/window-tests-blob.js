@@ -1,7 +1,16 @@
 'use strict';
 
-promise_test(async t => {
+font_access_test(async t => {
   const iterator = navigator.fonts.query();
+
+  if (!isPlatformSupported()) {
+    await promise_rejects_dom(t, 'NotSupportedError', (async () => {
+      for await (const f of iterator) {
+      }
+    })());
+    return;
+  }
+
   const expectedFonts = await filterEnumeration(iterator,
                                                 getEnumerationTestSet({
                                                   labelFilter: [TEST_SIZE_CATEGORY.small]}));

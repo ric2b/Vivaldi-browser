@@ -25,7 +25,7 @@ class CORE_EXPORT ScrollTimelineOffset final
   // Create a default offset representing 'auto'.
   ScrollTimelineOffset() = default;
   // Create a scroll based offset.
-  explicit ScrollTimelineOffset(CSSPrimitiveValue*);
+  explicit ScrollTimelineOffset(const CSSPrimitiveValue*);
   // Create an element based offset.
   explicit ScrollTimelineOffset(ScrollTimelineElementBasedOffset*);
 
@@ -51,12 +51,18 @@ class CORE_EXPORT ScrollTimelineOffset final
 
   StringOrScrollTimelineElementBasedOffset
   ToStringOrScrollTimelineElementBasedOffset() const;
+  bool IsDefaultValue() const {
+    return !length_based_offset_ && !element_based_offset_;
+  }
+
+  bool operator==(const ScrollTimelineOffset&) const;
+  bool operator!=(const ScrollTimelineOffset& o) const { return !(*this == o); }
 
  private:
   // We either have an scroll or element based offset so at any time one of
   // these is null. If both are null, it represents the default value of
   // 'auto'.
-  Member<CSSPrimitiveValue> length_based_offset_;
+  Member<const CSSPrimitiveValue> length_based_offset_;
   Member<ScrollTimelineElementBasedOffset> element_based_offset_;
 };
 

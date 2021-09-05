@@ -3,6 +3,7 @@
 #include "browser/vivaldi_default_bookmarks.h"
 
 #include "base/bind.h"
+#include "base/containers/flat_set.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
@@ -675,11 +676,18 @@ void UpdatePartners(Profile* profile,
     LOG(WARNING) << "unexpected locale format: " << locale;
   }
 
-  // Should not be used for incognito profile. That can be closed when
-  // various callbacks still runs.
-  if (profile->GetOriginalProfile() != profile) {
+  // A guest session cannot have persistent bookmarks and must not trigger
+  // this call.
+  if (profile->IsGuestSession()) {
+    LOG(ERROR) << "Attempt to update bookmarks from a guest window";
+
+    // This invokes callback later with an error flag.
     profile = nullptr;
-    LOG(ERROR) << "Attempt to update bookmarks from incognito or guest window";
+  } else {
+    // Allow to upgrade bookmarks even with a private profile as a command line
+    // switch can trigger the first window in Vivaldi to be incognito one. So
+    // get the original recording profile.
+    profile = profile->GetOriginalProfile();
   }
 
   // Unretained() is safe as recording profiles are not deleted until shutdown.

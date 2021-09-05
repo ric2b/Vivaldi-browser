@@ -49,8 +49,8 @@ import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.omnibox.UrlBar.ScrollType;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator.SelectionState;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
+import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.status.StatusView;
-import org.chromium.chrome.browser.omnibox.status.StatusViewCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorFactory;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
@@ -85,6 +85,7 @@ import java.util.HashMap;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 
 /**
@@ -111,7 +112,7 @@ public class LocationBarLayout extends FrameLayout
 
     private final List<Runnable> mDeferredNativeRunnables = new ArrayList<Runnable>();
 
-    protected StatusViewCoordinator mStatusViewCoordinator;
+    protected StatusCoordinator mStatusCoordinator;
 
     private WindowAndroid mWindowAndroid;
     private WindowDelegate mWindowDelegate;
@@ -260,8 +261,8 @@ public class LocationBarLayout extends FrameLayout
 
         StatusView statusView = findViewById(R.id.location_bar_status);
         statusView.setCompositeTouchDelegate(mCompositeTouchDelegate);
-        mStatusViewCoordinator = new StatusViewCoordinator(mIsTablet, statusView, mUrlCoordinator);
-        mUrlCoordinator.addUrlTextChangeListener(mStatusViewCoordinator);
+        mStatusCoordinator = new StatusCoordinator(mIsTablet, statusView, mUrlCoordinator);
+        mUrlCoordinator.addUrlTextChangeListener(mStatusCoordinator);
 
         updateShouldAnimateIconChanges();
         mUrlBar.setOnKeyListener(new UrlBarKeyListener());
@@ -319,8 +320,8 @@ public class LocationBarLayout extends FrameLayout
         mAutocompleteCoordinator.setWindowAndroid(windowAndroid);
         mAutocompleteCoordinator.setActivityTabProvider(activityTabProvider);
         mAutocompleteCoordinator.setShareDelegateSupplier(shareDelegateSupplier);
-        mStatusViewCoordinator.setIncognitoStateProvider(incognitoStateProvider);
-        mStatusViewCoordinator.setModalDialogManagerSupplier(modalDialogManagerSupplier);
+        mStatusCoordinator.setIncognitoStateProvider(incognitoStateProvider);
+        mStatusCoordinator.setModalDialogManagerSupplier(modalDialogManagerSupplier);
     }
 
     /**
@@ -349,7 +350,7 @@ public class LocationBarLayout extends FrameLayout
         mNativeInitialized = true;
 
         mAutocompleteCoordinator.onNativeInitialized();
-        mStatusViewCoordinator.onNativeInitialized();
+        mStatusCoordinator.onNativeInitialized();
         updateMicButtonState();
         mDeleteButton.setOnClickListener(this);
         mMicButton.setOnClickListener(this);
@@ -387,7 +388,7 @@ public class LocationBarLayout extends FrameLayout
      * @param shouldAnimate Boolean flag indicating whether animations should be enabled.
      */
     protected void notifyShouldAnimateIconChanges(boolean shouldAnimate) {
-        mStatusViewCoordinator.setShouldAnimateIconChanges(shouldAnimate);
+        mStatusCoordinator.setShouldAnimateIconChanges(shouldAnimate);
     }
 
     /**
@@ -534,7 +535,7 @@ public class LocationBarLayout extends FrameLayout
         if (ChromeApplication.isVivaldi()) updateVisualsForState();
         if (mToolbarDataProvider.isUsingBrandColor()) updateVisualsForState();
 
-        mStatusViewCoordinator.onUrlFocusChange(mUrlHasFocus);
+        mStatusCoordinator.onUrlFocusChange(mUrlHasFocus);
 
         if (!mUrlFocusedWithoutAnimations) handleUrlFocusAnimation(mUrlHasFocus);
 
@@ -617,7 +618,7 @@ public class LocationBarLayout extends FrameLayout
         updateButtonVisibility();
 
         mAutocompleteCoordinator.setToolbarDataProvider(toolbarDataProvider);
-        mStatusViewCoordinator.setToolbarDataProvider(toolbarDataProvider);
+        mStatusCoordinator.setToolbarDataProvider(toolbarDataProvider);
         mUrlCoordinator.setOnFocusChangedCallback(this::onUrlFocusChange);
     }
 
@@ -631,7 +632,7 @@ public class LocationBarLayout extends FrameLayout
      */
     @Override
     public void updateStatusIcon() {
-        mStatusViewCoordinator.updateStatusIcon();
+        mStatusCoordinator.updateStatusIcon();
         // Update the URL in case the scheme change triggers a URL emphasis change.
         setUrlToPageUrl();
     }
@@ -1035,7 +1036,7 @@ public class LocationBarLayout extends FrameLayout
     @Override
     public void updateLoadingState(boolean updateUrl) {
         if (updateUrl) setUrlToPageUrl();
-        mStatusViewCoordinator.updateStatusIcon();
+        mStatusCoordinator.updateStatusIcon();
     }
 
     /** @return The current active {@link Tab}. */
@@ -1060,13 +1061,13 @@ public class LocationBarLayout extends FrameLayout
 
     @Override
     public void setUnfocusedWidth(int unfocusedWidth) {
-        mStatusViewCoordinator.setUnfocusedLocationBarWidth(unfocusedWidth);
+        mStatusCoordinator.setUnfocusedLocationBarWidth(unfocusedWidth);
     }
 
     @Override
     public void updateSearchEngineStatusIcon(boolean shouldShowSearchEngineLogo,
             boolean isSearchEngineGoogle, String searchEngineUrl) {
-        mStatusViewCoordinator.updateSearchEngineStatusIcon(
+        mStatusCoordinator.updateSearchEngineStatusIcon(
                 shouldShowSearchEngineLogo, isSearchEngineGoogle, searchEngineUrl);
     }
 
@@ -1207,9 +1208,9 @@ public class LocationBarLayout extends FrameLayout
             setUrlToPageUrl();
         }
 
-        mStatusViewCoordinator.setUseDarkColors(useDarkColors);
+        mStatusCoordinator.setUseDarkColors(useDarkColors);
         if (!ChromeApplication.isVivaldi())  // Vivaldi: Do not display incognito badge.
-        mStatusViewCoordinator.setIncognitoBadgeVisibility(
+        mStatusCoordinator.setIncognitoBadgeVisibility(
                 mToolbarDataProvider.isIncognito() && !mIsTablet);
 
         if (mAutocompleteCoordinator != null) {
@@ -1230,7 +1231,7 @@ public class LocationBarLayout extends FrameLayout
 
     @Override
     public View getSecurityIconView() {
-        return mStatusViewCoordinator.getSecurityIconView();
+        return mStatusCoordinator.getSecurityIconView();
     }
 
     @Override
@@ -1245,8 +1246,8 @@ public class LocationBarLayout extends FrameLayout
     }
 
     @VisibleForTesting
-    public StatusViewCoordinator getStatusViewCoordinatorForTesting() {
-        return mStatusViewCoordinator;
+    public StatusCoordinator getStatusCoordinatorForTesting() {
+        return mStatusCoordinator;
     }
 
     private void forceOnTextChanged() {
@@ -1304,6 +1305,14 @@ public class LocationBarLayout extends FrameLayout
         // to show or hide keyboard anyway. This may happen when we schedule keyboard hide, and
         // receive a second request to hide the keyboard instantly.
         if (showKeyboard) {
+            // Note (david@vivaldi.com): When the toolbar is at the bottom we don't apply the soft
+            // input mode in oder to have the control container always visible. Also force status
+            // bar to be visible otherwise the control container won't be above the soft input
+            // keyboard.
+            if (!VivaldiUtils.isTopToolbarOn())
+                VivaldiUtils.handleStatusBarVisibility(
+                        getWindowAndroid().getActivity().get().getWindow(), true);
+            else
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, /* delay */ false);
             getWindowAndroid().getKeyboardDelegate().showKeyboard(mUrlBar);
         } else {
@@ -1319,6 +1328,9 @@ public class LocationBarLayout extends FrameLayout
             // Convert the keyboard back to resize mode (delay the change for an arbitrary amount
             // of time in hopes the keyboard will be completely hidden before making this change).
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE, /* delay */ true);
+            // Note (david@vivaldi.com): Update the status bar visibility here.
+            VivaldiUtils.handleStatusBarVisibility(
+                    getWindowAndroid().getActivity().get().getWindow(), false);
         }
     }
 

@@ -51,7 +51,6 @@
 #include "components/invalidation/impl/profile_identity_provider.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/invalidation/public/invalidation_service.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -199,7 +198,7 @@ class SyncProfileDelegate : public Profile::Delegate {
                         bool success,
                         bool is_new_profile) override {
     g_browser_process->profile_manager()->RegisterTestingProfile(
-        base::WrapUnique(profile), true, false);
+        base::WrapUnique(profile), true);
 
     // Perform any custom work needed before the profile is initialized.
     if (!on_profile_created_callback_.is_null())
@@ -892,9 +891,9 @@ void SyncTest::TearDownOnMainThread() {
 }
 
 void SyncTest::SetUpInProcessBrowserTestFixture() {
-  will_create_browser_context_services_subscription_ =
+  create_services_subscription_ =
       BrowserContextDependencyManager::GetInstance()
-          ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+          ->RegisterCreateServicesCallbackForTesting(
               base::BindRepeating(&SyncTest::OnWillCreateBrowserContextServices,
                                   base::Unretained(this)));
 }
@@ -1000,22 +999,23 @@ void SyncTest::SetUpOnMainThread() {
   // the mock gaia responses to be available before GaiaUrls is initialized.
   SetUpTestServerIfRequired();
 
-  if (!UsingExternalServers())
+  if (UsingExternalServers()) {
+    // Allows google.com as well as country-specific TLDs.
+    host_resolver()->AllowDirectLookup("*.google.com");
+    host_resolver()->AllowDirectLookup("accounts.google.*");
+    host_resolver()->AllowDirectLookup("*.googleusercontent.com");
+    // Allow connection to googleapis.com for oauth token requests in E2E tests.
+    host_resolver()->AllowDirectLookup("*.googleapis.com");
+
+    // On Linux, we use Chromium's NSS implementation which uses the following
+    // hosts for certificate verification. Without these overrides, running the
+    // integration tests on Linux causes error as we make external DNS lookups.
+    host_resolver()->AllowDirectLookup("*.thawte.com");
+    host_resolver()->AllowDirectLookup("*.geotrust.com");
+    host_resolver()->AllowDirectLookup("*.gstatic.com");
+  } else {
     SetupMockGaiaResponsesForProfile(ProfileManager::GetActiveUserProfile());
-
-  // Allows google.com as well as country-specific TLDs.
-  host_resolver()->AllowDirectLookup("*.google.com");
-  host_resolver()->AllowDirectLookup("accounts.google.*");
-  host_resolver()->AllowDirectLookup("*.googleusercontent.com");
-  // Allow connection to googleapis.com for oauth token requests in E2E tests.
-  host_resolver()->AllowDirectLookup("*.googleapis.com");
-
-  // On Linux, we use Chromium's NSS implementation which uses the following
-  // hosts for certificate verification. Without these overrides, running the
-  // integration tests on Linux causes error as we make external DNS lookups.
-  host_resolver()->AllowDirectLookup("*.thawte.com");
-  host_resolver()->AllowDirectLookup("*.geotrust.com");
-  host_resolver()->AllowDirectLookup("*.gstatic.com");
+  }
 }
 
 void SyncTest::WaitForDataModels(Profile* profile) {

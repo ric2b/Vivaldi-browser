@@ -149,6 +149,10 @@ grit("vivaldi_native_resources") {
 }
 
 grit("vivaldi_unscaled_native_resources") {
+  defines = [
+    "force_sopranos_build=$force_sopranos_build",
+    "is_official_build=$is_official_build",
+  ]
   output_dir = "$root_gen_dir/vivaldi"
   resource_ids = "//vivaldi/app/gritsettings/resource_ids"
   source = "native_resources/vivaldi_native_unscaled.grd"

@@ -16,7 +16,7 @@ import {DeviceInfoUpdater} from './device/device_info_updater.js';
 import * as error from './error.js';
 import {GalleryButton} from './gallerybutton.js';
 import * as metrics from './metrics.js';
-import * as filesystem from './models/filesystem.js';
+import * as filesystem from './models/file_system.js';
 import * as nav from './nav.js';
 import {PerfEvent} from './perf.js';
 import * as state from './state.js';
@@ -192,7 +192,7 @@ export class App {
       // Migrate pictures might take some time. Since it won't affect other
       // camera functions, we don't await here to avoid harming UX.
       filesystem.checkMigration(promptMigrate).then((ackMigrate) => {
-        metrics.log(metrics.Type.LAUNCH, ackMigrate);
+        metrics.sendLaunchEvent({ackMigrate});
       });
 
       const externalDir = filesystem.getExternalDirectory();
@@ -201,15 +201,15 @@ export class App {
     } catch (error) {
       console.error(error);
       if (error && error.message === 'no-migrate') {
-        chrome.app.window.current().close();
+        window.close();
         return;
       }
       nav.open(ViewName.WARNING, 'filesystem-failure');
     }
 
     const showWindow = (async () => {
-      await util.fitWindow();
-      chrome.app.window.current().show();
+      await browserProxy.fitWindow();
+      browserProxy.showWindow();
       this.backgroundOps_.notifyActivation();
     })();
     const startCamera = (async () => {
@@ -223,7 +223,7 @@ export class App {
 
   /**
    * Handles pressed keys.
-   * @param {Event} event Key press event.
+   * @param {!Event} event Key press event.
    * @private
    */
   onKeyPressed_(event) {
@@ -238,7 +238,7 @@ export class App {
   async suspend() {
     state.set(state.State.SUSPEND, true);
     await this.cameraView_.start();
-    chrome.app.window.current().hide();
+    browserProxy.hideWindow();
     this.backgroundOps_.notifySuspension();
   }
 
@@ -247,7 +247,7 @@ export class App {
    */
   resume() {
     state.set(state.State.SUSPEND, false);
-    chrome.app.window.current().show();
+    browserProxy.showWindow();
     this.backgroundOps_.notifyActivation();
   }
 }
@@ -265,8 +265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (instance !== null) {
     return;
   }
-  assert(window['backgroundOps'] !== undefined);
-  const /** !BackgroundOps */ bgOps = window['backgroundOps'];
+  const bgOps = browserProxy.getBackgroundOps();
 
   const testErrorCallback = bgOps.getTestingErrorCallback();
   metrics.initMetrics();
@@ -274,14 +273,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     metrics.setMetricsEnabled(false);
   }
 
-  // TODO(crbug/1082585): Initializes it before any other javascript loaded.
+  // TODO(crbug.com/1082585): Initializes it before any other javascript loaded.
   error.initialize(testErrorCallback);
 
   const perfLogger = bgOps.getPerfLogger();
 
   // Setup listener for performance events.
   perfLogger.addListener((event, duration, extras) => {
-    metrics.log(metrics.Type.PERF, event, duration, extras);
+    metrics.sendPerfEvent({event, duration, extras});
   });
   const states = Object.values(PerfEvent);
   states.push(state.State.TAKING);

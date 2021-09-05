@@ -2358,6 +2358,25 @@ void av1_highbd_warp_affine_sse4_1(const int32_t* mat,
                                    int16_t beta,
                                    int16_t gamma,
                                    int16_t delta);
+void av1_highbd_warp_affine_avx2(const int32_t* mat,
+                                 const uint16_t* ref,
+                                 int width,
+                                 int height,
+                                 int stride,
+                                 uint16_t* pred,
+                                 int p_col,
+                                 int p_row,
+                                 int p_width,
+                                 int p_height,
+                                 int p_stride,
+                                 int subsampling_x,
+                                 int subsampling_y,
+                                 int bd,
+                                 ConvolveParams* conv_params,
+                                 int16_t alpha,
+                                 int16_t beta,
+                                 int16_t gamma,
+                                 int16_t delta);
 RTCD_EXTERN void (*av1_highbd_warp_affine)(const int32_t* mat,
                                            const uint16_t* ref,
                                            int width,
@@ -2847,6 +2866,22 @@ RTCD_EXTERN void (*av1_quantize_lp)(const int16_t* coeff_ptr,
                                     const int16_t* dequant_ptr,
                                     uint16_t* eob_ptr,
                                     const int16_t* scan);
+
+void av1_resize_and_extend_frame_c(const YV12_BUFFER_CONFIG* src,
+                                   YV12_BUFFER_CONFIG* dst,
+                                   const InterpFilter filter,
+                                   const int phase,
+                                   const int num_planes);
+void av1_resize_and_extend_frame_ssse3(const YV12_BUFFER_CONFIG* src,
+                                       YV12_BUFFER_CONFIG* dst,
+                                       const InterpFilter filter,
+                                       const int phase,
+                                       const int num_planes);
+RTCD_EXTERN void (*av1_resize_and_extend_frame)(const YV12_BUFFER_CONFIG* src,
+                                                YV12_BUFFER_CONFIG* dst,
+                                                const InterpFilter filter,
+                                                const int phase,
+                                                const int num_planes);
 
 void av1_round_shift_array_c(int32_t* arr, int size, int bit);
 void av1_round_shift_array_sse4_1(int32_t* arr, int size, int bit);
@@ -3585,6 +3620,8 @@ static void setup_rtcd_internal(void) {
   av1_highbd_warp_affine = av1_highbd_warp_affine_c;
   if (flags & HAS_SSE4_1)
     av1_highbd_warp_affine = av1_highbd_warp_affine_sse4_1;
+  if (flags & HAS_AVX2)
+    av1_highbd_warp_affine = av1_highbd_warp_affine_avx2;
   av1_highbd_wiener_convolve_add_src = av1_highbd_wiener_convolve_add_src_c;
   if (flags & HAS_SSSE3)
     av1_highbd_wiener_convolve_add_src =
@@ -3628,6 +3665,9 @@ static void setup_rtcd_internal(void) {
   av1_quantize_lp = av1_quantize_lp_c;
   if (flags & HAS_AVX2)
     av1_quantize_lp = av1_quantize_lp_avx2;
+  av1_resize_and_extend_frame = av1_resize_and_extend_frame_c;
+  if (flags & HAS_SSSE3)
+    av1_resize_and_extend_frame = av1_resize_and_extend_frame_ssse3;
   av1_round_shift_array = av1_round_shift_array_c;
   if (flags & HAS_SSE4_1)
     av1_round_shift_array = av1_round_shift_array_sse4_1;

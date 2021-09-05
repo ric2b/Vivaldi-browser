@@ -1,0 +1,7 @@
+
+if (is_mac) {
+  update_target("//chrome/browser:browser") {
+    libs += [ "$root_out_dir/Vivaldi.app/Contents/Frameworks/Sparkle.framework/Sparkle" ]
+    public_deps += [ "//vivaldi/thirdparty/:copy_sparkle_framework" ]
+  }
+}

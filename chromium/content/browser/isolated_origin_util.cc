@@ -55,7 +55,7 @@ bool IsolatedOriginPattern::Parse(const base::StringPiece& unparsed_pattern) {
   if (host_part.size() == 0)
     return false;
 
-  if (host_part.starts_with(kAllSubdomainsWildcard)) {
+  if (base::StartsWith(host_part, kAllSubdomainsWildcard)) {
     isolate_all_subdomains_ = true;
     host_part.remove_prefix(strlen(kAllSubdomainsWildcard));
   }
@@ -138,14 +138,6 @@ bool IsolatedOriginUtil::IsValidIsolatedOrigin(const url::Origin& origin) {
     return false;
 
   return true;
-}
-
-// static
-bool IsolatedOriginUtil::IsStrictSubdomain(const url::Origin& sub_origin,
-                                           const url::Origin& base_origin) {
-  return sub_origin.scheme() == base_origin.scheme() &&
-         sub_origin.port() == base_origin.port() && sub_origin != base_origin &&
-         sub_origin.DomainIs(base_origin.host());
 }
 
 }  // namespace content

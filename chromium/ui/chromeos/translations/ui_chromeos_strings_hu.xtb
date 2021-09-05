@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Napszemüveg</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">katalán</translation>
+<translation id="1172970565351728681">Fennmaradó idő kb. <ph name="REMAINING_TIME" />…</translation>
 <translation id="1173894706177603556">Átnevezés</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> másolása...</translation>
 <translation id="1178581264944972037">Szünet</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Már létezik „<ph name="FILENAME" />” nevű fájl. Mit szeretne tenni?</translation>
 <translation id="2121825465123208577">Átméretezés</translation>
 <translation id="2136953289241069843">Átírás (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">„<ph name="PATH" />” megnyitása sikertelen: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Érvénytelen karakter: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Vietnami billentyűzet (TCVN)</translation>
 <translation id="2168214441502403371">Perzsa billentyűzet</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">A tulajdonjogot átruházza a következőre: <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">ír</translation>
 <translation id="3245321423178950146">Ismeretlen előadó</translation>
+<translation id="3248185426436836442">Függőben</translation>
 <translation id="3252266817569339921">francia</translation>
 <translation id="3254434849914415189">Válassza ki az alapértelmezett alkalmazást <ph name="FILE_TYPE" />-fájlokhoz:</translation>
 <translation id="3264582393905923483">Kontextus</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Felvétel éve</translation>
 <translation id="3338239663705455570">Szlovén billentyűzet</translation>
 <translation id="3353984535370177728">Válassza ki a feltölteni kívánt mappát</translation>
+<translation id="3356580349448036450">Kész</translation>
 <translation id="3399597614303179694">Macedón billentyűzet</translation>
 <translation id="3414856743105198592">A cserélhető adathordozók formázása minden adatot töröl. Szeretné folytatni?</translation>
 <translation id="3437801641691368414">Létrehozás ideje</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Nincs jogosultsága fájlok áthelyezésére a(z) „<ph name="FOLDER_NAME" />” mappába.</translation>
 <translation id="3786301125658655746">Ön jelenleg offline állapotban van</translation>
 <translation id="3789841737615482174">Telepítés</translation>
+<translation id="3793469551756281394">Fennmaradó idő kb. <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" />…</translation>
 <translation id="3798449238516105146">Verzió</translation>
 <translation id="3801082500826908679">feröer-szigeteki</translation>
 <translation id="3809272675881623365">Nyúl</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Ez a mappa meg van osztva a Windows rendszerrel</translation>
 <translation id="4487088045714738411">Belga billentyűzet</translation>
 <translation id="4522570452068850558">Részletek</translation>
+<translation id="4542387084127299777">A(z) „<ph name="PATH" />” megnyitása nem sikerült</translation>
 <translation id="4552678318981539154">További tárhely vásárlása</translation>
 <translation id="4559767610552730302">Elmosódott</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> fájl</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Mindenről van biztonsági másolat a <ph name="BEGIN_LINK" />Google Drive-on<ph name="END_LINK" />!</translation>
 <translation id="6643016212128521049">Törlés</translation>
 <translation id="6650726141019353908">Rózsaszín pillangó</translation>
+<translation id="6657585470893396449">Jelszó</translation>
 <translation id="6710213216561001401">Előző</translation>
 <translation id="6718273304615422081">Tömörítés...</translation>
 <translation id="6751256176799620176">1 mappa kiválasztva</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">A telepítés nem sikerült.</translation>
 <translation id="7040138676081995583">Megnyitás ezzel:...</translation>
-<translation id="7059566040011178088">Kevesebb mint <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> elem kiválasztva</translation>
 <translation id="7106346894903675391">További tárhely vásárlása...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;” – &lt;em&gt;keresés a Drive-ban&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Eszköz modellje</translation>
 <translation id="8208580316430297579">Grafikák</translation>
 <translation id="8223479393428528563">A fájlok offline használatra való mentéséhez lépjen fel újra az online felületre, kattintson jobb gombbal a fájlokra, és válassza a(z) <ph name="OFFLINE_CHECKBOX_NAME" /> lehetőséget.</translation>
-<translation id="8231972167769262174">Kb. <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Megszakítás</translation>
 <translation id="8261506727792406068">Törlés</translation>
 <translation id="8269755669432358899">A fájlokhoz tartozó visszajelzési párbeszédpanel összecsukása</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Szerkesztés</translation>
 <translation id="9099674669267916096">Oldalak száma</translation>
 <translation id="9110990317705400362">Folyamatosan keressük az új módszereket, hogy a böngészést biztonságosabbá tegyük. Korábban bármelyik webhely megkérhette Önt, hogy adjon hozzá egy bővítményt a böngészőjéhez. A Google Chrome legújabb verzióiban kifejezetten meg kell mondania a Chrome-nak, hogy telepíteni szeretné ezeket a bővítményeket. Ehhez a Bővítmények oldalon kell hozzáadnia őket. <ph name="BEGIN_LINK" />További információ<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Feloldás</translation>
 <translation id="912419004897138677">Kodek</translation>
 <translation id="9129931661813833980">Mappa rögzítése</translation>
 <translation id="9130775360844693113">A(z) „<ph name="DESTINATION_NAME" />” tagjai hozzá fognak férni ezekhez az elemekhez.</translation>

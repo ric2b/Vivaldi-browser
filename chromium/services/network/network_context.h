@@ -54,6 +54,7 @@
 #include "services/network/public/mojom/udp_socket.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
+#include "services/network/sct_auditing_cache.h"
 #include "services/network/socket_factory.h"
 #include "services/network/url_request_context_owner.h"
 
@@ -258,6 +259,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   void GetExpectCTState(const std::string& domain,
                         const net::NetworkIsolationKey& network_isolation_key,
                         GetExpectCTStateCallback callback) override;
+  void MaybeEnqueueSCTReport(
+      const net::HostPortPair& host_port_pair,
+      const net::X509Certificate* validated_certificate_chain,
+      const net::SignedCertificateTimestampAndStatusList&
+          signed_certificate_timestamps);
+  void SetSCTAuditingEnabled(bool enabled) override;
+  bool is_sct_auditing_enabled() { return is_sct_auditing_enabled_; }
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
   void CreateUDPSocket(
       mojo::PendingReceiver<mojom::UDPSocket> receiver,
@@ -300,6 +308,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       int32_t render_frame_id,
       const url::Origin& origin,
       uint32_t options,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
       mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
       mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client) override;
@@ -345,9 +354,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       std::vector<mojom::CorsOriginPatternPtr> allow_patterns,
       std::vector<mojom::CorsOriginPatternPtr> block_patterns,
       SetCorsOriginAccessListsForOriginCallback callback) override;
-  void SetCorsExtraSafelistedRequestHeaderNames(
-      const std::vector<std::string>&
-          cors_extra_safelisted_request_header_names) override;
   void EnableStaticKeyPinningForTesting(
       EnableStaticKeyPinningForTestingCallback callback) override;
   void VerifyCertificateForTesting(
@@ -400,6 +406,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const GURL& url,
       const net::NetworkIsolationKey& network_isolation_key,
       LookupServerBasicAuthCredentialsCallback callback) override;
+#if defined(OS_CHROMEOS)
+  void LookupProxyAuthCredentials(
+      const net::ProxyServer& proxy_server,
+      const std::string& auth_scheme,
+      const std::string& realm,
+      LookupProxyAuthCredentialsCallback callback) override;
+#endif
   void GetOriginPolicyManager(
       mojo::PendingReceiver<mojom::OriginPolicyManager> receiver) override;
 
@@ -493,6 +506,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   const PendingTrustTokenStore* trust_token_store() const {
     return trust_token_store_.get();
   }
+
+#if BUILDFLAG(IS_CT_SUPPORTED)
+  void SetIsSCTAuditingEnabledForTesting(bool enabled) {
+    is_sct_auditing_enabled_ = enabled;
+  }
+#endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
  private:
   URLRequestContextOwner MakeURLRequestContext(
@@ -647,6 +666,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   std::queue<SetExpectCTTestReportCallback>
       outstanding_set_expect_ct_callbacks_;
+
+  bool is_sct_auditing_enabled_ = false;
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
 #if defined(OS_CHROMEOS)

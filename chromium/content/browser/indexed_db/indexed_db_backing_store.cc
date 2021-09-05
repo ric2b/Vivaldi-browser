@@ -50,7 +50,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "net/url_request/url_request_context.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/file_system/file_stream_writer.h"
 #include "storage/browser/file_system/file_writer_delegate.h"
@@ -585,19 +584,22 @@ bool IndexCursorOptions(
         database_id, object_store_id, index_id, range.upper());
     cursor_options->high_open = range.upper_open();
 
-    std::string found_high_key;
-    // Seek to the *last* key in the set of non-unique keys
-    if (!FindGreatestKeyLessThanOrEqual(transaction, cursor_options->high_key,
-                                        &found_high_key, status))
-      return false;
+    if (!cursor_options->forward) {
+      // For reverse cursors, we need a key that exists.
+      std::string found_high_key;
+      // Seek to the *last* key in the set of non-unique keys
+      if (!FindGreatestKeyLessThanOrEqual(transaction, cursor_options->high_key,
+                                          &found_high_key, status))
+        return false;
 
-    // If the target key should not be included, but we end up with a smaller
-    // key, we should include that.
-    if (cursor_options->high_open &&
-        CompareIndexKeys(found_high_key, cursor_options->high_key) < 0)
-      cursor_options->high_open = false;
+      // If the target key should not be included, but we end up with a smaller
+      // key, we should include that.
+      if (cursor_options->high_open &&
+          CompareIndexKeys(found_high_key, cursor_options->high_key) < 0)
+        cursor_options->high_open = false;
 
-    cursor_options->high_key = found_high_key;
+      cursor_options->high_key = found_high_key;
+    }
   }
 
   return true;
@@ -691,7 +693,7 @@ leveldb::Status IndexedDBBackingStore::Initialize(bool clean_active_journal) {
         PutInt(write_batch.get(), data_version_key, db_data_version.Encode()));
     // If a blob directory already exists for this database, blow it away.  It's
     // leftover from a partially-purged previous generation of data.
-    if (!base::DeleteFileRecursively(blob_path_)) {
+    if (!base::DeletePathRecursively(blob_path_)) {
       INTERNAL_WRITE_ERROR_UNTESTED(SET_UP_METADATA);
       return IOErrorStatus();
     }
@@ -744,7 +746,7 @@ leveldb::Status IndexedDBBackingStore::Initialize(bool clean_active_journal) {
       // the updated schema version to disk. In consequence, any database that
       // started out as schema version <= 2 will remain at schema version 2
       // indefinitely. Furthermore, this migration path used to call
-      // "base::DeleteFileRecursively(blob_path_)", so databases stuck at
+      // "base::DeletePathRecursively(blob_path_)", so databases stuck at
       // version 2 would lose their stored Blobs on every open call.
       //
       // In order to prevent corrupt databases, when upgrading from 2 to 3 this
@@ -831,7 +833,7 @@ leveldb::Status IndexedDBBackingStore::Initialize(bool clean_active_journal) {
   // Delete all empty files that resulted from the migration to v4. If this
   // fails it's not a big deal.
   for (const auto& path : empty_blobs_to_delete) {
-    ignore_result(base::DeleteFile(path, /*recursive=*/false));
+    base::DeleteFile(path);
   }
 
   if (clean_active_journal) {
@@ -1703,13 +1705,13 @@ bool IndexedDBBackingStore::RemoveBlobFile(int64_t database_id,
   DVLOG(1) << "Deleting blob " << blob_number << " from IndexedDB database "
            << database_id << " at path " << path.value();
 #endif
-  return base::DeleteFile(path, false);
+  return base::DeleteFile(path);
 }
 
 bool IndexedDBBackingStore::RemoveBlobDirectory(int64_t database_id) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(idb_sequence_checker_);
   FilePath path = GetBlobDirectoryName(blob_path_, database_id);
-  return base::DeleteFileRecursively(path);
+  return base::DeletePathRecursively(path);
 }
 
 Status IndexedDBBackingStore::CleanUpBlobJournal(

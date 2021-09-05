@@ -9,18 +9,25 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "chrome/browser/reputation/safety_tip_ui.h"
+#include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/security_state/core/features.h"
 #include "components/security_state/core/security_state.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/navigation_entry.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "url/gurl.h"
 
 namespace {
+
+// Whether to show tips on server-side-flagged sites included in the component.
+const base::FeatureParam<bool> kEnableSuspiciousSiteChecks{
+    &security_state::features::kSafetyTipUI, "suspicioussites", true};
 
 void RecordHeuristicsUKMData(ReputationCheckResult result,
                              ukm::SourceId navigation_source_id,
@@ -113,6 +120,61 @@ void RecordPostFlagCheckHistogram(security_state::SafetyTipStatus status) {
                             status);
 }
 
+// Records a histogram that embeds the safety tip status along with whether the
+// navigation was initiated cross- or same-origin.
+void RecordSafetyTipStatusWithInitiatorOriginInfo(
+    const base::Optional<url::Origin>& committed_initiator_origin,
+    const GURL& committed_url,
+    const GURL& current_url,
+    security_state::SafetyTipStatus status) {
+  std::string suffix;
+  if (committed_url != current_url) {
+    // So long as we only record this metric following DidFinishNavigation, not
+    // OnVisibilityChanged, this should rarely happen. It would mean that a new
+    // navigation committed in this web contents before the reputation check
+    // completed. This is possible only when engaged_sites is out of date
+    // (forcing an async update). In that scenario, there may be a race
+    // condition between the async reputation check completing and the next call
+    // to DidFinishNavigation.
+    suffix = "UnexpectedUrl";
+  } else if (!committed_initiator_origin.has_value()) {
+    // The initiator origin has no value in cases like omnibox-initiated, or
+    // outside-of-Chrome-initiated, navigations.
+    suffix = "Unknown";
+  } else if (committed_initiator_origin.value().CanBeDerivedFrom(current_url)) {
+    // This is assumed to mean that the user has clicked on a same-origin link
+    // on a lookalike page, resulting in another lookalike navigation.
+    suffix = "SameOrigin";
+  } else if (GetETLDPlusOne(committed_initiator_origin.value().host()) ==
+             GetETLDPlusOne(current_url.host())) {
+    // The user has clicked on a link on a page, and it's bumped to another
+    // page on the same eTLD+1. If that happens and this is a non-none and
+    // non-ignored status, that implies that the first eTLD+1 load didn't
+    // trigger the warning, this subsequent page load did, implying that it was
+    // triggered by a different subdomain.
+    suffix = "SameRegDomain";
+  } else {
+    // This is assumed to mean that the user has clicked on a link from a
+    // non-lookalike page.
+    // on a lookalike page, resulting in another lookalike navigation.
+    suffix = "CrossOrigin";
+  }
+
+  base::UmaHistogramEnumeration(
+      "Security.SafetyTips.StatusWithInitiator." + suffix, status);
+}
+
+// Returns whether a safety tip should be shown, according to finch.
+bool IsSafetyTipEnabled(security_state::SafetyTipStatus status) {
+  if (!base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+    return false;
+  }
+  if (status == security_state::SafetyTipStatus::kBadReputation) {
+    return kEnableSuspiciousSiteChecks.Get();
+  }
+  return true;
+}
+
 }  // namespace
 
 ReputationWebContentsObserver::~ReputationWebContentsObserver() = default;
@@ -129,6 +191,8 @@ void ReputationWebContentsObserver::DidFinishNavigation(
   last_navigation_safety_tip_info_ = {security_state::SafetyTipStatus::kUnknown,
                                       GURL()};
   last_safety_tip_navigation_entry_id_ = 0;
+  last_committed_initiator_origin_ = navigation_handle->GetInitiatorOrigin();
+  last_committed_url_ = navigation_handle->GetURL();
 
   MaybeShowSafetyTip(
       ukm::ConvertToSourceId(navigation_handle->GetNavigationId(),
@@ -181,6 +245,13 @@ void ReputationWebContentsObserver::MaybeShowSafetyTip(
     return;
   }
 
+  // Filter out loads with no navigations, error pages and interstitials.
+  auto* last_entry = web_contents()->GetController().GetLastCommittedEntry();
+  if (!last_entry || last_entry->GetPageType() != content::PAGE_TYPE_NORMAL) {
+    MaybeCallReputationCheckCallback(false);
+    return;
+  }
+
   const GURL& url = web_contents()->GetLastCommittedURL();
   if (!url.SchemeIsHTTPOrHTTPS()) {
     MaybeCallReputationCheckCallback(false);
@@ -207,6 +278,11 @@ void ReputationWebContentsObserver::HandleReputationCheckResult(
           ? "Security.SafetyTips.ReputationCheckComplete.VisibilityChanged"
           : "Security.SafetyTips.ReputationCheckComplete.DidFinishNavigation",
       result.safety_tip_status);
+  if (!called_from_visibility_check) {
+    RecordSafetyTipStatusWithInitiatorOriginInfo(
+        last_committed_initiator_origin_, last_committed_url_, result.url,
+        result.safety_tip_status);
+  }
 
   // Set this field independent of whether the feature to show the UI is
   // enabled/disabled. Metrics code uses this field and we want to record
@@ -244,7 +320,7 @@ void ReputationWebContentsObserver::HandleReputationCheckResult(
     return;
   }
 
-  if (!base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+  if (!IsSafetyTipEnabled(result.safety_tip_status)) {
     // When the feature isn't enabled, we 'ignore' the UI after the first visit
     // to make it easier to disambiguate the control groups' first visit from
     // subsequent navigations to the flagged page in metrics. Since the user

@@ -220,8 +220,11 @@ void TrayBackgroundView::SetVisiblePreferred(bool visible_preferred) {
   StartVisibilityAnimation(GetEffectiveVisibility());
 
   // We need to update which trays overflow after showing or hiding a tray.
-  if (shelf_->GetStatusAreaWidget())
-    shelf_->GetStatusAreaWidget()->UpdateCollapseState();
+  auto* status_area_widget = shelf_->GetStatusAreaWidget();
+  if (status_area_widget) {
+    status_area_widget->UpdateCollapseState();
+    status_area_widget->LogVisiblePodCountMetric();
+  }
 }
 
 void TrayBackgroundView::StartVisibilityAnimation(bool visible) {
@@ -333,7 +336,7 @@ TrayBackgroundView::CreateInkDropHighlight() const {
           ShelfConfig::Get()->GetDefaultShelfColor());
   auto highlight = std::make_unique<views::InkDropHighlight>(
       gfx::SizeF(bounds.size()), ripple_attributes.base_color);
-  highlight->set_visible_opacity(ripple_attributes.inkdrop_opacity);
+  highlight->set_visible_opacity(ripple_attributes.highlight_opacity);
   return highlight;
 }
 

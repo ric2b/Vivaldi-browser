@@ -32,7 +32,13 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
 
   void OnSessionStarted(XRSession* session,
                         device::mojom::blink::XRSessionPtr session_ptr);
+
+  // The FrameProvider needs to be notified before the page does that the
+  // session has been ended so that requesting a new session is possible.
+  // However, the non-immersive frame loop shouldn't start until after the page
+  // has been notified.
   void OnSessionEnded(XRSession* session);
+  void RestartNonImmersiveFrameLoop();
 
   void RequestFrame(XRSession*);
 
@@ -75,6 +81,16 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
   void ProcessScheduledFrame(device::mojom::blink::XRFrameDataPtr frame_data,
                              double high_res_now_ms);
 
+  // Called before dispatching a frame to an inline session. This method ensures
+  // that inline session frame calls can be scheduled and that they are neither
+  // served nor dropped if an immersive session is started while the inline
+  // session was waiting to be served.
+  void OnPreDispatchInlineFrame(
+      XRSession* session,
+      double timestamp,
+      const base::Optional<gpu::MailboxHolder>& output_mailbox_holder,
+      const base::Optional<gpu::MailboxHolder>& camera_image_mailbox_holder);
+
   const Member<XRSystem> xr_;
 
   // Immersive session state
@@ -112,6 +128,7 @@ class XRFrameProvider final : public GarbageCollected<XRFrameProvider> {
   bool pending_non_immersive_vsync_ = false;
 
   base::Optional<gpu::MailboxHolder> buffer_mailbox_holder_;
+  base::Optional<gpu::MailboxHolder> camera_image_mailbox_holder_;
   bool last_has_focus_ = false;
 };
 

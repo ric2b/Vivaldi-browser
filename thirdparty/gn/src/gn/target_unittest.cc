@@ -1492,3 +1492,33 @@ TEST_F(TargetTest, WriteMetadataCollection) {
   EXPECT_TRUE(data_dep_present.OnResolved(&err));
   EXPECT_TRUE(scheduler().GetUnknownGeneratedInputs().empty());
 }
+
+// Tests that modulemap files use the cxx_module tool.
+TEST_F(TargetTest, ModuleMap) {
+  TestWithScope setup;
+
+  Toolchain toolchain(setup.settings(), Label(SourceDir("//tc/"), "tc"));
+
+  std::unique_ptr<Tool> tool = Tool::CreateTool(CTool::kCToolCxxModule);
+  CTool* cxx_module = tool->AsC();
+  cxx_module->set_outputs(
+      SubstitutionList::MakeForTest("{{source_file_part}}.pcm"));
+  toolchain.SetTool(std::move(tool));
+
+  Target target(setup.settings(), Label(SourceDir("//a/"), "a"));
+  target.set_output_type(Target::SOURCE_SET);
+  target.SetToolchain(&toolchain);
+  Err err;
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  const char* computed_tool_type = nullptr;
+  std::vector<OutputFile> output;
+  bool result = target.GetOutputFilesForSource(
+      SourceFile("//source/input.modulemap"), &computed_tool_type, &output);
+  ASSERT_TRUE(result);
+  EXPECT_EQ(std::string("cxx_module"), std::string(computed_tool_type));
+
+  // Outputs are relative to the build directory "//out/Debug/".
+  ASSERT_EQ(1u, output.size());
+  EXPECT_EQ("input.modulemap.pcm", output[0].value()) << output[0].value();
+}

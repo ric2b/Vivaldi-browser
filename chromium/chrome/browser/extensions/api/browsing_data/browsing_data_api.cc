@@ -288,7 +288,8 @@ void BrowsingDataSettingsFunction::SetDetails(
 
 BrowsingDataRemoverFunction::BrowsingDataRemoverFunction() : observer_(this) {}
 
-void BrowsingDataRemoverFunction::OnBrowsingDataRemoverDone() {
+void BrowsingDataRemoverFunction::OnBrowsingDataRemoverDone(
+    uint64_t failed_data_types) {
   OnTaskFinished();
 }
 
@@ -346,14 +347,14 @@ ExtensionFunction::ResponseAction BrowsingDataRemoverFunction::Run() {
     ResponseValue error_response;
     if (!ParseOrigins(*origins, &origins_, &error_response))
       return RespondNow(std::move(error_response));
-    mode_ = content::BrowsingDataFilterBuilder::WHITELIST;
+    mode_ = content::BrowsingDataFilterBuilder::Mode::kDelete;
   } else {
     if (exclude_origins) {
       ResponseValue error_response;
       if (!ParseOrigins(*exclude_origins, &origins_, &error_response))
         return RespondNow(std::move(error_response));
     }
-    mode_ = content::BrowsingDataFilterBuilder::BLACKLIST;
+    mode_ = content::BrowsingDataFilterBuilder::Mode::kPreserve;
   }
 
   // Check if a filter is set but non-filterable types are selected.

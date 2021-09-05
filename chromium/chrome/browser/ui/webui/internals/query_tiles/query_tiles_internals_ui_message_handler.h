@@ -7,6 +7,8 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observer.h"
+#include "components/query_tiles/logger.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 namespace base {
@@ -20,7 +22,8 @@ class TileService;
 }
 
 class QueryTilesInternalsUIMessageHandler
-    : public content::WebUIMessageHandler {
+    : public content::WebUIMessageHandler,
+      public query_tiles::Logger::Observer {
  public:
   explicit QueryTilesInternalsUIMessageHandler(Profile* profile);
   ~QueryTilesInternalsUIMessageHandler() override;
@@ -29,12 +32,22 @@ class QueryTilesInternalsUIMessageHandler
   void RegisterMessages() override;
 
  private:
+  // Logger::Observer implementation.
+  void OnServiceStatusChanged(const base::Value& status) override;
+  void OnTileDataAvailable(const base::Value& status) override;
+  void OnJavascriptAllowed() override;
+  void OnJavascriptDisallowed() override;
+
   void HandleGetServiceStatus(const base::ListValue* args);
   void HandleGetTileData(const base::ListValue* args);
   void HandleStartFetch(const base::ListValue* args);
   void HandlePurgeDb(const base::ListValue* args);
+  void HandleSetServerUrl(const base::ListValue* args);
 
   query_tiles::TileService* tile_service_;
+
+  ScopedObserver<query_tiles::Logger, query_tiles::Logger::Observer>
+      logger_observer_{this};
 
   base::WeakPtrFactory<QueryTilesInternalsUIMessageHandler> weak_ptr_factory_{
       this};

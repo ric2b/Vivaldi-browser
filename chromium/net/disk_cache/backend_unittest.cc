@@ -781,8 +781,7 @@ TEST_F(DiskCacheBackendTest, SimpleCreateBackendRecoveryAppCache) {
 
   // Delete the index.
   base::DeleteFile(
-      cache_path_.AppendASCII("index-dir").AppendASCII("the-real-index"),
-      false);
+      cache_path_.AppendASCII("index-dir").AppendASCII("the-real-index"));
 
   // Open the cache again. The fixture will also waits for index init.
   InitCache();
@@ -798,7 +797,7 @@ TEST_F(DiskCacheBackendTest, SimpleCreateBackendRecoveryAppCache) {
 TEST_F(DiskCacheBackendTest, CreateBackend_MissingFile) {
   ASSERT_TRUE(CopyTestCache("bad_entry"));
   base::FilePath filename = cache_path_.AppendASCII("data_1");
-  base::DeleteFile(filename, false);
+  base::DeleteFile(filename);
   net::TestCompletionCallback cb;
 
   bool prev = base::ThreadRestrictions::SetIOAllowed(false);
@@ -3920,18 +3919,18 @@ TEST_F(DiskCacheBackendTest, FileSharing) {
 #if defined(OS_WIN)
   DWORD sharing = FILE_SHARE_READ | FILE_SHARE_WRITE;
   DWORD access = GENERIC_READ | GENERIC_WRITE;
-  base::win::ScopedHandle file2(CreateFile(base::as_wcstr(name.value()), access,
+  base::win::ScopedHandle file2(CreateFile(name.value().c_str(), access,
                                            sharing, nullptr, OPEN_EXISTING, 0,
                                            nullptr));
   EXPECT_FALSE(file2.IsValid());
 
   sharing |= FILE_SHARE_DELETE;
-  file2.Set(CreateFile(base::as_wcstr(name.value()), access, sharing, nullptr,
+  file2.Set(CreateFile(name.value().c_str(), access, sharing, nullptr,
                        OPEN_EXISTING, 0, nullptr));
   EXPECT_TRUE(file2.IsValid());
 #endif
 
-  EXPECT_TRUE(base::DeleteFile(name, false));
+  EXPECT_TRUE(base::DeleteFile(name));
 
   // We should be able to use the file.
   const int kSize = 200;

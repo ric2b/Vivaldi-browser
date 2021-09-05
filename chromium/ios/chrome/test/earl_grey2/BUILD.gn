@@ -84,7 +84,6 @@ chrome_ios_eg2_test("ios_chrome_integration_eg2tests_module") {
     "//ios/chrome/browser/policy_url_blocking:eg2_tests",
     "//ios/chrome/browser/prerender:eg2_tests",
     "//ios/chrome/browser/safe_browsing:eg2_tests",
-    "//ios/chrome/browser/translate:eg2_tests",
     "//ios/chrome/browser/ui/autofill:eg2_tests",
     "//ios/chrome/browser/ui/autofill/manual_fill:eg2_tests",
     "//ios/chrome/browser/ui/content_suggestions:eg2_tests",
@@ -197,6 +196,7 @@ source_set("eg2_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser:pref_names",
     "//ios/chrome/browser/ui:feature_flags",
+    "//ios/chrome/browser/ui/util:multiwindow_util",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:eg_test_support+eg2",
     "//ios/third_party/earl_grey2:test_lib",
@@ -204,5 +204,5 @@ source_set("eg2_tests") {
     "//ui/base",
   ]
 
-  libs = [ "UIKit.framework" ]
+  frameworks = [ "UIKit.framework" ]
 }

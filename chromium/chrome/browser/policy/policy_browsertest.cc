@@ -39,7 +39,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
@@ -52,6 +51,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -72,6 +72,7 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/api/chrome_extensions_api_client.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
+#include "chrome/browser/media/audio_service_util.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -184,11 +185,11 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "sandbox/policy/sandbox_type.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/sandbox/sandbox_type.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -221,7 +222,7 @@
 #include "ui/snapshot/screenshot_grabber.h"
 #endif
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 #include "base/compiler_specific.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
@@ -235,10 +236,10 @@
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 #include "media/webrtc/webrtc_switches.h"
-#include "services/service_manager/sandbox/features.h"
+#include "sandbox/policy/features.h"
 #endif
 
 using content::BrowserThread;
@@ -257,10 +258,10 @@ const int kOneHourInMs = 60 * 60 * 1000;
 const int kThreeHoursInMs = 180 * 60 * 1000;
 #endif
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 const base::FilePath::CharType kUnpackedFullscreenAppName[] =
     FILE_PATH_LITERAL("fullscreen_app");
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 // Arbitrary port range for testing the WebRTC UDP port policy.
 const char kTestWebRtcUdpPortRange[] = "10000-10100";
@@ -380,7 +381,7 @@ class TestAudioObserver : public chromeos::CrasAudioHandler::AudioObserver {
 };
 #endif
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 
 // Observer used to wait for the creation of a new app window.
 class TestAddAppWindowObserver
@@ -645,17 +646,18 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, LegacySafeSearch) {
     // Override the default SafeSearch setting using policies.
     ApplySafeSearchPolicy(
         legacy_safe_search == 0
-            ? nullptr
-            : std::make_unique<base::Value>(legacy_safe_search == 1),
+            ? base::nullopt
+            : base::make_optional<base::Value>(legacy_safe_search == 1),
         google_safe_search == 0
-            ? nullptr
-            : std::make_unique<base::Value>(google_safe_search == 1),
+            ? base::nullopt
+            : base::make_optional<base::Value>(google_safe_search == 1),
         legacy_youtube == 0
-            ? nullptr
-            : std::make_unique<base::Value>(legacy_youtube == 1),
+            ? base::nullopt
+            : base::make_optional<base::Value>(legacy_youtube == 1),
         youtube_restrict == 0
-            ? nullptr  // subtracting 1 gives 0,1,2, see above
-            : std::make_unique<base::Value>(youtube_restrict - 1));
+            ? base::nullopt  // subtracting 1 gives
+                             // 0,1,2, see above
+            : base::make_optional<base::Value>(youtube_restrict - 1));
 
     // The legacy ForceSafeSearch policy should only have an effect if none of
     // the other 3 policies are defined.
@@ -728,12 +730,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ForceGoogleSafeSearch) {
   // ForceGoogleSafeSearch policy.
   for (int safe_search = 0; safe_search < 3; safe_search++) {
     // Override the Google safe search policy.
-    ApplySafeSearchPolicy(nullptr,          // ForceSafeSearch
-                          safe_search == 0  // ForceGoogleSafeSearch
-                              ? nullptr
-                              : std::make_unique<base::Value>(safe_search == 1),
-                          nullptr,   // ForceYouTubeSafetyMode
-                          nullptr);  // ForceYouTubeRestrict
+    ApplySafeSearchPolicy(
+        base::nullopt,    // ForceSafeSearch
+        safe_search == 0  // ForceGoogleSafeSearch
+            ? base::nullopt
+            : base::make_optional<base::Value>(safe_search == 1),
+        base::nullopt,   // ForceYouTubeSafetyMode
+        base::nullopt);  // ForceYouTubeRestrict
     // Verify that the safe search pref behaves the way we expect.
     PrefService* prefs = browser()->profile()->GetPrefs();
     EXPECT_EQ(safe_search != 0,
@@ -818,10 +821,10 @@ class PolicyTestGoogle : public PolicyTest {
 };
 
 IN_PROC_BROWSER_TEST_F(PolicyTestGoogle, ForceGoogleSafeSearch) {
-  ApplySafeSearchPolicy(nullptr,  // ForceSafeSearch
-                        std::make_unique<base::Value>(true),
-                        nullptr,   // ForceYouTubeSafetyMode
-                        nullptr);  // ForceYouTubeRestrict
+  ApplySafeSearchPolicy(base::nullopt,  // ForceSafeSearch
+                        base::Value(true),
+                        base::nullopt,   // ForceYouTubeSafetyMode
+                        base::nullopt);  // ForceYouTubeRestrict
 
   GURL url = https_server()->GetURL("www.google.com",
                                     "/server-redirect?http://google.com/");
@@ -832,10 +835,10 @@ IN_PROC_BROWSER_TEST_F(PolicyTestGoogle, ForceYouTubeRestrict) {
   for (int youtube_restrict_mode = safe_search_util::YOUTUBE_RESTRICT_OFF;
        youtube_restrict_mode < safe_search_util::YOUTUBE_RESTRICT_COUNT;
        ++youtube_restrict_mode) {
-    ApplySafeSearchPolicy(nullptr,  // ForceSafeSearch
-                          nullptr,  // ForceGoogleSafeSearch
-                          nullptr,  // ForceYouTubeSafetyMode
-                          std::make_unique<base::Value>(youtube_restrict_mode));
+    ApplySafeSearchPolicy(base::nullopt,  // ForceSafeSearch
+                          base::nullopt,  // ForceGoogleSafeSearch
+                          base::nullopt,  // ForceYouTubeSafetyMode
+                          base::Value(youtube_restrict_mode));
     {
       // First check frame requests.
       GURL youtube_url(https_server()->GetURL("youtube.com", "/empty.html"));
@@ -864,7 +867,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTestGoogle, AllowedDomainsForApps) {
       PolicyMap policies;
       allowed_domain = "foo.com";
       SetPolicy(&policies, key::kAllowedDomainsForApps,
-                std::make_unique<base::Value>(allowed_domain));
+                base::Value(allowed_domain));
       UpdateProviderPolicy(policies);
     }
 
@@ -1186,7 +1189,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HomepageLocation) {
                base::Value(chrome::kChromeUICreditsURL), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_HOME));
-  content::WaitForLoadStop(contents);
+  EXPECT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_EQ(GURL(chrome::kChromeUICreditsURL), contents->GetURL());
 
   policies.Set(key::kHomepageIsNewTabPage, POLICY_LEVEL_MANDATORY,
@@ -1194,11 +1197,11 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HomepageLocation) {
                nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_HOME));
-  content::WaitForLoadStop(contents);
+  EXPECT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_TRUE(search::IsInstantNTP(contents));
 }
 
-#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
+#if defined(OS_MAC) && defined(ADDRESS_SANITIZER)
 // Flaky on ASAN on Mac. See https://crbug.com/674497.
 #define MAYBE_IncognitoEnabled DISABLED_IncognitoEnabled
 #else
@@ -1350,7 +1353,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, UrlKeyedAnonymizedDataCollection) {
       unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled));
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(PolicyTest, FullscreenAllowedBrowser) {
   PolicyMap policies;
   policies.Set(key::kFullscreenAllowed, POLICY_LEVEL_MANDATORY,
@@ -1382,7 +1385,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, FullscreenAllowedApp) {
       extensions::AppWindowRegistry::Get(browser()->profile()));
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceTest));
@@ -1394,7 +1397,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, FullscreenAllowedApp) {
 
   // We have to wait for the navigation to commit since the JS object
   // registration is delayed (see AppWindowCreateFunction::RunAsync).
-  content::WaitForLoadStop(window->web_contents());
+  EXPECT_TRUE(content::WaitForLoadStop(window->web_contents()));
 
   // Verify that the window cannot be toggled into fullscreen mode via apps
   // APIs.
@@ -1469,8 +1472,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, PRE_SessionLengthLimit) {
   // occurred yet.
   g_browser_process->local_state()->SetInt64(
       prefs::kSessionStartTime,
-      (base::TimeTicks::Now() - base::TimeDelta::FromHours(2))
-          .ToInternalValue());
+      (base::Time::Now() - base::TimeDelta::FromHours(2)).ToInternalValue());
 }
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, SessionLengthLimit) {
@@ -1510,8 +1512,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest,
   // occurred yet.
   g_browser_process->local_state()->SetInt64(
       prefs::kSessionStartTime,
-      (base::TimeTicks::Now() - base::TimeDelta::FromHours(2))
-          .ToInternalValue());
+      (base::Time::Now() - base::TimeDelta::FromHours(2)).ToInternalValue());
 }
 
 // Disabled, see http://crbug.com/554728.
@@ -1546,8 +1547,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, PRE_WaitForInitialUserActivitySatisfied) {
   // Indicate that initial user activity in this session occurred 2 hours ago.
   g_browser_process->local_state()->SetInt64(
       prefs::kSessionStartTime,
-      (base::TimeTicks::Now() - base::TimeDelta::FromHours(2))
-          .ToInternalValue());
+      (base::Time::Now() - base::TimeDelta::FromHours(2)).ToInternalValue());
   g_browser_process->local_state()->SetBoolean(prefs::kSessionUserActivitySeen,
                                                true);
 }
@@ -1947,11 +1947,11 @@ IN_PROC_BROWSER_TEST_F(PolicyVariationsServiceTest, VariationsURLIsValid) {
   EXPECT_EQ("restricted", value);
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlacklistSelective) {
+IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlocklistSelective) {
   base::ListValue blacklist;
   blacklist.AppendString("host.name");
   PolicyMap policies;
-  policies.Set(key::kNativeMessagingBlacklist, POLICY_LEVEL_MANDATORY,
+  policies.Set(key::kNativeMessagingBlocklist, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, blacklist.Clone(),
                nullptr);
   UpdateProviderPolicy(policies);
@@ -1963,11 +1963,11 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlacklistSelective) {
       IsNativeMessagingHostAllowed(browser()->profile(), "other.host.name"));
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlacklistWildcard) {
+IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlocklistWildcard) {
   base::ListValue blacklist;
   blacklist.AppendString("*");
   PolicyMap policies;
-  policies.Set(key::kNativeMessagingBlacklist, POLICY_LEVEL_MANDATORY,
+  policies.Set(key::kNativeMessagingBlocklist, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, blacklist.Clone(),
                nullptr);
   UpdateProviderPolicy(policies);
@@ -1979,17 +1979,17 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingBlacklistWildcard) {
       IsNativeMessagingHostAllowed(browser()->profile(), "other.host.name"));
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingWhitelist) {
+IN_PROC_BROWSER_TEST_F(PolicyTest, NativeMessagingAllowlist) {
   base::ListValue blacklist;
   blacklist.AppendString("*");
-  base::ListValue whitelist;
-  whitelist.AppendString("host.name");
+  base::ListValue allowlist;
+  allowlist.AppendString("host.name");
   PolicyMap policies;
-  policies.Set(key::kNativeMessagingBlacklist, POLICY_LEVEL_MANDATORY,
+  policies.Set(key::kNativeMessagingBlocklist, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, blacklist.Clone(),
                nullptr);
-  policies.Set(key::kNativeMessagingWhitelist, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, whitelist.Clone(),
+  policies.Set(key::kNativeMessagingAllowlist, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, allowlist.Clone(),
                nullptr);
   UpdateProviderPolicy(policies);
 
@@ -2142,10 +2142,10 @@ class NoteTakingOnLockScreenPolicyTest : public PolicyTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // An app requires lockScreen permission to be enabled as a lock screen app.
-    // This permission is protected by a whitelist, so the test app has to be
-    // whitelisted as well.
+    // This permission is protected by a allowlist, so the test app has to be
+    // allowlisted as well.
     command_line->AppendSwitchASCII(
-        extensions::switches::kWhitelistedExtensionID, kTestAppId);
+        extensions::switches::kAllowlistedExtensionID, kTestAppId);
     command_line->AppendSwitch(ash::switches::kAshForceEnableStylusTools);
     PolicyTest::SetUpCommandLine(command_line);
   }
@@ -2163,7 +2163,7 @@ class NoteTakingOnLockScreenPolicyTest : public PolicyTest {
   void SetPolicyValue(base::Optional<base::Value> value) {
     PolicyMap policies;
     if (value) {
-      policies.Set(key::kNoteTakingAppsLockScreenWhitelist,
+      policies.Set(key::kNoteTakingAppsLockScreenAllowlist,
                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                    POLICY_SOURCE_CLOUD, std::move(value), nullptr);
     }
@@ -2211,7 +2211,7 @@ IN_PROC_BROWSER_TEST_F(NoteTakingOnLockScreenPolicyTest,
 }
 
 IN_PROC_BROWSER_TEST_F(NoteTakingOnLockScreenPolicyTest,
-                       WhitelistLockScreenNoteTakingAppByPolicy) {
+                       AllowlistLockScreenNoteTakingAppByPolicy) {
   scoped_refptr<const extensions::Extension> app =
       LoadUnpackedExtension("lock_screen_apps/app_launch");
   ASSERT_TRUE(app);
@@ -2574,7 +2574,7 @@ IN_PROC_BROWSER_TEST_F(SharedClipboardPolicyTest, SharedClipboardEnabled) {
   EXPECT_TRUE(prefs->GetBoolean(prefs::kSharedClipboardEnabled));
 }
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 
 class AudioSandboxEnabledTest
@@ -2606,11 +2606,11 @@ class AudioSandboxEnabledTest
 
 IN_PROC_BROWSER_TEST_P(AudioSandboxEnabledTest, IsRespected) {
   base::Optional<bool> enable_sandbox_via_policy = GetParam();
-  bool is_sandbox_enabled_by_default = base::FeatureList::IsEnabled(
-      service_manager::features::kAudioServiceSandbox);
+  bool is_sandbox_enabled_by_default =
+      base::FeatureList::IsEnabled(features::kAudioServiceSandbox);
 
   ASSERT_EQ(enable_sandbox_via_policy.value_or(is_sandbox_enabled_by_default),
-            service_manager::IsAudioSandboxEnabled());
+            IsAudioServiceSandboxEnabled());
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -2628,7 +2628,7 @@ INSTANTIATE_TEST_SUITE_P(
     AudioSandboxEnabledTest,
     ::testing::Values(/*policy::key::kAudioSandboxEnabled=*/base::nullopt));
 
-#endif  //  defined(OS_WIN) || defined (OS_MACOSX) || (defined(OS_LINUX) &&
+#endif  //  defined(OS_WIN) || defined (OS_MAC) || (defined(OS_LINUX) &&
         //  !defined(OS_CHROMEOS))
 
 }  // namespace policy

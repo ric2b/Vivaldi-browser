@@ -15,6 +15,7 @@
 #include "absl/container/btree_test.h"
 
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -1344,6 +1345,12 @@ class BtreeNodePeer {
   constexpr static size_t GetNumValuesPerNode() {
     return btree_node<typename Set::params_type>::kNodeValues;
   }
+
+  template <typename Set>
+  constexpr static size_t GetMaxFieldType() {
+    return std::numeric_limits<
+        typename btree_node<typename Set::params_type>::field_type>::max();
+  }
 };
 
 namespace {
@@ -2463,9 +2470,12 @@ TEST(Btree,
   EXPECT_THAT(s2, ElementsAre(IsEmpty(), ElementsAre(IsNull())));
 }
 
-// GCC 4.9 has a bug in the std::pair constructors that prevents explicit
-// conversions between pair types.
-#if defined(__clang__) || !defined(__GNUC__) || __GNUC__ >= 5
+// libstdc++ included with GCC 4.9 has a bug in the std::pair constructors that
+// prevents explicit conversions between pair types.
+// We only run this test for the libstdc++ from GCC 7 or newer because we can't
+// reliably check the libstdc++ version prior to that release.
+#if !defined(__GLIBCXX__) || \
+    (defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE >= 7)
 TEST(Btree, MapRangeConstructorAndInsertSupportExplicitConversionComparable) {
   const std::pair<absl::string_view, int> names[] = {{"n1", 1}, {"n2", 2}};
 
@@ -2505,6 +2515,68 @@ TEST(Btree,
   m2.insert(std::begin(i), std::end(i));
   EXPECT_THAT(m2,
               ElementsAre(Pair(IsEmpty(), 1), Pair(ElementsAre(IsNull()), 2)));
+}
+
+TEST(Btree, HeterogeneousTryEmplace) {
+  absl::btree_map<std::string, int> m;
+  std::string s = "key";
+  absl::string_view sv = s;
+  m.try_emplace(sv, 1);
+  EXPECT_EQ(m[s], 1);
+
+  m.try_emplace(m.end(), sv, 2);
+  EXPECT_EQ(m[s], 1);
+}
+
+TEST(Btree, HeterogeneousOperatorMapped) {
+  absl::btree_map<std::string, int> m;
+  std::string s = "key";
+  absl::string_view sv = s;
+  m[sv] = 1;
+  EXPECT_EQ(m[s], 1);
+
+  m[sv] = 2;
+  EXPECT_EQ(m[s], 2);
+}
+
+TEST(Btree, HeterogeneousInsertOrAssign) {
+  absl::btree_map<std::string, int> m;
+  std::string s = "key";
+  absl::string_view sv = s;
+  m.insert_or_assign(sv, 1);
+  EXPECT_EQ(m[s], 1);
+
+  m.insert_or_assign(m.end(), sv, 2);
+  EXPECT_EQ(m[s], 2);
+}
+#endif
+
+// This test requires std::launder for mutable key access in node handles.
+#if defined(__cpp_lib_launder) && __cpp_lib_launder >= 201606
+TEST(Btree, NodeHandleMutableKeyAccess) {
+  {
+    absl::btree_map<std::string, std::string> map;
+
+    map["key1"] = "mapped";
+
+    auto nh = map.extract(map.begin());
+    nh.key().resize(3);
+    map.insert(std::move(nh));
+
+    EXPECT_THAT(map, ElementsAre(Pair("key", "mapped")));
+  }
+  // Also for multimap.
+  {
+    absl::btree_multimap<std::string, std::string> map;
+
+    map.emplace("key1", "mapped");
+
+    auto nh = map.extract(map.begin());
+    nh.key().resize(3);
+    map.insert(std::move(nh));
+
+    EXPECT_THAT(map, ElementsAre(Pair("key", "mapped")));
+  }
 }
 #endif
 

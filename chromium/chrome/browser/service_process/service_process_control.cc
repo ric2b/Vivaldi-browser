@@ -349,7 +349,7 @@ void ServiceProcessControl::Launcher::Notify() {
   notify_task_.Reset();
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 void ServiceProcessControl::Launcher::DoDetectLaunched() {
   DCHECK(!notify_task_.is_null());
 
@@ -390,4 +390,4 @@ void ServiceProcessControl::Launcher::DoRun() {
         FROM_HERE, base::BindOnce(&Launcher::Notify, this));
   }
 }
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC

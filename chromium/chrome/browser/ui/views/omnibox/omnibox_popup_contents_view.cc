@@ -7,6 +7,7 @@
 #include <memory>
 #include <numeric>
 
+#include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/optional.h"
@@ -62,7 +63,10 @@ class OmniboxPopupContentsView::AutocompletePopupWidget
         new RoundedOmniboxResultsFrame(contents, contents->location_bar_view_));
   }
 
-  void SetTargetBounds(const gfx::Rect& bounds) { SetBounds(bounds); }
+  void SetTargetBounds(const gfx::Rect& bounds) {
+    base::AutoReset<bool> reset(&is_setting_popup_bounds_, true);
+    SetBounds(bounds);
+  }
 
   void ShowAnimated() {
     // Set the initial opacity to 0 and ease into fully opaque.
@@ -116,6 +120,8 @@ class OmniboxPopupContentsView::AutocompletePopupWidget
     ThemeCopyingWidget::OnGestureEvent(event);
   }
 
+  bool is_setting_popup_bounds() const { return is_setting_popup_bounds_; }
+
  private:
   std::unique_ptr<ui::ScopedLayerAnimationSettings>
   GetScopedAnimationSettings() {
@@ -133,6 +139,9 @@ class OmniboxPopupContentsView::AutocompletePopupWidget
 
   // True if the popup is in the process of closing via animation.
   bool is_animating_closed_ = false;
+
+  // True if the popup's bounds are currently being set.
+  bool is_setting_popup_bounds_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AutocompletePopupWidget);
 };
@@ -157,9 +166,10 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
     pref_change_registrar_.Init(pref_service);
     // Unretained is appropriate here. 'this' will outlive the registrar.
     pref_change_registrar_.Add(
-        omnibox::kOmniboxHiddenGroupIds,
-        base::BindRepeating(&OmniboxPopupContentsView::OnHiddenGroupIdsUpdate,
-                            base::Unretained(this)));
+        omnibox::kSuggestionGroupVisibility,
+        base::BindRepeating(
+            &OmniboxPopupContentsView::OnSuggestionGroupVisibilityUpdate,
+            base::Unretained(this)));
   }
 }
 
@@ -208,10 +218,6 @@ bool OmniboxPopupContentsView::IsSelectedIndex(size_t index) const {
   return index == model_->selected_line();
 }
 
-bool OmniboxPopupContentsView::IsButtonSelected() const {
-  return model_->selected_line_state() == OmniboxPopupModel::BUTTON_FOCUSED;
-}
-
 void OmniboxPopupContentsView::UnselectButton() {
   model_->SetSelectedLineState(OmniboxPopupModel::NORMAL);
 }
@@ -229,6 +235,13 @@ OmniboxResultView* OmniboxPopupContentsView::result_view_at(size_t i) {
     return nullptr;
 
   return static_cast<OmniboxRowView*>(children()[i])->result_view();
+}
+
+OmniboxResultView* OmniboxPopupContentsView::GetSelectedResultView() {
+  size_t selected_line = model_->selected_line();
+  if (selected_line == OmniboxPopupModel::kNoMatch)
+    return nullptr;
+  return result_view_at(selected_line);
 }
 
 bool OmniboxPopupContentsView::InExplicitExperimentalKeywordMode() {
@@ -262,7 +275,10 @@ void OmniboxPopupContentsView::OnSelectionChanged(
     return;
   }
 
-  if (old_selection.line != OmniboxPopupModel::kNoMatch) {
+  // Do not invalidate the same line twice, in order to avoid redundant
+  // accessibility events.
+  if (old_selection.line != OmniboxPopupModel::kNoMatch &&
+      old_selection.line != new_selection.line) {
     InvalidateLine(old_selection.line);
   }
 
@@ -361,7 +377,7 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
       // Set visibility of the result view based on whether the group is hidden.
       bool match_hidden = pref_service &&
                           match.suggestion_group_id.has_value() &&
-                          omnibox::IsSuggestionGroupIdHidden(
+                          model_->result().IsSuggestionGroupIdHidden(
                               pref_service, match.suggestion_group_id.value());
       result_view->SetVisible(!match_hidden);
 
@@ -459,18 +475,32 @@ void OmniboxPopupContentsView::OnGestureEvent(ui::GestureEvent* event) {
 
 void OmniboxPopupContentsView::FireAXEventsForNewActiveDescendant(
     View* descendant_view) {
-  if (descendant_view)
+  if (descendant_view) {
     descendant_view->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
                                               true);
-  NotifyAccessibilityEvent(ax::mojom::Event::kActiveDescendantChanged, true);
+  }
+  // Selected children changed is fired on the popup.
+  NotifyAccessibilityEvent(ax::mojom::Event::kSelectedChildrenChanged, true);
+  // Active descendant changed is fired on the focused text field.
+  omnibox_view_->NotifyAccessibilityEvent(
+      ax::mojom::Event::kActiveDescendantChanged, true);
 }
 
 void OmniboxPopupContentsView::OnWidgetBoundsChanged(
     views::Widget* widget,
     const gfx::Rect& new_bounds) {
+  // Because we don't directly control the lifetime of the widget, gracefully
+  // handle "stale" notifications by ignoring them. https://crbug.com/1108762
+  if (!popup_ || popup_.get() != widget)
+    return;
+
   // This is called on rotation or device scale change. We have to re-align to
   // the new location bar location.
-  DCHECK_EQ(popup_.get(), widget);
+
+  // Ignore cases when we are internally updating the popup bounds.
+  if (popup_->is_setting_popup_bounds())
+    return;
+
   UpdatePopupAppearance();
 }
 
@@ -536,13 +566,13 @@ size_t OmniboxPopupContentsView::GetIndexForPoint(const gfx::Point& point) {
   return OmniboxPopupModel::kNoMatch;
 }
 
-void OmniboxPopupContentsView::OnHiddenGroupIdsUpdate() {
+void OmniboxPopupContentsView::OnSuggestionGroupVisibilityUpdate() {
   for (size_t i = 0; i < model_->result().size(); ++i) {
     const AutocompleteMatch& match = model_->result().match_at(i);
     bool match_hidden =
         match.suggestion_group_id.has_value() &&
-        omnibox::IsSuggestionGroupIdHidden(GetPrefService(),
-                                           match.suggestion_group_id.value());
+        model_->result().IsSuggestionGroupIdHidden(
+            GetPrefService(), match.suggestion_group_id.value());
     if (OmniboxResultView* result_view = result_view_at(i))
       result_view->SetVisible(!match_hidden);
   }
@@ -567,12 +597,6 @@ void OmniboxPopupContentsView::GetAccessibleNodeData(
   node_data->role = ax::mojom::Role::kListBox;
   if (IsOpen()) {
     node_data->AddState(ax::mojom::State::kExpanded);
-    OmniboxResultView* selected_result_view =
-        result_view_at(model_->selected_line());
-    if (selected_result_view)
-      node_data->AddIntAttribute(
-          ax::mojom::IntAttribute::kActivedescendantId,
-          selected_result_view->GetViewAccessibility().GetUniqueId().Get());
   } else {
     node_data->AddState(ax::mojom::State::kCollapsed);
     node_data->AddState(ax::mojom::State::kInvisible);

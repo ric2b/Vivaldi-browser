@@ -30,6 +30,14 @@ base::UnguessableToken ProtoToUnguessableToken(
   return base::UnguessableToken::Deserialize(proto.high(), proto.low());
 }
 
+void AssignStatement(sql::Statement* statement,
+                     sql::Database* db,
+                     const sql::StatementID& id,
+                     const std::vector<std::string>& sql) {
+  statement->Assign(
+      db->GetCachedStatement(id, base::JoinString(sql, " ").c_str()));
+}
+
 }  // namespace
 
 const char MediaHistoryFeedsTable::kTableName[] = "mediaFeed";
@@ -97,6 +105,19 @@ sql::InitStatus MediaHistoryFeedsTable::CreateTableIfNonExistent() {
     success = DB()->Execute(
         "CREATE INDEX IF NOT EXISTS mediaFeed_safe_search_result ON "
         "mediaFeed (safe_search_result)");
+  }
+
+  if (success) {
+    success = DB()->Execute(
+        "CREATE INDEX IF NOT EXISTS mediaFeed_last_fetch_content_types_index "
+        "ON "
+        "mediaFeed (last_fetch_content_types)");
+  }
+
+  if (success) {
+    success = DB()->Execute(
+        "CREATE INDEX IF NOT EXISTS mediaFeed_top_feeds_index ON "
+        "mediaFeed (last_fetch_content_types, safe_search_result)");
   }
 
   if (!success) {
@@ -205,11 +226,13 @@ std::vector<media_feeds::mojom::MediaFeedPtr> MediaHistoryFeedsTable::GetRows(
   if (top_feeds) {
     // Check the request has the right parameters.
     DCHECK(request.limit.has_value());
-    DCHECK(request.audio_video_watchtime_min.has_value());
 
     if (request.type == MediaHistoryKeyedService::GetMediaFeedsRequest::Type::
                             kTopFeedsForDisplay) {
       DCHECK(request.fetched_items_min.has_value());
+    } else if (request.type == MediaHistoryKeyedService::GetMediaFeedsRequest::
+                                   Type::kTopFeedsForFetch) {
+      DCHECK(request.audio_video_watchtime_min.has_value());
     }
 
     // If we need the top feeds we should select rows from the origin table and
@@ -218,9 +241,18 @@ std::vector<media_feeds::mojom::MediaFeedPtr> MediaHistoryFeedsTable::GetRows(
     sql.push_back(
         "FROM origin "
         "LEFT JOIN mediaFeed "
-        "ON origin.id = mediaFeed.origin_id "
-        "WHERE origin.aggregate_watchtime_audio_video_s >= ? "
-        "ORDER BY origin.aggregate_watchtime_audio_video_s DESC");
+        "ON origin.id = mediaFeed.origin_id");
+
+    // If we have an audio/video watchtime requirement we should add that.
+    if (request.audio_video_watchtime_min.has_value())
+      sql.push_back("WHERE origin.aggregate_watchtime_audio_video_s >= ?");
+
+    // If we have a content type filter then we should add that.
+    if (request.filter_by_type.has_value())
+      sql.push_back("WHERE mediaFeed.last_fetch_content_types & ?");
+
+    // Finally, order the results by watchtime.
+    sql.push_back("ORDER BY origin.aggregate_watchtime_audio_video_s DESC");
 
     // Get the total count of the origins so we can calculate a percentile.
     sql::Statement origin_statement(DB()->GetCachedStatement(
@@ -233,10 +265,31 @@ std::vector<media_feeds::mojom::MediaFeedPtr> MediaHistoryFeedsTable::GetRows(
 
     DCHECK(origin_count.has_value());
 
-    statement.Assign(DB()->GetCachedStatement(
-        SQL_FROM_HERE, base::JoinString(sql, " ").c_str()));
+    // For each different query combination we should have an assign statement
+    // call that will generate a unique SQL_FROM_HERE value.
+    if (request.audio_video_watchtime_min.has_value() &&
+        request.filter_by_type) {
+      AssignStatement(&statement, DB(), SQL_FROM_HERE, sql);
+    } else if (request.audio_video_watchtime_min.has_value()) {
+      AssignStatement(&statement, DB(), SQL_FROM_HERE, sql);
+    } else if (request.filter_by_type) {
+      AssignStatement(&statement, DB(), SQL_FROM_HERE, sql);
+    } else {
+      AssignStatement(&statement, DB(), SQL_FROM_HERE, sql);
+    }
 
-    statement.BindInt64(0, request.audio_video_watchtime_min->InSeconds());
+    // Now bind all the parameters to the query.
+    int bind_index = 0;
+
+    if (request.audio_video_watchtime_min.has_value()) {
+      statement.BindInt64(bind_index++,
+                          request.audio_video_watchtime_min->InSeconds());
+    }
+
+    if (request.filter_by_type.has_value()) {
+      statement.BindInt64(bind_index++,
+                          static_cast<int>(*request.filter_by_type));
+    }
   } else {
     sql.push_back("FROM mediaFeed");
 

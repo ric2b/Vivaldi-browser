@@ -114,7 +114,7 @@ IN_PROC_BROWSER_TEST_F(InProcessBrowserTest, AfterStartupTaskUtils) {
 
 // On Mac this crashes inside cc::SingleThreadProxy::SetNeedsCommit. See
 // https://ci.chromium.org/b/8923336499994443392
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 class SingleProcessBrowserTest : public InProcessBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -122,7 +122,7 @@ class SingleProcessBrowserTest : public InProcessBrowserTest {
   }
 };
 
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 // TODO(https://crbug.com/931233): Reenable on Linux.
 // TODO(https://crbug.com/987448): Reenable on Windows.
 #define MAYBE_Test DISABLED_Test

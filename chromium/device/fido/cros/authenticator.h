@@ -27,11 +27,15 @@ class COMPONENT_EXPORT(DEVICE_FIDO) ChromeOSAuthenticator
   ChromeOSAuthenticator();
   ~ChromeOSAuthenticator() override;
 
+  bool HasCredentialForGetAssertionRequest(
+      const CtapGetAssertionRequest& request);
+
   // FidoAuthenticator
   void InitializeAuthenticator(base::OnceClosure callback) override;
   void MakeCredential(CtapMakeCredentialRequest request,
                       MakeCredentialCallback callback) override;
   void GetAssertion(CtapGetAssertionRequest request,
+                    CtapGetAssertionOptions options,
                     GetAssertionCallback callback) override;
   void GetNextAssertion(GetAssertionCallback callback) override {}
   void Cancel() override {}
@@ -44,6 +48,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) ChromeOSAuthenticator
   bool IsInPairingMode() const override;
   bool IsPaired() const override;
   bool RequiresBlePairingPin() const override;
+
+  bool IsChromeOSAuthenticator() const override;
 
   void GetTouch(base::OnceClosure callback) override {}
   base::WeakPtr<FidoAuthenticator> GetWeakPtr() override;

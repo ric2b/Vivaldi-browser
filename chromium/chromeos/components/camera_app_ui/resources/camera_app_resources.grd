@@ -21,17 +21,19 @@
       <structure name="IDR_CAMERA_CAMERA3_DEVICE_INFO_JS" file="src/js/device/camera3_device_info.js" type="chrome_html" />
       <structure name="IDR_CAMERA_CAMERA_INTENT_JS" file="src/js/views/camera_intent.js" type="chrome_html" />
       <structure name="IDR_CAMERA_CAMERA_JS" file="src/js/views/camera.js" type="chrome_html" />
+      <structure name="IDR_CAMERA_CHROME_FILE_SYSTEM_ENTRY_JS" file="src/js/models/chrome_file_system_entry.js" type="chrome_html" />
       <structure name="IDR_CAMERA_CHROME_HELPER_JS" file="src/js/mojo/chrome_helper.js" type="chrome_html" />
       <structure name="IDR_CAMERA_CHROME_UTIL_JS" file="src/js/chrome_util.js" type="chrome_html" />
       <structure name="IDR_CAMERA_COMLINK_JS" file="src/js/lib/comlink.js" type="chrome_html" />
       <structure name="IDR_CAMERA_CONSTRAINTS_PREFERRER_JS" file="src/js/device/constraints_preferrer.js" type="chrome_html" />
-      <structure name="IDR_CAMERA_DEVICE_ERROR_JS" file="src/js/device/error.js" type="chrome_html" />
       <structure name="IDR_CAMERA_DEVICE_INFO_UPDATER_JS" file="src/js/device/device_info_updater.js" type="chrome_html" />
       <structure name="IDR_CAMERA_DEVICE_OPERATOR_JS" file="src/js/mojo/device_operator.js" type="chrome_html" />
       <structure name="IDR_CAMERA_DIALOG_JS" file="src/js/views/dialog.js" type="chrome_html" />
       <structure name="IDR_CAMERA_ERROR_JS" file="src/js/error.js" type="chrome_html" />
-      <structure name="IDR_CAMERA_FILENAMER_JS" file="src/js/models/filenamer.js" type="chrome_html" />
-      <structure name="IDR_CAMERA_FILESYSTEM_JS" file="src/js/models/filesystem.js" type="chrome_html" />
+      <structure name="IDR_CAMERA_FILE_NAMER_JS" file="src/js/models/file_namer.js" type="chrome_html" />
+      <structure name="IDR_CAMERA_FILE_SYSTEM_ENTRY_JS" file="src/js/models/file_system_entry.js" type="chrome_html" />
+      <structure name="IDR_CAMERA_FILE_SYSTEM_JS" file="src/js/models/file_system.js" type="chrome_html" />
+      <structure name="IDR_CAMERA_FILE_UTIL_JS" file="src/js/models/file_util.js" type="chrome_html" />
       <structure name="IDR_CAMERA_GALLERYBUTTON_JS" file="src/js/gallerybutton.js" type="chrome_html" />
       <structure name="IDR_CAMERA_IMAGECAPTURE_JS" file="src/js/mojo/image_capture.js" type="chrome_html" />
       <structure name="IDR_CAMERA_INTENT_JS" file="src/js/intent.js" type="chrome_html" />
@@ -43,6 +45,7 @@
       <structure name="IDR_CAMERA_METRICS_JS" file="src/js/metrics.js" type="chrome_html" />
       <structure name="IDR_CAMERA_MODES_JS" file="src/js/views/camera/modes.js" type="chrome_html" />
       <structure name="IDR_CAMERA_MP4_VIDEO_PROCESSOR_JS" file="src/js/models/mp4_video_processor.js" type="chrome_html" />
+      <structure name="IDR_CAMERA_NATIVE_FILE_SYSTEM_ENTRY_JS" file="src/js/models/native_file_system_entry.js" type="chrome_html" />
       <structure name="IDR_CAMERA_NAV_JS" file="src/js/nav.js" type="chrome_html" />
       <structure name="IDR_CAMERA_NOP_VIDEO_PROCESSOR_JS" file="src/js/models/nop_video_processor.js" type="chrome_html" />
       <structure name="IDR_CAMERA_OPTIONS_JS" file="src/js/views/camera/options.js" type="chrome_html" />

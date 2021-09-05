@@ -38,7 +38,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/navigation_correction_tab_observer.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -79,12 +78,6 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/test_data_directory.h"
-#include "net/test/url_request/url_request_failed_job.h"
-#include "net/test/url_request/url_request_mock_http_job.h"
-#include "net/url_request/url_request.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_status.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_WIN)
@@ -439,8 +432,8 @@ CaptivePortalObserver::CaptivePortalObserver(Profile* profile)
           CaptivePortalServiceFactory::GetForProfile(profile)),
       captive_portal_result_(
           captive_portal_service_->last_detection_result()) {
-  subscription_ = captive_portal_service_->RegisterCallback(
-      base::Bind(&CaptivePortalObserver::Observe, base::Unretained(this)));
+  subscription_ = captive_portal_service_->RegisterCallback(base::BindRepeating(
+      &CaptivePortalObserver::Observe, base::Unretained(this)));
 }
 
 void CaptivePortalObserver::WaitForResults(int num_results_to_wait_for) {
@@ -629,12 +622,8 @@ class CaptivePortalBrowserTest : public InProcessBrowserTest {
   int NumNeedReloadTabs() const;
 
   // Navigates |browser|'s active tab to |url| and expects no captive portal
-  // test to be triggered.  |expected_navigations| is the number of times the
-  // active tab will end up being navigated.  It should be 1, except for the
-  // Link Doctor page, which acts like two navigations.
-  void NavigateToPageExpectNoTest(Browser* browser,
-                                  const GURL& url,
-                                  int expected_navigations);
+  // test to be triggered.
+  void NavigateToPageExpectNoTest(Browser* browser, const GURL& url);
 
   // Navigates |browser|'s active tab to an SSL tab that takes a while to load,
   // triggering a captive portal check, which is expected to give the result
@@ -937,12 +926,9 @@ CaptivePortalBrowserTest::CaptivePortalBrowserTest()
       scoped_domain_(false),
 #endif
       browser_list_(BrowserList::GetInstance()) {
-  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(true);
 }
 
-CaptivePortalBrowserTest::~CaptivePortalBrowserTest() {
-  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(false);
-}
+CaptivePortalBrowserTest::~CaptivePortalBrowserTest() = default;
 
 void CaptivePortalBrowserTest::SetUpOnMainThread() {
   url_loader_interceptor_ =
@@ -1193,22 +1179,19 @@ int CaptivePortalBrowserTest::NumNeedReloadTabs() const {
       captive_portal::CaptivePortalTabReloader::STATE_NEEDS_RELOAD);
 }
 
-void CaptivePortalBrowserTest::NavigateToPageExpectNoTest(
-    Browser* browser,
-    const GURL& url,
-    int expected_navigations) {
+void CaptivePortalBrowserTest::NavigateToPageExpectNoTest(Browser* browser,
+                                                          const GURL& url) {
   MultiNavigationObserver navigation_observer;
   CaptivePortalObserver portal_observer(browser->profile());
 
-  ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
-      browser, url, expected_navigations);
+  ui_test_utils::NavigateToURL(browser, url);
 
   // No captive portal checks should have ocurred or be pending, and there
   // should be no new tabs.
   EXPECT_EQ(0, portal_observer.num_results_received());
   EXPECT_FALSE(CheckPending(browser));
   EXPECT_EQ(1, browser->tab_strip_model()->count());
-  EXPECT_EQ(expected_navigations, navigation_observer.num_navigations());
+  EXPECT_EQ(1, navigation_observer.num_navigations());
   EXPECT_EQ(0, NumLoadingTabs());
   EXPECT_EQ(captive_portal::CaptivePortalTabReloader::STATE_NONE,
             GetStateOfTabReloaderAt(browser, 0));
@@ -1755,7 +1738,7 @@ void CaptivePortalBrowserTest::RunNavigateLoadingTabToTimeoutTest(
   // Temporarily disable the captive portal and navigate to the starting
   // URL, which may be a URL that will hang when behind a captive portal.
   SetBehindCaptivePortal(false);
-  NavigateToPageExpectNoTest(browser, starting_url, 1);
+  NavigateToPageExpectNoTest(browser, starting_url);
   SetBehindCaptivePortal(true);
 
   // Go to the first hanging url.
@@ -1824,18 +1807,16 @@ CaptivePortalBrowserTest::GetTabReloader(WebContents* web_contents) const {
       ->GetTabReloaderForTest();
 }
 
-// Make sure there's no test for a captive portal on HTTP timeouts.  This will
-// also trigger the link doctor page, which results in the load of a second
-// error page.
+// Make sure there's no test for a captive portal on HTTP timeouts.
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpTimeout) {
-  NavigateToPageExpectNoTest(browser(), GURL(kMockHttpConnectionTimeoutErr), 2);
+  NavigateToPageExpectNoTest(browser(), GURL(kMockHttpConnectionTimeoutErr));
 }
 
 // Make sure there's no check for a captive portal on HTTPS errors other than
 // timeouts, when they preempt the slow load timer.
 IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpsNonTimeoutError) {
-  NavigateToPageExpectNoTest(browser(), GURL(kMockHttpsConnectionUnexpectedErr),
-                             1);
+  NavigateToPageExpectNoTest(browser(),
+                             GURL(kMockHttpsConnectionUnexpectedErr));
 }
 
 // Make sure no captive portal test triggers on HTTPS timeouts of iframes.
@@ -1846,7 +1827,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpsIframeTimeout) {
   ASSERT_TRUE(https_server.Start());
 
   GURL url = https_server.GetURL(kTestServerIframeTimeoutPath);
-  NavigateToPageExpectNoTest(browser(), url, 1);
+  NavigateToPageExpectNoTest(browser(), url);
 }
 
 // Check the captive portal result when the test request reports a network
@@ -2784,7 +2765,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, HttpsToHttpRedirect) {
   GURL http_error_url("http://doesnt.exist/");
   NavigateToPageExpectNoTest(
       browser(),
-      https_server.GetURL(CreateServerRedirect(http_error_url.spec())), 1);
+      https_server.GetURL(CreateServerRedirect(http_error_url.spec())));
 }
 
 // Tests the 511 response code, along with an HTML redirect to a login page.
@@ -2851,7 +2832,9 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
             GetInterstitialType(broken_tab_contents));
 }
 
-IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest, SecureDnsCaptivePortal) {
+// Disabled due to flake. https://crbug.com/1113928
+IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
+                       DISABLED_SecureDnsCaptivePortal) {
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDnsOverHttpsMode,
                          SecureDnsConfig::kModeSecure);

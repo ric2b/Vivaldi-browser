@@ -45,6 +45,7 @@
 #include "ash/public/cpp/window_tree_host_lookup.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_helper_bridge.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes_util.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ui_base_features.h"
@@ -81,8 +82,11 @@ AccessibilityPrivateOpenSettingsSubpageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
 #if defined(OS_CHROMEOS)
+  // TODO(chrome-a11y-core): we can't open a settings page when you're on the
+  // signin profile, but maybe we should notify the user and explain why?
   Profile* profile = chromeos::AccessibilityManager::Get()->profile();
-  if (chromeos::settings::IsOSSettingsSubPage(params->subpage)) {
+  if (!chromeos::ProfileHelper::IsSigninProfile(profile) &&
+      chromeos::settings::IsOSSettingsSubPage(params->subpage)) {
     chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
         profile, params->subpage);
   }
@@ -308,7 +312,7 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
   accessibility_private::SyntheticMouseEvent* mouse_data = &params->mouse_event;
 
-  ui::EventType type;
+  ui::EventType type = ui::ET_UNKNOWN;
   switch (mouse_data->type) {
     case accessibility_private::SYNTHETIC_MOUSE_EVENT_TYPE_PRESS:
       type = ui::ET_MOUSE_PRESSED;
@@ -332,7 +336,14 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
       NOTREACHED();
   }
 
-  int flags = ui::EF_LEFT_MOUSE_BUTTON;
+  int flags = 0;
+  if (type != ui::ET_MOUSE_MOVED)
+    flags |= ui::EF_LEFT_MOUSE_BUTTON;
+
+  int changed_button_flags = flags;
+
+  if (mouse_data->touch_accessibility && *(mouse_data->touch_accessibility))
+    flags |= ui::EF_TOUCH_ACCESSIBILITY;
 
   // Locations are assumed to be display relative (and in DIPs).
   // TODO(crbug/893752) Choose correct display
@@ -341,7 +352,7 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
   std::unique_ptr<ui::MouseEvent> synthetic_mouse_event =
       std::make_unique<ui::MouseEvent>(type, location, location,
                                        ui::EventTimeForNow(), flags,
-                                       flags /* changed_button_flags */);
+                                       changed_button_flags);
 
   auto* host = ash::GetWindowTreeHostForDisplay(display.id());
   DCHECK(host);
@@ -422,10 +433,7 @@ AccessibilityPrivateForwardKeyEventsToSwitchAccessFunction::Run() {
               *args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  ash::AccessibilityController::Get()->ForwardKeyEventsToSwitchAccess(
-      params->should_forward);
-
-  return RespondNow(NoArguments());
+  return RespondNow(Error("Forwarding key events is no longer supported."));
 }
 
 ExtensionFunction::ResponseAction

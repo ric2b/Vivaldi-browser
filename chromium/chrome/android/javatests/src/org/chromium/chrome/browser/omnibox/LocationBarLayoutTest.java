@@ -12,6 +12,7 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
 import android.view.View;
@@ -36,7 +37,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Matchers;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
@@ -215,8 +216,9 @@ public class LocationBarLayoutTest {
         setUrlBarTextAndFocus("testing");
         Assert.assertEquals(getDeleteButton().getVisibility(), VISIBLE);
         ClickUtils.clickButton(getDeleteButton());
-        CriteriaHelper.pollUiThread(
-                () -> Assert.assertThat(getDeleteButton().getVisibility(), Matchers.not(VISIBLE)));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(getDeleteButton().getVisibility(), Matchers.not(VISIBLE));
+        });
         Assert.assertEquals("", getUrlText(getUrlBar()));
     }
 
@@ -263,7 +265,7 @@ public class LocationBarLayoutTest {
         onView(withId(R.id.location_bar_status)).check((view, e) -> {
             Assert.assertEquals(iconView.getVisibility(), VISIBLE);
             Assert.assertEquals(R.drawable.omnibox_https_valid,
-                    locationBar.getStatusViewCoordinatorForTesting()
+                    locationBar.getStatusCoordinatorForTesting()
                             .getSecurityIconResourceIdForTesting());
         });
     }
@@ -284,7 +286,7 @@ public class LocationBarLayoutTest {
         onView(withId(R.id.location_bar_status)).check((view, e) -> {
             Assert.assertEquals(statusIconView.getVisibility(), VISIBLE);
             Assert.assertEquals(R.drawable.ic_logo_googleg_20dp,
-                    locationBar.getStatusViewCoordinatorForTesting()
+                    locationBar.getStatusCoordinatorForTesting()
                             .getSecurityIconResourceIdForTesting());
         });
     }
@@ -602,14 +604,20 @@ public class LocationBarLayoutTest {
             return mActivityTestRule.getActivity().getWindow().getAttributes().softInputMode;
         };
         OmniboxTestUtils.toggleUrlBarFocus(urlBar, true);
-        CriteriaHelper.pollUiThread(Criteria.equals(true, urlBar::hasFocus));
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, softInputModeCallable));
+        CriteriaHelper.pollUiThread(urlBar::hasFocus);
+        CriteriaHelper.pollUiThread(() -> {
+            int inputMode =
+                    mActivityTestRule.getActivity().getWindow().getAttributes().softInputMode;
+            Criteria.checkThat(inputMode, is(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN));
+        });
 
         OmniboxTestUtils.toggleUrlBarFocus(urlBar, false);
-        CriteriaHelper.pollUiThread(Criteria.equals(false, urlBar::hasFocus));
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE, softInputModeCallable));
+        CriteriaHelper.pollUiThread(() -> !urlBar.hasFocus());
+        CriteriaHelper.pollUiThread(() -> {
+            int inputMode =
+                    mActivityTestRule.getActivity().getWindow().getAttributes().softInputMode;
+            Criteria.checkThat(inputMode, is(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE));
+        });
     }
 
     /** Test NPE when focus callback triggers after LocationBarLayout is destroyed. */

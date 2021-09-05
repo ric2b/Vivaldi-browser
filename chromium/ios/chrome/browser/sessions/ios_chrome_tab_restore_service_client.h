@@ -29,13 +29,14 @@ class IOSChromeTabRestoreServiceClient
       const sessions::LiveTab* tab) override;
   sessions::LiveTabContext* FindLiveTabContextWithID(
       SessionID desired_id) override;
+  sessions::LiveTabContext* FindLiveTabContextWithGroup(
+      tab_groups::TabGroupId group) override;
   bool ShouldTrackURLForRestore(const GURL& url) override;
   std::string GetExtensionAppIDForTab(sessions::LiveTab* tab) override;
   base::FilePath GetPathToSaveTo() override;
   GURL GetNewTabURL() override;
   bool HasLastSession() override;
-  void GetLastSession(sessions::GetLastSessionCallback callback,
-                      base::CancelableTaskTracker* tracker) override;
+  void GetLastSession(sessions::GetLastSessionCallback callback) override;
 
   ChromeBrowserState* browser_state_;
 

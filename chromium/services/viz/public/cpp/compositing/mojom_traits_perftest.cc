@@ -27,9 +27,9 @@
 namespace viz {
 namespace {
 
-static const int kTimeLimitMillis = 2000;
+static const auto kTimeLimit = base::TimeDelta::FromSeconds(2);
 static const int kNumWarmupRuns = 20;
-static const int kTimeCheckInterval = 10;
+static const int kNumRunsPerTimeRecord = 10;
 
 enum class UseSingleSharedQuadState { YES, NO };
 
@@ -73,14 +73,12 @@ class VizSerializationPerfTest : public testing::Test {
           message.payload(), message.payload_num_bytes(), &compositor_frame);
     }
 
-    base::TimeTicks start = base::TimeTicks::Now();
-    base::TimeTicks end =
-        start + base::TimeDelta::FromMilliseconds(kTimeLimitMillis);
-    base::TimeTicks now = start;
+    base::TimeTicks now = base::TimeTicks::Now();
+    base::TimeTicks end = now + kTimeLimit;
     base::TimeDelta min_time;
     size_t count = 0;
-    while (start < end) {
-      for (int i = 0; i < kTimeCheckInterval; ++i) {
+    for (base::TimeTicks start = now; start < end; start = now) {
+      for (int i = 0; i < kNumRunsPerTimeRecord; ++i) {
         CompositorFrame compositor_frame;
         mojom::CompositorFrame::Deserialize(
             message.payload(), message.payload_num_bytes(), &compositor_frame);
@@ -92,14 +90,13 @@ class VizSerializationPerfTest : public testing::Test {
 
       if (now - start < min_time || min_time.is_zero())
         min_time = now - start;
-      start = now;
     }
 
     auto reporter = SetUpReporter(story, single_sqs);
     reporter.AddResult(kMetricStructDeserializationTimeUs,
-                       min_time.InMicrosecondsF() / kTimeCheckInterval);
+                       min_time.InMicrosecondsF() / kNumRunsPerTimeRecord);
     reporter.AddResult(kMetricStructDeserializationThroughputRunsPerS,
-                       count * 1000 / kTimeLimitMillis);
+                       count * kTimeLimit.ToHz());
   }
 
   static void RunSerializationTestStructTraits(
@@ -111,14 +108,12 @@ class VizSerializationPerfTest : public testing::Test {
           mojom::CompositorFrame::SerializeAsMessage(&frame);
     }
 
-    base::TimeTicks start = base::TimeTicks::Now();
-    base::TimeTicks end =
-        start + base::TimeDelta::FromMilliseconds(kTimeLimitMillis);
-    base::TimeTicks now = start;
+    base::TimeTicks now = base::TimeTicks::Now();
+    base::TimeTicks end = now + kTimeLimit;
     base::TimeDelta min_time;
     size_t count = 0;
-    while (start < end) {
-      for (int i = 0; i < kTimeCheckInterval; ++i) {
+    for (base::TimeTicks start = now; start < end; start = now) {
+      for (int i = 0; i < kNumRunsPerTimeRecord; ++i) {
         mojo::Message message =
             mojom::CompositorFrame::SerializeAsMessage(&frame);
         now = base::TimeTicks::Now();
@@ -129,14 +124,13 @@ class VizSerializationPerfTest : public testing::Test {
 
       if (now - start < min_time || min_time.is_zero())
         min_time = now - start;
-      start = now;
     }
 
     auto reporter = SetUpReporter(story, single_sqs);
     reporter.AddResult(kMetricStructSerializationTimeUs,
-                       min_time.InMicrosecondsF() / kTimeCheckInterval);
+                       min_time.InMicrosecondsF() / kNumRunsPerTimeRecord);
     reporter.AddResult(kMetricStructSerializationThroughputRunsPerS,
-                       count * 1000 / kTimeLimitMillis);
+                       count / kTimeLimit.InSecondsF());
   }
 
   static void RunComplexCompositorFrameTest(const std::string& story) {
@@ -199,7 +193,7 @@ class VizSerializationPerfTest : public testing::Test {
     SkScalar arbitrary_sigma = SkFloatToScalar(2.0f);
     gfx::ContentColorUsage arbitrary_content_color_usage =
         gfx::ContentColorUsage::kSRGB;
-    int root_id = 14;
+    RenderPassId root_id{14};
 
     cc::FilterOperations arbitrary_filters1;
     arbitrary_filters1.Append(
@@ -308,7 +302,8 @@ class VizSerializationPerfTest : public testing::Test {
 
     for (uint32_t i = 0; i < num_passes; ++i) {
       std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
-      render_pass->SetNew(1, gfx::Rect(20, 20), gfx::Rect(), gfx::Transform());
+      render_pass->SetNew(RenderPassId{1}, gfx::Rect(20, 20), gfx::Rect(),
+                          gfx::Transform());
       for (uint32_t j = 0; j < num_quads; ++j) {
         if (j == 0 || single_sqs == UseSingleSharedQuadState::NO)
           render_pass->CreateAndAppendSharedQuadState();

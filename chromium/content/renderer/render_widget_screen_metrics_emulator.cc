@@ -4,6 +4,7 @@
 
 #include "content/renderer/render_widget_screen_metrics_emulator.h"
 
+#include "base/numerics/safe_conversions.h"
 #include "content/public/common/untrustworthy_context_menu_params.h"
 #include "content/renderer/render_widget_screen_metrics_emulator_delegate.h"
 
@@ -11,7 +12,7 @@ namespace content {
 
 RenderWidgetScreenMetricsEmulator::RenderWidgetScreenMetricsEmulator(
     RenderWidgetScreenMetricsEmulatorDelegate* delegate,
-    const ScreenInfo& screen_info,
+    const blink::ScreenInfo& screen_info,
     const gfx::Size& widget_size,
     const gfx::Size& visible_viewport_size,
     const gfx::Rect& view_screen_rect,
@@ -30,12 +31,13 @@ void RenderWidgetScreenMetricsEmulator::DisableAndApply() {
   delegate_->SetScreenMetricsEmulationParameters(false, emulation_params_);
   delegate_->SetScreenRects(original_view_screen_rect_,
                             original_window_screen_rect_);
+  delegate_->SetRootWindowSegments(original_root_window_segments_);
   delegate_->SetScreenInfoAndSize(original_screen_info_, original_widget_size_,
                                   original_visible_viewport_size_);
 }
 
 void RenderWidgetScreenMetricsEmulator::ChangeEmulationParams(
-    const blink::WebDeviceEmulationParams& params) {
+    const blink::DeviceEmulationParams& params) {
   emulation_params_ = params;
   Apply();
 }
@@ -59,17 +61,17 @@ void RenderWidgetScreenMetricsEmulator::Apply() {
 
   // If either the width or height are specified by the emulator, then we use
   // that size, and assume that they have the scale pre-applied to them.
-  if (emulation_params_.view_size.width) {
-    widget_size.set_width(emulation_params_.view_size.width);
+  if (emulation_params_.view_size.width()) {
+    widget_size.set_width(emulation_params_.view_size.width());
   } else {
     widget_size.set_width(
-        gfx::ToRoundedInt(widget_size.width() / emulation_params_.scale));
+        base::ClampRound(widget_size.width() / emulation_params_.scale));
   }
-  if (emulation_params_.view_size.height) {
-    widget_size.set_height(emulation_params_.view_size.height);
+  if (emulation_params_.view_size.height()) {
+    widget_size.set_height(emulation_params_.view_size.height());
   } else {
     widget_size.set_height(
-        gfx::ToRoundedInt(widget_size.height() / emulation_params_.scale));
+        base::ClampRound(widget_size.height() / emulation_params_.scale));
   }
 
   // For mobile emulation, the window size is changed to match the widget size,
@@ -108,35 +110,19 @@ void RenderWidgetScreenMetricsEmulator::Apply() {
   if (emulation_params_.device_scale_factor)
     device_scale_factor = emulation_params_.device_scale_factor;
 
-  ScreenOrientationValues orientation_type =
+  blink::mojom::ScreenOrientation orientation_type =
       original_screen_info().orientation_type;
   uint16_t orientation_angle = original_screen_info().orientation_angle;
-
-  switch (emulation_params_.screen_orientation_type) {
-    case blink::kWebScreenOrientationUndefined:
-      break;  // Leave as the real value.
-    case blink::kWebScreenOrientationPortraitPrimary:
-      orientation_type = SCREEN_ORIENTATION_VALUES_PORTRAIT_PRIMARY;
-      orientation_angle = emulation_params_.screen_orientation_angle;
-      break;
-    case blink::kWebScreenOrientationPortraitSecondary:
-      orientation_type = SCREEN_ORIENTATION_VALUES_PORTRAIT_SECONDARY;
-      orientation_angle = emulation_params_.screen_orientation_angle;
-      break;
-    case blink::kWebScreenOrientationLandscapePrimary:
-      orientation_type = SCREEN_ORIENTATION_VALUES_LANDSCAPE_PRIMARY;
-      orientation_angle = emulation_params_.screen_orientation_angle;
-      break;
-    case blink::kWebScreenOrientationLandscapeSecondary:
-      orientation_type = SCREEN_ORIENTATION_VALUES_LANDSCAPE_SECONDARY;
-      orientation_angle = emulation_params_.screen_orientation_angle;
-      break;
+  if (emulation_params_.screen_orientation_type !=
+      blink::mojom::ScreenOrientation::kUndefined) {
+    orientation_type = emulation_params_.screen_orientation_type;
+    orientation_angle = emulation_params_.screen_orientation_angle;
   }
 
   // Pass three emulation parameters to the blink side:
   // - we keep the real device scale factor in compositor to produce sharp image
   //   even when emulating different scale factor;
-  blink::WebDeviceEmulationParams modified_emulation_params = emulation_params_;
+  blink::DeviceEmulationParams modified_emulation_params = emulation_params_;
   modified_emulation_params.device_scale_factor =
       original_screen_info().device_scale_factor;
   delegate_->SetScreenMetricsEmulationParameters(true,
@@ -145,7 +131,19 @@ void RenderWidgetScreenMetricsEmulator::Apply() {
   delegate_->SetScreenRects(gfx::Rect(widget_pos, widget_size),
                             gfx::Rect(window_pos, window_size));
 
-  ScreenInfo screen_info = original_screen_info();
+  // If there are no emulated window segments, use the emulated widget size
+  // instead. When we switch from emulated segments to not having any, we should
+  // have a single segment that matches the widget size.
+  bool has_emulated_segments = emulation_params_.window_segments.size();
+  if (has_emulated_segments) {
+    delegate_->SetRootWindowSegments(emulation_params_.window_segments);
+  } else {
+    std::vector<gfx::Rect> emulated_segments{
+        {0, 0, widget_size.width(), widget_size.height()}};
+    delegate_->SetRootWindowSegments(emulated_segments);
+  }
+
+  blink::ScreenInfo screen_info = original_screen_info();
   screen_info.device_scale_factor = device_scale_factor;
   screen_info.rect = screen_rect;
   screen_info.available_rect = screen_rect;
@@ -156,12 +154,14 @@ void RenderWidgetScreenMetricsEmulator::Apply() {
 }
 
 void RenderWidgetScreenMetricsEmulator::OnSynchronizeVisualProperties(
-    const ScreenInfo& screen_info,
+    const blink::ScreenInfo& screen_info,
     const gfx::Size& widget_size,
-    const gfx::Size& visible_viewport_size) {
+    const gfx::Size& visible_viewport_size,
+    const std::vector<gfx::Rect>& root_window_segments) {
   original_screen_info_ = screen_info;
   original_widget_size_ = widget_size;
   original_visible_viewport_size_ = visible_viewport_size;
+  original_root_window_segments_ = root_window_segments;
   Apply();
 }
 

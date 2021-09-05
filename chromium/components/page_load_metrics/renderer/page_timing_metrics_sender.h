@@ -14,9 +14,9 @@
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "components/page_load_metrics/renderer/page_resource_data_use.h"
 #include "components/page_load_metrics/renderer/page_timing_metadata_recorder.h"
-#include "content/public/common/previews_state.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom-shared.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
@@ -72,8 +72,7 @@ class PageTimingMetricsSender {
                                       int request_id,
                                       int64_t encoded_body_length,
                                       const std::string& mime_type);
-  void OnMainFrameDocumentIntersectionChanged(
-      const blink::WebRect& intersect_rect);
+  void OnMainFrameIntersectionChanged(const blink::WebRect& intersect_rect);
 
   void DidObserveInputDelay(base::TimeDelta input_delay);
   // Updates the timing information. Buffers |timing| to be sent over mojo

@@ -45,7 +45,6 @@ enum SkeletonType {
   // Max value used to determine the number of different types. Update this and
   // |kSkeletonTypeBitLength| when new SkeletonTypes are added.
   kMaxValue = kSeparatorsRemoved
-
 };
 
 const uint8_t kSkeletonTypeBitLength = 1;
@@ -104,17 +103,24 @@ class IDNSpoofChecker {
 
   IDNSpoofChecker();
   ~IDNSpoofChecker();
-  // Returns kSafe if |label| is safe to display as Unicode and fills
-  // |top_level_domain_unicode| with the converted value. Otherwise, returns the
-  // reason of the failure and leaves |top_level_domain_unicode| unchanged.
+
+  // Returns kSafe if |label| is safe to display as Unicode. Some of the checks
+  // depend on the TLD of the full domain name, so this function also takes
+  // the ASCII (including punycode) TLD in |top_level_domain| and its unicode
+  // version in |top_level_domain_unicode|.
   // This method doesn't check for similarity to a top domain: If the input
   // matches a top domain but is otherwise safe (e.g. googlé.com), the result
   // will be kSafe.
   // In the event of library failure, all IDN inputs will be treated as unsafe
-  // and the return value will be kUSpoofChecks.
+  // and the return value will be kICUSpoofChecks.
   // See the function body for details on the specific safety checks performed.
-  // |top_level_domain_unicode| can be empty if |top_level_domain| is not well
-  // formed punycode.
+  // |top_level_domain_unicode| can be passed as empty if |top_level_domain| is
+  // not well formed punycode.
+  // Example usages:
+  // - SafeToDisplayAsUnicode(L"google", "com", "com") -> kSafe
+  // - SafeToDisplayAsUnicode(L"аррӏе", "com", "com") -> kWholeScriptConfusable
+  // - SafeToDisplayAsUnicode(L"аррӏе", "xn--p1ai", "рф") -> kSafe (xn--p1ai is
+  //   the punycode form of рф)
   Result SafeToDisplayAsUnicode(base::StringPiece16 label,
                                 base::StringPiece top_level_domain,
                                 base::StringPiece16 top_level_domain_unicode);
@@ -133,7 +139,7 @@ class IDNSpoofChecker {
 
   // Returns skeleton strings computed from |hostname|. This function can apply
   // extra mappings to some characters to produce multiple skeletons.
-  Skeletons GetSkeletons(base::StringPiece16 hostname);
+  Skeletons GetSkeletons(base::StringPiece16 hostname) const;
 
   // Returns a top domain from the top 10K list matching the given |skeleton|.
   // If |without_separators| is set, the skeleton will be compared against
@@ -180,7 +186,7 @@ class IDNSpoofChecker {
   // number of domains in |script| (as in, written script). |tld_unicode| can be
   // empty if |tld| is not well formed punycode.
   static bool IsWholeScriptConfusableAllowedForTLD(
-      const WholeScriptConfusable& wsc,
+      const WholeScriptConfusable& script,
       base::StringPiece tld,
       base::StringPiece16 tld_unicode);
 

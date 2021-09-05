@@ -21,11 +21,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ui/base/base_window.h"
-#include "ui/gfx/codec/jpeg_codec.h"
-#include "ui/gfx/codec/png_codec.h"
-#include "ui/gfx/image/image.h"
-#include "ui/gfx/scrollbar_size.h"
-#include "ui/gfx/skbitmap_operations.h"
 #include "ui/vivaldi_browser_window.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
@@ -33,6 +28,31 @@
 
 namespace vivaldi {
 namespace ui_tools {
+
+namespace {
+
+bool IsMainVivaldiBrowserWindow(VivaldiBrowserWindow* window) {
+  DCHECK(window);
+  base::JSONParserOptions options = base::JSON_PARSE_RFC;
+  base::Optional<base::Value> json =
+      base::JSONReader::Read(window->browser()->ext_data(), options);
+  base::DictionaryValue* dict = NULL;
+  std::string window_type;
+  if (json && json->GetAsDictionary(&dict)) {
+    dict->GetString("windowType", &window_type);
+    // Don't track popup windows (like settings) in the session.
+    // We have "", "popup" and "settings".
+    // TODO(pettern): Popup windows still rely on extData, this
+    // should go away and we should use the type sent to the apis
+    // instead.
+    if (window_type == "popup" || window_type == "settings") {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
 
 extensions::WebViewGuest* GetActiveWebViewGuest() {
   Browser* browser = chrome::FindLastActive();
@@ -57,6 +77,17 @@ VivaldiBrowserWindow* GetActiveAppWindow() {
   if (browser && browser->is_vivaldi())
     return static_cast<VivaldiBrowserWindow*>(browser->window());
 #endif
+  return nullptr;
+}
+
+VivaldiBrowserWindow* GetLastActiveMainWindow() {
+  BrowserList* browser_list = BrowserList::GetInstance();
+  for (auto i = browser_list->begin_last_active();
+        i != browser_list->end_last_active(); ++i) {
+    VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(*i);
+    if (window && IsMainVivaldiBrowserWindow(window))
+      return window;
+  }
   return nullptr;
 }
 
@@ -91,65 +122,6 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
   return outside;
 }
 
-bool EncodeBitmap(const SkBitmap& bitmap,
-                  std::vector<unsigned char>* data,
-                  std::string* mime_type,
-                  extensions::api::extension_types::ImageFormat image_format,
-                  int image_quality) {
-  bool encoded = false;
-
-  switch (image_format) {
-    case extensions::api::extension_types::IMAGE_FORMAT_JPEG:
-      if (bitmap.getPixels()) {
-        encoded = gfx::JPEGCodec::Encode(bitmap, image_quality, data);
-        *mime_type = "image/jpeg";  // kMimeTypeJpeg;
-        if (!encoded) {
-          LOG(ERROR) << "Failed to encode bitmap as jpeg";
-        }
-      } else {
-        LOG(ERROR) << "Cannot encode empty bitmap as jpeg";
-      }
-      break;
-    case extensions::api::extension_types::IMAGE_FORMAT_PNG:
-      encoded =
-          gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
-                                            true,  // Discard transparency.
-                                            data);
-      *mime_type = "image/png";  // kMimeTypePng;
-      if (!encoded) {
-        LOG(ERROR) << "Failed to encode bitmap as png";
-      }
-      break;
-    default:
-      NOTREACHED() << "Invalid image format.";
-  }
-
-  return encoded;
-}
-
-bool IsMainVivaldiBrowserWindow(Browser* browser) {
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  base::Optional<base::Value> json =
-      base::JSONReader::Read(browser->ext_data(), options);
-  base::DictionaryValue* dict = NULL;
-  std::string window_type;
-  if (json && json->GetAsDictionary(&dict)) {
-    dict->GetString("windowType", &window_type);
-    // Don't track popup windows (like settings) in the session.
-    // We have "", "popup" and "settings".
-    // TODO(pettern): Popup windows still rely on extData, this
-    // should go away and we should use the type sent to the apis
-    // instead.
-    if (window_type == "popup" || window_type == "settings") {
-      return false;
-    }
-  }
-  if (static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
-      VivaldiBrowserWindow::WindowType::NORMAL) {
-    return true;
-  }
-  return false;
-}
 
 Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
   if (current_browser->profile()->IsOffTheRecord()) {
@@ -166,7 +138,8 @@ Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
     if (browser == current_browser) {
       continue;
     }
-    if (!browser->window()) {
+    VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+    if (!window || !IsMainVivaldiBrowserWindow(window)) {
       continue;
     }
     if (browser->type() != current_browser->type()) {
@@ -177,9 +150,6 @@ Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
     }
     // Only move within the same profile.
     if (current_browser->profile() != browser->profile()) {
-      continue;
-    }
-    if (!IsMainVivaldiBrowserWindow(browser)) {
       continue;
     }
     if (browser->tab_strip_model()->empty() ||

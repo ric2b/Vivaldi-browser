@@ -8,17 +8,21 @@
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> estava a utilizar o Chrome</translation>
 <translation id="1097330777386562916">Limpar os cookies e os dados do site quando sair do Chrome</translation>
 <translation id="110877069173485804">Este é o seu Chrome</translation>
+<translation id="1125124144982679672">Quem está a utilizar o Chrome?</translation>
 <translation id="1142745911746664600">Não é possível atualizar o Chrome</translation>
 <translation id="1154147086299354128">&amp;Abrir no Chrome</translation>
 <translation id="123620459398936149">O Chrome OS não conseguiu sincronizar os dados. Atualize a sua frase de acesso de sincronização.</translation>
 <translation id="1302523850133262269">Aguarde até que o Chrome instale as atualizações do sistema mais recentes.</translation>
+<translation id="1355000804395496115">Utilize perfis diferentes no Chrome para separar a navegação profissional e pessoal ou para utilizadores diferentes deste dispositivo.</translation>
 <translation id="137466361146087520">Google Chrome Beta</translation>
 <translation id="1399397803214730675">Este computador já tem uma versão mais recente do Google Chrome. Se o software não estiver a funcionar, desinstale o Google Chrome e tente novamente.</translation>
 <translation id="1434626383986940139">Apps do Chrome para o Canary</translation>
+<translation id="1513277449617685876">Para separar a navegação pessoal e a navegação de <ph name="NEW_USER" />, crie um novo perfil no Chrome.</translation>
 <translation id="1553358976309200471">Atualizar o Chrome</translation>
 <translation id="1587223624401073077">O Google Chrome está a utilizar a câmara.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> é perigoso, por isso o Chrome bloqueou-o.</translation>
 <translation id="1619887657840448962">Para tornar o Chrome mais seguro, desativámos a seguinte extensão, que não está listada na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />, e é possível que tenha sido adicionada sem o seu conhecimento.</translation>
+<translation id="162448658176061655">O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: há uns momentos.</translation>
 <translation id="162629503687514352">O Chrome OS não conseguiu sincronizar as suas palavras-passe.</translation>
 <translation id="1628000112320670027">Obter ajuda relacionada com o Chrome</translation>
 <translation id="1662639173275167396">Foi possível conceber o Chrome OS devido a <ph name="BEGIN_LINK_CROS_OSS" />software de código aberto<ph name="END_LINK_CROS_OSS" />, como o <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Beta)<ph name="END_LINK_LINUX_OSS" />.</translation>
@@ -53,7 +57,6 @@
 <translation id="2534507159460261402">Google Pay (copiado para o Chrome)</translation>
 <translation id="2580411288591421699">Não é possível instalar a mesma versão do Google Chrome atualmente em execução. Feche o Google Chrome e tente novamente.</translation>
 <translation id="2586406160782125153">Esta ação elimina os seus dados de navegação deste dispositivo. Para recuperar os seus dados mais tarde, inicie sessão no Chrome como <ph name="USER_EMAIL" />.</translation>
-<translation id="2588322182880276190">Logótipo do Chrome</translation>
 <translation id="2622559029861875898">O Chrome não consegue verificar se existem atualizações. Experimente verificar a sua ligação à Internet.</translation>
 <translation id="2644798301485385923">Sistema Chrome OS</translation>
 <translation id="2652691236519827073">Abrir link num novo &amp;separador do Chrome</translation>
@@ -66,6 +69,7 @@
 <translation id="2847461019998147611">Apresentar o Google Chrome neste idioma</translation>
 <translation id="2857540653560290388">A iniciar o Chrome…</translation>
 <translation id="2871893339301912279">Tem sessão iniciada no Chrome!</translation>
+<translation id="2885378588091291677">Gestor de tarefas</translation>
 <translation id="2888126860611144412">Acerca do Chrome</translation>
 <translation id="2929907241665500097">O Chrome não foi atualizado. Ocorreu um erro. <ph name="BEGIN_LINK" />Corrija problemas de atualização do Chrome e falhas nas atualizações<ph name="END_LINK" />.</translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> – Início de sessão na rede – Chrome</translation>
@@ -101,6 +105,7 @@
 <translation id="3889417619312448367">Desinstalar o Google Chrome</translation>
 <translation id="4050175100176540509">Estão disponíveis na versão mais recente melhorias de segurança importantes e novas funcionalidades.</translation>
 <translation id="4053720452172726777">Personalizar e controlar o Google Chrome</translation>
+<translation id="4110895483821904099">Configure o seu novo perfil do Chrome</translation>
 <translation id="4143243756087420366">Nome e imagem do Chrome</translation>
 <translation id="4147555960264124640">Está a iniciar sessão com uma conta gerida e a permitir que o gestor controle o seu perfil do Google Chrome. Os seus dados do Chrome, como aplicações, marcadores, histórico, palavras-passe e outras definições, ficarão associados definitivamente a <ph name="USER_NAME" />. Poderá eliminar estes dados através do Painel de Controlo das Contas Google, mas não poderá associá-los a outra conta. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Houve uma falha no programa de instalação ao descompactar o arquivo. Descarregue de novo o Google Chrome.</translation>
@@ -134,6 +139,7 @@
 <translation id="4771048833395599659">Este ficheiro pode ser perigoso. Como tal, o Chrome bloqueou-o.</translation>
 <translation id="479167709087336770">Utiliza o mesmo corretor ortográfico utilizado na Pesquisa Google. O texto que introduzir no navegador é enviado à Google. Pode alterar este comportamento nas definições.</translation>
 <translation id="4891791193823137474">Permitir que o Google Chrome seja executado em segundo plano</translation>
+<translation id="489337168347244450">{NUM_DAYS,plural, =1{O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: há 1 dia.}other{O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: há {NUM_DAYS} dias.}}</translation>
 <translation id="4895437082222824641">Abrir link num novo &amp;separador do Chrome</translation>
 <translation id="4953650215774548573">Definir o Google Chrome como o navegador predefinido</translation>
 <translation id="495931528404527476">No Chrome</translation>
@@ -149,6 +155,7 @@
 <translation id="5430073640787465221">O ficheiro de preferências está danificado ou não é válido. O Google Chrome não consegue recuperar as suas definições.</translation>
 <translation id="556024056938947818">O Google Chrome está a tentar mostrar palavras-passe.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
+<translation id="5633355459292055250">Perguntar quando abrir o Chrome</translation>
 <translation id="5657226924540934362">Se não encontrar uma definição nesta página, procure nas <ph name="LINK_BEGIN" />
       Definições do Chrome OS<ph name="LINK_END" />.</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> pode ser perigoso, por isso o Chrome bloqueou-o.</translation>
@@ -174,6 +181,7 @@
 <translation id="6291549208091401781">O Google Chrome já está instalado para todos os utilizadores no seu computador.</translation>
 <translation id="6338556085225130112">A atualizar o Google Chrome…</translation>
 <translation id="6368958679917195344">O Chrome OS é possível através de <ph name="BEGIN_LINK_CROS_OSS" />software de código aberto<ph name="END_LINK_CROS_OSS" /> adicional.</translation>
+<translation id="6454142105866844106">O Chrome verifica a existência de software indesejável uma vez por semana.</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> – Google Chrome Dev</translation>
 <translation id="6566149418543181476">A atualizar o Google Chrome (<ph name="PROGRESS_PERCENT" />)…</translation>
 <translation id="6676384891291319759">Aceder à Internet</translation>
@@ -191,14 +199,17 @@
 <translation id="7106741999175697885">Gestor de tarefas - Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{Está disponível uma atualização para o Chrome que será aplicada logo que o reinicie.}=1{Está disponível uma atualização para o Chrome que será aplicada logo que o reinicie. Não é possível reabrir a sua janela de navegação anónima.}other{Está disponível uma atualização para o Chrome que será aplicada logo que o reinicie. Não é possível reabrir as suas # janelas de navegação anónima.}}</translation>
 <translation id="7155997830309522122">Em caso afirmativo, edite a sua palavra-passe guardada no Chrome para que corresponda à nova palavra-passe.</translation>
+<translation id="7236955538461508933">{NUM_HOURS,plural, =1{O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: há 1 hora.}other{O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: há {NUM_HOURS} horas.}}</translation>
 <translation id="7242029209006116544">Está a iniciar sessão com uma conta gerida e a permitir que o gestor controle o seu perfil do Google Chrome. Os seus dados do Chrome, como aplicações, marcadores, histórico, palavras-passe e outras definições, ficarão associados definitivamente a <ph name="USER_NAME" />. Poderá eliminar estes dados através do Painel de Controlo das Contas Google, mas não poderá associá-los a outra conta. Opcionalmente, pode criar um perfil novo para manter os seus dados atuais do Chrome em separado. <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">Este idioma é utilizado para apresentar a IU do Google Chrome</translation>
 <translation id="7296210096911315575">Informações de utilização e segurança importantes</translation>
 <translation id="7308322188646931570">O Chrome necessita de acesso ao armazenamento para transferir ficheiros.</translation>
 <translation id="7339898014177206373">Nova janela</translation>
+<translation id="7386132805935307836">O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: ontem.</translation>
 <translation id="7398801000654795464">Iniciou sessão no Chrome com a conta <ph name="USER_EMAIL_ADDRESS" />. Utilize a mesma conta para iniciar sessão novamente.</translation>
 <translation id="7408085963519505752">Termos do Chrome OS</translation>
 <translation id="7419046106786626209">O Chrome OS não conseguiu sincronizar os dados porque a sincronização não está disponível para o seu domínio.</translation>
+<translation id="7423733001651488593">Esta ação elimina permanentemente os dados de navegação deste dispositivo. Para recuperar os dados, inicie sessão no Chrome como</translation>
 <translation id="7486227612705979895">O Chrome vai aceder ao Drive para fornecer sugestões na barra de endereço.</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7573289029918943991">Para ver se o seu dispositivo está atualizado, aceda às <ph name="LINK_BEGIN" />Definições do Chrome OS<ph name="LINK_END" />.</translation>
@@ -230,6 +241,7 @@
 <translation id="828798499196665338">O teu pai/mãe desativou as "Autorizações para sites, apps e extensões" para o Chrome. Não é permitido ativar esta <ph name="EXTENSION_TYPE_PARAMETER" />.</translation>
 <translation id="8290100596633877290">Ups! O Google Chrome falhou. Reiniciar agora?</translation>
 <translation id="8342675569599923794">Este ficheiro é perigoso. Como tal, o Chrome bloqueou-o.</translation>
+<translation id="8344083974188970894">{NUM_MINS,plural, =1{O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: há 1 minuto.}other{O Chrome verifica a existência de software indesejável uma vez por semana. Última verificação: há {NUM_MINS} minutos.}}</translation>
 <translation id="8370517070665726704">Copyright <ph name="YEAR" /> Google LLC. Todos os direitos reservados.</translation>
 <translation id="840084489713044809">O Google Chrome pretende exportar as suas palavras-passe.</translation>
 <translation id="8498858610309223613">Acabou de ser instalada uma atualização de segurança especial para o Google Chrome. Reinicie agora e iremos restaurar os seus separadores.</translation>
@@ -242,8 +254,10 @@
 <translation id="8641606876632989680">O Chrome envia-lhe uma notificação quando iniciar sessão com uma palavra-passe comprometida.</translation>
 <translation id="8669527147644353129">Ajudante do Google Chrome</translation>
 <translation id="8679801911857917785">Também controla a página apresentada quando inicia o Chrome.</translation>
+<translation id="8681614230122836773">O Chrome encontrou software prejudicial no seu computador.</translation>
 <translation id="870251953148363156">Atualizar o &amp;Google Chrome</translation>
 <translation id="873133009373065397">O Google Chrome não consegue determinar ou definir o navegador predefinido</translation>
+<translation id="8748242232968346981">Pretende criar o seu próprio perfil no Chrome?</translation>
 <translation id="8823341990149967727">O Chrome Está Desatualizado</translation>
 <translation id="8834965163890861871">O Google Chrome está a tentar editar palavras-passe. Escreva a sua palavra-passe do Windows para permitir esta ação.</translation>
 <translation id="884296878221830158">Também controla a página apresentada quando inicia o Chrome ou clica no botão Página Inicial.</translation>

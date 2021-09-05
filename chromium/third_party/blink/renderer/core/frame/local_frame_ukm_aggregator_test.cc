@@ -37,16 +37,15 @@ class LocalFrameUkmAggregatorTest : public testing::Test {
   void ResetAggregator() { aggregator_.reset(); }
 
   std::string GetPrimaryMetricName() {
-    return LocalFrameUkmAggregator::primary_metric_name().Utf8();
+    return LocalFrameUkmAggregator::primary_metric_name();
   }
 
   std::string GetMetricName(int index) {
-    return LocalFrameUkmAggregator::metrics_data()[index].name.Utf8();
+    return LocalFrameUkmAggregator::metrics_data()[index].name;
   }
 
   std::string GetPercentageMetricName(int index) {
-    return LocalFrameUkmAggregator::metrics_data()[index].name.Utf8() +
-           "Percentage";
+    return GetMetricName(index) + "Percentage";
   }
 
   void ChooseNextFrameForTest() { aggregator().ChooseNextFrameForTest(); }
@@ -62,7 +61,7 @@ class LocalFrameUkmAggregatorTest : public testing::Test {
   void VerifyUpdateEntry(unsigned index,
                          unsigned expected_primary_metric,
                          unsigned expected_sub_metric,
-                         unsigned expected_percentage,
+                         float expected_percentage,
                          unsigned expected_reasons,
                          bool expected_before_fcp) {
     auto entries = recorder().GetEntriesByName("Blink.UpdateTime");
@@ -85,7 +84,7 @@ class LocalFrameUkmAggregatorTest : public testing::Test {
           entry, GetPercentageMetricName(i)));
       const int64_t* metric_percentage = ukm::TestUkmRecorder::GetEntryMetric(
           entry, GetPercentageMetricName(i));
-      EXPECT_NEAR(*metric_percentage, expected_percentage, 0.001);
+      EXPECT_NEAR(*metric_percentage, expected_percentage, 0.5);
     }
     EXPECT_TRUE(
         ukm::TestUkmRecorder::EntryHasMetric(entry, "MainFrameIsBeforeFCP"));
@@ -101,8 +100,8 @@ class LocalFrameUkmAggregatorTest : public testing::Test {
                                unsigned expected_primary_metric,
                                unsigned expected_sub_metric) {
     auto entries = recorder().GetEntriesByName("Blink.PageLoad");
-    EXPECT_EQ(entries.size(), expected_num_entries);
 
+    EXPECT_EQ(entries.size(), expected_num_entries);
     for (auto* entry : entries) {
       EXPECT_TRUE(
           ukm::TestUkmRecorder::EntryHasMetric(entry, GetPrimaryMetricName()));
@@ -186,7 +185,7 @@ TEST_F(LocalFrameUkmAggregatorTest, FirstFrameIsRecorded) {
       millisecond_for_step * LocalFrameUkmAggregator::kCount;
   float expected_sub_metric = millisecond_for_step;
   float expected_percentage =
-      floor(100.0 / static_cast<float>(LocalFrameUkmAggregator::kCount));
+      100.0 / static_cast<float>(LocalFrameUkmAggregator::kCount);
 
   VerifyUpdateEntry(0u, expected_primary_metric, expected_sub_metric,
                     expected_percentage, 12, true);
@@ -215,7 +214,7 @@ TEST_F(LocalFrameUkmAggregatorTest, PreAndPostFCPAreRecorded) {
       millisecond_per_step * LocalFrameUkmAggregator::kCount;
   float expected_sub_metric = millisecond_per_step;
   float expected_percentage =
-      floor(100.0 / static_cast<float>(LocalFrameUkmAggregator::kCount));
+      100.0 / static_cast<float>(LocalFrameUkmAggregator::kCount);
 
   VerifyUpdateEntry(0u, expected_primary_metric, expected_sub_metric,
                     expected_percentage, 4, true);
@@ -238,8 +237,8 @@ TEST_F(LocalFrameUkmAggregatorTest, PreAndPostFCPAreRecorded) {
   // been recorded.
   EXPECT_EQ(recorder().entries_count(), 3u);
 
-  expected_percentage = floor(millisecond_per_step * 100.0 /
-                              static_cast<float>(millisecond_per_frame));
+  expected_percentage =
+      millisecond_per_step * 100.0 / static_cast<float>(millisecond_per_frame);
   VerifyUpdateEntry(1u, millisecond_per_frame, millisecond_per_step,
                     expected_percentage, 4, false);
 }
@@ -303,8 +302,11 @@ TEST_F(LocalFrameUkmAggregatorTest, LatencyDataIsPopulated) {
   EXPECT_EQ(metrics_data->style_update.InMillisecondsF(), millisecond_for_step);
   EXPECT_EQ(metrics_data->layout_update.InMillisecondsF(),
             millisecond_for_step);
+  EXPECT_EQ(metrics_data->compositing_inputs.InMillisecondsF(),
+            millisecond_for_step);
   EXPECT_EQ(metrics_data->prepaint.InMillisecondsF(), millisecond_for_step);
-  EXPECT_EQ(metrics_data->composite.InMillisecondsF(), millisecond_for_step);
+  EXPECT_EQ(metrics_data->compositing_assignments.InMillisecondsF(),
+            millisecond_for_step);
   EXPECT_EQ(metrics_data->paint.InMillisecondsF(), millisecond_for_step);
   EXPECT_EQ(metrics_data->scrolling_coordinator.InMillisecondsF(),
             millisecond_for_step);

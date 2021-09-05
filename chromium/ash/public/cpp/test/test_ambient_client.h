@@ -15,7 +15,7 @@
 namespace ash {
 
 // An implementation for test support.
-// IsAmbientModeAllowedForProfile() returns true to run the unittests.
+// IsAmbientModeAllowed() returns true to run the unittests.
 class ASH_PUBLIC_EXPORT TestAmbientClient : public AmbientClient {
  public:
   explicit TestAmbientClient(device::TestWakeLockProvider* wake_lock_provider);
@@ -27,6 +27,7 @@ class ASH_PUBLIC_EXPORT TestAmbientClient : public AmbientClient {
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   void RequestWakeLockProvider(
       mojo::PendingReceiver<device::mojom::WakeLockProvider> receiver) override;
+  bool ShouldUseProdServer() override;
 
   // Simulate to issue an |access_token|.
   // If |with_error| is true, will return an empty access token.

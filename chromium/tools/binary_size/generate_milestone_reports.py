@@ -45,8 +45,7 @@ _GSUTIL = os.path.join(_DIR_SOURCE_ROOT, 'third_party', 'depot_tools',
 _PUSH_URL = 'gs://chrome-supersize/milestones/'
 
 _DESIRED_CPUS = ['arm', 'arm_64']
-# Measure Chrome.apk since it's not a bundle.
-_DESIRED_APKS = ['Monochrome.apk', 'Chrome.apk', 'AndroidWebview.apk']
+_DESIRED_APKS = ['Monochrome.apk', 'AndroidWebview.apk']
 # Versions are manually gathered from
 # https://omahaproxy.appspot.com/history?os=android&channel=stable
 _DESIRED_VERSIONS = [
@@ -73,7 +72,9 @@ _DESIRED_VERSIONS = [
     '80.0.3987.99',
     '81.0.4044.138',
     '83.0.4103.60',
-    '84.0.4147.20',  # Canary
+    '84.0.4147.89',
+    '85.0.4183.81',
+    '86.0.4240.11',  # Canary
 ]
 
 
@@ -205,14 +206,15 @@ def main():
     _WriteMilestonesJson(os.path.join(staging_dir, 'milestones.json'))
 
     if args.sync:
-      subprocess.check_call([
-          _GSUTIL, '-m', 'rsync', '-J', '-a', 'public-read', '-r', staging_dir,
-          _PUSH_URL
-      ])
-      subprocess.check_call([
-          _GSUTIL, 'setmeta', '-h', 'Cache-Control:no-cache',
-          _PUSH_URL + 'milestones.json'
-      ])
+      subprocess.check_call(
+          [_GSUTIL, '-m', 'rsync', '-J', '-r', staging_dir, _PUSH_URL])
+      milestones_json = _PUSH_URL + 'milestones.json'
+      # The main index.html page has no authentication code, so make .json file
+      # world-readable.
+      subprocess.check_call(
+          [_GSUTIL, 'acl', 'set', '-a', 'public-read', milestones_json])
+      subprocess.check_call(
+          [_GSUTIL, 'setmeta', '-h', 'Cache-Control:no-cache', milestones_json])
     else:
       logging.warning('Finished dry run. Run with --sync to upload.')
 

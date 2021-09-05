@@ -13,7 +13,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import org.chromium.base.Callback;
-import org.chromium.chrome.browser.share.R;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.share.screenshot.ScreenshotShareSheetViewProperties.NoArgOperation;
 import org.chromium.ui.widget.ChromeImageView;
 
@@ -36,6 +36,7 @@ class ScreenshotShareSheetView extends FrameLayout {
         setNoArgOperationListener(NoArgOperation.SAVE, R.id.save, noArgOperationCallback);
         setNoArgOperationListener(NoArgOperation.DELETE, R.id.delete, noArgOperationCallback);
         setNoArgOperationListener(NoArgOperation.DELETE, R.id.close_button, noArgOperationCallback);
+        setNoArgOperationListener(NoArgOperation.INSTALL, R.id.edit, noArgOperationCallback);
     }
 
     /**

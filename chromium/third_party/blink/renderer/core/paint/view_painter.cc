@@ -42,7 +42,7 @@ void ViewPainter::PaintRootGroup(const PaintInfo& paint_info,
                                  const IntRect& pixel_snapped_background_rect,
                                  const Document& document,
                                  const DisplayItemClient& client,
-                                 const PropertyTreeState& state) {
+                                 const PropertyTreeStateOrAlias& state) {
   if (!document.IsInMainFrame())
     return;
   bool should_clear_canvas =
@@ -59,7 +59,8 @@ void ViewPainter::PaintRootGroup(const PaintInfo& paint_info,
   if (!DrawingRecorder::UseCachedDrawingIfPossible(
           context, client, DisplayItem::kDocumentRootBackdrop)) {
     DrawingRecorder recorder(context, client,
-                             DisplayItem::kDocumentRootBackdrop);
+                             DisplayItem::kDocumentRootBackdrop,
+                             pixel_snapped_background_rect);
     context.FillRect(
         pixel_snapped_background_rect, base_background_color,
         should_clear_canvas ? SkBlendMode::kSrc : SkBlendMode::kSrcOver);
@@ -131,7 +132,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
 
   const Document& document = layout_view_.GetDocument();
 
-  PropertyTreeState root_element_background_painting_state =
+  auto root_element_background_painting_state =
       layout_view_.FirstFragment().ContentsProperties();
 
   base::Optional<ScopedPaintChunkProperties> scoped_properties;
@@ -167,7 +168,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
   // [2] https://drafts.fxtf.org/compositing/#rootgroup
   if (should_paint_background && painting_scrolling_background &&
       should_apply_root_background_behavior && root_object) {
-    const PropertyTreeState& document_element_state =
+    const auto& document_element_state =
         root_object->FirstFragment().LocalBorderBoxProperties();
 
     // As an optimization, only paint a separate PaintChunk for the
@@ -235,7 +236,7 @@ void ViewPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info) {
 void ViewPainter::PaintRootElementGroup(
     const PaintInfo& paint_info,
     const IntRect& pixel_snapped_background_rect,
-    const PropertyTreeState& background_paint_state,
+    const PropertyTreeStateOrAlias& background_paint_state,
     const DisplayItemClient& background_client,
     bool painted_separate_backdrop,
     bool painted_separate_effect) {
@@ -245,7 +246,8 @@ void ViewPainter::PaintRootElementGroup(
     return;
   }
   DrawingRecorder recorder(context, background_client,
-                           DisplayItem::kDocumentBackground);
+                           DisplayItem::kDocumentBackground,
+                           pixel_snapped_background_rect);
 
   const Document& document = layout_view_.GetDocument();
   const LocalFrameView& frame_view = *layout_view_.GetFrameView();
@@ -286,7 +288,7 @@ void ViewPainter::PaintRootElementGroup(
   // Offset for BackgroundImageGeometry to offset the image's origin. This makes
   // background tiling start at the root element's origin instead of the view.
   // This is different from the offset for painting, which is in |paint_rect|.
-  LayoutPoint background_image_offset;
+  PhysicalOffset background_image_offset;
   if (!root_object || !root_object->IsBox()) {
     background_renderable = false;
   } else {
@@ -301,10 +303,9 @@ void ViewPainter::PaintRootElementGroup(
       // With transforms, paint offset is encoded in paint property nodes but we
       // can use the |paint_rect|'s adjusted location as the offset from the
       // view to the root element.
-      background_image_offset = paint_rect.Location();
+      background_image_offset = PhysicalOffset(paint_rect.Location());
     } else {
-      background_image_offset =
-          -root_object->FirstFragment().PaintOffset().ToLayoutPoint();
+      background_image_offset = -root_object->FirstFragment().PaintOffset();
     }
   }
 
@@ -326,6 +327,8 @@ void ViewPainter::PaintRootElementGroup(
     }
     return;
   }
+
+  recorder.UniteVisualRect(paint_rect);
 
   BoxPainterBase::FillLayerOcclusionOutputList reversed_paint_list;
   bool should_draw_background_in_separate_buffer =

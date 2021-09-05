@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/libprotobuf-mutator/fuzzable_proto_library.gni")
 
@@ -31,7 +30,7 @@ config("password_reuse_detection_config") {
   }
 }
 
-jumbo_static_library("browser") {
+static_library("browser") {
   sources = [
     "android_affiliation/affiliated_match_helper.cc",
     "android_affiliation/affiliated_match_helper.h",
@@ -44,9 +43,11 @@ jumbo_static_library("browser") {
     "android_affiliation/affiliation_fetch_throttler_delegate.h",
     "android_affiliation/affiliation_fetcher.cc",
     "android_affiliation/affiliation_fetcher.h",
+    "android_affiliation/affiliation_fetcher_delegate.cc",
     "android_affiliation/affiliation_fetcher_delegate.h",
-    "android_affiliation/affiliation_service.cc",
-    "android_affiliation/affiliation_service.h",
+    "android_affiliation/affiliation_fetcher_interface.h",
+    "android_affiliation/android_affiliation_service.cc",
+    "android_affiliation/android_affiliation_service.h",
     "android_affiliation/facet_manager.cc",
     "android_affiliation/facet_manager.h",
     "android_affiliation/facet_manager_host.h",
@@ -60,6 +61,9 @@ jumbo_static_library("browser") {
     "bulk_leak_check_service.h",
     "bulk_leak_check_service_interface.cc",
     "bulk_leak_check_service_interface.h",
+    "change_password_url_service.h",
+    "change_password_url_service_impl.cc",
+    "change_password_url_service_impl.h",
     "compromised_credentials_consumer.cc",
     "compromised_credentials_consumer.h",
     "compromised_credentials_observer.cc",
@@ -105,6 +109,8 @@ jumbo_static_library("browser") {
     "generation/password_requirements_spec_fetcher_impl.h",
     "generation/password_requirements_spec_printer.cc",
     "generation/password_requirements_spec_printer.h",
+    "hsts_query.cc",
+    "hsts_query.h",
     "http_auth_manager.h",
     "http_auth_manager_impl.cc",
     "http_auth_manager_impl.h",
@@ -166,6 +172,7 @@ jumbo_static_library("browser") {
     "password_manager_driver.h",
     "password_manager_features_util.cc",
     "password_manager_features_util.h",
+    "password_manager_interface.h",
     "password_manager_metrics_recorder.cc",
     "password_manager_metrics_recorder.h",
     "password_manager_metrics_util.cc",
@@ -202,6 +209,9 @@ jumbo_static_library("browser") {
     "psl_matching_helper.cc",
     "psl_matching_helper.h",
     "reauth_purpose.h",
+    "site_affiliation/affiliation_service.h",
+    "site_affiliation/affiliation_service_impl.cc",
+    "site_affiliation/affiliation_service_impl.h",
     "site_affiliation/asset_link_data.cc",
     "site_affiliation/asset_link_data.h",
     "sql_table_builder.cc",
@@ -234,6 +244,10 @@ jumbo_static_library("browser") {
     "ui/saved_passwords_presenter.h",
     "votes_uploader.cc",
     "votes_uploader.h",
+    "well_known_change_password_state.cc",
+    "well_known_change_password_state.h",
+    "well_known_change_password_util.cc",
+    "well_known_change_password_util.h",
   ]
 
   all_dependent_configs = [ ":password_reuse_detection_config" ]
@@ -303,10 +317,16 @@ jumbo_static_library("browser") {
     "//url",
   ]
 
+  if (is_android) {
+    sources += [
+      "password_scripts_fetcher.h",
+      "password_scripts_fetcher_impl.cc",
+      "password_scripts_fetcher_impl.h",
+    ]
+  }
+
   if (!is_ios) {
     sources += [
-      "hsts_query.cc",
-      "hsts_query.h",
       "http_credentials_cleaner.cc",
       "http_credentials_cleaner.h",
     ]
@@ -380,6 +400,13 @@ static_library("password_generator") {
 }
 
 if (is_android) {
+  # Wrap the java_cpp_enum in android_library so it can be used by both
+  # chrome_java and modules.
+  android_library("password_manager_java_enums") {
+    deps = [ "//third_party/android_deps:androidx_annotation_annotation_java" ]
+    srcjar_deps = [ ":password_manager_java_enums_srcjar" ]
+  }
+
   java_cpp_enum("password_manager_java_enums_srcjar") {
     sources = [
       "biometric_authenticator.h",
@@ -393,7 +420,7 @@ fuzzable_proto_library("proto") {
   sources = [ "android_affiliation/affiliation_api.proto" ]
 }
 
-jumbo_static_library("password_hash_data") {
+static_library("password_hash_data") {
   sources = [
     "password_hash_data.cc",
     "password_hash_data.h",
@@ -419,7 +446,7 @@ static_library("hash_password_manager") {
   ]
 }
 
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "android_affiliation/fake_affiliation_api.cc",
@@ -430,6 +457,8 @@ jumbo_static_library("test_support") {
     "android_affiliation/mock_affiliated_match_helper.h",
     "android_affiliation/mock_affiliation_consumer.cc",
     "android_affiliation/mock_affiliation_consumer.h",
+    "android_affiliation/mock_affiliation_fetcher.cc",
+    "android_affiliation/mock_affiliation_fetcher.h",
     "fake_form_fetcher.cc",
     "fake_form_fetcher.h",
     "mock_bulk_leak_check_service.cc",
@@ -440,6 +469,8 @@ jumbo_static_library("test_support") {
     "mock_password_form_manager_for_ui.h",
     "mock_password_store.cc",
     "mock_password_store.h",
+    "mock_password_sync_metadata_store.cc",
+    "mock_password_sync_metadata_store.h",
     "password_manager_test_utils.cc",
     "password_manager_test_utils.h",
     "stub_credentials_filter.cc",
@@ -526,16 +557,19 @@ source_set("unit_tests") {
     "android_affiliation/affiliation_database_unittest.cc",
     "android_affiliation/affiliation_fetch_throttler_unittest.cc",
     "android_affiliation/affiliation_fetcher_unittest.cc",
-    "android_affiliation/affiliation_service_unittest.cc",
+    "android_affiliation/android_affiliation_service_unittest.cc",
     "android_affiliation/facet_manager_unittest.cc",
     "browser_save_password_progress_logger_unittest.cc",
     "bulk_leak_check_service_unittest.cc",
+    "change_password_url_service_impl_unittest.cc",
     "compromised_credentials_observer_unittest.cc",
     "compromised_credentials_table_unittest.cc",
     "credential_cache_unittest.cc",
     "credential_manager_impl_unittest.cc",
     "credential_manager_logger_unittest.cc",
     "credential_manager_password_form_manager_unittest.cc",
+    "credential_manager_pending_prevent_silent_access_task_unittest.cc",
+    "credential_manager_pending_request_task_unittest.cc",
     "credentials_cleaner_runner_unittest.cc",
     "credentials_cleaner_unittest.cc",
     "export/csv_writer_unittest.cc",
@@ -547,6 +581,7 @@ source_set("unit_tests") {
     "form_saver_impl_unittest.cc",
     "generation/password_generator_unittest.cc",
     "generation/password_requirements_spec_fetcher_unittest.cc",
+    "hsts_query_unittest.cc",
     "http_auth_manager_unittest.cc",
     "http_password_store_migrator_unittest.cc",
     "import/password_importer_unittest.cc",
@@ -584,6 +619,7 @@ source_set("unit_tests") {
     "password_ui_utils_unittest.cc",
     "possible_username_data_unittest.cc",
     "psl_matching_helper_unittest.cc",
+    "site_affiliation/affiliation_service_impl_unittest.cc",
     "site_affiliation/asset_link_data_unittest.cc",
     "sql_table_builder_unittest.cc",
     "statistics_table_unittest.cc",
@@ -598,17 +634,19 @@ source_set("unit_tests") {
     "ui/saved_passwords_presenter_unittest.cc",
     "vote_uploads_test_matchers.h",
     "votes_uploader_unittest.cc",
+    "well_known_change_password_state_unittest.cc",
+    "well_known_change_password_util_unittest.cc",
   ]
+  if (is_android) {
+    sources += [ "password_scripts_fetcher_impl_unittests.cc" ]
+  }
   if (is_mac) {
     sources -= [ "password_store_default_unittest.cc" ]
   }
   if (is_ios) {
     sources += [ "login_database_ios_unittest.cc" ]
   } else {
-    sources += [
-      "hsts_query_unittest.cc",
-      "http_credentials_cleaner_unittest.cc",
-    ]
+    sources += [ "http_credentials_cleaner_unittest.cc" ]
   }
   if (password_reuse_detection_support) {
     sources += [

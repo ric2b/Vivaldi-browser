@@ -28,7 +28,6 @@ class Bluetooth final : public EventTargetWithInlineData,
                         public PageVisibilityObserver,
                         public mojom::blink::WebBluetoothAdvertisementClient {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(Bluetooth);
 
  public:
   explicit Bluetooth(LocalDOMWindow*);
@@ -99,9 +98,9 @@ class Bluetooth final : public EventTargetWithInlineData,
                                 Bluetooth>
       client_receivers_;
 
-  HeapMojoRemote<mojom::blink::WebBluetoothService,
-                 HeapMojoWrapperMode::kForceWithoutContextObserver>
-      service_;
+  // HeapMojoRemote objects are associated with a ContextLifecycleNotifier and
+  // cleaned up automatically when it is destroyed.
+  HeapMojoRemote<mojom::blink::WebBluetoothService> service_;
 };
 
 }  // namespace blink

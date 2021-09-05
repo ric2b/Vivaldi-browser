@@ -12,7 +12,9 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/javascript_dialogs/app_modal_dialog_controller.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/common/drag_event_source_info.h"
@@ -40,27 +42,17 @@ class TabStripModelObserver;
 
 namespace extensions {
 
-
 class VivaldiTabsPrivateApiNotification;
 
-class TabsPrivateAPIPrivate;
-
-class TabsPrivateAPI : public BrowserContextKeyedAPI {
+class TabsPrivateAPI : public BrowserContextKeyedAPI,
+                       public TabStripModelObserver,
+                       public javascript_dialogs::AppModalDialogObserver {
  public:
   explicit TabsPrivateAPI(content::BrowserContext* context);
   ~TabsPrivateAPI() override;
 
-  static TabStripModelObserver* GetTabStripModelObserver(
+  static TabsPrivateAPI* FromBrowserContext(
       content::BrowserContext* browser_context);
-
-  static void SendKeyboardShortcutEvent(
-      content::BrowserContext* browser_context,
-      const content::NativeWebKeyboardEvent& event,
-      bool is_auto_repeat);
-
-  static void SendMouseChangeEvent(
-      content::BrowserContext* browser_context,
-      bool is_motion);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -68,20 +60,22 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI {
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<TabsPrivateAPI>* GetFactoryInstance();
 
-  static void SetupWebContents(content::WebContents* web_contents);
-
-  static TabsPrivateAPIPrivate* GetPrivate(content::BrowserContext* context);
-
  private:
   friend class VivaldiEventHooksImpl;
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
+
+  // TabStripModelObserver implementation
+  void TabChangedAt(content::WebContents* contents,
+                    int index,
+                    TabChangeType change_type) override;
+
+  // javascript_dialogs::AppModalDialogObserver implementation
+  void Notify(javascript_dialogs::AppModalDialogController* dialog) override;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "TabsPrivateAPI"; }
   static const bool kServiceIsNULLWhileTesting = true;
   static const bool kServiceRedirectedInIncognito = true;
-
-  std::unique_ptr<TabsPrivateAPIPrivate> priv_;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateAPI);
 };
@@ -135,7 +129,6 @@ class VivaldiPrivateTabObserver
   bool enable_plugins() { return enable_plugins_; }
   std::string contents_mime_type() { return contents_mime_type_; }
   bool mute() { return mute_; }
-  bool NeedToFireBeforeUnload();
 
   // Commit setting to the active RenderViewHost
   void CommitSettings();

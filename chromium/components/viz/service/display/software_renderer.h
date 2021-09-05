@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_SOFTWARE_RENDERER_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_SOFTWARE_RENDERER_H_
 
+#include <memory>
+#include <vector>
+
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "components/viz/service/display/direct_renderer.h"
@@ -25,6 +28,7 @@ class TileDrawQuad;
 class VIZ_SERVICE_EXPORT SoftwareRenderer : public DirectRenderer {
  public:
   SoftwareRenderer(const RendererSettings* settings,
+                   const DebugRendererSettings* debug_settings,
                    OutputSurface* output_surface,
                    DisplayResourceProvider* resource_provider,
                    OverlayProcessorInterface* overlay_processor);
@@ -63,9 +67,6 @@ class VIZ_SERVICE_EXPORT SoftwareRenderer : public DirectRenderer {
   void EnsureScissorTestDisabled() override;
   void CopyDrawnRenderPass(const copy_output::RenderPassGeometry& geometry,
                            std::unique_ptr<CopyOutputRequest> request) override;
-#if defined(OS_WIN)
-  void SetEnableDCLayers(bool enable) override;
-#endif
   void DidChangeVisibility() override;
   void GenerateMipmap() override;
 

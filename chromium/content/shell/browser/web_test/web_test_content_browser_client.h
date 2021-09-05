@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "build/build_config.h"
-#include "content/public/common/client_hints.mojom.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/common/web_test/fake_bluetooth_chooser.mojom-forward.h"
 #include "content/shell/common/web_test/web_test.mojom-forward.h"
@@ -22,6 +21,7 @@
 #include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
 #include "third_party/blink/public/mojom/clipboard/raw_clipboard.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_automation.mojom-forward.h"
+#include "third_party/blink/public/mojom/storage_access/storage_access_automation.mojom-forward.h"
 
 namespace content {
 class FakeBluetoothChooser;
@@ -56,8 +56,6 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
       service_manager::BinderRegistry* registry,
       blink::AssociatedInterfaceRegistry* associated_registry,
       RenderProcessHost* render_process_host) override;
-  base::Optional<service_manager::Manifest> GetServiceManifestOverlay(
-      base::StringPiece name) override;
   void OverrideWebkitPrefs(RenderViewHost* render_view_host,
                            WebPreferences* prefs) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
@@ -126,11 +124,12 @@ class WebTestContentBrowserClient : public ShellContentBrowserClient {
       RenderFrameHost* render_frame_host,
       mojo::PendingReceiver<blink::mojom::BadgeService> receiver);
 
-  void BindClientHintsControllerDelegate(
-      mojo::PendingReceiver<client_hints::mojom::ClientHints> receiver);
-
   void BindPermissionAutomation(
       mojo::PendingReceiver<blink::test::mojom::PermissionAutomation> receiver);
+
+  void BindStorageAccessAutomation(
+      mojo::PendingReceiver<blink::test::mojom::StorageAccessAutomation>
+          receiver);
 
   void BindWebTestControlHost(
       mojo::PendingAssociatedReceiver<mojom::WebTestControlHost> receiver);

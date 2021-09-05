@@ -238,10 +238,10 @@ void ChromeClientImpl::StartDragging(LocalFrame* frame,
                                      const SkBitmap& drag_image,
                                      const gfx::Point& drag_image_offset) {
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  network::mojom::ReferrerPolicy policy =
-      web_frame->GetDocument().GetReferrerPolicy();
-  web_frame->LocalRootFrameWidget()->StartDragging(
-      policy, drag_data, mask, drag_image, drag_image_offset);
+  WebDragData drag = drag_data;
+  drag.SetReferrerPolicy(web_frame->GetDocument().GetReferrerPolicy());
+  web_frame->LocalRootFrameWidget()->StartDragging(drag, mask, drag_image,
+                                                   drag_image_offset);
 }
 
 bool ChromeClientImpl::AcceptsLoadDrops() const {
@@ -254,7 +254,7 @@ Page* ChromeClientImpl::CreateWindowDelegate(
     const AtomicString& name,
     const WebWindowFeatures& features,
     network::mojom::blink::WebSandboxFlags sandbox_flags,
-    const FeaturePolicy::FeatureState& opener_feature_state,
+    const FeaturePolicyFeatureState& opener_feature_state,
     const SessionStorageNamespaceId& session_storage_namespace_id) {
   if (!web_view_->Client())
     return nullptr;
@@ -370,8 +370,7 @@ void ChromeClientImpl::SetBeforeUnloadConfirmPanelResultForTesting(
 }
 
 void ChromeClientImpl::CloseWindowSoon() {
-  if (web_view_->Client())
-    web_view_->Client()->CloseWindowSoon();
+  web_view_->CloseWindowSoon();
 }
 
 bool ChromeClientImpl::OpenJavaScriptAlertDelegate(LocalFrame* frame,
@@ -486,10 +485,8 @@ void ChromeClientImpl::WindowToViewportRect(LocalFrame& frame,
       viewport_rect);
 }
 
-WebScreenInfo ChromeClientImpl::GetScreenInfo(LocalFrame& frame) const {
-  WebWidgetClient* client = frame.GetWidgetForLocalRoot()->Client();
-  DCHECK(client);
-  return client->GetScreenInfo();
+ScreenInfo ChromeClientImpl::GetScreenInfo(LocalFrame& frame) const {
+  return frame.GetWidgetForLocalRoot()->GetScreenInfo();
 }
 
 void ChromeClientImpl::OverrideVisibleRectForMainFrame(
@@ -724,7 +721,7 @@ void ChromeClientImpl::SetCursorInternal(const ui::Cursor& cursor,
   if (cursor_overridden_)
     return;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On Mac the mousemove event propagates to both the popup and main window.
   // If a popup is open we don't want the main window to change the cursor.
   if (web_view_->HasOpenedPopup())
@@ -807,8 +804,8 @@ void ChromeClientImpl::DetachCompositorAnimationTimeline(
 
 void ChromeClientImpl::EnterFullscreen(LocalFrame& frame,
                                        const FullscreenOptions* options,
-                                       bool for_cross_process_descendant) {
-  web_view_->EnterFullscreen(frame, options, for_cross_process_descendant);
+                                       FullscreenRequestType request_type) {
+  web_view_->EnterFullscreen(frame, options, request_type);
 }
 
 void ChromeClientImpl::ExitFullscreen(LocalFrame& frame) {
@@ -1027,8 +1024,7 @@ void ChromeClientImpl::SetNeedsLowLatencyInput(LocalFrame* frame,
   if (!widget)
     return;
 
-  if (WebWidgetClient* client = widget->Client())
-    client->SetNeedsLowLatencyInput(needs_low_latency);
+  widget->SetNeedsLowLatencyInput(needs_low_latency);
 }
 
 void ChromeClientImpl::SetNeedsUnbufferedInputForDebugger(LocalFrame* frame,
@@ -1039,8 +1035,7 @@ void ChromeClientImpl::SetNeedsUnbufferedInputForDebugger(LocalFrame* frame,
   if (!widget)
     return;
 
-  if (WebWidgetClient* client = widget->Client())
-    client->SetNeedsUnbufferedInputForDebugger(unbuffered);
+  widget->SetNeedsUnbufferedInputForDebugger(unbuffered);
 }
 
 void ChromeClientImpl::RequestUnbufferedInputEvents(LocalFrame* frame) {
@@ -1050,8 +1045,7 @@ void ChromeClientImpl::RequestUnbufferedInputEvents(LocalFrame* frame) {
   if (!widget)
     return;
 
-  if (WebWidgetClient* client = widget->Client())
-    client->RequestUnbufferedInputEvents();
+  widget->RequestUnbufferedInputEvents();
 }
 
 void ChromeClientImpl::SetTouchAction(LocalFrame* frame,
@@ -1228,7 +1222,7 @@ WebAutofillClient* ChromeClientImpl::AutofillClientFromFrame(
 }
 
 void ChromeClientImpl::DidUpdateTextAutosizerPageInfo(
-    const WebTextAutosizerPageInfo& page_info) {
+    const mojom::blink::TextAutosizerPageInfo& page_info) {
   web_view_->TextAutosizerPageInfoChanged(page_info);
 }
 
@@ -1247,6 +1241,14 @@ void ChromeClientImpl::SetDelegatedInkMetadata(
     LocalFrame* frame,
     std::unique_ptr<viz::DelegatedInkMetadata> metadata) {
   frame->GetWidgetForLocalRoot()->SetDelegatedInkMetadata(std::move(metadata));
+}
+
+void ChromeClientImpl::BatterySavingsChanged(LocalFrame& main_frame,
+                                             WebBatterySavingsFlags savings) {
+  DCHECK(main_frame.IsMainFrame());
+  WebLocalFrameImpl::FromFrame(main_frame)
+      ->FrameWidgetImpl()
+      ->BatterySavingsChanged(savings);
 }
 
 }  // namespace blink

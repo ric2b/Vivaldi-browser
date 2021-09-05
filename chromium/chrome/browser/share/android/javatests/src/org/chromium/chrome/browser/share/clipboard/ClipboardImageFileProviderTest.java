@@ -9,6 +9,7 @@ import android.os.Looper;
 
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -20,8 +21,8 @@ import org.chromium.base.ContentUriUtils;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.FileProviderHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -93,11 +94,8 @@ public class ClipboardImageFileProviderTest {
         Clipboard.getInstance().setImageFileProvider(new ClipboardImageFileProvider());
         Clipboard.getInstance().setImage(mTestImageData, TEST_PNG_IMAGE_FILE_EXTENSION);
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return Clipboard.getInstance().getImageUri() != null;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(Clipboard.getInstance().getImageUri(), Matchers.notNullValue());
         });
 
         // Make sure Clipboard::getImage is call on non UI thread.

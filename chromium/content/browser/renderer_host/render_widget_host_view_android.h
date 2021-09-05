@@ -176,7 +176,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void DidNavigate() override;
   viz::ScopedSurfaceIdAllocator DidUpdateVisualProperties(
       const cc::RenderFrameMetadata& metadata) override;
-  void GetScreenInfo(ScreenInfo* screen_info) override;
+  void GetScreenInfo(blink::ScreenInfo* screen_info) override;
   std::vector<std::unique_ptr<ui::TouchEvent>> ExtractAndCancelActiveTouches()
       override;
   void TransferTouches(
@@ -187,7 +187,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool OnMouseEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseWheelEvent(const ui::MotionEventAndroid& event) override;
   bool OnGestureEvent(const ui::GestureEventAndroid& event) override;
-  void OnPhysicalBackingSizeChanged() override;
+  void OnPhysicalBackingSizeChanged(
+      base::Optional<base::TimeDelta> deadline_override) override;
 
   // ui::ViewAndroidObserver implementation:
   void OnAttachedToWindow() override;
@@ -377,8 +378,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
 
-  void EvictDelegatedFrame();
-
   bool ShouldRouteEvents() const;
 
   void UpdateTouchSelectionController(
@@ -407,8 +406,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void AttachLayers();
   void RemoveLayers();
 
-  void EvictFrameIfNecessary();
-
   // Helper function to update background color for WebView on fullscreen
   // changes. See https://crbug.com/961223.
   void UpdateWebViewBackgroundColorIfNecessary();
@@ -421,9 +418,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void MaybeCreateSynchronousCompositor();
   void ResetSynchronousCompositor();
-
-  void EvictDelegatedContent();
-  void OnLostResources();
 
   void StartObservingRootWindow();
   void StopObservingRootWindow();
@@ -509,6 +503,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   const bool using_browser_compositor_;
   const bool using_viz_for_webview_;
   std::unique_ptr<SynchronousCompositorHost> sync_compositor_;
+  uint32_t sync_compositor_last_frame_token_ = 0u;
+
 
   SynchronousCompositorClient* synchronous_compositor_client_;
 
@@ -517,6 +513,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool controls_initialized_ = false;
 
   float prev_top_shown_pix_;
+  float prev_top_controls_pix_;
   float prev_top_controls_translate_;
   float prev_top_controls_min_height_offset_pix_;
   float prev_bottom_shown_pix_;

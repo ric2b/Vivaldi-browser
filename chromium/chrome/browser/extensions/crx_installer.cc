@@ -22,7 +22,7 @@
 #include "base/time/time.h"
 #include "base/version.h"
 #include "build/build_config.h"
-#include "chrome/browser/extensions/blacklist_check.h"
+#include "chrome/browser/extensions/blocklist_check.h"
 #include "chrome/browser/extensions/convert_user_script.h"
 #include "chrome/browser/extensions/convert_web_app.h"
 #include "chrome/browser/extensions/extension_assets_manager.h"
@@ -51,6 +51,7 @@
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/install/extension_install_ui.h"
 #include "extensions/browser/install_flag.h"
+#include "extensions/browser/install_stage.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/policy_check.h"
 #include "extensions/browser/preload_check_group.h"
@@ -523,6 +524,7 @@ void CrxInstaller::OnUnpackSuccess(
   extension_ = extension;
   temp_dir_ = temp_dir;
   ruleset_checksums_ = std::move(ruleset_checksums);
+  ReportInstallationStage(InstallationStage::kCheckingExpectations);
 
   if (!install_icon.empty())
     install_icon_ = std::make_unique<SkBitmap>(install_icon);
@@ -572,6 +574,10 @@ void CrxInstaller::OnUnpackSuccess(
   if (!content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(&CrxInstaller::CheckInstall, this)))
     NOTREACHED();
+}
+
+void CrxInstaller::OnStageChanged(InstallationStage stage) {
+  ReportInstallationStage(stage);
 }
 
 void CrxInstaller::CheckInstall() {
@@ -634,17 +640,17 @@ void CrxInstaller::CheckInstall() {
     return;
   }
 
-  // Run the policy, requirements and blacklist checks in parallel.
+  // Run the policy, requirements and blocklist checks in parallel.
   check_group_ = std::make_unique<PreloadCheckGroup>();
 
   policy_check_ = std::make_unique<PolicyCheck>(profile_, extension());
   requirements_check_ = std::make_unique<RequirementsChecker>(extension());
-  blacklist_check_ =
-      std::make_unique<BlacklistCheck>(Blacklist::Get(profile_), extension_);
+  blocklist_check_ =
+      std::make_unique<BlocklistCheck>(Blocklist::Get(profile_), extension_);
 
   check_group_->AddCheck(policy_check_.get());
   check_group_->AddCheck(requirements_check_.get());
-  check_group_->AddCheck(blacklist_check_.get());
+  check_group_->AddCheck(blocklist_check_.get());
 
   check_group_->Start(
       base::BindOnce(&CrxInstaller::OnInstallChecksComplete, this));
@@ -672,17 +678,17 @@ void CrxInstaller::OnInstallChecksComplete(const PreloadCheck::Errors& errors) {
     install_flags_ |= kInstallFlagHasRequirementErrors;
   }
 
-  // Check the blacklist state.
-  if (errors.count(PreloadCheck::BLACKLISTED_ID) ||
-      errors.count(PreloadCheck::BLACKLISTED_UNKNOWN)) {
+  // Check the blocklist state.
+  if (errors.count(PreloadCheck::BLOCKLISTED_ID) ||
+      errors.count(PreloadCheck::BLOCKLISTED_UNKNOWN)) {
     if (allow_silent_install_) {
-      // NOTE: extension may still be blacklisted, but we're forced to silently
+      // NOTE: extension may still be blocklisted, but we're forced to silently
       // install it. In this case, ExtensionService::OnExtensionInstalled needs
       // to deal with it.
-      if (errors.count(PreloadCheck::BLACKLISTED_ID))
-        install_flags_ |= kInstallFlagIsBlacklistedForMalware;
+      if (errors.count(PreloadCheck::BLOCKLISTED_ID))
+        install_flags_ |= kInstallFlagIsBlocklistedForMalware;
     } else {
-      // User tried to install a blacklisted extension. Show an error and
+      // User tried to install a blocklisted extension. Show an error and
       // refuse to install it.
       ReportFailureFromUIThread(CrxInstallError(
           CrxInstallErrorType::DECLINED,
@@ -716,6 +722,7 @@ void CrxInstaller::OnInstallChecksComplete(const PreloadCheck::Errors& errors) {
 
 void CrxInstaller::ConfirmInstall() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  ReportInstallationStage(InstallationStage::kFinalizing);
   ExtensionService* service = service_weak_.get();
   if (!service || service->browser_terminating())
     return;
@@ -1011,6 +1018,28 @@ void CrxInstaller::ReportSuccessFromUIThread() {
   NotifyCrxInstallComplete(base::nullopt);
 }
 
+void CrxInstaller::ReportInstallationStage(InstallationStage stage) {
+  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
+    DCHECK(installer_task_runner_->RunsTasksInCurrentSequence());
+    if (!content::GetUIThreadTaskRunner({})->PostTask(
+            FROM_HERE, base::BindOnce(&CrxInstaller::ReportInstallationStage,
+                                      this, stage))) {
+      NOTREACHED();
+    }
+    return;
+  }
+
+  if (!service_weak_.get() || service_weak_->browser_terminating())
+    return;
+  // In case of force installed extensions, expected_id_ should always be set.
+  // We do not want to report in case of other extensions.
+  if (expected_id_.empty())
+    return;
+  InstallStageTracker* install_stage_tracker =
+      InstallStageTracker::Get(profile_);
+  install_stage_tracker->ReportCRXInstallationStage(expected_id_, stage);
+}
+
 void CrxInstaller::NotifyCrxInstallBegin() {
   InstallTrackerFactory::GetForBrowserContext(profile())
       ->OnBeginCrxInstall(expected_id_);
@@ -1018,6 +1047,7 @@ void CrxInstaller::NotifyCrxInstallBegin() {
 
 void CrxInstaller::NotifyCrxInstallComplete(
     const base::Optional<CrxInstallError>& error) {
+  ReportInstallationStage(InstallationStage::kComplete);
   const std::string extension_id =
       expected_id_.empty() && extension() ? extension()->id() : expected_id_;
   InstallStageTracker* install_stage_tracker =
@@ -1026,14 +1056,14 @@ void CrxInstaller::NotifyCrxInstallComplete(
       extension_id, InstallStageTracker::Stage::COMPLETE);
   const bool success = !error.has_value();
 
+  if (extension()) {
+    install_stage_tracker->ReportExtensionType(extension_id,
+                                               extension()->GetType());
+  }
+
   if (!success && (!expected_id_.empty() || extension())) {
     switch (error->type()) {
       case CrxInstallErrorType::DECLINED:
-        if (error->detail() == CrxInstallErrorDetail::DISALLOWED_BY_POLICY) {
-          install_stage_tracker
-              ->ReportExtensionTypeForPolicyDisallowedExtension(
-                  extension_id, extension()->GetType());
-        }
         install_stage_tracker->ReportCrxInstallError(
             extension_id,
             InstallStageTracker::FailureReason::CRX_INSTALL_ERROR_DECLINED,
@@ -1088,12 +1118,12 @@ void CrxInstaller::CleanupTempFiles() {
 
   // Delete the temp directory and crx file as necessary.
   if (!temp_dir_.value().empty()) {
-    file_util::DeleteFile(temp_dir_, true);
+    base::DeletePathRecursively(temp_dir_);
     temp_dir_ = base::FilePath();
   }
 
   if (delete_source_ && !source_file_.value().empty()) {
-    file_util::DeleteFile(source_file_, false);
+    base::DeleteFile(source_file_);
     source_file_ = base::FilePath();
   }
 }

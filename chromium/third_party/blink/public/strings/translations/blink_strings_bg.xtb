@@ -16,6 +16,7 @@
 <translation id="1335095011850992622">признания за източника</translation>
 <translation id="1342835525016946179">статия</translation>
 <translation id="1359897965706325498">банер</translation>
+<translation id="1480676835519562650">възможност за избиране на няколко опции, избрани са <ph name="SELECTED" /> от <ph name="COUNT" />.</translation>
 <translation id="1589122976691792535">регион</translation>
 <translation id="1591562245178063882">Този месец</translation>
 <translation id="1637811476055996098">Избор на файлове</translation>
@@ -51,6 +52,7 @@
 <translation id="248395913932153421">Ден</translation>
 <translation id="2507943997699731163">Моля, попълнете това поле.</translation>
 <translation id="2508569020611168319">списък с раздели</translation>
+<translation id="2530182415807757784">възможност за избиране на няколко опции, не е избрано нищо.</translation>
 <translation id="2561842179657104141">показване на още контроли за мултимедия</translation>
 <translation id="2572483411312390101">пускане</translation>
 <translation id="2613802280814924224">Моля, въведете валидна стойност. Най-близката такава е <ph name="VALID_VALUE" />.</translation>
@@ -102,7 +104,6 @@
 <translation id="4248100235867064564">лента с менюта</translation>
 <translation id="4360991593054037559">Моля, въведете валидна стойност. Двете най-близки такива са <ph name="VALID_VALUE_LOW" /> и <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Въпроси и отговори</translation>
-<translation id="4413860115965805769">бутон за меню</translation>
 <translation id="4444765639179266822">Изглежда, че пише: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">препратка към определение в терминологичния речник</translation>
 <translation id="4522570452068850558">Подробности</translation>

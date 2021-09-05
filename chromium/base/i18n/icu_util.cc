@@ -36,7 +36,7 @@
 #include "base/ios/ios_util.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "base/mac/foundation_util.h"
 #endif
 
@@ -49,7 +49,7 @@
 #endif
 
 #if defined(OS_ANDROID) || defined(OS_FUCHSIA) || \
-    (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMECAST))
+    ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && !BUILDFLAG(IS_CHROMECAST))
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #endif
 
@@ -142,7 +142,7 @@ std::unique_ptr<PfRegion> OpenIcuDataFile(const std::string& filename) {
   }
 #endif  // defined(OS_ANDROID)
   // For unit tests, data file is located on disk, so try there as a fallback.
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   FilePath data_path;
   if (!PathService::Get(DIR_ASSETS, &data_path)) {
     LOG(ERROR) << "Can't find " << filename;
@@ -163,7 +163,7 @@ std::unique_ptr<PfRegion> OpenIcuDataFile(const std::string& filename) {
   debug::Alias(tmp_buffer2);
 #endif
 
-#else  // !defined(OS_MACOSX)
+#else  // !defined(OS_APPLE)
   // Assume it is in the framework bundle's Resources directory.
   ScopedCFTypeRef<CFStringRef> data_file_name(SysUTF8ToCFStringRef(filename));
   FilePath data_path = mac::PathForFrameworkBundleResource(data_file_name);
@@ -177,7 +177,7 @@ std::unique_ptr<PfRegion> OpenIcuDataFile(const std::string& filename) {
     LOG(ERROR) << filename << " not found in bundle";
     return nullptr;
   }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_APPLE)
   File file(data_path, File::FLAG_OPEN | File::FLAG_READ);
   if (file.IsValid()) {
     // TODO(brucedawson): http://crbug.com/445616.
@@ -341,7 +341,7 @@ void InitializeIcuTimeZone() {
       fuchsia::IntlProfileWatcher::GetPrimaryTimeZoneIdForIcuInitialization();
   icu::TimeZone::adoptDefault(
       icu::TimeZone::createTimeZone(icu::UnicodeString::fromUTF8(zone_id)));
-#elif defined(OS_LINUX) && !BUILDFLAG(IS_CHROMECAST)
+#elif (defined(OS_LINUX) || defined(OS_CHROMEOS)) && !BUILDFLAG(IS_CHROMECAST)
   // To respond to the time zone change properly, the default time zone
   // cache in ICU has to be populated on starting up.
   // See TimeZoneMonitorLinux::NotifyClientsFromImpl().

@@ -155,7 +155,7 @@ void DeleteVersionDirectory(const base::FilePath& version_path) {
     }
 
     // Mark the file for deletion.
-    HRESULT hr = base::DeleteFile(path, false);
+    HRESULT hr = base::DeleteFile(path);
     if (FAILED(hr)) {
       LOGFN(ERROR) << "Could not delete " << path;
       all_deletes_succeeded = false;
@@ -165,7 +165,7 @@ void DeleteVersionDirectory(const base::FilePath& version_path) {
   // Release the locks, actually deleting the files.  It is now possible to
   // delete the version path.
   locks.clear();
-  if (all_deletes_succeeded && !base::DeleteFileRecursively(version_path))
+  if (all_deletes_succeeded && !base::DeletePathRecursively(version_path))
     LOGFN(ERROR) << "Could not delete version " << version_path.BaseName();
 }
 
@@ -809,7 +809,7 @@ void DeleteStartupSentinel() {
 void DeleteStartupSentinelForVersion(const base::string16& version) {
   base::FilePath startup_sentinel_path = GetStartupSentinelLocation(version);
   if (base::PathExists(startup_sentinel_path) &&
-      !base::DeleteFile(startup_sentinel_path, false)) {
+      !base::DeleteFile(startup_sentinel_path)) {
     LOGFN(ERROR) << "Failed to delete sentinel file: " << startup_sentinel_path;
   }
 }

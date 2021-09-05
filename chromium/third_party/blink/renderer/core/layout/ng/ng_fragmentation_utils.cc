@@ -175,8 +175,10 @@ void SetupSpaceBuilderForFragmentation(const NGConstraintSpace& parent_space,
   // fragmentation. If it's too tall to fit, it will either overflow the
   // fragmentainer or get brutally sliced into pieces (without looking for
   // allowed breakpoints, since there are none, by definition), depending on
-  // fragmentation type (multicol vs. printing).
-  if (child.IsMonolithic())
+  // fragmentation type (multicol vs. printing). We still need to perform block
+  // fragmentation inside inline nodes, though: While the line box itself is
+  // monolithic, there may be floats inside, which are fragmentable.
+  if (child.IsMonolithic() && !child.IsInline())
     return;
 
   builder->SetFragmentainerBlockSize(parent_space.FragmentainerBlockSize());
@@ -208,6 +210,8 @@ void SetupFragmentBuilderForFragmentation(
     builder->SetIsFirstForNode(false);
   }
   builder->SetSequenceNumber(sequence_number);
+
+  builder->AdjustBorderScrollbarPaddingForFragmentation(previous_break_token);
 }
 
 bool IsNodeFullyGrown(NGBlockNode node,
@@ -224,7 +228,7 @@ bool IsNodeFullyGrown(NGBlockNode node,
   return max_block_size == current_total_block_size;
 }
 
-void FinishFragmentation(NGBlockNode node,
+bool FinishFragmentation(NGBlockNode node,
                          const NGConstraintSpace& space,
                          const NGBlockBreakToken* previous_break_token,
                          const NGBoxStrut& border_padding,
@@ -235,22 +239,83 @@ void FinishFragmentation(NGBlockNode node,
     previously_consumed_block_size = previous_break_token->ConsumedBlockSize();
 
   LayoutUnit fragments_total_block_size = builder->FragmentsTotalBlockSize();
-  LayoutUnit wanted_block_size =
+  LayoutUnit desired_block_size =
       fragments_total_block_size - previously_consumed_block_size;
-  DCHECK_GE(wanted_block_size, LayoutUnit());
+  DCHECK_GE(desired_block_size, LayoutUnit());
+  LayoutUnit intrinsic_block_size = builder->IntrinsicBlockSize();
 
-  LayoutUnit final_block_size = wanted_block_size;
-  if (space_left != kIndefiniteSize)
-    final_block_size = std::min(final_block_size, space_left);
+  LayoutUnit final_block_size = desired_block_size;
+  if (builder->FoundColumnSpanner()) {
+    // There's a column spanner (or more) inside. This means that layout got
+    // interrupted and thus hasn't reached the end of this block yet. We're
+    // going to resume inside this block when done with the spanner(s). This is
+    // true even if there is no column content siblings after the spanner(s).
+    //
+    // <div style="columns:2;">
+    //   <div id="container" style="height:100px;">
+    //     <div id="child" style="height:20px;"></div>
+    //     <div style="column-span:all;"></div>
+    //   </div>
+    // </div>
+    //
+    // We'll create fragments for #container both before and after the spanner.
+    // Before the spanner we'll create one for each column, each 10px tall
+    // (height of #child divided into 2 columns). After the spanner, there's no
+    // more content, but the specified height is 100px, so distribute what we
+    // haven't already consumed (100px - 20px = 80px) over two columns. We get
+    // two fragments for #container after the spanner, each 40px tall.
+    final_block_size = std::min(final_block_size, intrinsic_block_size);
+    builder->SetDidBreakSelf();
+  } else if (space_left != kIndefiniteSize && desired_block_size > space_left) {
+    // We're taller than what we have room for. We don't want to use more than
+    // |space_left|, but if the intrinsic block-size is larger than that, it
+    // means that there's something unbreakable (monolithic) inside (or we'd
+    // already have broken inside). We'll allow this to overflow the
+    // fragmentainer.
+    //
+    // TODO(mstensho): This is desired behavior for multicol, but not ideal for
+    // printing, where we'd prefer the unbreakable content to be sliced into
+    // different pages, lest it be clipped and lost.
+    //
+    // There is a last-resort breakpoint before trailing border and padding, so
+    // first check if we can break there and still make progress.
+    DCHECK_GE(intrinsic_block_size, border_padding.block_end);
+    DCHECK_GE(desired_block_size, border_padding.block_end);
+
+    LayoutUnit subtractable_border_padding;
+    if (desired_block_size > border_padding.block_end)
+      subtractable_border_padding = border_padding.block_end;
+
+    final_block_size =
+        std::min(desired_block_size - subtractable_border_padding,
+                 std::max(space_left,
+                          intrinsic_block_size - subtractable_border_padding));
+
+    // We'll only need to break inside if we need more space after any
+    // unbreakable content that we may have forcefully fitted here.
+    if (final_block_size < desired_block_size)
+      builder->SetDidBreakSelf();
+  }
+
+  LogicalBoxSides sides;
+  if (previously_consumed_block_size)
+    sides.block_start = false;
+  if (builder->DidBreakSelf())
+    sides.block_end = false;
+  builder->SetSidesToInclude(sides);
+
   builder->SetConsumedBlockSize(previously_consumed_block_size +
                                 final_block_size);
   builder->SetFragmentBlockSize(final_block_size);
+
+  if (builder->FoundColumnSpanner())
+    return true;
 
   if (space_left == kIndefiniteSize) {
     // We don't know how space is available (initial column balancing pass), so
     // we won't break.
     builder->SetIsAtBlockEnd();
-    return;
+    return true;
   }
 
   if (builder->HasChildBreakInside()) {
@@ -274,8 +339,8 @@ void FinishFragmentation(NGBlockNode node,
       builder->SetIsAtBlockEnd();
       // We entered layout already at the end of the block (but with overflowing
       // children). So we should take up no more space on our own.
-      DCHECK_EQ(wanted_block_size, LayoutUnit());
-    } else if (wanted_block_size <= space_left) {
+      DCHECK_EQ(desired_block_size, LayoutUnit());
+    } else if (desired_block_size <= space_left) {
       // We have room for the calculated block-size in the current
       // fragmentainer, but we need to figure out whether this node is going to
       // produce more non-zero block-size fragments or not.
@@ -298,13 +363,11 @@ void FinishFragmentation(NGBlockNode node,
       if (!builder->HasInflowChildBreakInside())
         builder->SetBreakAppeal(kBreakAppealPerfect);
     }
-    return;
+    return true;
   }
 
-  if (wanted_block_size > space_left) {
-    // No child inside broke, but we need a break inside this block anyway, due
-    // to its size.
-    builder->SetDidBreakSelf();
+  if (desired_block_size > space_left) {
+    // No child inside broke, but we're too tall to fit.
     NGBreakAppeal break_appeal = kBreakAppealPerfect;
     if (!previously_consumed_block_size) {
       // This is the first fragment generated for the node. Avoid breaking
@@ -317,15 +380,30 @@ void FinishFragmentation(NGBlockNode node,
       if (space_left < block_start_unbreakable_space)
         break_appeal = kBreakAppealLastResort;
     }
-    builder->SetBreakAppeal(break_appeal);
     if (space.BlockFragmentationType() == kFragmentColumn &&
         !space.IsInitialColumnBalancingPass())
-      builder->PropagateSpaceShortage(wanted_block_size - space_left);
-    return;
+      builder->PropagateSpaceShortage(desired_block_size - space_left);
+    if (desired_block_size <= intrinsic_block_size) {
+      // We only want to break inside if there's a valid class C breakpoint [1].
+      // That is, we need a non-zero gap between the last child (outer block-end
+      // edge) and this container (inner block-end edge). We've just found that
+      // not to be the case. If we have found a better early break, we should
+      // break there. Otherwise mark the break as unappealing, as breaking here
+      // means that we're going to break inside the block-end padding or border,
+      // or right before them. No valid breakpoints there.
+      //
+      // [1] https://www.w3.org/TR/css-break-3/#possible-breaks
+      if (builder->HasEarlyBreak())
+        return false;
+      break_appeal = kBreakAppealLastResort;
+    }
+    builder->SetBreakAppeal(break_appeal);
+    return true;
   }
 
   // The end of the block fits in the current fragmentainer.
   builder->SetIsAtBlockEnd();
+  return true;
 }
 
 NGBreakStatus BreakBeforeChildIfNeeded(const NGConstraintSpace& space,
@@ -597,6 +675,40 @@ bool AttemptSoftBreak(const NGConstraintSpace& space,
   BreakBeforeChild(space, child, layout_result, fragmentainer_block_offset,
                    appeal_before, /* is_forced_break */ false, builder);
   return true;
+}
+
+NGConstraintSpace CreateConstraintSpaceForColumns(
+    const NGConstraintSpace& parent_space,
+    WritingMode writing_mode,
+    const LogicalSize& column_size,
+    bool is_first_fragmentainer,
+    bool balance_columns) {
+  NGConstraintSpaceBuilder space_builder(parent_space, writing_mode,
+                                         /* is_new_fc */ true);
+  space_builder.SetAvailableSize(column_size);
+  space_builder.SetPercentageResolutionSize(column_size);
+
+  // To ensure progression, we need something larger than 0 here. The spec
+  // actually says that fragmentainers have to accept at least 1px of content.
+  // See https://www.w3.org/TR/css-break-3/#breaking-rules
+  LayoutUnit column_block_size =
+      std::max(column_size.block_size, LayoutUnit(1));
+
+  space_builder.SetFragmentationType(kFragmentColumn);
+  space_builder.SetFragmentainerBlockSize(column_block_size);
+  space_builder.SetIsAnonymous(true);
+  space_builder.SetIsInColumnBfc();
+  if (balance_columns)
+    space_builder.SetIsInsideBalancedColumns();
+  if (!is_first_fragmentainer) {
+    // Margins at fragmentainer boundaries should be eaten and truncated to
+    // zero. Note that this doesn't apply to margins at forced breaks, but we'll
+    // deal with those when we get to them. Set up a margin strut that eats all
+    // leading adjacent margins.
+    space_builder.SetDiscardingMarginStrut();
+  }
+
+  return space_builder.ToConstraintSpace();
 }
 
 }  // namespace blink

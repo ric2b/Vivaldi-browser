@@ -99,14 +99,14 @@ std::string CaptivePortalBlockingPage::GetWiFiSSID() const {
   // currently associated WiFi access point. |WiFiService| isn't available on
   // Linux so |net::GetWifiSSID| is used instead.
   std::string ssid;
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_APPLE)
   std::unique_ptr<wifi::WiFiService> wifi_service(wifi::WiFiService::Create());
   wifi_service->Initialize(nullptr);
   std::string error;
   wifi_service->GetConnectedNetworkSSID(&ssid, &error);
   if (!error.empty())
     return std::string();
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
   ssid = net::GetWifiSSID();
 #elif defined(OS_ANDROID)
   ssid = net::android::GetWifiSSID();
@@ -115,13 +115,6 @@ std::string CaptivePortalBlockingPage::GetWiFiSSID() const {
   if (!base::IsStringUTF8(ssid))
     return std::string();
   return ssid;
-}
-
-bool CaptivePortalBlockingPage::ShouldCreateNewNavigation() const {
-  // Captive portal interstitials always create new navigation entries, as
-  // opposed to SafeBrowsing subresource interstitials which just block access
-  // to the current page and don't create a new entry.
-  return true;
 }
 
 void CaptivePortalBlockingPage::PopulateInterstitialStrings(

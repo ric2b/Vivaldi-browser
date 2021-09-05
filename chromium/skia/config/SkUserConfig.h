@@ -151,6 +151,13 @@ SK_API void SkDebugf_FileLine(const char* file,
                               const char* format,
                               ...);
 
+#define SK_ABORT(format, ...) SkAbort_FileLine(__FILE__, __LINE__, \
+                                               format,##__VA_ARGS__)
+[[noreturn]] SK_API void SkAbort_FileLine(const char* file,
+                                          int line,
+                                          const char* format,
+                                          ...);
+
 #if !defined(ANDROID)   // On Android, we use the skia default settings.
 #define SK_A32_SHIFT    24
 #define SK_R32_SHIFT    16
@@ -195,6 +202,10 @@ SK_API void SkDebugf_FileLine(const char* file,
 #   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #endif
 
+#ifndef SK_DISABLE_LEGACY_CONTEXT_FACTORIES
+#define SK_DISABLE_LEGACY_CONTEXT_FACTORIES
+#endif
+
 // For now, Chrome should only attempt to reduce opList splitting when recording
 // DDLs
 #ifndef SK_DISABLE_REDUCE_OPLIST_SPLITTING
@@ -214,11 +225,14 @@ SK_API void SkDebugf_FileLine(const char* file,
 #define SK_SUPPORT_LEGACY_AAA_CHOICE
 #endif
 
+// Staging for changes to SkRuntimeEffect main() signature
+#define SK_USE_LEGACY_RUNTIME_EFFECT_SIGNATURE
+
 // Staging for lowp::bilerp_clamp_8888, and for planned misc. others.
 #define SK_DISABLE_LOWP_BILERP_CLAMP_CLAMP_STAGE
 
-// Staging for migrating SkDeferredDisplayList from unique_ptr to sk_sp.
-#define SK_DDL_IS_UNIQUE_POINTER
+// Staging for Skia requiring GrDirectContext in SkImage::readPixels.
+#define SK_IMAGE_READ_PIXELS_LEGACY_API
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 

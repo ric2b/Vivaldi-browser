@@ -15,7 +15,9 @@
 #include "base/optional.h"
 #include "base/util/type_safety/pass_key.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_database.h"
 #include "chrome/browser/web_applications/web_app_database_factory.h"
@@ -46,33 +48,16 @@ bool AreAppsLocallyInstalledByDefault() {
 }
 
 std::unique_ptr<syncer::EntityData> CreateSyncEntityData(const WebApp& app) {
+  // The Sync System doesn't allow empty entity_data name.
+  DCHECK(!app.name().empty());
+
   auto entity_data = std::make_unique<syncer::EntityData>();
   entity_data->name = app.name();
+  // TODO(crbug.com/1103570): Remove this fallback later.
+  if (entity_data->name.empty())
+    entity_data->name = app.launch_url().spec();
 
-  sync_pb::WebAppSpecifics* sync_data =
-      entity_data->specifics.mutable_web_app();
-  sync_data->set_launch_url(app.launch_url().spec());
-  sync_data->set_user_display_mode(
-      ToWebAppSpecificsUserDisplayMode(app.user_display_mode()));
-  sync_data->set_name(app.sync_fallback_data().name);
-  if (app.sync_fallback_data().theme_color.has_value())
-    sync_data->set_theme_color(app.sync_fallback_data().theme_color.value());
-  if (app.user_page_ordinal().IsValid()) {
-    sync_data->set_user_page_ordinal(app.user_page_ordinal().ToInternalValue());
-  }
-  if (app.user_launch_ordinal().IsValid()) {
-    sync_data->set_user_launch_ordinal(
-        app.user_launch_ordinal().ToInternalValue());
-  }
-  if (app.scope().is_valid())
-    sync_data->set_scope(app.scope().spec());
-  for (const WebApplicationIconInfo& icon : app.icon_infos()) {
-    sync_pb::WebAppIconInfo* icon_info_proto = sync_data->add_icon_infos();
-    icon_info_proto->set_url(icon.url.spec());
-    if (icon.square_size_px.has_value())
-      icon_info_proto->set_size_in_px(icon.square_size_px.value());
-  }
-
+  *(entity_data->specifics.mutable_web_app()) = WebAppToSyncProto(app);
   return entity_data;
 }
 
@@ -200,6 +185,14 @@ void WebAppSyncBridge::SetAppUserDisplayMode(const AppId& app_id,
     web_app->SetUserDisplayMode(user_display_mode);
 }
 
+void WebAppSyncBridge::SetAppRunOnOsLoginMode(const AppId& app_id,
+                                              RunOnOsLoginMode mode) {
+  ScopedRegistryUpdate update(this);
+  WebApp* web_app = update->UpdateApp(app_id);
+  if (web_app)
+    web_app->SetRunOnOsLoginMode(mode);
+}
+
 void WebAppSyncBridge::SetAppIsDisabled(const AppId& app_id, bool is_disabled) {
   if (!IsChromeOs())
     return;
@@ -295,11 +288,15 @@ void WebAppSyncBridge::SetUserLaunchOrdinal(
 void WebAppSyncBridge::CheckRegistryUpdateData(
     const RegistryUpdateData& update_data) const {
 #if DCHECK_IS_ON()
-  for (const std::unique_ptr<WebApp>& web_app : update_data.apps_to_create)
+  for (const std::unique_ptr<WebApp>& web_app : update_data.apps_to_create) {
     DCHECK(!registrar_->GetAppById(web_app->app_id()));
+    DCHECK(!web_app->name().empty());
+  }
 
-  for (const std::unique_ptr<WebApp>& web_app : update_data.apps_to_update)
+  for (const std::unique_ptr<WebApp>& web_app : update_data.apps_to_update) {
     DCHECK(registrar_->GetAppById(web_app->app_id()));
+    DCHECK(!web_app->name().empty());
+  }
 
   for (const AppId& app_id : update_data.apps_to_delete)
     DCHECK(registrar_->GetAppById(app_id));
@@ -484,6 +481,13 @@ void WebAppSyncBridge::ApplySyncDataChange(
     // full local data and all the icons.
     web_app->SetIsInSyncInstall(true);
 
+    // The sync system requires non-empty name, populate temp name from
+    // the fallback sync data name:
+    web_app->SetName(specifics.name());
+    // Or use syncer::EntityData::name as a last resort.
+    if (web_app->name().empty())
+      web_app->SetName(change.data().name);
+
     ApplySyncDataToApp(specifics, web_app.get());
 
     // For a new app, automatically choose if we want to install it locally.
@@ -513,8 +517,12 @@ void WebAppSyncBridge::ApplySyncChangesToRegistrar(
 
   // Notify observers that web apps will be uninstalled. |apps_to_delete| are
   // still registered at this stage.
-  for (const AppId& app_id : update_local_data->apps_to_delete)
+  for (const AppId& app_id : update_local_data->apps_to_delete) {
     registrar_->NotifyWebAppUninstalled(app_id);
+    WebAppProviderBase::GetProviderBase(profile())
+        ->os_integration_manager()
+        .UninstallOsHooks(app_id, base::DoNothing());
+  }
 
   std::vector<WebApp*> apps_to_install;
   for (const auto& web_app : update_local_data->apps_to_create)

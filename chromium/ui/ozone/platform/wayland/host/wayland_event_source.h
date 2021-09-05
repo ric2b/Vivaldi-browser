@@ -59,6 +59,8 @@ class WaylandEventSource : public PlatformEventSource,
     return last_pointer_button_pressed_;
   }
 
+  int keyboard_modifiers() const { return keyboard_modifiers_; }
+
   // Starts polling for events from the wayland connection file descriptor.
   // This method assumes connection is already estabilished and input objects
   // are already bound and properly initialized.
@@ -92,7 +94,9 @@ class WaylandEventSource : public PlatformEventSource,
   void OnPointerDestroyed(WaylandPointer* pointer) override;
   void OnPointerFocusChanged(WaylandWindow* window,
                              const gfx::PointF& location) override;
-  void OnPointerButtonEvent(EventType evtype, int changed_button) override;
+  void OnPointerButtonEvent(EventType evtype,
+                            int changed_button,
+                            WaylandWindow* window = nullptr) override;
   void OnPointerMotionEvent(const gfx::PointF& location) override;
   void OnPointerAxisEvent(const gfx::Vector2d& offset) override;
 

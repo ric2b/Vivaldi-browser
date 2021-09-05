@@ -264,7 +264,7 @@
 <translation id="5355926466126177564">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du søger via omnifeltet.</translation>
 <translation id="5360150013186312835">Vis på værktøjslinjen</translation>
 <translation id="5362741141255528695">Vælg privat nøglefil.</translation>
-<translation id="5370819323174483825">&amp;Opdater</translation>
+<translation id="5370819323174483825">&amp;Genindlæs</translation>
 <translation id="5398572795982417028">Sidereferencen er ugyldig. Grænsen er <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Fortsæt download</translation>
 <translation id="5427459444770871191">Roter med &amp;uret</translation>
@@ -345,7 +345,6 @@
 <translation id="6639554308659482635">SQLite-hukommelse</translation>
 <translation id="6686817083349815241">Gem din adgangskode</translation>
 <translation id="6691936601825168937">&amp;Frem</translation>
-<translation id="6723354935081862304">Udskriv til Google Docs og andre cloud-destinationer. <ph name="BEGIN_LINK" />Log ind<ph name="END_LINK" /> for at udskrive til Google Cloud-printer.</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Behold ændringer</translation>
 <translation id="6817174620439930047">Spørg mig, når et website vil anvende interne systemmeddelelser til at få adgang til MIDI-enheder (anbefales)</translation>

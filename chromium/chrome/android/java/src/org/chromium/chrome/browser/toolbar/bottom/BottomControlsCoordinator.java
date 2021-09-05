@@ -18,8 +18,8 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ThemeColorProvider;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -90,6 +90,7 @@ public class BottomControlsCoordinator {
             FullscreenManager fullscreenManager, ViewStub stub, ActivityTabProvider tabProvider,
             OnLongClickListener tabSwitcherLongclickListener, ThemeColorProvider themeColorProvider,
             ObservableSupplier<ShareDelegate> shareDelegateSupplier,
+            ObservableSupplier<AppMenuButtonHelper> menuButtonHelperSupplier,
             Supplier<Boolean> showStartSurfaceCallable, Runnable openHomepageAction,
             Callback<Integer> setUrlBarFocusAction,
             ObservableSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
@@ -130,11 +131,11 @@ public class BottomControlsCoordinator {
                         root.getResources().getDimensionPixelSize(R.dimen.min_touch_target_size);
             }
         } else {
-            mBottomToolbarCoordinator =
-                    new BottomToolbarCoordinator(root.findViewById(R.id.bottom_toolbar_stub),
-                            tabProvider, tabSwitcherLongclickListener, themeColorProvider,
-                            shareDelegateSupplier, showStartSurfaceCallable, openHomepageAction,
-                            setUrlBarFocusAction, overviewModeBehaviorSupplier);
+            mBottomToolbarCoordinator = new BottomToolbarCoordinator(
+                    root.findViewById(R.id.bottom_toolbar_stub), tabProvider,
+                    tabSwitcherLongclickListener, themeColorProvider, shareDelegateSupplier,
+                    showStartSurfaceCallable, openHomepageAction, setUrlBarFocusAction,
+                    overviewModeBehaviorSupplier, menuButtonHelperSupplier);
         }
 
         Toast.setGlobalExtraYOffset(root.getResources().getDimensionPixelSize(
@@ -149,7 +150,7 @@ public class BottomControlsCoordinator {
                     root.findViewById(R.id.bottom_toolbar_stub), tabProvider,
                     tabSwitcherLongclickListener, themeColorProvider, shareDelegateSupplier,
                     showStartSurfaceCallable, openHomepageAction, setUrlBarFocusAction,
-                    overviewModeBehaviorSupplier);
+                    overviewModeBehaviorSupplier, menuButtonHelperSupplier);
         mBottomContainerSlot = toolbar;
     }
 
@@ -165,8 +166,6 @@ public class BottomControlsCoordinator {
      *                            bottom toolbar's tab switcher button is clicked.
      * @param newTabClickListener An {@link OnClickListener} that is triggered when the
      *                            bottom toolbar's new tab button is clicked.
-     * @param menuButtonHelper An {@link AppMenuButtonHelper} that is triggered when the
-     *                         bottom toolbar's menu button is clicked.
      * @param windowAndroid A {@link WindowAndroid} for watching keyboard visibility events.
      * @param tabCountProvider Updates the tab count number in the tab switcher button and in the
      *                         incognito toggle tab layout.
@@ -176,10 +175,9 @@ public class BottomControlsCoordinator {
      */
     public void initializeWithNative(ChromeActivity chromeActivity, ResourceManager resourceManager,
             LayoutManager layoutManager, OnClickListener tabSwitcherListener,
-            OnClickListener newTabClickListener, AppMenuButtonHelper menuButtonHelper,
-            WindowAndroid windowAndroid, TabCountProvider tabCountProvider,
-            IncognitoStateProvider incognitoStateProvider, ViewGroup topToolbarRoot,
-            Runnable closeAllTabsAction) {
+            OnClickListener newTabClickListener, WindowAndroid windowAndroid,
+            TabCountProvider tabCountProvider, IncognitoStateProvider incognitoStateProvider,
+            ViewGroup topToolbarRoot, Runnable closeAllTabsAction) {
         mMediator.setLayoutManager(layoutManager);
         mMediator.setResourceManager(resourceManager);
         mMediator.setWindowAndroid(windowAndroid);
@@ -188,8 +186,9 @@ public class BottomControlsCoordinator {
 
         if (mBottomToolbarCoordinator != null) {
             mBottomToolbarCoordinator.initializeWithNative(tabSwitcherListener, newTabClickListener,
-                    menuButtonHelper, tabCountProvider, incognitoStateProvider, topToolbarRoot,
-                    closeAllTabsAction);
+                    tabCountProvider, incognitoStateProvider, topToolbarRoot, closeAllTabsAction);
+            // Note(david@vivaldi.com): Create toolbar swipe handler.
+            mMediator.setToolbarSwipeHandler(layoutManager.createToolbarSwipeHandler(false));
         }
 
         if (mTabGroupUi != null) {
@@ -222,6 +221,16 @@ public class BottomControlsCoordinator {
         if (mBottomToolbarCoordinator != null) mBottomToolbarCoordinator.destroy();
         if (mTabGroupUi != null) mTabGroupUi.destroy();
         mMediator.destroy();
+    }
+
+    /**
+     * @return {@link Supplier} that provides dialog visibility.
+     */
+    public Supplier<Boolean> getTabGridDialogVisibilitySupplier() {
+        if (mTabGroupUi == null) {
+            return null;
+        }
+        return mTabGroupUi.getTabGridDialogVisibilitySupplier();
     }
 
     /** Vivaldi. Update back button according to available back history. */

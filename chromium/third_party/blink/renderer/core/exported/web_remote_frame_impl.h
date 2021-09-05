@@ -87,10 +87,11 @@ class CORE_EXPORT WebRemoteFrameImpl final
       bool is_potentially_trustworthy_opaque_origin) override;
   void SetReplicatedSandboxFlags(
       network::mojom::blink::WebSandboxFlags) override;
-  void SetReplicatedName(const WebString&) override;
+  void SetReplicatedName(const WebString& name,
+                         const WebString& unique_name) override;
   void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
       const ParsedFeaturePolicy& parsed_header,
-      const FeaturePolicy::FeatureState&) override;
+      const FeaturePolicyFeatureState&) override;
   void AddReplicatedContentSecurityPolicyHeader(
       const WebString& header_value,
       network::mojom::ContentSecurityPolicyType,
@@ -104,10 +105,12 @@ class CORE_EXPORT WebRemoteFrameImpl final
   void DidStartLoading() override;
   bool IsIgnoredForHitTest() const override;
   void UpdateUserActivationState(
-      mojom::blink::UserActivationUpdateType) override;
+      mojom::blink::UserActivationUpdateType update_type,
+      mojom::blink::UserActivationNotificationType notification_type) override;
   void SetHadStickyUserActivationBeforeNavigation(bool value) override;
   v8::Local<v8::Object> GlobalProxy() const override;
   WebRect GetCompositingRect() override;
+  WebString UniqueName() const override;
 
   void InitializeCoreFrame(Page&,
                            FrameOwner*,

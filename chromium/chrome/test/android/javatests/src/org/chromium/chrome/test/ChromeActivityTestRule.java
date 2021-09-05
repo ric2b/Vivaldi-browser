@@ -17,6 +17,7 @@ import android.support.test.rule.ActivityTestRule;
 import android.text.TextUtils;
 import android.view.Menu;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.runner.Description;
@@ -25,11 +26,12 @@ import org.junit.runners.model.Statement;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
+import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.DeferredStartupHandler;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
@@ -45,19 +47,20 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuTestSupport;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.WaitForFocusHelper;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.components.infobars.InfoBar;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.EmbeddedTestServerRule;
 import org.chromium.ui.KeyboardVisibilityDelegate;
@@ -119,11 +122,18 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
                 // Disable offline indicator UI to prevent it from popping up to obstruct other UI
                 // views that may make tests flaky.
                 Features.getInstance().disable(ChromeFeatureList.OFFLINE_INDICATOR);
+                // Tests are run on bots that are offline by default. This might cause offline UI
+                // to show and cause flakiness or failures in tests. Using this switch will prevent
+                // that.
+                // TODO(crbug.com/1093085): Remove this once we disable the offline indicator for
+                // specific tests.
+                CommandLine.getInstance().appendSwitch(
+                        ContentSwitches.FORCE_ONLINE_CONNECTION_STATE_FOR_INDICATOR);
 
                 try {
                     base.evaluate();
                 } finally {
-                    ruleTearDown();
+                    Thread.setDefaultUncaughtExceptionHandler(mDefaultUncaughtExceptionHandler);
                 }
             }
         };
@@ -136,27 +146,6 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
      */
     public static int getActivityStartTimeoutMs() {
         return ACTIVITY_START_TIMEOUT_MS;
-    }
-
-    private void ruleTearDown() {
-        try {
-            ApplicationTestUtils.tearDown(InstrumentationRegistry.getTargetContext());
-            waitForActivityFinished();
-            Thread.setDefaultUncaughtExceptionHandler(mDefaultUncaughtExceptionHandler);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to tearDown", e);
-        }
-    }
-
-    private void waitForActivityFinished() {
-        if (mSetActivity == null) return;
-        try {
-            ApplicationTestUtils.waitForActivityState(mSetActivity, ActivityState.DESTROYED);
-        } catch (Exception e) {
-            Log.e(TAG, "Cannot finish activity, exception:" + e);
-        } finally {
-            mSetActivity = null;
-        }
     }
 
     // TODO(yolandyan): remove this once startActivityCompletely is refactored out of
@@ -441,7 +430,7 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
 
         ChromeTabUtils.waitForTabPageLoaded(tab, (String) null);
 
-        if (tab != null && NewTabPage.isNTPUrl(tab.getUrlString())
+        if (tab != null && NewTabPage.isNTPUrl(ChromeTabUtils.getUrlStringOnUiThread(tab))
                 && !getActivity().isInOverviewMode()) {
             NewTabPageTestUtils.waitForNtpLoaded(tab);
         }
@@ -674,13 +663,12 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
     @SuppressWarnings("unchecked")
     public static <T extends ChromeActivity> T waitFor(final Class<T> expectedClass) {
         final Activity[] holder = new Activity[1];
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                holder[0] = ApplicationStatus.getLastTrackedFocusedActivity();
-                return holder[0] != null && expectedClass.isAssignableFrom(holder[0].getClass())
-                        && ((ChromeActivity) holder[0]).getActivityTab() != null;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            holder[0] = ApplicationStatus.getLastTrackedFocusedActivity();
+            Criteria.checkThat(holder[0], Matchers.notNullValue());
+            Criteria.checkThat(holder[0].getClass(), Matchers.typeCompatibleWith(expectedClass));
+            Criteria.checkThat(
+                    ((ChromeActivity) holder[0]).getActivityTab(), Matchers.notNullValue());
         });
         return (T) holder[0];
     }

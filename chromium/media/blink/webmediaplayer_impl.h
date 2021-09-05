@@ -69,12 +69,12 @@ class WebAudioSourceProviderImpl;
 class WebLocalFrame;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
-}
+}  // namespace blink
 
 namespace base {
 class SingleThreadTaskRunner;
 class TaskRunner;
-}
+}  // namespace base
 
 namespace cc {
 class VideoLayer;
@@ -84,7 +84,7 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
-}
+}  // namespace gpu
 
 namespace media {
 class CdmContextRef;
@@ -264,6 +264,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnSeekBackward(double seconds) override;
   void OnEnterPictureInPicture() override;
   void OnExitPictureInPicture() override;
+  void OnSetAudioSink(const std::string& sink_id) override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
   void OnBecamePersistentVideo(bool value) override;
   void OnPowerExperimentState(bool state) override;
@@ -659,6 +660,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   std::unique_ptr<learning::LearningTaskController> GetLearningTaskController(
       const char* task_name);
 
+  // Returns whether the player has an audio track and whether it should be
+  // allowed to play it.
+  bool HasUnmutedAudio() const;
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   void SniffProtocol();
   void StartIPCPipeline(std::string mime_type);
@@ -666,12 +671,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 #endif
 
   blink::WebLocalFrame* const frame_;
-
-  // The playback state last reported to |delegate_|, to avoid setting duplicate
-  // states.
-  // TODO(sandersd): The delegate should be implementing deduplication.
-  DelegateState delegate_state_ = DelegateState::GONE;
-  bool delegate_has_audio_ = false;
 
   blink::WebMediaPlayer::NetworkState network_state_ =
       WebMediaPlayer::kNetworkStateEmpty;
@@ -771,6 +770,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   blink::WebMediaPlayerDelegate* const delegate_;
   int delegate_id_ = 0;
 
+  // The playback state last reported to |delegate_|, to avoid setting duplicate
+  // states.
+  // TODO(sandersd): The delegate should be implementing deduplication.
+  DelegateState delegate_state_ = DelegateState::GONE;
+  bool delegate_has_audio_ = false;
+
   WebMediaPlayerParams::DeferLoadCB defer_load_cb_;
 
   // Members for notifying upstream clients about internal memory usage.  The
@@ -785,7 +790,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   IPCDemuxer* ipc_demuxer_ = nullptr;
   std::unique_ptr<media::IPCMediaPipelineHost> ipc_media_pipeline_host_;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   CoreAudioDemuxer* audio_demuxer_ = nullptr;
 #endif
 #endif
@@ -867,7 +872,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   std::unique_ptr<RendererFactorySelector> renderer_factory_selector_;
 
   // For canceling AndroidOverlay routing token requests.
-  base::CancelableCallback<void(const base::UnguessableToken&)>
+  base::CancelableOnceCallback<void(const base::UnguessableToken&)>
       token_available_cb_;
 
   // If overlay info is requested before we have it, then the request is saved
@@ -905,8 +910,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   bool allow_media_player_renderer_credentials_ = false;
 #endif
 
-  // Stores the current position state of the media. See
-  // |UpdateMediaPositionState| for more details.
+  // Stores the current position state of the media.
   media_session::MediaPosition media_position_state_;
 
   // Set whenever the demuxer encounters an HLS file.

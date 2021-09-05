@@ -17,6 +17,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModel.ReadableBooleanPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.ReadableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.ReadableObjectPropertyKey;
+import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableFloatPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
@@ -34,7 +35,8 @@ public class ScrimProperties {
      * The top margin of the scrim. This can be used to shrink the scrim to show items at the
      * top of the screen.
      */
-    public static final ReadableIntPropertyKey TOP_MARGIN = new ReadableIntPropertyKey();
+    // Note(david@vivaldi.com): In Vivaldi we are changing this property.
+    public static final WritableIntPropertyKey TOP_MARGIN = new WritableIntPropertyKey();
 
     /** Whether the scrim should affect the status bar color. */
     public static final ReadableBooleanPropertyKey AFFECTS_STATUS_BAR =
@@ -89,6 +91,10 @@ public class ScrimProperties {
     public static final WritableObjectPropertyKey<GestureDetector> GESTURE_DETECTOR =
             new WritableObjectPropertyKey<>();
 
+    /** Whether the scrim should affect the navigation bar color. */
+    public static final WritableBooleanPropertyKey AFFECTS_NAVIGATION_BAR =
+            new WritableBooleanPropertyKey();
+
     /** A subset of {@link #ALL_KEYS} that are required to use the scrim. */
     public static final PropertyKey[] REQUIRED_KEYS =
             new PropertyKey[] {TOP_MARGIN, AFFECTS_STATUS_BAR, ANCHOR_VIEW,
@@ -96,5 +102,6 @@ public class ScrimProperties {
 
     /** All keys used for the scrim, including optional ones (see {@link #REQUIRED_KEYS}). */
     public static final PropertyKey[] ALL_KEYS = PropertyModel.concatKeys(REQUIRED_KEYS,
-            new PropertyKey[] {BACKGROUND_COLOR, BACKGROUND_DRAWABLE, GESTURE_DETECTOR});
+            new PropertyKey[] {BACKGROUND_COLOR, BACKGROUND_DRAWABLE, GESTURE_DETECTOR,
+                    AFFECTS_NAVIGATION_BAR});
 }

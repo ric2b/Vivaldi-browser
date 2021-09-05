@@ -10,7 +10,9 @@
 <link rel="import" href="../localized_link/localized_link.html">
 <link rel="import" href="../metrics_recorder.html">
 <link rel="import" href="../os_route.html">
+<link rel="import" href="../../router.html">
 <link rel="import" href="os_sync_browser_proxy.html">
+<link rel="import" href="../../people_page/sync_browser_proxy.html">
 
 <dom-module id="os-sync-controls">
   <template>
@@ -118,20 +120,12 @@
         </div>
       </div>
 
-      <cr-button id="turnOnSyncButton"
+      <cr-button id="syncOnOffButton"
           class="action-button"
-          on-click="onTurnOnSyncButtonClick_"
-          aria-labelledby="turnOnSyncButton accountTitle accountSubtitle"
-          aria-describedby="featureLabel"
-          hidden="[[osSyncFeatureEnabled]]">
-        $i18n{osSyncTurnOn}
-      </cr-button>
-      <cr-button id="turnOffSyncButton"
-          on-click="onTurnOffSyncButtonClick_"
-          aria-labelledby="turnOffSyncButton accountTitle accountSubtitle"
-          aria-describedby="featureLabel"
-          hidden="[[!osSyncFeatureEnabled]]">
-        $i18n{osSyncTurnOff}
+          on-click="onSyncOnOffButtonClick_"
+          aria-labelledby="syncOnOffButton accountTitle accountSubtitle"
+          aria-describedby="featureLabel">
+        [[getSyncOnOffButtonLabel_(osSyncFeatureEnabled)]]
       </cr-button>
     </div>
 

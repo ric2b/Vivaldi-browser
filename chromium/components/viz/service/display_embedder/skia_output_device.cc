@@ -15,6 +15,7 @@
 #include "components/viz/service/display/dc_layer_overlay.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/latency/latency_tracker.h"
@@ -54,6 +55,7 @@ SkiaOutputDevice::ScopedPaint::~ScopedPaint() {
 }
 
 SkiaOutputDevice::SkiaOutputDevice(
+    GrContext* gr_context,
     gpu::MemoryTracker* memory_tracker,
     DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
     : did_swap_buffer_complete_callback_(
@@ -61,12 +63,17 @@ SkiaOutputDevice::SkiaOutputDevice(
       memory_type_tracker_(
           std::make_unique<gpu::MemoryTypeTracker>(memory_tracker)),
       latency_tracker_(std::make_unique<ui::LatencyTracker>()),
-      latency_tracker_runner_(CreateLatencyTracerRunner()) {}
+      latency_tracker_runner_(CreateLatencyTracerRunner()) {
+  DCHECK(gr_context);
+  capabilities_.max_render_target_size = gr_context->maxRenderTargetSize();
+}
 
 SkiaOutputDevice::~SkiaOutputDevice() {
   if (latency_tracker_runner_)
     latency_tracker_runner_->DeleteSoon(FROM_HERE, std::move(latency_tracker_));
 }
+
+void SkiaOutputDevice::PreGrContextSubmit() {}
 
 void SkiaOutputDevice::CommitOverlayPlanes(
     BufferPresentedCallback feedback,
@@ -82,11 +89,16 @@ void SkiaOutputDevice::PostSubBuffer(
 }
 
 bool SkiaOutputDevice::SetDrawRectangle(const gfx::Rect& draw_rectangle) {
+  NOTREACHED();
   return false;
 }
 
+void SkiaOutputDevice::SetEnableDCLayers(bool enable) {
+  NOTREACHED();
+}
+
 void SkiaOutputDevice::SetGpuVSyncEnabled(bool enabled) {
-  NOTIMPLEMENTED();
+  NOTREACHED();
 }
 
 bool SkiaOutputDevice::IsPrimaryPlaneOverlay() const {
@@ -94,20 +106,16 @@ bool SkiaOutputDevice::IsPrimaryPlaneOverlay() const {
 }
 
 void SkiaOutputDevice::SchedulePrimaryPlane(
-    const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane) {
-  NOTIMPLEMENTED();
+    const base::Optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>&
+        plane) {
+  if (plane)
+    NOTIMPLEMENTED();
 }
 
 void SkiaOutputDevice::ScheduleOverlays(
     SkiaOutputSurface::OverlayList overlays) {
   NOTIMPLEMENTED();
 }
-
-#if defined(OS_WIN)
-void SkiaOutputDevice::SetEnableDCLayers(bool enable) {
-  NOTIMPLEMENTED();
-}
-#endif
 
 void SkiaOutputDevice::EnsureBackbuffer() {}
 void SkiaOutputDevice::DiscardBackbuffer() {}
@@ -116,7 +124,10 @@ void SkiaOutputDevice::StartSwapBuffers(BufferPresentedCallback feedback) {
   DCHECK_LT(static_cast<int>(pending_swaps_.size()),
             capabilities_.max_frames_pending);
 
-  pending_swaps_.emplace(++swap_id_, std::move(feedback));
+  pending_swaps_.emplace(++swap_id_, std::move(feedback), viz_scheduled_draw_,
+                         gpu_started_draw_);
+  viz_scheduled_draw_ = base::TimeTicks();
+  gpu_started_draw_ = base::TimeTicks();
 }
 
 void SkiaOutputDevice::FinishSwapBuffers(
@@ -147,12 +158,22 @@ void SkiaOutputDevice::FinishSwapBuffers(
   pending_swaps_.pop();
 }
 
+void SkiaOutputDevice::SetDrawTimings(base::TimeTicks submitted,
+                                      base::TimeTicks started) {
+  viz_scheduled_draw_ = submitted;
+  gpu_started_draw_ = started;
+}
+
 SkiaOutputDevice::SwapInfo::SwapInfo(
     uint64_t swap_id,
-    SkiaOutputDevice::BufferPresentedCallback feedback)
+    SkiaOutputDevice::BufferPresentedCallback feedback,
+    base::TimeTicks viz_scheduled_draw,
+    base::TimeTicks gpu_started_draw)
     : feedback_(std::move(feedback)) {
   params_.swap_response.swap_id = swap_id;
   params_.swap_response.timings.swap_start = base::TimeTicks::Now();
+  params_.swap_response.timings.viz_scheduled_draw = viz_scheduled_draw;
+  params_.swap_response.timings.gpu_started_draw = gpu_started_draw;
 }
 
 SkiaOutputDevice::SwapInfo::SwapInfo(SwapInfo&& other) = default;

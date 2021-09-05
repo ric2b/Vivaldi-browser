@@ -136,8 +136,9 @@ TEST_P(LayoutBoxTest, ForegroundIsKnownToBeOpaqueInRect) {
   // Covered by the first child of the second child is translucent.
   EXPECT_FALSE(
       ForegroundIsKnownToBeOpaqueInRect(target, PhysicalRect(0, 10, 10, 10)));
-  // Covered by the second child of the second child which is opaque.
-  EXPECT_TRUE(
+  // Though covered by the second child of the second child which is opaque,
+  // we ignore child layers.
+  EXPECT_FALSE(
       ForegroundIsKnownToBeOpaqueInRect(target, PhysicalRect(20, 20, 10, 10)));
   // Not covered by any child.
   EXPECT_FALSE(
@@ -1015,34 +1016,61 @@ TEST_P(LayoutBoxTest, LocationOfRelativeChildWithContainerScrollbars) {
   // because relative offset doesn't contribute to box location.
 
   const auto* normal = GetLayoutBoxByElementId("normal");
-  EXPECT_EQ(LayoutPoint(90, 100), normal->Location());
-  EXPECT_EQ(PhysicalOffset(90, 100), normal->PhysicalLocation());
-  EXPECT_EQ(PhysicalOffset(88, 77), normal->OffsetForInFlowPosition());
-
   const auto* vlr = GetLayoutBoxByElementId("vlr");
-  EXPECT_EQ(LayoutPoint(190, 30), vlr->Location());
-  EXPECT_EQ(PhysicalOffset(190, 30), vlr->PhysicalLocation());
-  EXPECT_EQ(PhysicalOffset(88, 77), vlr->OffsetForInFlowPosition());
-
   const auto* vrl = GetLayoutBoxByElementId("vrl");
-  EXPECT_EQ(LayoutPoint(165, 30), vrl->Location());
-  EXPECT_EQ(PhysicalOffset(225, 30), vrl->PhysicalLocation());
-  EXPECT_EQ(PhysicalOffset(88, 77), vrl->OffsetForInFlowPosition());
-
   const auto* rtl = GetLayoutBoxByElementId("rtl");
-  EXPECT_EQ(LayoutPoint(340, 100), rtl->Location());
-  EXPECT_EQ(PhysicalOffset(340, 100), rtl->PhysicalLocation());
-  EXPECT_EQ(PhysicalOffset(88, 77), rtl->OffsetForInFlowPosition());
-
   const auto* rtl_vlr = GetLayoutBoxByElementId("rtl-vlr");
-  EXPECT_EQ(LayoutPoint(190, 134), rtl_vlr->Location());
-  EXPECT_EQ(PhysicalOffset(190, 134), rtl_vlr->PhysicalLocation());
-  EXPECT_EQ(PhysicalOffset(88, 77), rtl_vlr->OffsetForInFlowPosition());
-
   const auto* rtl_vrl = GetLayoutBoxByElementId("rtl-vrl");
-  EXPECT_EQ(LayoutPoint(165, 134), rtl_vrl->Location());
-  EXPECT_EQ(PhysicalOffset(225, 134), rtl_vrl->PhysicalLocation());
-  EXPECT_EQ(PhysicalOffset(88, 77), rtl_vrl->OffsetForInFlowPosition());
+
+  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    EXPECT_EQ(LayoutPoint(178, 177), normal->Location());
+    EXPECT_EQ(PhysicalOffset(178, 177), normal->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(0, 0), normal->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(278, 107), vlr->Location());
+    EXPECT_EQ(PhysicalOffset(278, 107), vlr->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(0, 0), vlr->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(77, 107), vrl->Location());
+    EXPECT_EQ(PhysicalOffset(313, 107), vrl->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(0, 0), vrl->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(428, 177), rtl->Location());
+    EXPECT_EQ(PhysicalOffset(428, 177), rtl->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(0, 0), rtl->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(278, 211), rtl_vlr->Location());
+    EXPECT_EQ(PhysicalOffset(278, 211), rtl_vlr->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(0, 0), rtl_vlr->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(77, 211), rtl_vrl->Location());
+    EXPECT_EQ(PhysicalOffset(313, 211), rtl_vrl->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(0, 0), rtl_vrl->OffsetForInFlowPosition());
+  } else {
+    EXPECT_EQ(LayoutPoint(90, 100), normal->Location());
+    EXPECT_EQ(PhysicalOffset(90, 100), normal->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(88, 77), normal->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(190, 30), vlr->Location());
+    EXPECT_EQ(PhysicalOffset(190, 30), vlr->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(88, 77), vlr->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(165, 30), vrl->Location());
+    EXPECT_EQ(PhysicalOffset(225, 30), vrl->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(88, 77), vrl->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(340, 100), rtl->Location());
+    EXPECT_EQ(PhysicalOffset(340, 100), rtl->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(88, 77), rtl->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(190, 134), rtl_vlr->Location());
+    EXPECT_EQ(PhysicalOffset(190, 134), rtl_vlr->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(88, 77), rtl_vlr->OffsetForInFlowPosition());
+
+    EXPECT_EQ(LayoutPoint(165, 134), rtl_vrl->Location());
+    EXPECT_EQ(PhysicalOffset(225, 134), rtl_vrl->PhysicalLocation());
+    EXPECT_EQ(PhysicalOffset(88, 77), rtl_vrl->OffsetForInFlowPosition());
+  }
 }
 
 TEST_P(LayoutBoxTest, LocationOfFloatLeftChildWithContainerScrollbars) {
@@ -1461,6 +1489,44 @@ TEST_P(LayoutBoxTest,
   )HTML");
 
   DCHECK(!GetLayoutObjectByElementId("target")->NeedsLayout());
+}
+
+// crbug.com/1108270
+TEST_P(LayoutBoxTest, MenuListIntrinsicBlockSize) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      .hidden { content-visibility: hidden; }
+    </style>
+    <select id=container class=hidden>
+  )HTML");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason ::kTest);
+  // The test passes if no crash.
+}
+
+TEST_P(LayoutBoxTest, PartialInvalidationRect) {
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin : 0 }</style>
+    <div id="target" style="margin: 10.5px; width: 100px; height: 100px"></div>
+  )HTML");
+
+  auto* target = GetLayoutBoxByElementId("target");
+  auto* display_item_client = static_cast<const DisplayItemClient*>(target);
+  EXPECT_EQ(IntRect(), display_item_client->PartialInvalidationVisualRect());
+  EXPECT_FALSE(target->HasPartialInvalidationRect());
+
+  target->InvalidatePaintRectangle(PhysicalRect(10, 20, 30, 40));
+  EXPECT_TRUE(target->HasPartialInvalidationRect());
+  EXPECT_EQ(IntRect(20, 30, 31, 41),
+            display_item_client->PartialInvalidationVisualRect());
+  target->InvalidatePaintRectangle(PhysicalRect(20, 30, 40, 50));
+  EXPECT_TRUE(target->HasPartialInvalidationRect());
+  EXPECT_EQ(IntRect(20, 30, 51, 61),
+            display_item_client->PartialInvalidationVisualRect());
+
+  display_item_client->ClearPartialInvalidationVisualRect();
+  EXPECT_FALSE(target->HasPartialInvalidationRect());
+  EXPECT_EQ(IntRect(), display_item_client->PartialInvalidationVisualRect());
 }
 
 }  // namespace blink

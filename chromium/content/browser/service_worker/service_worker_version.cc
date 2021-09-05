@@ -248,6 +248,8 @@ ServiceWorkerVersion::ServiceWorkerVersion(
     const GURL& script_url,
     blink::mojom::ScriptType script_type,
     int64_t version_id,
+    mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>
+        remote_reference,
     base::WeakPtr<ServiceWorkerContextCore> context)
     : version_id_(version_id),
       registration_id_(registration->id()),
@@ -264,7 +266,10 @@ ServiceWorkerVersion::ServiceWorkerVersion(
       tick_clock_(base::DefaultTickClock::GetInstance()),
       clock_(base::DefaultClock::GetInstance()),
       ping_controller_(this),
-      validator_(std::make_unique<blink::TrialTokenValidator>()) {
+      validator_(std::make_unique<blink::TrialTokenValidator>()),
+      remote_reference_(std::move(remote_reference)),
+      ukm_source_id_(ukm::ConvertToSourceId(ukm::AssignNewSourceId(),
+                                            ukm::SourceIdType::WORKER_ID)) {
   DCHECK_NE(blink::mojom::kInvalidServiceWorkerVersionId, version_id);
   DCHECK(context_);
   DCHECK(registration);
@@ -369,11 +374,9 @@ void ServiceWorkerVersion::SetStatus(Status status) {
   } else if (status == REDUNDANT) {
     embedded_worker_->OnWorkerVersionDoomed();
 
-    // Tell the storage system that this worker's script resources can now be
-    // deleted.
-    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources;
-    script_cache_map_.GetResources(&resources);
-    context_->storage()->PurgeResources(resources);
+    // Drop the remote reference to tell the storage system that the worker
+    // script resources can now be deleted.
+    remote_reference_.reset();
   }
 }
 
@@ -389,18 +392,11 @@ ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
       script_origin(), registration_id(), version_id(),
       embedded_worker()->process_id(), embedded_worker()->thread_id(),
       embedded_worker()->worker_devtools_agent_route_id());
-
-  UMA_HISTOGRAM_COUNTS_10000("ServiceWorker.VersionInfo.ScriptURLLength",
-                             info.script_url.spec().length());
-
   for (const auto& controllee : controllee_map_) {
     ServiceWorkerContainerHost* container_host = controllee.second;
     info.clients.emplace(container_host->client_uuid(),
                          container_host->GetServiceWorkerClientInfo());
   }
-
-  UMA_HISTOGRAM_COUNTS_10000("ServiceWorker.VersionInfo.ClientCount",
-                             info.clients.size());
 
   info.script_response_time = script_response_time_for_devtools_;
   if (!main_script_response_)
@@ -1899,6 +1895,8 @@ void ServiceWorkerVersion::StartWorkerInternal() {
   params->controller_receiver = std::move(controller_receiver_);
 
   params->provider_info = std::move(provider_info);
+
+  params->ukm_source_id = ukm_source_id_;
 
   embedded_worker_->Start(std::move(params),
                           base::BindOnce(&ServiceWorkerVersion::OnStartSent,

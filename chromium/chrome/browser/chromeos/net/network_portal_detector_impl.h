@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback_forward.h"
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -25,7 +26,6 @@
 #include "components/captive_portal/core/captive_portal_types.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "net/url_request/url_fetcher.h"
 #include "url/gurl.h"
 
 class NetworkingConfigTest;
@@ -186,11 +186,6 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
   // Returns true if attempt timeout callback isn't fired or
   // cancelled.
   bool AttemptTimeoutIsCancelledForTesting() const;
-
-  // Record detection stats such as detection duration and detection
-  // result in UMA.
-  void RecordDetectionStats(const NetworkState* network,
-                            CaptivePortalStatus status);
 
   // Resets strategy and all counters used in computations of
   // timeouts.

@@ -41,10 +41,10 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void DocumentAvailableInMainFrame(bool uses_temporary_zoom_level) override;
   void SetNeedsOcclusionTracking(bool needs_tracking) override;
   void SetVirtualKeyboardOverlayPolicy(bool vk_overlays_content) override;
-  void EvictFromBackForwardCache() override;
   void VisibilityChanged(mojom::blink::FrameVisibility visibility) override;
   void DidChangeThemeColor(
       const base::Optional<::SkColor>& theme_color) override;
+  void DidChangeBackgroundColor(const SkColor& background_color) override;
   void DidFailLoadWithError(const ::blink::KURL& url,
                             int32_t error_code) override;
   void DidFocusFrame() override;
@@ -75,7 +75,8 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void UpdateTitle(const WTF::String& title,
                    base::i18n::TextDirection title_direction) override;
   void UpdateUserActivationState(
-      mojom::blink::UserActivationUpdateType update_type) override;
+      mojom::blink::UserActivationUpdateType update_type,
+      mojom::UserActivationNotificationType notification_type) override;
   void HandleAccessibilityFindInPageResult(
       mojom::blink::FindInPageResultAXParamsPtr params) override;
   void HandleAccessibilityFindInPageTermination() override;
@@ -92,12 +93,12 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
                             RunModalPromptDialogCallback callback) override;
   void RunBeforeUnloadConfirm(bool is_reload,
                               RunBeforeUnloadConfirmCallback callback) override;
-  void Are3DAPIsBlocked(Are3DAPIsBlockedCallback callback) override;
   void UpdateFaviconURL(
       WTF::Vector<blink::mojom::blink::FaviconURLPtr> favicon_urls) override;
   void DownloadURL(mojom::blink::DownloadURLParamsPtr params) override;
   void FocusedElementChanged(bool is_editable_element,
-                             const gfx::Rect& bounds_in_frame_widget) override;
+                             const gfx::Rect& bounds_in_frame_widget,
+                             blink::mojom::FocusType focus_type) override;
   void ShowPopupMenu(
       mojo::PendingRemote<mojom::blink::PopupMenuClient> popup_client,
       const gfx::Rect& bounds,
@@ -117,8 +118,15 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
       mojom::blink::FrameOwnerPropertiesPtr frame_owner_properties) override;
   void DidChangeOpener(
       const base::Optional<base::UnguessableToken>& opener_frame) override;
+  void DidChangeCSPAttribute(const base::UnguessableToken& child_frame_token,
+                             network::mojom::blink::ContentSecurityPolicyPtr
+                                 parsed_csp_attribute) override;
   void DidChangeFramePolicy(const base::UnguessableToken& child_frame_token,
                             const FramePolicy& frame_policy) override;
+  void CapturePaintPreviewOfSubframe(
+      const gfx::Rect& clip_rect,
+      const base::UnguessableToken& guid) override;
+  void Detach() override;
 
  private:
   void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle);

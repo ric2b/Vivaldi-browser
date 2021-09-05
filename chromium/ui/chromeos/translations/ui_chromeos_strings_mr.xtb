@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">सनग्लासेस</translation>
 <translation id="115443833402798225">हँगल Ahnmatae</translation>
 <translation id="1155759005174418845">कॅटलान</translation>
+<translation id="1172970565351728681">सुमारे <ph name="REMAINING_TIME" /> शिल्लक आहे/आहेत</translation>
 <translation id="1173894706177603556">नाव बदला</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> कॉपी करत आहे...</translation>
 <translation id="1178581264944972037">विराम द्या</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">"<ph name="FILENAME" />" नावाची फाईल आधीपासूनच विद्यमान आहे. तुम्ही काय करू इच्छिता?</translation>
 <translation id="2121825465123208577">आकार बदला</translation>
 <translation id="2136953289241069843">लिप्यंतरण (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">"<ph name="PATH" />" उघडू शकत नाही: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">चुकीचा वर्ण: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">व्हिएतनामी कीबोर्ड (TCVN)</translation>
 <translation id="2168214441502403371">पर्शियन कीबोर्ड</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">मालकी <ph name="DESTINATION_DOMAIN" /> कडे हस्तांतरित केली जाईल.</translation>
 <translation id="3241720467332021590">आयरिश</translation>
 <translation id="3245321423178950146">अज्ञात कलाकार</translation>
+<translation id="3248185426436836442">प्रलंबित</translation>
 <translation id="3252266817569339921">फ्रेंच</translation>
 <translation id="3254434849914415189"><ph name="FILE_TYPE" /> फायलींसाठी डीफॉल्ट ॲप्लिकेशन निवडा:</translation>
 <translation id="3264582393905923483">संदर्भ</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">रेकॉर्ड केलेले वर्ष</translation>
 <translation id="3338239663705455570">स्लॉव्हेनियन कीबोर्ड</translation>
 <translation id="3353984535370177728">अपलोड करण्यासाठी एक फोल्डर निवडा</translation>
+<translation id="3356580349448036450">पूर्ण</translation>
 <translation id="3399597614303179694">मॅसेडोनियन कीबोर्ड</translation>
 <translation id="3414856743105198592">काढता येणार्‍या मीडिआचे स्वरूपन सर्व डेटा पुसून टाकत आहे. तुम्ही सुरू ठेवू इच्छिता?</translation>
 <translation id="3437801641691368414">तयार केल्याची वेळ</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">तुम्हाला '<ph name="FOLDER_NAME" />' या फोल्डरमध्ये फाइल हलवण्यास परवानगी नाही.</translation>
 <translation id="3786301125658655746">तुम्ही ऑफलाइन आहात</translation>
 <translation id="3789841737615482174">स्थापना करा</translation>
+<translation id="3793469551756281394">सुमारे <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /> शिल्लक आहेत</translation>
 <translation id="3798449238516105146">आवृत्ती</translation>
 <translation id="3801082500826908679">फारोसे</translation>
 <translation id="3809272675881623365">ससा</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">हे फोल्डर Windows सोबत शेअर केलेले आहे</translation>
 <translation id="4487088045714738411">बेल्जिअन कीबोर्ड</translation>
 <translation id="4522570452068850558">तपशील</translation>
+<translation id="4542387084127299777">"<ph name="PATH" />" उघडता आले नाही</translation>
 <translation id="4552678318981539154">अधिक स्टोरेज खरेदी करा</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" /> फाइल</translation>
@@ -511,6 +515,7 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="6629841649550503054"><ph name="BEGIN_LINK" />Google ड्राइव्ह!<ph name="END_LINK" /> वर सर्व बॅकअप घेतला</translation>
 <translation id="6643016212128521049">साफ करा</translation>
 <translation id="6650726141019353908">गुलाबी फुलपाखरू</translation>
+<translation id="6657585470893396449">पासवर्ड</translation>
 <translation id="6710213216561001401">मागील</translation>
 <translation id="6718273304615422081">झिप करत आहे...</translation>
 <translation id="6751256176799620176">1 फोल्डर निवडले</translation>
@@ -551,7 +556,6 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">स्थापना अयशस्वी.</translation>
 <translation id="7040138676081995583">यासह उघडा...</translation>
-<translation id="7059566040011178088"><ph name="REMAINING_TIME" /> पेक्षा कमी</translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> आयटम निवडले</translation>
 <translation id="7106346894903675391">अधिक स्टोरेज विकत घ्या...</translation>
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;ड्राइव्ह शोधा&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="8193175696669055101">डिव्हाइस मॉडेल</translation>
 <translation id="8208580316430297579">कलाकृती</translation>
 <translation id="8223479393428528563">ऑफलाइन वापराकरिता या फाइल सेव्ह करण्यासाठी, परत ऑनलाइन व्‍हा, फाइलंवर राइट-क्लिक करा आणि <ph name="OFFLINE_CHECKBOX_NAME" /> पर्याय निवडा.</translation>
-<translation id="8231972167769262174"><ph name="REMAINING_TIME" /> बद्दल</translation>
 <translation id="8249296373107784235">रद्द करा</translation>
 <translation id="8261506727792406068">हटवा</translation>
 <translation id="8269755669432358899">फाइल फीडबॅक पॅनल कोलॅप्स करा</translation>
@@ -725,6 +728,7 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="9065203028668620118">संपादन</translation>
 <translation id="9099674669267916096">पेज गणना</translation>
 <translation id="9110990317705400362">आम्ही तुमचे ब्राउझिंग सुरक्षित करण्यासाठी सातत्याने मार्ग शोधत आहोत. मागे, तुमच्या ब्राउझरमध्ये एक्स्टेंशन जोडण्यासाठी कोणतीही वेबसाइट तुम्हाला सूचित करू शकत होती. Google Chrome च्या नवीनतम आवृत्तीमध्ये, एक्स्टेंशन पेजद्वारे ते जोडून हे एक्स्टेंशन तुम्ही इंस्टॉल करू इच्छित आहात हे तुम्ही Chrome ला स्पष्टपणे सांगणे आवश्यक आहे. <ph name="BEGIN_LINK" />अधिक जाणून घ्या<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">अनलॉक करा</translation>
 <translation id="912419004897138677">कोडेक</translation>
 <translation id="9129931661813833980">फोल्डर पिन करा</translation>
 <translation id="9130775360844693113">'<ph name="DESTINATION_NAME" />' चे सदस्य या आयटमचा ॲक्सेस मिळवतील.</translation>

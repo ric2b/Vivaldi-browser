@@ -24,6 +24,8 @@ EnumTraits<blink::mojom::AuthenticatorTransport,
       return blink::mojom::AuthenticatorTransport::CABLE;
     case ::device::FidoTransportProtocol::kInternal:
       return blink::mojom::AuthenticatorTransport::INTERNAL;
+    case ::device::FidoTransportProtocol::kAndroidAccessory:
+      return blink::mojom::AuthenticatorTransport::CABLE;
   }
   NOTREACHED();
   return blink::mojom::AuthenticatorTransport::USB;
@@ -261,7 +263,11 @@ EnumTraits<blink::mojom::AttestationConveyancePreference,
       return blink::mojom::AttestationConveyancePreference::INDIRECT;
     case ::device::AttestationConveyancePreference::kDirect:
       return blink::mojom::AttestationConveyancePreference::DIRECT;
-    case ::device::AttestationConveyancePreference::kEnterprise:
+    case ::device::AttestationConveyancePreference::
+        kEnterpriseIfRPListedOnAuthenticator:
+      return blink::mojom::AttestationConveyancePreference::ENTERPRISE;
+    case ::device::AttestationConveyancePreference::
+        kEnterpriseApprovedByBrowser:
       return blink::mojom::AttestationConveyancePreference::ENTERPRISE;
   }
   NOTREACHED();
@@ -284,7 +290,8 @@ bool EnumTraits<blink::mojom::AttestationConveyancePreference,
       *output = ::device::AttestationConveyancePreference::kDirect;
       return true;
     case blink::mojom::AttestationConveyancePreference::ENTERPRISE:
-      *output = ::device::AttestationConveyancePreference::kEnterprise;
+      *output = ::device::AttestationConveyancePreference::
+          kEnterpriseIfRPListedOnAuthenticator;
       return true;
   }
   NOTREACHED();

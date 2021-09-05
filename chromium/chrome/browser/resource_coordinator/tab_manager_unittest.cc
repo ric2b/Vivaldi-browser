@@ -14,10 +14,10 @@
 #include "base/check.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
 #include "base/notreached.h"
 #include "base/strings/string16.h"
+#include "base/task/current_thread.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -29,8 +29,6 @@
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_tracker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/background_tab_navigation_throttle.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_data_unittest_utils.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_webcontents_observer.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
@@ -46,6 +44,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/variations/variations_associated_data.h"
@@ -110,14 +109,14 @@ class FakeOfflineNetworkChangeNotifier : public net::NetworkChangeNotifier {
 
 }  // namespace
 
-class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
+class TabManagerTest : public ChromeRenderViewHostTestHarness {
  public:
   TabManagerTest()
       : scoped_context_(
             std::make_unique<base::TestMockTimeTaskRunner::ScopedContext>(
                 task_runner_)),
         scoped_set_tick_clock_for_testing_(task_runner_->GetMockTickClock()) {
-    base::MessageLoopCurrent::Get()->SetTaskRunner(task_runner_);
+    base::CurrentThread::Get()->SetTaskRunner(task_runner_);
 
     // Start with a non-zero time.
     task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(42));
@@ -133,14 +132,11 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
     base::RepeatingClosure run_loop_cb = base::BindRepeating(
         &base::TestMockTimeTaskRunner::RunUntilIdle, task_runner_);
 
-    testing::WaitForLocalDBEntryToBeInitialized(web_contents.get(),
-                                                run_loop_cb);
-    testing::ExpireLocalDBObservationWindows(web_contents.get());
     return web_contents;
   }
 
   void SetUp() override {
-    ChromeTestHarnessWithLocalDB::SetUp();
+    ChromeRenderViewHostTestHarness::SetUp();
     tab_manager_ = g_browser_process->GetTabManager();
   }
 
@@ -164,7 +160,7 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
     nav_handle3_.reset();
 
     // WebContents must be deleted before
-    // ChromeTestHarnessWithLocalDB::TearDown() deletes the
+    // ChromeRenderViewHostTestHarness::TearDown() deletes the
     // RenderProcessHost.
     contents1_.reset();
     contents2_.reset();
@@ -176,7 +172,7 @@ class TabManagerTest : public testing::ChromeTestHarnessWithLocalDB {
 
     task_runner_->RunUntilIdle();
     scoped_context_.reset();
-    ChromeTestHarnessWithLocalDB::TearDown();
+    ChromeRenderViewHostTestHarness::TearDown();
   }
 
   void PrepareTabs(const char* url1 = kTestUrl,
@@ -327,7 +323,8 @@ TEST_F(TabManagerTest, IsInternalPage) {
 
 // Data race on Linux. http://crbug.com/787842
 // Flaky on Mac and Windows: https://crbug.com/995682
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
+    defined(OS_WIN)
 #define MAYBE_DiscardTabWithNonVisibleTabs DISABLED_DiscardTabWithNonVisibleTabs
 #else
 #define MAYBE_DiscardTabWithNonVisibleTabs DiscardTabWithNonVisibleTabs

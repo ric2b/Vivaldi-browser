@@ -17,7 +17,6 @@
 #include "chrome/chrome_cleaner/parsers/shortcut_parser/broker/shortcut_parser_api.h"
 #include "chrome/chrome_cleaner/parsers/shortcut_parser/sandboxed_lnk_parser_test_util.h"
 #include "chrome/chrome_cleaner/parsers/target/sandbox_setup.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "sandbox/win/src/sandbox_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -80,7 +79,7 @@ TEST_F(LnkParserSandboxSetupTest, ParseCorrectShortcutSandboxedTest) {
   base::win::ShortcutProperties shortcut_properties;
   shortcut_properties.set_target(not_lnk_file_path_);
   shortcut_properties.set_icon(not_lnk_file_path_, /*icon_index=*/0);
-  const base::string16 lnk_arguments = L"argument1 -f -t -a -o";
+  const std::wstring lnk_arguments = L"argument1 -f -t -a -o";
   shortcut_properties.set_arguments(lnk_arguments);
 
   base::win::ScopedHandle lnk_file_handle = CreateAndOpenShortcutInTempDir(

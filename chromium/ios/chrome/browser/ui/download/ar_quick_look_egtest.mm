@@ -93,6 +93,16 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 
 // Tests that QLPreviewController is shown for sucessfully downloaded USDZ file.
 - (void)testDownloadUsdz {
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+  // TODO(crbug.com/1114202): The XCUIElement queries in this test are broken on
+  // Xcode 12 beta 4 when running on the iOS 12 simulator.  Disable until Xcode
+  // is fixed.
+  if (@available(iOS 13, *)) {
+  } else {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS12.");
+  }
+#endif
+
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Good"];
   [ChromeEarlGrey tapWebStateElementWithID:@"good"];
@@ -125,6 +135,16 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 }
 
 - (void)testDownloadUnauthorized {
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+  // TODO(crbug.com/1114202): The XCUIElement queries in this test are broken on
+  // Xcode 12 beta 4 when running on the iOS 12 simulator.  Disable until Xcode
+  // is fixed.
+  if (@available(iOS 13, *)) {
+  } else {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS12.");
+  }
+#endif
+
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Unauthorized"];
   [ChromeEarlGrey tapWebStateElementWithID:@"unauthorized"];
@@ -157,6 +177,16 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 }
 
 - (void)testDownloadForbidden {
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+  // TODO(crbug.com/1114202): The XCUIElement queries in this test are broken on
+  // Xcode 12 beta 4 when running on the iOS 12 simulator.  Disable until Xcode
+  // is fixed.
+  if (@available(iOS 13, *)) {
+  } else {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS12.");
+  }
+#endif
+
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Forbidden"];
   [ChromeEarlGrey tapWebStateElementWithID:@"forbidden"];
@@ -189,6 +219,16 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 }
 
 - (void)testDownloadChangingMimeType {
+#if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
+  // TODO(crbug.com/1114202): The XCUIElement queries in this test are broken on
+  // Xcode 12 beta 4 when running on the iOS 12 simulator.  Disable until Xcode
+  // is fixed.
+  if (@available(iOS 13, *)) {
+  } else {
+    EARL_GREY_TEST_DISABLED(@"Test disabled on iOS12.");
+  }
+#endif
+
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Changing Mime Type"];
   [ChromeEarlGrey tapWebStateElementWithID:@"changing-mime-type"];

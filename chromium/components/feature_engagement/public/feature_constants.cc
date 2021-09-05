@@ -4,8 +4,6 @@
 
 #include "components/feature_engagement/public/feature_constants.h"
 
-#include "components/feature_engagement/buildflags.h"
-
 namespace feature_engagement {
 
 const base::Feature kIPHDemoMode{"IPH_DemoMode",
@@ -14,7 +12,7 @@ const base::Feature kIPHDemoMode{"IPH_DemoMode",
 const base::Feature kIPHDummyFeature{"IPH_Dummy",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+#if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
 const base::Feature kIPHDesktopTabGroupsNewGroupFeature{
     "IPH_DesktopTabGroupsNewGroup", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -28,16 +26,7 @@ const base::Feature kIPHReopenTabFeature{"IPH_ReopenTab",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHWebUITabStripFeature{"IPH_WebUITabStrip",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-const base::Feature kIPHBookmarkFeature{"IPH_Bookmark",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHIncognitoWindowFeature{
-    "IPH_IncognitoWindow", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kIPHNewTabFeature{"IPH_NewTab",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
+#endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
 #if defined(OS_ANDROID)
@@ -63,6 +52,8 @@ const base::Feature kIPHChromeHomeExpandFeature{
     "IPH_ChromeHomeExpand", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHChromeHomePullToRefreshFeature{
     "IPH_ChromeHomePullToRefresh", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHContextualSearchTranslationEnableFeature{
+    "IPH_ContextualSearchTranslationEnable", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHContextualSearchWebSearchFeature{
     "IPH_ContextualSearchWebSearch", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHContextualSearchPromoteTapFeature{
@@ -133,6 +124,8 @@ const base::Feature kIPHBadgedReadingListFeature{
     "IPH_BadgedReadingList", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHBadgedTranslateManualTriggerFeature{
     "IPH_BadgedTranslateManualTrigger", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHDiscoverFeedHeaderFeature{
+    "IPH_DiscoverFeedHeaderMenu", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_IOS)
 
 }  // namespace feature_engagement

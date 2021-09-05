@@ -16,8 +16,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
-#include "base/timer/timer.h"
-#include "base/trace_event/memory_dump_provider.h"
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/public/invalidation.h"
 #include "components/sync/base/cancelation_signal.h"
@@ -28,7 +26,6 @@
 #include "components/sync/engine/shutdown_reason.h"
 #include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/engine/sync_status_observer.h"
-#include "components/sync/syncable/user_share.h"
 #include "url/gurl.h"
 
 namespace syncer {
@@ -36,14 +33,7 @@ namespace syncer {
 class ModelTypeController;
 class SyncEngineImpl;
 
-namespace syncable {
-
-class NigoriHandlerProxy;
-
-}  // namespace syncable
-
 class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
-                          public base::trace_event::MemoryDumpProvider,
                           public SyncManager::Observer,
                           public TypeDebugInfoObserver,
                           public SyncStatusObserver {
@@ -55,10 +45,6 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   SyncEngineBackend(const std::string& name,
                     const base::FilePath& sync_data_folder,
                     const base::WeakPtr<SyncEngineImpl>& host);
-
-  // MemoryDumpProvider implementation.
-  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
-                    base::trace_event::ProcessMemoryDump* pmd) override;
 
   // SyncManager::Observer implementation.  The Core just acts like an air
   // traffic controller here, forwarding incoming messages to appropriate
@@ -141,16 +127,14 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   // The shutdown order is a bit complicated:
   // 1) Call ShutdownOnUIThread() from |frontend_loop_| to request sync manager
   //    to stop as soon as possible.
-  // 2) Post DoShutdown() to sync loop to clean up backend state, save
-  //    directory and destroy sync manager.
+  // 2) Post DoShutdown() to sync loop to clean up backend state and destroy
+  //    sync manager.
   void ShutdownOnUIThread();
   void DoShutdown(ShutdownReason reason);
   void DoDestroySyncManager();
 
   // Configuration methods that must execute on sync loop.
-  void DoPurgeDisabledTypes(const ModelTypeSet& to_purge,
-                            const ModelTypeSet& to_journal,
-                            const ModelTypeSet& to_unapply);
+  void DoPurgeDisabledTypes(const ModelTypeSet& to_purge);
   void DoConfigureSyncer(ModelTypeConfigurer::ConfigureParams params);
   void DoFinishConfigureDataTypes(
       ModelTypeSet types_to_config,
@@ -173,11 +157,6 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   // Disables forwarding of directory type debug counters.
   void DisableDirectoryTypeDebugInfoForwarding();
 
-  // Tell the sync manager to persist its state by writing to disk.
-  // Called on the sync thread, both by a timer and, on Android, when the
-  // application is backgrounded.
-  void SaveChanges();
-
   // Notify the syncer that the cookie jar has changed.
   void DoOnCookieJarChanged(bool account_mismatch,
                             bool empty_jar,
@@ -185,6 +164,10 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
 
   // Notify about change in client id.
   void DoOnInvalidatorClientIdChange(const std::string& client_id);
+
+  // Forwards an invalidation to the sync manager for all data types from the
+  // |payload|.
+  void DoOnInvalidationReceived(const std::string& payload);
 
   // Returns a ListValue representing Nigori node.
   void GetNigoriNodeForDebugging(AllNodesCallback callback);
@@ -201,12 +184,6 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   bool ShouldIgnoreRedundantInvalidation(const Invalidation& invalidation,
                                          ModelType Type);
 
-  // Invoked when initialization of syncapi is complete and we can start
-  // our timer.
-  // This must be called from the thread on which SaveChanges is intended to
-  // be run on; the host's |registrar_->sync_thread()|.
-  void StartSavingChanges();
-
   void LoadAndConnectNigoriController();
 
   // Name used for debugging.
@@ -221,22 +198,11 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   // Non-null only between calls to DoInitialize() and DoShutdown().
   std::unique_ptr<SyncBackendRegistrar> registrar_;
 
-  // The timer used to periodically call SaveChanges.
-  std::unique_ptr<base::RepeatingTimer> save_changes_timer_;
-
   // Our encryptor, which uses Chrome's encryption functions.
   SystemEncryptor encryptor_;
 
-  // We hold |user_share_| here as a dependency for |sync_encryption_handler_|.
-  // Should outlive |sync_encryption_handler_| and |sync_manager_|.
-  UserShare user_share_;
-
-  // Points to either SyncEncryptionHandlerImpl or NigoriSyncBridgeImpl
-  // depending on whether USS implementation of Nigori is enabled or not.
   // Should outlive |sync_manager_|.
   std::unique_ptr<SyncEncryptionHandler> sync_encryption_handler_;
-
-  std::unique_ptr<syncable::NigoriHandlerProxy> nigori_handler_proxy_;
 
   // The top-level syncapi entry point.  Lives on the sync thread.
   std::unique_ptr<SyncManager> sync_manager_;

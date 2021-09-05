@@ -90,7 +90,7 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
   // Reads registrations for |origin| from the database. Returns OK if they are
   // successfully read or not found. Otherwise, returns an error.
   Status GetRegistrationsForOrigin(
-      const GURL& origin,
+      const url::Origin& origin,
       std::vector<storage::mojom::ServiceWorkerRegistrationDataPtr>*
           registrations,
       std::vector<std::vector<storage::mojom::ServiceWorkerResourceRecordPtr>>*
@@ -217,14 +217,14 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
   // from the database. Returns OK if they are successfully read or not found.
   Status ReadUserDataForAllRegistrations(
       const std::string& user_data_name,
-      std::vector<std::pair<int64_t, std::string>>* user_data);
+      std::vector<storage::mojom::ServiceWorkerUserDataPtr>* user_data);
 
   // Reads user data for all registrations that have data with
   // |user_data_name_prefix| from the database. Returns OK if they are
   // successfully read or not found.
   Status ReadUserDataForAllRegistrationsByKeyPrefix(
       const std::string& user_data_name_prefix,
-      std::vector<std::pair<int64_t, std::string>>* user_data);
+      std::vector<storage::mojom::ServiceWorkerUserDataPtr>* user_data);
 
   // Deletes user data for all registrations that have data with
   // |user_data_name_prefix| from the database. Returns OK if all are
@@ -295,7 +295,7 @@ class CONTENT_EXPORT ServiceWorkerDatabase {
   // if successfully reads. Otherwise, returns an error.
   Status ReadRegistrationData(
       int64_t registration_id,
-      const GURL& origin,
+      const url::Origin& origin,
       storage::mojom::ServiceWorkerRegistrationDataPtr* registration);
 
   // Parses |serialized| as a RegistrationData object and pushes it into |out|.

@@ -23,11 +23,12 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
+#include "components/infobars/android/infobar_android.h"  // nogncheck
 #include "components/infobars/core/infobar_manager.h"  // nogncheck
 #include "components/translate/core/browser/translate_download_manager.h"
-#include "weblayer/browser/infobar_android.h"
 #include "weblayer/browser/infobar_service.h"
 #include "weblayer/browser/translate_compact_infobar.h"
+#include "weblayer/shell/android/browsertests_apk/translate_test_bridge.h"
 #endif
 
 namespace weblayer {
@@ -465,7 +466,8 @@ IN_PROC_BROWSER_TEST_F(TranslateBrowserTest, TranslateInfoBarPresentation) {
   run_loop.Run();
 
   EXPECT_EQ(1u, infobar_service->infobar_count());
-  auto* infobar = static_cast<InfoBarAndroid*>(infobar_service->infobar_at(0));
+  auto* infobar =
+      static_cast<infobars::InfoBarAndroid*>(infobar_service->infobar_at(0));
   EXPECT_TRUE(infobar->HasSetJavaInfoBar());
 
   base::RunLoop run_loop2;
@@ -520,7 +522,8 @@ IN_PROC_BROWSER_TEST_F(TranslateBrowserTest, TranslationViaInfoBar) {
   // occurs.
   auto* infobar =
       static_cast<TranslateCompactInfoBar*>(infobar_service->infobar_at(0));
-  infobar->SelectButtonForTesting(InfoBarAndroid::ActionType::ACTION_TRANSLATE);
+  TranslateTestBridge::SelectButton(
+      infobar, infobars::InfoBarAndroid::ActionType::ACTION_TRANSLATE);
 
   WaitUntilPageTranslated(shell());
 
@@ -538,8 +541,9 @@ IN_PROC_BROWSER_TEST_F(TranslateBrowserTest, TranslationViaInfoBar) {
 
   // Revert to the source language via the Java infobar and ensure that the
   // translation is undone.
-  infobar->SelectButtonForTesting(
-      InfoBarAndroid::ActionType::ACTION_TRANSLATE_SHOW_ORIGINAL);
+  TranslateTestBridge::SelectButton(
+      infobar,
+      infobars::InfoBarAndroid::ActionType::ACTION_TRANSLATE_SHOW_ORIGINAL);
 
   translate_reversion_waiter->Wait();
   EXPECT_EQ("fr", translate_client->GetLanguageState().current_language());
@@ -587,8 +591,9 @@ IN_PROC_BROWSER_TEST_F(TranslateBrowserTest,
 
   auto* infobar =
       static_cast<TranslateCompactInfoBar*>(infobar_service->infobar_at(0));
-  infobar->ClickOverflowMenuItemForTesting(
-      TranslateCompactInfoBar::OverflowMenuItemId::NEVER_TRANSLATE_LANGUAGE);
+  TranslateTestBridge::ClickOverflowMenuItem(
+      infobar,
+      TranslateTestBridge::OverflowMenuItemId::NEVER_TRANSLATE_LANGUAGE);
 
   // The translate infobar should still be present.
   EXPECT_EQ(1u, infobar_service->infobar_count());
@@ -657,8 +662,8 @@ IN_PROC_BROWSER_TEST_F(TranslateBrowserTest,
 
   auto* infobar =
       static_cast<TranslateCompactInfoBar*>(infobar_service->infobar_at(0));
-  infobar->ClickOverflowMenuItemForTesting(
-      TranslateCompactInfoBar::OverflowMenuItemId::NEVER_TRANSLATE_SITE);
+  TranslateTestBridge::ClickOverflowMenuItem(
+      infobar, TranslateTestBridge::OverflowMenuItemId::NEVER_TRANSLATE_SITE);
 
   // The translate infobar should still be present.
   EXPECT_EQ(1u, infobar_service->infobar_count());
@@ -689,12 +694,14 @@ IN_PROC_BROWSER_TEST_F(TranslateBrowserTest,
 class NeverTranslateMenuItemTranslateBrowserTest
     : public TranslateBrowserTest,
       public testing::WithParamInterface<
-          TranslateCompactInfoBar::OverflowMenuItemId> {};
+          TranslateTestBridge::OverflowMenuItemId> {};
 
 // Test that clicking and unclicking a never translate item ends up being a
 // no-op.
-IN_PROC_BROWSER_TEST_P(NeverTranslateMenuItemTranslateBrowserTest,
-                       TranslateInfoBarToggleAndToggleBackNeverTranslateItem) {
+// Disabled due to flakiness on P (crbug.com/1114795).
+IN_PROC_BROWSER_TEST_P(
+    NeverTranslateMenuItemTranslateBrowserTest,
+    DISABLED_TranslateInfoBarToggleAndToggleBackNeverTranslateItem) {
   auto* web_contents = static_cast<TabImpl*>(shell()->tab())->web_contents();
   auto* infobar_service = InfoBarService::FromWebContents(web_contents);
 
@@ -725,12 +732,12 @@ IN_PROC_BROWSER_TEST_P(NeverTranslateMenuItemTranslateBrowserTest,
 
     auto* infobar =
         static_cast<TranslateCompactInfoBar*>(infobar_service->infobar_at(0));
-    infobar->ClickOverflowMenuItemForTesting(GetParam());
+    TranslateTestBridge::ClickOverflowMenuItem(infobar, GetParam());
 
     // The translate infobar should still be present.
     EXPECT_EQ(1u, infobar_service->infobar_count());
 
-    infobar->ClickOverflowMenuItemForTesting(GetParam());
+    TranslateTestBridge::ClickOverflowMenuItem(infobar, GetParam());
   }
 
   // The infobar should be shown on a new navigation to a page in the same
@@ -768,8 +775,8 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     NeverTranslateMenuItemTranslateBrowserTest,
     ::testing::Values(
-        TranslateCompactInfoBar::OverflowMenuItemId::NEVER_TRANSLATE_LANGUAGE,
-        TranslateCompactInfoBar::OverflowMenuItemId::NEVER_TRANSLATE_SITE));
+        TranslateTestBridge::OverflowMenuItemId::NEVER_TRANSLATE_LANGUAGE,
+        TranslateTestBridge::OverflowMenuItemId::NEVER_TRANSLATE_SITE));
 
 #endif  // #if defined(OS_ANDROID)
 

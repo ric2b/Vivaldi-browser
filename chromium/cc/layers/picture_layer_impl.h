@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -76,6 +77,7 @@ class CC_EXPORT PictureLayerImpl
   bool HasValidTilePriorities() const override;
   bool RequiresHighResToDraw() const override;
   const PaintWorkletRecordMap& GetPaintWorkletRecords() const override;
+  bool IsDirectlyCompositedImage() const override;
 
   // ImageAnimationController::AnimationDriver overrides.
   bool ShouldAnimate(PaintImage::Id paint_image_id) const override;
@@ -94,8 +96,6 @@ class CC_EXPORT PictureLayerImpl
       const PictureLayerTilingSet* pending_set,
       const PaintWorkletRecordMap* pending_paint_worklet_records);
   bool UpdateTiles();
-  // Returns true if the LCD state changed.
-  bool UpdateCanUseLCDTextAfterCommit();
 
   // Mask-related functions.
   void GetContentsResourceId(viz::ResourceId* resource_id,
@@ -103,8 +103,6 @@ class CC_EXPORT PictureLayerImpl
                              gfx::SizeF* resource_uv_size) const override;
 
   void SetNearestNeighbor(bool nearest_neighbor);
-
-  void SetUseTransformedRasterization(bool use);
 
   void SetDirectlyCompositedImageSize(base::Optional<gfx::Size>);
 
@@ -143,9 +141,7 @@ class CC_EXPORT PictureLayerImpl
   LCDTextDisallowedReason lcd_text_disallowed_reason() const {
     return lcd_text_disallowed_reason_;
   }
-  LCDTextDisallowedReason ComputeLCDTextDisallowedReasonForTesting() const {
-    return ComputeLCDTextDisallowedReason();
-  }
+  LCDTextDisallowedReason ComputeLCDTextDisallowedReasonForTesting() const;
 
   const Region& InvalidationForTesting() const { return invalidation_; }
 
@@ -175,11 +171,14 @@ class CC_EXPORT PictureLayerImpl
   PictureLayerImpl(LayerTreeImpl* tree_impl, int id);
   PictureLayerTiling* AddTiling(const gfx::AxisTransform2d& contents_transform);
   void RemoveAllTilings();
+  bool CanRecreateHighResTilingForLCDTextAndRasterTranslation(
+      const PictureLayerTiling& high_res) const;
   void UpdateTilingsForRasterScaleAndTranslation(bool adjusted_raster_scale);
   void AddLowResolutionTilingIfNeeded();
   bool ShouldAdjustRasterScale(float old_ideal_contents_scale) const;
   void RecalculateRasterScales();
-  gfx::Vector2dF CalculateRasterTranslation(float raster_scale);
+  // Returns false if raster translation is not applicable.
+  bool CalculateRasterTranslation(gfx::Vector2dF& raster_translation) const;
   void CleanUpTilingsOnActiveLayer(
       const std::vector<PictureLayerTiling*>& used_tilings);
   float MinimumContentsScale() const;
@@ -222,7 +221,10 @@ class CC_EXPORT PictureLayerImpl
       const std::vector<DiscardableImageMap::PaintWorkletInputWithImageId>&
           inputs);
 
-  LCDTextDisallowedReason ComputeLCDTextDisallowedReason() const;
+  LCDTextDisallowedReason ComputeLCDTextDisallowedReason(
+      bool raster_translation_aligns_pixels) const;
+  // Returns true if the LCD state changed.
+  bool UpdateCanUseLCDText(bool raster_translation_aligns_pixels);
 
   PictureLayerImpl* twin_layer_;
 
@@ -256,7 +258,6 @@ class CC_EXPORT PictureLayerImpl
   bool only_used_low_res_last_append_quads_ : 1;
 
   bool nearest_neighbor_ : 1;
-  bool use_transformed_rasterization_ : 1;
 
   LCDTextDisallowedReason lcd_text_disallowed_reason_;
 

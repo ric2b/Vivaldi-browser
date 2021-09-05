@@ -8,8 +8,11 @@
 
 #include <memory>
 
+#include "base/allocator/partition_allocator/checked_ptr_support.h"
+#include "base/allocator/partition_allocator/memory_reclaimer.h"
 #include "base/allocator/partition_allocator/oom.h"
 #include "base/allocator/partition_allocator/page_allocator_internal.h"
+#include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
@@ -66,15 +69,27 @@ static_assert(kPageMetadataSize * kNumPartitionPagesPerSuperPage <=
                   kSystemPageSize,
               "page metadata fits in hole");
 // Limit to prevent callers accidentally overflowing an int size.
-static_assert(kGenericMaxDirectMapped <=
-                  (1UL << 31) + kPageAllocationGranularity,
+static_assert(kMaxDirectMapped <= (1UL << 31) + kPageAllocationGranularity,
               "maximum direct mapped allocation");
 // Check that some of our zanier calculations worked out as expected.
-static_assert(kGenericSmallestBucket == alignof(std::max_align_t),
+#if ENABLE_TAG_FOR_MTE_CHECKED_PTR
+static_assert(kSmallestBucket >= alignof(std::max_align_t),
               "generic smallest bucket");
-static_assert(kGenericMaxBucketed == 983040, "generic max bucketed");
+#else
+static_assert(kSmallestBucket == alignof(std::max_align_t),
+              "generic smallest bucket");
+#endif
+static_assert(kMaxBucketed == 983040, "generic max bucketed");
 static_assert(kMaxSystemPagesPerSlotSpan < (1 << 8),
               "System pages per slot span must be less than 128.");
+
+#if ENABLE_TAG_FOR_SINGLE_TAG_CHECKED_PTR
+namespace internal {
+BASE_EXPORT PartitionTagWrapper g_checked_ptr_single_tag = {{},
+                                                            kFixedTagValue,
+                                                            {}};
+}
+#endif
 
 Lock& GetHooksLock() {
   static NoDestructor<Lock> lock;
@@ -181,12 +196,6 @@ bool PartitionAllocHooks::ReallocOverrideHookIfEnabled(size_t* out,
 void PartitionAllocGlobalInit(OomFunction on_out_of_memory) {
   PA_DCHECK(on_out_of_memory);
   internal::g_oom_handling_function = on_out_of_memory;
-
-#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
-  // Reserve address space for partition alloc.
-  if (IsPartitionAllocGigaCageEnabled())
-    internal::PartitionAddressSpace::Init();
-#endif
 }
 
 void PartitionAllocGlobalUninitForTesting() {
@@ -198,11 +207,20 @@ void PartitionAllocGlobalUninitForTesting() {
 }
 
 template <bool thread_safe>
-void PartitionRoot<thread_safe>::InitSlowPath() {
+void PartitionRoot<thread_safe>::Init(bool enforce_alignment) {
   ScopedGuard guard{lock_};
-
-  if (initialized.load(std::memory_order_relaxed))
+  if (initialized)
     return;
+
+#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
+  // Reserve address space for partition alloc.
+  if (IsPartitionAllocGigaCageEnabled())
+    internal::PartitionAddressSpace::Init();
+#endif
+
+  // If alignment needs to be enforced, disallow adding cookies and/or tags at
+  // the beginning of the slot.
+  allow_extras = !enforce_alignment;
 
   // We mark the sentinel bucket/page as free to make sure it is skipped by our
   // logic to find a new active page.
@@ -224,19 +242,19 @@ void PartitionRoot<thread_safe>::InitSlowPath() {
   size_t order;
   for (order = 0; order <= kBitsPerSizeT; ++order) {
     size_t order_index_shift;
-    if (order < kGenericNumBucketsPerOrderBits + 1)
+    if (order < kNumBucketsPerOrderBits + 1)
       order_index_shift = 0;
     else
-      order_index_shift = order - (kGenericNumBucketsPerOrderBits + 1);
+      order_index_shift = order - (kNumBucketsPerOrderBits + 1);
     order_index_shifts[order] = order_index_shift;
     size_t sub_order_index_mask;
     if (order == kBitsPerSizeT) {
       // This avoids invoking undefined behavior for an excessive shift.
       sub_order_index_mask =
-          static_cast<size_t>(-1) >> (kGenericNumBucketsPerOrderBits + 1);
+          static_cast<size_t>(-1) >> (kNumBucketsPerOrderBits + 1);
     } else {
       sub_order_index_mask = ((static_cast<size_t>(1) << order) - 1) >>
-                             (kGenericNumBucketsPerOrderBits + 1);
+                             (kNumBucketsPerOrderBits + 1);
     }
     order_sub_index_masks[order] = sub_order_index_mask;
   }
@@ -248,47 +266,46 @@ void PartitionRoot<thread_safe>::InitSlowPath() {
   // We avoid them in the bucket lookup map, but we tolerate them to keep the
   // code simpler and the structures more generic.
   size_t i, j;
-  size_t current_size = kGenericSmallestBucket;
-  size_t current_increment =
-      kGenericSmallestBucket >> kGenericNumBucketsPerOrderBits;
+  size_t current_size = kSmallestBucket;
+  size_t current_increment = kSmallestBucket >> kNumBucketsPerOrderBits;
   Bucket* bucket = &buckets[0];
-  for (i = 0; i < kGenericNumBucketedOrders; ++i) {
-    for (j = 0; j < kGenericNumBucketsPerOrder; ++j) {
+  for (i = 0; i < kNumBucketedOrders; ++i) {
+    for (j = 0; j < kNumBucketsPerOrder; ++j) {
       bucket->Init(current_size);
       // Disable pseudo buckets so that touching them faults.
-      if (current_size % kGenericSmallestBucket)
+      if (current_size % kSmallestBucket)
         bucket->active_pages_head = nullptr;
       current_size += current_increment;
       ++bucket;
     }
     current_increment <<= 1;
   }
-  PA_DCHECK(current_size == 1 << kGenericMaxBucketedOrder);
-  PA_DCHECK(bucket == &buckets[0] + kGenericNumBuckets);
+  PA_DCHECK(current_size == 1 << kMaxBucketedOrder);
+  PA_DCHECK(bucket == &buckets[0] + kNumBuckets);
 
   // Then set up the fast size -> bucket lookup table.
   bucket = &buckets[0];
   Bucket** bucket_ptr = &bucket_lookups[0];
   for (order = 0; order <= kBitsPerSizeT; ++order) {
-    for (j = 0; j < kGenericNumBucketsPerOrder; ++j) {
-      if (order < kGenericMinBucketedOrder) {
+    for (j = 0; j < kNumBucketsPerOrder; ++j) {
+      if (order < kMinBucketedOrder) {
         // Use the bucket of the finest granularity for malloc(0) etc.
         *bucket_ptr++ = &buckets[0];
-      } else if (order > kGenericMaxBucketedOrder) {
+      } else if (order > kMaxBucketedOrder) {
         *bucket_ptr++ = Bucket::get_sentinel_bucket();
       } else {
         Bucket* valid_bucket = bucket;
         // Skip over invalid buckets.
-        while (valid_bucket->slot_size % kGenericSmallestBucket)
+        while (valid_bucket->slot_size % kSmallestBucket)
           valid_bucket++;
         *bucket_ptr++ = valid_bucket;
         bucket++;
       }
     }
   }
-  PA_DCHECK(bucket == &buckets[0] + kGenericNumBuckets);
-  PA_DCHECK(bucket_ptr == &bucket_lookups[0] + ((kBitsPerSizeT + 1) *
-                                                kGenericNumBucketsPerOrder));
+  PA_DCHECK(bucket == &buckets[0] + kNumBuckets);
+  PA_DCHECK(bucket_ptr ==
+            &bucket_lookups[0] + ((kBitsPerSizeT + 1) * kNumBucketsPerOrder));
   // And there's one last bucket lookup that will be hit for e.g. malloc(-1),
   // which tries to overflow to a non-existent order.
   *bucket_ptr = Bucket::get_sentinel_bucket();
@@ -302,12 +319,11 @@ bool PartitionRoot<thread_safe>::ReallocDirectMappedInPlace(
     size_t raw_size) {
   PA_DCHECK(page->bucket->is_direct_mapped());
 
-  raw_size = internal::PartitionCookieSizeAdjustAdd(raw_size);
-
+  raw_size = internal::PartitionSizeAdjustAdd(allow_extras, raw_size);
   // Note that the new size might be a bucketed size; this function is called
   // whenever we're reallocating a direct mapped allocation.
   size_t new_size = Bucket::get_direct_map_size(raw_size);
-  if (new_size < kGenericMinDirectMappedDownsize)
+  if (new_size < kMinDirectMappedDownsize)
     return false;
 
   // bucket->slot_size is the current size of the allocation.
@@ -345,8 +361,10 @@ bool PartitionRoot<thread_safe>::ReallocDirectMappedInPlace(
 
 #if DCHECK_IS_ON()
   // Write a new trailing cookie.
-  internal::PartitionCookieWriteValue(char_ptr + raw_size -
-                                      internal::kCookieSize);
+  if (allow_extras) {
+    internal::PartitionCookieWriteValue(char_ptr + raw_size -
+                                        internal::kCookieSize);
+  }
 #endif
 
   page->set_raw_size(raw_size);
@@ -367,14 +385,18 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
   PA_CHECK(result || flags & PartitionAllocReturnNull);
   return result;
 #else
-  if (UNLIKELY(!ptr))
-    return AllocFlags(flags, new_size, type_name);
+  bool no_hooks = flags & PartitionAllocNoHooks;
+  if (UNLIKELY(!ptr)) {
+    return no_hooks ? AllocFlagsNoHooks(flags, new_size)
+                    : AllocFlags(flags, new_size, type_name);
+  }
+
   if (UNLIKELY(!new_size)) {
     Free(ptr);
     return nullptr;
   }
 
-  if (new_size > kGenericMaxDirectMapped) {
+  if (new_size > kMaxDirectMapped) {
     if (flags & PartitionAllocReturnNull)
       return nullptr;
     internal::PartitionExcessiveAllocationSize(new_size);
@@ -383,13 +405,13 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
   const bool hooks_enabled = PartitionAllocHooks::AreHooksEnabled();
   bool overridden = false;
   size_t actual_old_size;
-  if (UNLIKELY(hooks_enabled)) {
+  if (UNLIKELY(!no_hooks && hooks_enabled)) {
     overridden = PartitionAllocHooks::ReallocOverrideHookIfEnabled(
         &actual_old_size, ptr);
   }
   if (LIKELY(!overridden)) {
-    auto* page =
-        Page::FromPointer(internal::PartitionCookieFreePointerAdjust(ptr));
+    auto* page = Page::FromPointer(
+        internal::PartitionPointerAdjustSubtract(allow_extras, ptr));
     bool success = false;
     {
       internal::ScopedGuard<thread_safe> guard{lock_};
@@ -404,7 +426,7 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
       }
     }
     if (success) {
-      if (UNLIKELY(hooks_enabled)) {
+      if (UNLIKELY(!no_hooks && hooks_enabled)) {
         PartitionAllocHooks::ReallocObserverHookIfEnabled(ptr, ptr, new_size,
                                                           type_name);
       }
@@ -412,7 +434,7 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
     }
 
     const size_t actual_new_size = ActualSize(new_size);
-    actual_old_size = PartitionAllocGetSize<thread_safe>(ptr);
+    actual_old_size = GetSize(ptr);
 
     // TODO: note that tcmalloc will "ignore" a downsizing realloc() unless the
     // new size is a significant percentage smaller. We could do the same if we
@@ -421,19 +443,23 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
       // Trying to allocate a block of size |new_size| would give us a block of
       // the same size as the one we've already got, so re-use the allocation
       // after updating statistics (and cookies, if present).
-      page->set_raw_size(internal::PartitionCookieSizeAdjustAdd(new_size));
+      size_t new_raw_size =
+          internal::PartitionSizeAdjustAdd(allow_extras, new_size);
+      page->set_raw_size(new_raw_size);
 #if DCHECK_IS_ON()
       // Write a new trailing cookie when it is possible to keep track of
       // |new_size| via the raw size pointer.
-      if (page->get_raw_size_ptr())
+      if (page->get_raw_size_ptr() && allow_extras) {
         internal::PartitionCookieWriteValue(static_cast<char*>(ptr) + new_size);
+      }
 #endif
       return ptr;
     }
   }
 
   // This realloc cannot be resized in-place. Sadness.
-  void* ret = AllocFlags(flags, new_size, type_name);
+  void* ret = no_hooks ? AllocFlagsNoHooks(flags, new_size)
+                       : AllocFlags(flags, new_size, type_name);
   if (!ret) {
     if (flags & PartitionAllocReturnNull)
       return nullptr;
@@ -620,7 +646,7 @@ void PartitionRoot<thread_safe>::PurgeMemory(int flags) {
   if (flags & PartitionPurgeDecommitEmptyPages)
     DecommitEmptyPages();
   if (flags & PartitionPurgeDiscardUnusedSystemPages) {
-    for (size_t i = 0; i < kGenericNumBuckets; ++i) {
+    for (size_t i = 0; i < kNumBuckets; ++i) {
       Bucket* bucket = &buckets[i];
       if (bucket->slot_size >= kSystemPageSize)
         PartitionPurgeBucket(bucket);
@@ -735,10 +761,10 @@ void PartitionRoot<thread_safe>::DumpStats(const char* partition_name,
         std::unique_ptr<uint32_t[]>(new uint32_t[kMaxReportableDirectMaps]);
   }
 
-  PartitionBucketMemoryStats bucket_stats[kGenericNumBuckets];
+  PartitionBucketMemoryStats bucket_stats[kNumBuckets];
   size_t num_direct_mapped_allocations = 0;
   {
-    for (size_t i = 0; i < kGenericNumBuckets; ++i) {
+    for (size_t i = 0; i < kNumBuckets; ++i) {
       const Bucket* bucket = &buckets[i];
       // Don't report the pseudo buckets that the generic allocator sets up in
       // order to preserve a fast size->bucket map (see
@@ -772,7 +798,7 @@ void PartitionRoot<thread_safe>::DumpStats(const char* partition_name,
     // Call |PartitionsDumpBucketStats| after collecting stats because it can
     // try to allocate using |PartitionRoot::Alloc()| and it can't
     // obtain the lock.
-    for (size_t i = 0; i < kGenericNumBuckets; ++i) {
+    for (size_t i = 0; i < kNumBuckets; ++i) {
       if (bucket_stats[i].is_valid)
         dumper->PartitionsDumpBucketStats(partition_name, &bucket_stats[i]);
     }
@@ -799,5 +825,38 @@ void PartitionRoot<thread_safe>::DumpStats(const char* partition_name,
 
 template struct BASE_EXPORT PartitionRoot<internal::ThreadSafe>;
 template struct BASE_EXPORT PartitionRoot<internal::NotThreadSafe>;
+
+namespace internal {
+
+template <bool thread_safe>
+PartitionAllocator<thread_safe>::~PartitionAllocator() {
+  PartitionAllocMemoryReclaimer::Instance()->UnregisterPartition(
+      &partition_root_);
+}
+
+template <bool thread_safe>
+void PartitionAllocator<thread_safe>::init(
+    PartitionAllocatorAlignment alignment) {
+  partition_root_.Init(
+      alignment ==
+      PartitionAllocatorAlignment::kAlignedAlloc /* enforce_alignment */);
+  PartitionAllocMemoryReclaimer::Instance()->RegisterPartition(
+      &partition_root_);
+}
+
+template PartitionAllocator<internal::ThreadSafe>::~PartitionAllocator();
+template void PartitionAllocator<internal::ThreadSafe>::init(
+    PartitionAllocatorAlignment alignment);
+template PartitionAllocator<internal::NotThreadSafe>::~PartitionAllocator();
+template void PartitionAllocator<internal::NotThreadSafe>::init(
+    PartitionAllocatorAlignment alignment);
+
+#if DCHECK_IS_ON()
+void DCheckIfManagedByPartitionAllocNormalBuckets(const void* ptr) {
+  PA_DCHECK(IsManagedByPartitionAllocNormalBuckets(ptr));
+}
+#endif
+
+}  // namespace internal
 
 }  // namespace base

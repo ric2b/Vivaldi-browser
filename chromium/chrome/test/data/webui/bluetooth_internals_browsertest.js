@@ -126,8 +126,26 @@ BluetoothInternalsTest.prototype = {
         this.methodCalled('setClient', client);
       }
 
+      async setDiscoverable() {
+        this.methodCalled('setDiscoverable');
+        return {success: true};
+      }
+
+      async setName() {
+        this.methodCalled('setName');
+        return {success: true};
+      }
+
       async startDiscoverySession() {
         return {session: null};
+      }
+
+      async connectToServiceInsecurely(address, service_uuid) {
+        return {result: null};
+      }
+
+      async createRfcommService(service_name, service_uuid) {
+        return {result: null};
       }
 
       setTestConnectResult(connectResult) {

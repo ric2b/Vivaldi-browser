@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Ставка во список</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Повлечете надесно со два прста</translation>
+<translation id="1016393160682012902">Притиснете некое од копчињата qwerty, копчето за освежување на брајовото писмо или допрете на движење за да ја дознаете неговата функција. Притиснете control со w или escape за да излезете.</translation>
 <translation id="1022586497894531524">Дали првпат ги користите говорните повратни информации на ChromeVox? Ова брзо упатство ви ги објаснува основните работи за тоа како да започнете со ChromeVox.</translation>
 <translation id="1025074108959230262">Лепливиот режим е оневозможен</translation>
 <translation id="1031961866430398710">потоа</translation>
@@ -505,7 +506,6 @@
 <translation id="489907760999452556">Внатрешна врска</translation>
 <translation id="4909019435900810068">Преместете наназад за еден збор</translation>
 <translation id="4911349081560453449">Нема претходно поле за избор</translation>
-<translation id="4915087353619183190">Се отвора режимот на учење. Притиснете некое од копчињата qwerty, копчето за освежување на брајовото писмо или допрете на движење за да ја научите неговата функција. Притиснете control со w или escape за да излезете.</translation>
 <translation id="492295894462528572">Предговор</translation>
 <translation id="495046168593986294">Оди нагоре</translation>
 <translation id="495170559598752135">Дејства</translation>
@@ -648,6 +648,7 @@
 <translation id="6017514345406065928">Зелена</translation>
 <translation id="602001110135236999">Лизгај налево</translation>
 <translation id="6034000775414344507">Светлосива</translation>
+<translation id="6036135911048686884">Истражувајте со допир</translation>
 <translation id="6037602951055904232">Повлечи напред</translation>
 <translation id="6044160928851315051">Затемни го екранот</translation>
 <translation id="6082768461603900813">Основна навигација</translation>
@@ -924,6 +925,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{тараба}one{# знак тараба}other{# знаци тараба}}</translation>
 <translation id="8378855320830505539">Регион</translation>
 <translation id="8382679411218029383">Линеарно автоматско комплетирање и набројување</translation>
+<translation id="8394908167088220973">Пушти/Паузирај медиум</translation>
 <translation id="8428213095426709021">Поставки</translation>
 <translation id="8428603554127842284">Ниво <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -968,6 +970,7 @@
 <translation id="8770473310765924354">излези од структурирана содржина, како што се табели</translation>
 <translation id="8779057862865475116">Нема претходен линк</translation>
 <translation id="8796411681063377102">Заглавие на следно ниво 3.</translation>
+<translation id="8823311177246872527">Страница <ph name="CURRENTPAGE" /> од <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">главно</translation>
 <translation id="8882002077197914455">Заглавие на ред</translation>

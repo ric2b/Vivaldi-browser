@@ -15,8 +15,11 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/base/default_style.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/compositor/layer_animation_element.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/layout/layout_manager.h"
@@ -30,8 +33,11 @@
 #include "ui/base/win/shell.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "ui/views/widget/widget_utils_mac.h"
+#else
+#include "ui/aura/window.h"
+#include "ui/aura/window_observer.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -124,7 +130,7 @@ Widget* CreateBubbleWidget(BubbleDialogDelegate* bubble) {
                                   : Widget::InitParams::ACTIVATABLE_NO;
   bubble->OnBeforeBubbleWidgetInit(&bubble_params, bubble_widget);
   bubble_widget->Init(std::move(bubble_params));
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   // On Mac, having a parent window creates a permanent stacking order, so
   // there's no need to do this. Also, calling StackAbove() on Mac shows the
   // bubble implicitly, for which the bubble is currently not ready.
@@ -176,16 +182,29 @@ class BubbleDialogDelegate::AnchorViewObserver : public ViewObserver {
 
 // This class is responsible for observing events on a BubbleDialogDelegate's
 // anchor widget and notifying the BubbleDialogDelegate of them.
+#if defined(OS_APPLE)
 class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver {
+#else
+class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver,
+                                                   public aura::WindowObserver {
+#endif
+
  public:
   AnchorWidgetObserver(BubbleDialogDelegate* owner, Widget* widget)
       : owner_(owner) {
-    observer_.Add(widget);
+    widget_observer_.Add(widget);
+#if !defined(OS_APPLE)
+    window_observer_.Add(widget->GetNativeWindow());
+#endif
   }
   ~AnchorWidgetObserver() override = default;
 
+  // WidgetObserver:
   void OnWidgetDestroying(Widget* widget) override {
-    observer_.Remove(widget);
+#if !defined(OS_APPLE)
+    window_observer_.Remove(widget->GetNativeWindow());
+#endif
+    widget_observer_.Remove(widget);
     owner_->OnAnchorWidgetDestroying();
     // |this| may be destroyed here!
   }
@@ -198,9 +217,28 @@ class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver {
     owner_->OnAnchorBoundsChanged();
   }
 
+#if !defined(OS_APPLE)
+  // aura::WindowObserver:
+  void OnWindowTransformed(aura::Window* window,
+                           ui::PropertyChangeReason reason) override {
+    if (window->is_destroying())
+      return;
+
+    // Update the anchor bounds when the transform animation is complete, or
+    // when the transform is set without animation.
+    if (!window->layer()->GetAnimator()->IsAnimatingOnePropertyOf(
+            ui::LayerAnimationElement::TRANSFORM)) {
+      owner_->OnAnchorBoundsChanged();
+    }
+  }
+#endif
+
  private:
   BubbleDialogDelegate* owner_;
-  ScopedObserver<views::Widget, views::WidgetObserver> observer_{this};
+  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_{this};
+#if !defined(OS_APPLE)
+  ScopedObserver<aura::Window, aura::WindowObserver> window_observer_{this};
+#endif
 };
 
 // This class is responsible for observing events on a BubbleDialogDelegate's
@@ -219,11 +257,11 @@ class BubbleDialogDelegate::BubbleWidgetObserver : public WidgetObserver {
   }
 
   void OnWidgetDestroying(Widget* widget) override {
-    observer_.Remove(widget);
     owner_->OnWidgetDestroying(widget);
   }
 
   void OnWidgetDestroyed(Widget* widget) override {
+    observer_.Remove(widget);
     owner_->OnWidgetDestroyed(widget);
   }
 
@@ -250,10 +288,6 @@ class BubbleDialogDelegate::BubbleWidgetObserver : public WidgetObserver {
   void OnWidgetActivationChanged(Widget* widget, bool active) override {
     owner_->OnBubbleWidgetActivationChanged(active);
     owner_->OnWidgetActivationChanged(widget, active);
-  }
-
-  void OnWidgetPaintAsActiveChanged(Widget* widget, bool as_active) override {
-    owner_->OnBubbleWidgetPaintAsActiveChanged(as_active);
   }
 
  private:
@@ -290,7 +324,7 @@ Widget* BubbleDialogDelegate::CreateBubble(
     // we must adjust to try to fit inside the window.
     bubble_delegate->set_adjust_if_offscreen(true);
   } else {
-#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_MACOSX)
+#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_APPLE)
   // Linux clips bubble windows that extend outside their parent window bounds.
   // Mac never adjusts.
   bubble_delegate->set_adjust_if_offscreen(false);
@@ -300,6 +334,10 @@ Widget* BubbleDialogDelegate::CreateBubble(
   bubble_delegate->SizeToContents();
   bubble_delegate->bubble_widget_observer_ =
       std::make_unique<BubbleWidgetObserver>(bubble_delegate, bubble_widget);
+  bubble_delegate->paint_as_active_subscription_ =
+      bubble_widget->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+          &BubbleDialogDelegate::OnBubbleWidgetPaintAsActiveChanged,
+          base::Unretained(bubble_delegate)));
   return bubble_widget;
 }
 
@@ -338,9 +376,9 @@ BubbleDialogDelegate* BubbleDialogDelegate::AsBubbleDialogDelegate() {
   return this;
 }
 
-NonClientFrameView* BubbleDialogDelegate::CreateNonClientFrameView(
-    Widget* widget) {
-  BubbleFrameView* frame = new BubbleDialogFrameView(title_margins_);
+std::unique_ptr<NonClientFrameView>
+BubbleDialogDelegate::CreateNonClientFrameView(Widget* widget) {
+  auto frame = std::make_unique<BubbleDialogFrameView>(title_margins_);
   LayoutProvider* provider = LayoutProvider::Get();
 
   frame->set_footnote_margins(
@@ -349,12 +387,8 @@ NonClientFrameView* BubbleDialogDelegate::CreateNonClientFrameView(
 
   std::unique_ptr<BubbleBorder> border =
       std::make_unique<BubbleBorder>(arrow(), GetShadow(), color());
-  if (CustomShadowsSupported() && GetParams().round_corners) {
-    border->SetCornerRadius(
-        base::FeatureList::IsEnabled(features::kEnableMDRoundedCornersOnDialogs)
-            ? provider->GetCornerRadiusMetric(views::EMPHASIS_HIGH)
-            : 2);
-  }
+  if (CustomShadowsSupported() && GetParams().round_corners)
+    border->SetCornerRadius(GetCornerRadius());
 
   frame->SetBubbleBorder(std::move(border));
   return frame;
@@ -362,13 +396,17 @@ NonClientFrameView* BubbleDialogDelegate::CreateNonClientFrameView(
 
 ClientView* BubbleDialogDelegate::CreateClientView(Widget* widget) {
   client_view_ = DialogDelegate::CreateClientView(widget);
-  // In order for the |client_view|'s content view hierarchy to respect its clip
-  // mask we must paint to a layer. This is necessary because layers do not
-  // respect the clip of a non-layer backed parent.
+  // In order for the |client_view|'s content view hierarchy to respect its
+  // rounded corner clip we must paint the client view to a layer. This is
+  // necessary because layers do not respect the clip of a non-layer backed
+  // parent.
   if (base::FeatureList::IsEnabled(
           features::kEnableMDRoundedCornersOnDialogs) &&
       GetProperty(kPaintClientToLayer)) {
     client_view_->SetPaintToLayer();
+    client_view_->layer()->SetRoundedCornerRadius(
+        gfx::RoundedCornersF(GetCornerRadius()));
+    client_view_->layer()->SetIsFastRoundedCorner(true);
   }
 
   return client_view_;
@@ -426,7 +464,7 @@ void BubbleDialogDelegate::OnBubbleWidgetActivationChanged(bool active) {
   if (devtools_dismiss_override_)
     return;
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // Install |mac_bubble_closer_| the first time the widget becomes active.
   if (active && !mac_bubble_closer_) {
     mac_bubble_closer_ = std::make_unique<ui::BubbleCloser>(
@@ -445,8 +483,15 @@ void BubbleDialogDelegate::OnAnchorWidgetBoundsChanged() {
     SizeToContents();
 }
 
-void BubbleDialogDelegate::OnBubbleWidgetPaintAsActiveChanged(bool as_active) {
-  if (!as_active) {
+void BubbleDialogDelegate::OnBubbleWidgetPaintAsActiveChanged() {
+  // It's possible for GetWidget() to return null here when the Widget's
+  // ownership model is WIDGET_OWNS_NATIVE_WIDGET.  In that case, the View
+  // hierarchy is torn down, which detaches rather than destroys |this| due to
+  // set_owned_by_client().  Then the native widget is destroyed, which calls
+  // back here.  Since GetWidget() is implemented in terms of View::GetWidget(),
+  // which no longer has a RootView, it returns null.  While there are other
+  // ways to address this, they all seem more fragile than null-checking.
+  if (!GetWidget() || !GetWidget()->ShouldPaintAsActive()) {
     paint_as_active_lock_.reset();
     return;
   }
@@ -512,6 +557,21 @@ gfx::Rect BubbleDialogDelegate::GetAnchorRect() const {
 
   anchor_rect_ = GetAnchorView()->GetAnchorBoundsInScreen();
   anchor_rect_->Inset(anchor_view_insets_);
+
+#if !defined(OS_APPLE)
+  // GetAnchorBoundsInScreen returns values that take anchor widget's
+  // translation into account, so undo that here. Without this, features which
+  // apply transforms on windows such as ChromeOS overview mode will see bubbles
+  // offset.
+  // TODO(sammiequon): Investigate if we can remove |anchor_widget_| and just
+  // replace its calls with GetAnchorView()->GetWidget().
+  DCHECK_EQ(anchor_widget_, GetAnchorView()->GetWidget());
+  gfx::Transform transform =
+      anchor_widget_->GetNativeWindow()->layer()->GetTargetTransform();
+  if (!transform.IsIdentity())
+    anchor_rect_->Offset(-gfx::ToRoundedVector2d(transform.To2dTranslation()));
+#endif
+
   return anchor_rect_.value();
 }
 
@@ -642,7 +702,7 @@ void BubbleDialogDelegate::SetAnchorRect(const gfx::Rect& rect) {
 
 void BubbleDialogDelegate::SizeToContents() {
   gfx::Rect bubble_bounds = GetBubbleBounds();
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   // GetBubbleBounds() doesn't take the Mac NativeWindow's style mask into
   // account, so we need to adjust the size.
   gfx::Size actual_size =

@@ -5,6 +5,8 @@
 #ifndef BASE_TASK_POST_JOB_H_
 #define BASE_TASK_POST_JOB_H_
 
+#include <limits>
+
 #include "base/base_export.h"
 #include "base/callback.h"
 #include "base/check_op.h"
@@ -50,21 +52,19 @@ class BASE_EXPORT JobDelegate {
   // of worker should be adjusted accordingly. See PostJob() for more details.
   void NotifyConcurrencyIncrease();
 
+  // Returns a task_id unique among threads currently running this job, such
+  // that GetTaskId() < worker count. To achieve this, the same task_id may be
+  // reused by a different thread after a worker_task returns.
+  uint8_t GetTaskId();
+
  private:
-  // Verifies that either max concurrency is lower or equal to
-  // |expected_max_concurrency|, or there is an increase version update
-  // triggered by NotifyConcurrencyIncrease().
-  void AssertExpectedConcurrency(size_t expected_max_concurrency);
+  static constexpr uint8_t kInvalidTaskId = std::numeric_limits<uint8_t>::max();
 
   internal::JobTaskSource* const task_source_;
   internal::PooledTaskRunnerDelegate* const pooled_task_runner_delegate_;
+  uint8_t task_id_ = kInvalidTaskId;
 
 #if DCHECK_IS_ON()
-  // Used in AssertExpectedConcurrency(), see that method's impl for details.
-  // Value of max concurrency recorded before running the worker task.
-  size_t recorded_max_concurrency_;
-  // Value of the increase version recorded before running the worker task.
-  size_t recorded_increase_version_;
   // Value returned by the last call to ShouldYield().
   bool last_should_yield_ = false;
 #endif
@@ -87,6 +87,9 @@ class BASE_EXPORT JobHandle {
 
   // Returns true if associated with a Job.
   explicit operator bool() const { return task_source_ != nullptr; }
+
+  // Returns true if there's no work pending and no worker running.
+  bool IsCompleted() const;
 
   // Update this Job's priority.
   void UpdatePriority(TaskPriority new_priority);
@@ -151,8 +154,9 @@ class BASE_EXPORT JobHandle {
 //   }
 //
 // |max_concurrency_callback| controls the maximum number of threads calling
-// |worker_task| concurrently. |worker_task| is only invoked if the number of
-// threads previously running |worker_task| was less than the value returned by
+// |worker_task| concurrently, given the number of threads currently assigned to
+// this job. |worker_task| is only invoked if the number of threads previously
+// running |worker_task| was less than the value returned by
 // |max_concurrency_callback|. In general, |max_concurrency_callback| should
 // return the latest number of incomplete work items (smallest unit of work)
 // left to processed. JobHandle/JobDelegate::NotifyConcurrencyIncrease() *must*
@@ -171,7 +175,7 @@ JobHandle BASE_EXPORT
 PostJob(const Location& from_here,
         const TaskTraits& traits,
         RepeatingCallback<void(JobDelegate*)> worker_task,
-        RepeatingCallback<size_t()> max_concurrency_callback);
+        RepeatingCallback<size_t(size_t)> max_concurrency_callback);
 
 }  // namespace base
 

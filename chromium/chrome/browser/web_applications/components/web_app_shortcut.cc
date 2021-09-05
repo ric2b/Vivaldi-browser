@@ -32,7 +32,7 @@ namespace web_app {
 
 namespace {
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 const int kDesiredIconSizesForShortcut[] = {16, 32, 128, 256, 512};
 #elif defined(OS_LINUX)
 // Linux supports icons of any size. FreeDesktop Icon Theme Specification states
@@ -69,6 +69,16 @@ void CreatePlatformShortcutsAndPostCallback(
       shortcut_data_path, creation_locations, creation_reason, shortcut_info);
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), shortcut_created));
+}
+
+void DeletePlatformShortcutsAndPostCallback(
+    const base::FilePath& shortcut_data_path,
+    CreateShortcutsCallback callback,
+    const ShortcutInfo& shortcut_info) {
+  bool shortcut_deleted =
+      internals::DeletePlatformShortcuts(shortcut_data_path, shortcut_info);
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), shortcut_deleted));
 }
 
 }  // namespace
@@ -166,6 +176,17 @@ void ScheduleCreatePlatformShortcuts(
                      std::move(shortcut_info));
 }
 
+void ScheduleDeletePlatformShortcuts(
+    const base::FilePath& shortcut_data_path,
+    std::unique_ptr<ShortcutInfo> shortcut_info,
+    DeleteShortcutsCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  PostShortcutIOTask(base::BindOnce(&DeletePlatformShortcutsAndPostCallback,
+                                    shortcut_data_path, std::move(callback)),
+                     std::move(shortcut_info));
+}
+
 void PostShortcutIOTaskAndReply(
     base::OnceCallback<void(const ShortcutInfo&)> task,
     std::unique_ptr<ShortcutInfo> shortcut_info,
@@ -210,7 +231,7 @@ base::FilePath GetShortcutDataDir(const ShortcutInfo& shortcut_info) {
                                                   shortcut_info.url);
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 void DeleteMultiProfileShortcutsForApp(const std::string& app_id) {
   // Multi-profile shortcuts exist only on macOS.
   NOTREACHED();

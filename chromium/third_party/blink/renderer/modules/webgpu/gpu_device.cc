@@ -8,6 +8,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_device_descriptor.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_extension_name.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_uncaptured_error_event_init.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -32,6 +33,20 @@
 
 namespace blink {
 
+namespace {
+
+#ifdef USE_BLINK_V8_BINDING_NEW_IDL_DICTIONARY
+Vector<String> ToStringVector(
+    const Vector<V8GPUExtensionName>& gpu_extension_names) {
+  Vector<String> result;
+  for (auto& name : gpu_extension_names)
+    result.push_back(IDLEnumAsString(name));
+  return result;
+}
+#endif
+
+}  // anonymous namespace
+
 // TODO(enga): Handle adapter options and device descriptor
 GPUDevice::GPUDevice(ExecutionContext* execution_context,
                      scoped_refptr<DawnControlClientHolder> dawn_control_client,
@@ -43,6 +58,11 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
                  client_id,
                  dawn_control_client->GetInterface()->GetDevice(client_id)),
       adapter_(adapter),
+#ifdef USE_BLINK_V8_BINDING_NEW_IDL_DICTIONARY
+      extension_name_list_(ToStringVector(descriptor->extensions())),
+#else
+      extension_name_list_(descriptor->extensions()),
+#endif
       queue_(MakeGarbageCollected<GPUQueue>(
           this,
           GetProcs().deviceGetDefaultQueue(GetHandle()))),
@@ -53,6 +73,12 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
   GetProcs().deviceSetUncapturedErrorCallback(
       GetHandle(), error_callback_->UnboundRepeatingCallback(),
       error_callback_->AsUserdata());
+
+  if (extension_name_list_.Contains("textureCompressionBC")) {
+    AddConsoleWarning(
+        "The extension name 'textureCompressionBC' is deprecated: use "
+        "'texture-compression-bc' instead");
+  }
 }
 
 GPUDevice::~GPUDevice() {
@@ -117,6 +143,10 @@ GPUAdapter* GPUDevice::adapter() const {
   return adapter_;
 }
 
+Vector<String> GPUDevice::extensions() const {
+  return extension_name_list_;
+}
+
 ScriptPromise GPUDevice::lost(ScriptState* script_state) {
   return lost_property_->Promise(script_state->World());
 }
@@ -127,18 +157,6 @@ GPUQueue* GPUDevice::defaultQueue() {
 
 GPUBuffer* GPUDevice::createBuffer(const GPUBufferDescriptor* descriptor) {
   return GPUBuffer::Create(this, descriptor);
-}
-
-HeapVector<GPUBufferOrArrayBuffer> GPUDevice::createBufferMapped(
-    const GPUBufferDescriptor* descriptor,
-    ExceptionState& exception_state) {
-  GPUBuffer* gpu_buffer;
-  DOMArrayBuffer* array_buffer;
-  std::tie(gpu_buffer, array_buffer) =
-      GPUBuffer::CreateMapped(this, descriptor, exception_state);
-  return HeapVector<GPUBufferOrArrayBuffer>(
-      {GPUBufferOrArrayBuffer::FromGPUBuffer(gpu_buffer),
-       GPUBufferOrArrayBuffer::FromArrayBuffer(array_buffer)});
 }
 
 GPUTexture* GPUDevice::createTexture(const GPUTextureDescriptor* descriptor,

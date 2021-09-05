@@ -11,6 +11,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
+#include "chrome/browser/chromeos/crosapi/browser_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
@@ -68,7 +69,6 @@ AppServiceContextMenu::AppServiceContextMenu(
     : AppContextMenu(delegate, profile, app_id, controller) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
   proxy->AppRegistryCache().ForOneApp(
       app_id, [this](const apps::AppUpdate& update) {
         app_type_ =
@@ -83,7 +83,12 @@ AppServiceContextMenu::~AppServiceContextMenu() = default;
 void AppServiceContextMenu::GetMenuModel(GetMenuModelCallback callback) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile());
-  DCHECK(proxy);
+  if (proxy->AppRegistryCache().GetAppType(app_id()) ==
+      apps::mojom::AppType::kUnknown) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
   proxy->GetMenuModel(
       app_id(), apps::mojom::MenuType::kAppList,
       controller()->GetAppListDisplayId(),
@@ -113,13 +118,16 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
 
     case ash::SETTINGS:
-      if (app_id() == crostini::GetTerminalId())
+      if (app_id() == crostini::kCrostiniTerminalSystemAppId)
         crostini::LaunchTerminalSettings(profile(),
                                          controller()->GetAppListDisplayId());
       break;
 
     case ash::APP_CONTEXT_MENU_NEW_WINDOW:
-      controller()->CreateNewWindow(/*incognito=*/false);
+      if (app_type_ == apps::mojom::AppType::kLacros)
+        crosapi::BrowserManager::Get()->NewWindow();
+      else
+        controller()->CreateNewWindow(/*incognito=*/false);
       break;
 
     case ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW:
@@ -127,7 +135,7 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
 
     case ash::SHUTDOWN_GUEST_OS:
-      if (app_id() == crostini::GetTerminalId()) {
+      if (app_id() == crostini::kCrostiniTerminalSystemAppId) {
         crostini::CrostiniManager::GetForProfile(profile())->StopVm(
             crostini::kCrostiniDefaultVmName, base::DoNothing());
       } else if (app_id() == plugin_vm::kPluginVmShelfAppId) {
@@ -237,15 +245,24 @@ void AppServiceContextMenu::OnGetMenuModel(
     index = 1;
   }
 
-  // Create default items.
+  // The special rule to ensure that FilesManager's first menu item is "New
+  // window".
+  const bool build_extension_menu_before_default =
+      (app_type_ == apps::mojom::AppType::kExtension &&
+       app_id() == extension_misc::kFilesManagerAppId);
+
+  if (build_extension_menu_before_default)
+    BuildExtensionAppShortcutsMenu(menu_model.get());
+
+  // Create default items for non-Remote apps.
   if (app_id() != extension_misc::kChromeAppId &&
-      app_type_ != apps::mojom::AppType::kUnknown) {
+      app_type_ != apps::mojom::AppType::kUnknown &&
+      app_type_ != apps::mojom::AppType::kRemote) {
     app_list::AppContextMenu::BuildMenu(menu_model.get());
   }
 
-  if (app_type_ == apps::mojom::AppType::kExtension) {
+  if (!build_extension_menu_before_default)
     BuildExtensionAppShortcutsMenu(menu_model.get());
-  }
 
   app_shortcut_items_ = std::make_unique<arc::ArcAppShortcutItems>();
   for (size_t i = index; i < menu_items->items.size(); i++) {

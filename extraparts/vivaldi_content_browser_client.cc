@@ -27,11 +27,12 @@ VivaldiContentBrowserClient::CreateBrowserMainParts(
   std::unique_ptr<content::BrowserMainParts> main_parts =
       ChromeContentBrowserClient::CreateBrowserMainParts(parameters);
 
-  ChromeBrowserMainParts* main_parts_actual =
+  if (vivaldi::IsVivaldiRunning()) {
+    ChromeBrowserMainParts* main_parts_actual =
       static_cast<ChromeBrowserMainParts*>(main_parts.get());
 
-  main_parts_actual->AddParts(VivaldiBrowserMainExtraParts::Create());
-
+    main_parts_actual->AddParts(VivaldiBrowserMainExtraParts::Create());
+  }
   return main_parts;
 }
 

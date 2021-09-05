@@ -8,11 +8,14 @@ import "mojo/public/mojom/base/time.mojom";
 
 // An advertisement send by a device in receiving mode.
 struct Advertisement {
-  // Random data erived from a device's private key.
+  // Random bytes that were used as salt during encryption of public
+  // certificate metadata.
   array<uint8, 2> salt;
 
-  // Derived from a device's private key. Identifying data for the device.
-  array<uint8, 14> encrypted_metadata;
+  // An encrypted symmetric key that was used to encrypt public certificate
+  // metadata. The key can be decrypted using |salt| and the corresponding
+  // public certificate's secret/authenticity key.
+  array<uint8, 14> encrypted_metadata_key;
 
   // If present, the device is visible to everyone rather than contacts only.
   string? device_name;
@@ -35,6 +38,8 @@ union V1Frame {
   PairedKeyResultFrame paired_key_result;
 
   CertificateInfoFrame certificate_info;
+
+  CancelFrame cancel_frame;
 };
 
 // An introduction packet sent by the sending side. Contains a list of files
@@ -81,6 +86,9 @@ struct FileMetadata {
   // The mimeType of file (eg. 'image/jpeg' from 'dog.jpg'). Specifying a
   // mimeType helps provide a richer experience on receiving side.
   string mime_type = "application/octet-stream";
+
+  // A uuid for the attachment. Should be unique across all attachments.
+  int64 id;
 };
 
 // Text metadata. Does not include the actual bytes of the text in transit.
@@ -108,6 +116,9 @@ struct TextMetadata {
 
   // The size of the text content.
   uint64 size;
+
+  // A uuid for the attachment. Should be unique across all attachments.
+  int64 id;
 };
 
 // Wifi credentails metadata. Describes the wifi network to be used by the
@@ -129,6 +140,9 @@ struct WifiCredentialsMetadata {
   // The BYTE payload id that will be sent as a follow up containing the
   // password.
   int64 payload_id;
+
+  // A uuid for the attachment. Should be unique across all attachments.
+  int64 id;
 };
 
 // A response packet sent by the receiving side. Accepts or rejects the list of
@@ -207,4 +221,8 @@ struct PublicCertificate {
   // The tag for verifying metadata_encryption_key.
   // The size should be 32.
   array<uint8> metadata_encryption_key_tag;
+};
+
+// Frame sent by remote device to cancel the share action.
+struct CancelFrame {
 };

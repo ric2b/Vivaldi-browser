@@ -48,7 +48,7 @@ class VivaldiNativeAppWindowViewsMac : public VivaldiNativeAppWindowViews {
 
   // WidgetDelegate implementation.
   void DeleteDelegate() override;
-  views::NonClientFrameView* CreateNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override;
 
  private:

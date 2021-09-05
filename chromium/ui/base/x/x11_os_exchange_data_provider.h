@@ -61,9 +61,7 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
   }
 
   // Overridden from OSExchangeDataProvider:
-#if defined(USE_OZONE)
   std::unique_ptr<OSExchangeDataProvider> Clone() const override;
-#endif
   void MarkOriginatedFromRenderer() override;
   bool DidOriginateFromRenderer() const override;
   void SetString(const base::string16& data) override;
@@ -84,6 +82,10 @@ class COMPONENT_EXPORT(UI_BASE_X) XOSExchangeDataProvider
   bool HasURL(FilenameToURLPolicy policy) const override;
   bool HasFile() const override;
   bool HasCustomFormat(const ClipboardFormatType& format) const override;
+#if defined(USE_X11)
+  void SetFileContents(const base::FilePath& filename,
+                       const std::string& file_contents) override;
+#endif
 
   void SetHtml(const base::string16& html, const GURL& base_url) override;
   bool GetHtml(base::string16* html, GURL* base_url) const override;

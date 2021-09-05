@@ -265,14 +265,15 @@ void HTMLFormElement::PrepareForSubmission(
     return;
   }
 
-  if (GetDocument().IsSandboxed(
+  if (GetExecutionContext()->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kForms)) {
-    GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kSecurity,
-        mojom::ConsoleMessageLevel::kError,
-        "Blocked form submission to '" + attributes_.Action() +
-            "' because the form's frame is sandboxed and the 'allow-forms' "
-            "permission is not set."));
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kSecurity,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "Blocked form submission to '" + attributes_.Action() +
+                "' because the form's frame is sandboxed and the 'allow-forms' "
+                "permission is not set."));
     return;
   }
 
@@ -454,21 +455,22 @@ void HTMLFormElement::ScheduleFormSubmission(
   DCHECK(form_submission->Form());
   if (form_submission->Action().IsEmpty())
     return;
-  if (GetDocument().IsSandboxed(
+  if (GetExecutionContext()->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kForms)) {
     // FIXME: This message should be moved off the console once a solution to
     // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-    GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::blink::ConsoleMessageSource::kSecurity,
-        mojom::blink::ConsoleMessageLevel::kError,
-        "Blocked form submission to '" +
-            form_submission->Action().ElidedString() +
-            "' because the form's frame is sandboxed and the 'allow-forms' "
-            "permission is not set."));
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kSecurity,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "Blocked form submission to '" +
+                form_submission->Action().ElidedString() +
+                "' because the form's frame is sandboxed and the 'allow-forms' "
+                "permission is not set."));
     return;
   }
 
-  if (!GetDocument().GetContentSecurityPolicy()->AllowFormAction(
+  if (!GetExecutionContext()->GetContentSecurityPolicy()->AllowFormAction(
           form_submission->Action())) {
     return;
   }
@@ -589,9 +591,12 @@ void HTMLFormElement::ParseAttribute(
     // If we're not upgrading insecure requests, and the new action attribute is
     // pointing to an insecure "action" location from a secure page it is marked
     // as "passive" mixed content.
-    if ((GetDocument().GetSecurityContext().GetInsecureRequestPolicy() &
+    if (GetExecutionContext() &&
+        (GetExecutionContext()
+             ->GetSecurityContext()
+             .GetInsecureRequestPolicy() &
          mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests) !=
-        mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone)
+            mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone)
       return;
     KURL action_url = GetDocument().CompleteURL(
         attributes_.Action().IsEmpty() ? GetDocument().Url().GetString()

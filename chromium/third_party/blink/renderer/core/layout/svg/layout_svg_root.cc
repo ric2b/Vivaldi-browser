@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
+#include "third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/svg_root_painter.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
@@ -54,7 +55,9 @@ LayoutSVGRoot::LayoutSVGRoot(SVGElement* node)
       needs_boundaries_or_transform_update_(true),
       has_box_decoration_background_(false),
       has_non_isolated_blending_descendants_(false),
-      has_non_isolated_blending_descendants_dirty_(false) {
+      has_non_isolated_blending_descendants_dirty_(false),
+      has_descendant_with_compositing_reason_(false),
+      has_descendant_with_compositing_reason_dirty_(false) {
   auto* svg = To<SVGSVGElement>(node);
   DCHECK(svg);
 
@@ -189,6 +192,15 @@ void LayoutSVGRoot::UpdateLayout() {
   LayoutSize old_size = Size();
   UpdateLogicalWidth();
   UpdateLogicalHeight();
+
+  // Whether we have a self-painting layer depends on whether there are
+  // compositing descendants (see: |HasCompositingDescendants()| which is called
+  // from |PaintLayer::UpdateSelfPaintingLayer()|). We cannot do this update in
+  // StyleDidChange because descendants have not yet run StyleDidChange, so we
+  // don't know their compositing reasons yet. A layout is scheduled when
+  // |HasCompositingDescendants()| changes to ensure this is run.
+  if (Layer() && RuntimeEnabledFeatures::CompositeSVGEnabled())
+    Layer()->UpdateSelfPaintingLayer();
 
   // The local-to-border-box transform is a function with the following as
   // input:
@@ -541,6 +553,52 @@ bool LayoutSVGRoot::NodeAtPoint(HitTestResult& result,
   }
 
   return false;
+}
+
+void LayoutSVGRoot::NotifyDescendantCompositingReasonsChanged() {
+  if (has_descendant_with_compositing_reason_dirty_)
+    return;
+  has_descendant_with_compositing_reason_dirty_ = true;
+  SetNeedsLayout(layout_invalidation_reason::kSvgChanged);
+}
+
+PaintLayerType LayoutSVGRoot::LayerTypeRequired() const {
+  auto layer_type_required = LayoutReplaced::LayerTypeRequired();
+  if (layer_type_required == kNoPaintLayer &&
+      RuntimeEnabledFeatures::CompositeSVGEnabled() &&
+      !RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+    // Force a paint layer so a GraphicsLayer can be created if there are
+    // directly-composited descendants.
+    layer_type_required = kForcedPaintLayer;
+  }
+  return layer_type_required;
+}
+
+CompositingReasons LayoutSVGRoot::AdditionalCompositingReasons() const {
+  return RuntimeEnabledFeatures::CompositeSVGEnabled() &&
+                 HasDescendantWithCompositingReason()
+             ? CompositingReason::kSVGRoot
+             : CompositingReason::kNone;
+}
+
+bool LayoutSVGRoot::HasDescendantWithCompositingReason() const {
+  if (has_descendant_with_compositing_reason_dirty_) {
+    has_descendant_with_compositing_reason_ = false;
+    for (const LayoutObject* object = FirstChild(); object;
+         // Do not consider descendants of <foreignObject>.
+         object = object->IsSVGForeignObject()
+                      ? object->NextInPreOrderAfterChildren(this)
+                      : object->NextInPreOrder(this)) {
+      DCHECK(object->IsSVGChild());
+      if (CompositingReasonFinder::DirectReasonsForSVGChildPaintProperties(
+              *object) != CompositingReason::kNone) {
+        has_descendant_with_compositing_reason_ = true;
+        break;
+      }
+    }
+    has_descendant_with_compositing_reason_dirty_ = false;
+  }
+  return has_descendant_with_compositing_reason_;
 }
 
 }  // namespace blink

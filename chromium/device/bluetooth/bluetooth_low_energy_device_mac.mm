@@ -20,6 +20,7 @@
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic_mac.h"
 #include "device/bluetooth/bluetooth_remote_gatt_descriptor_mac.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_mac.h"
+#include "device/bluetooth/public/cpp/bluetooth_address.h"
 
 // Remove when Chrome no longer supports 10.12.
 #if defined(MAC_OS_X_VERSION_10_13)
@@ -140,14 +141,14 @@ bool BluetoothLowEnergyDeviceMac::ExpectingConfirmation() const {
 }
 
 void BluetoothLowEnergyDeviceMac::GetConnectionInfo(
-    const ConnectionInfoCallback& callback) {
+    ConnectionInfoCallback callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothLowEnergyDeviceMac::SetConnectionLatency(
     ConnectionLatency connection_latency,
-    const base::Closure& callback,
-    const ErrorCallback& error_callback) {
+    base::OnceClosure callback,
+    ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -177,28 +178,27 @@ void BluetoothLowEnergyDeviceMac::CancelPairing() {
   NOTIMPLEMENTED();
 }
 
-void BluetoothLowEnergyDeviceMac::Disconnect(
-    const base::Closure& callback,
-    const ErrorCallback& error_callback) {
+void BluetoothLowEnergyDeviceMac::Disconnect(base::OnceClosure callback,
+                                             ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
-void BluetoothLowEnergyDeviceMac::Forget(const base::Closure& callback,
-                                         const ErrorCallback& error_callback) {
+void BluetoothLowEnergyDeviceMac::Forget(base::OnceClosure callback,
+                                         ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothLowEnergyDeviceMac::ConnectToService(
     const BluetoothUUID& uuid,
-    const ConnectToServiceCallback& callback,
-    const ConnectToServiceErrorCallback& error_callback) {
+    ConnectToServiceCallback callback,
+    ConnectToServiceErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothLowEnergyDeviceMac::ConnectToServiceInsecurely(
     const BluetoothUUID& uuid,
-    const ConnectToServiceCallback& callback,
-    const ConnectToServiceErrorCallback& error_callback) {
+    ConnectToServiceCallback callback,
+    ConnectToServiceErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -416,8 +416,7 @@ std::string BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(
   const size_t kCanonicalAddressNumberOfBytes = 6;
   char raw[kCanonicalAddressNumberOfBytes];
   crypto::SHA256HashString(device_identifier, raw, sizeof(raw));
-  return BluetoothDevice::CanonicalizeAddress(
-      base::HexEncode(raw, sizeof(raw)));
+  return CanonicalizeBluetoothAddress(base::HexEncode(raw, sizeof(raw)));
 }
 
 void BluetoothLowEnergyDeviceMac::DidConnectPeripheral() {

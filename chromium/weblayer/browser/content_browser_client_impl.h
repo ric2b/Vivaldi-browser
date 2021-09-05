@@ -39,8 +39,6 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       content::WebContents* web_contents) override;
   bool CanShutdownGpuProcessNowOnIOThread() override;
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
-  base::Optional<service_manager::Manifest> GetServiceManifestOverlay(
-      base::StringPiece name) override;
   void LogWebFeatureForCurrentPage(content::RenderFrameHost* render_frame_host,
                                    blink::mojom::WebFeature feature) override;
   std::string GetProduct() override;
@@ -66,6 +64,10 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       int frame_tree_node_id) override;
   bool IsHandledURL(const GURL& url) override;
   std::vector<url::Origin> GetOriginsRequiringDedicatedProcess() override;
+  bool MayReuseHost(content::RenderProcessHost* process_host) override;
+  void OverridePageVisibilityState(
+      content::RenderFrameHost* render_frame_host,
+      content::PageVisibilityState* visibility_state) override;
   bool ShouldDisableSiteIsolation() override;
   std::vector<std::string> GetAdditionalSiteIsolationModes() override;
   void PersistIsolatedOrigin(content::BrowserContext* context,
@@ -130,11 +132,12 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
       LoginAuthRequiredCallback auth_required_callback) override;
+  std::unique_ptr<content::TtsEnvironmentAndroid> CreateTtsEnvironmentAndroid()
+      override;
 #endif  // OS_ANDROID
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
   ukm::UkmService* GetUkmService() override;
-  content::TtsPlatform* GetTtsPlatform() override;
 
   void CreateFeatureListAndFieldTrials();
 

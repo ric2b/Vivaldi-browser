@@ -16,6 +16,11 @@ namespace features {
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
+extern const base::Feature kClosedTabCache;
+
+extern const base::Feature kPromoBrowserCommands;
+extern const char kPromoBrowserCommandIdParam[];
+
 #if defined(OS_CHROMEOS)
 extern const base::Feature kDoubleTapToZoomInTabletMode;
 #endif

@@ -14,9 +14,11 @@
 #include "base/util/type_safety/pass_key.h"
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/public/graph/frame_node.h"
+#include "components/performance_manager/public/graph/node_attached_data.h"
 #include "components/performance_manager/public/render_frame_host_proxy.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "url/gurl.h"
 
 namespace performance_manager {
@@ -25,6 +27,10 @@ class FrameNodeImplDescriber;
 class PageNodeImpl;
 class ProcessNodeImpl;
 class WorkerNodeImpl;
+
+namespace execution_context {
+class ExecutionContextAccess;
+}  // namespace execution_context
 
 // Frame nodes form a tree structure, each FrameNode at most has one parent that
 // is a FrameNode. Conceptually, a frame corresponds to a
@@ -65,7 +71,7 @@ class FrameNodeImpl
                 FrameNodeImpl* parent_frame_node,
                 int frame_tree_node_id,
                 int render_frame_id,
-                const FrameToken& frame_token,
+                const blink::LocalFrameToken& frame_token,
                 int32_t browsing_instance_id,
                 int32_t site_instance_id);
   ~FrameNodeImpl() override;
@@ -93,7 +99,7 @@ class FrameNodeImpl
   ProcessNodeImpl* process_node() const;
   int frame_tree_node_id() const;
   int render_frame_id() const;
-  const FrameToken& frame_token() const;
+  const blink::LocalFrameToken& frame_token() const;
   int32_t browsing_instance_id() const;
   int32_t site_instance_id() const;
   const RenderFrameHostProxy& render_frame_host_proxy() const;
@@ -139,14 +145,19 @@ class FrameNodeImpl
     SeverOpenedPagesAndMaybeReparent();
   }
 
- protected:
-  friend class PageNodeImpl;
+  // Implementation details below this point.
 
   // Invoked by opened pages when this frame is set/cleared as their opener.
   // See PageNodeImpl::(Set|Clear)OpenerFrameNodeAndOpenedType.
   void AddOpenedPage(util::PassKey<PageNodeImpl> key, PageNodeImpl* page_node);
   void RemoveOpenedPage(util::PassKey<PageNodeImpl> key,
                         PageNodeImpl* page_node);
+
+  // Used by the ExecutionContextRegistry mechanism.
+  std::unique_ptr<NodeAttachedData>* GetExecutionContextStorage(
+      util::PassKey<execution_context::ExecutionContextAccess> key) {
+    return &execution_context_;
+  }
 
  private:
   friend class FrameNodeImplDescriber;
@@ -159,7 +170,7 @@ class FrameNodeImpl
   const PageNode* GetPageNode() const override;
   const ProcessNode* GetProcessNode() const override;
   int GetFrameTreeNodeId() const override;
-  const FrameToken& GetFrameToken() const override;
+  const blink::LocalFrameToken& GetFrameToken() const override;
   int32_t GetBrowsingInstanceId() const override;
   int32_t GetSiteInstanceId() const override;
   bool VisitChildFrameNodes(const FrameNodeVisitor& visitor) const override;
@@ -253,7 +264,7 @@ class FrameNodeImpl
 
   // This is the unique token for this frame instance as per e.g.
   // RenderFrameHost::GetFrameToken().
-  const FrameToken frame_token_;
+  const blink::LocalFrameToken frame_token_;
 
   // The unique ID of the BrowsingInstance this frame belongs to. Frames in the
   // same BrowsingInstance are allowed to script each other at least
@@ -327,6 +338,9 @@ class FrameNodeImpl
 
   // Inline storage for FramePriorityDecorator data.
   frame_priority::AcceptedVote accepted_vote_;
+
+  // Inline storage for ExecutionContext.
+  std::unique_ptr<NodeAttachedData> execution_context_;
 
   base::WeakPtrFactory<FrameNodeImpl> weak_factory_;
 

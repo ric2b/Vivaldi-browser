@@ -388,7 +388,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
     }
   } else {
     // Either a sub menu item or a new top level item.
-    if (item.name == "---") {
+    if (item.type && *(item.type) == "separator") {
       NSMenuItem* menuItem = [NSMenuItem separatorItem];
       [menuItem setTag:item.id];
       if (index == -1) {

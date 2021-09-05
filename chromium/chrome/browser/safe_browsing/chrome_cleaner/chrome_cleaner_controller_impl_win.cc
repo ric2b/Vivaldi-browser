@@ -95,7 +95,7 @@ base::FilePath VerifyAndRenameDownloadedCleaner(
     return base::FilePath();
 
   if (fetch_status != ChromeCleanerFetchStatus::kSuccess) {
-    base::DeleteFile(downloaded_path, /*recursive=*/false);
+    base::DeleteFile(downloaded_path);
     return base::FilePath();
   }
 
@@ -103,7 +103,7 @@ base::FilePath VerifyAndRenameDownloadedCleaner(
       downloaded_path.ReplaceExtension(FILE_PATH_LITERAL("exe")));
 
   if (!base::ReplaceFile(downloaded_path, executable_path, nullptr)) {
-    base::DeleteFile(downloaded_path, /*recursive=*/false);
+    base::DeleteFile(downloaded_path);
     return base::FilePath();
   }
 
@@ -160,22 +160,6 @@ void RecordReporterSequenceTypeHistogram(
                             static_cast<int>(SwReporterInvocationType::kMax));
 }
 
-void RecordReporterSequenceResultHistogram(
-    SwReporterInvocationType invocation_type,
-    SwReporterInvocationResult result) {
-  if (invocation_type == SwReporterInvocationType::kPeriodicRun) {
-    UMA_HISTOGRAM_ENUMERATION(
-        "SoftwareReporter.ReporterSequenceResult_Periodic",
-        static_cast<int>(result),
-        static_cast<int>(SwReporterInvocationResult::kMax));
-  } else {
-    UMA_HISTOGRAM_ENUMERATION(
-        "SoftwareReporter.ReporterSequenceResult_UserInitiated",
-        static_cast<int>(result),
-        static_cast<int>(SwReporterInvocationResult::kMax));
-  }
-}
-
 void RecordOnDemandUpdateRequiredHistogram(bool value) {
   UMA_HISTOGRAM_BOOLEAN("SoftwareReporter.OnDemandUpdateRequired", value);
 }
@@ -217,6 +201,10 @@ void ChromeCleanerControllerDelegate::StartRebootPromptFlow(
     ChromeCleanerController* controller) {
   // The controller object decides if and when a prompt should be shown.
   ChromeCleanerRebootDialogControllerImpl::Create(controller);
+}
+
+bool ChromeCleanerControllerDelegate::IsAllowedByPolicy() {
+  return safe_browsing::SwReporterIsAllowedByPolicy();
 }
 
 // static
@@ -281,6 +269,11 @@ void ChromeCleanerControllerImpl::SetStateForTesting(State state) {
     idle_reason_ = IdleReason::kInitial;
 }
 
+void ChromeCleanerControllerImpl::SetIdleForTesting(IdleReason idle_reason) {
+  state_ = State::kIdle;
+  idle_reason_ = idle_reason;
+}
+
 // static
 void ChromeCleanerControllerImpl::ResetInstanceForTesting() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -315,8 +308,6 @@ void ChromeCleanerControllerImpl::OnReporterSequenceDone(
     SwReporterInvocationResult result) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_NE(SwReporterInvocationResult::kUnspecified, result);
-
-  RecordReporterSequenceResultHistogram(pending_invocation_type_, result);
 
   // Ignore if any interaction with cleaner runs is ongoing. This can happen
   // in two situations:
@@ -522,7 +513,7 @@ void ChromeCleanerControllerImpl::Reboot() {
 }
 
 bool ChromeCleanerControllerImpl::IsAllowedByPolicy() {
-  return safe_browsing::SwReporterIsAllowedByPolicy();
+  return delegate_->IsAllowedByPolicy();
 }
 
 bool ChromeCleanerControllerImpl::IsReportingManagedByPolicy(Profile* profile) {

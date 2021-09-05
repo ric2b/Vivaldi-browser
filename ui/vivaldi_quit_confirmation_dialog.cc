@@ -83,13 +83,18 @@ std::unique_ptr<views::Checkbox> VivaldiQuitConfirmationDialog::CreateExtraView(
 }
 
 bool VivaldiQuitConfirmationDialog::Accept() {
-  std::move(quit_callback_).Run(true);
+  RunCallback(true);
   return true;
 }
 
 bool VivaldiQuitConfirmationDialog::Cancel() {
-  std::move(quit_callback_).Run(false);
+  RunCallback(false);
   return true;
+}
+
+void VivaldiQuitConfirmationDialog::RunCallback(bool close) {
+  bool stop_asking = checkbox_ && checkbox_->GetChecked();
+  std::move(quit_callback_).Run(close, stop_asking);
 }
 
 ui::ModalType VivaldiQuitConfirmationDialog::GetModalType() const {
@@ -103,11 +108,6 @@ base::string16 VivaldiQuitConfirmationDialog::GetWindowTitle() const {
 bool VivaldiQuitConfirmationDialog::ShouldShowCloseButton() const {
   return false;
 }
-
-bool VivaldiQuitConfirmationDialog::IsChecked() {
-  return checkbox_ && checkbox_->GetChecked();
-}
-
 
 gfx::Size VivaldiQuitConfirmationDialog::CalculatePreferredSize() const {
   return gfx::Size(

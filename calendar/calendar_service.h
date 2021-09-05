@@ -73,9 +73,9 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<CalendarQueryResults>)>
       GetALLQueryCalendarCallback;
 
-  // Provides the result of a event create. See CreateEventResult in
+  // Provides the result of a event create. See EventResultCB in
   // event_type.h.
-  typedef base::Callback<void(std::shared_ptr<CreateEventResult>)>
+  typedef base::Callback<void(std::shared_ptr<EventResultCB>)>
       CreateEventCallback;
 
   // Provides the results of multiple event create. See CreateEventsResult in
@@ -116,7 +116,7 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<DeleteEventTypeResult>)>
       DeleteEventTypeCallback;
 
-  typedef base::Callback<void(std::shared_ptr<CreateRecurrenceExceptionResult>)>
+  typedef base::Callback<void(std::shared_ptr<EventResultCB>)>
       CreateRecurrenceExceptionCallback;
 
   typedef base::Callback<void(std::shared_ptr<GetAllNotificationResult>)>

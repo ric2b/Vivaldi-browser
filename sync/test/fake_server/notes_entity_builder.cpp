@@ -16,7 +16,6 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/sync.pb.h"
-#include "components/sync/syncable/syncable_util.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "sync/test/fake_server/notes_entity.h"
 #include "sync/vivaldi_hash_util.h"

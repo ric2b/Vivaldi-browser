@@ -34,12 +34,15 @@
 #include <memory>
 
 #include "base/unguessable_token.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-shared.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-shared.h"
+#include "third_party/blink/public/mojom/worker/shared_worker_host.mojom-shared.h"
 #include "third_party/blink/public/mojom/worker/worker_content_settings_proxy.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -48,22 +51,23 @@
 
 namespace blink {
 
-class MessagePortChannel;
 class WebString;
 class WebSharedWorkerClient;
 class WebURL;
+class WebWorkerFetchContext;
 struct WebFetchClientSettingsObject;
+struct WorkerMainScriptLoadParameters;
 
 // This is the interface to a SharedWorker thread.
 class BLINK_EXPORT WebSharedWorker {
  public:
   virtual ~WebSharedWorker() {}
 
-  // Instantiate a WebSharedWorker that interacts with the shared worker.
+  // Instantiates a WebSharedWorker that interacts with the shared worker and
+  // starts a worker context.
   // WebSharedWorkerClient given here should own this instance.
-  static std::unique_ptr<WebSharedWorker> Create(WebSharedWorkerClient*);
-
-  virtual void StartWorkerContext(
+  static std::unique_ptr<WebSharedWorker> CreateAndStart(
+      const blink::SharedWorkerToken& token,
       const WebURL& script_url,
       mojom::ScriptType script_type,
       network::mojom::CredentialsMode,
@@ -81,10 +85,17 @@ class BLINK_EXPORT WebSharedWorker {
           content_settings,
       CrossVariantMojoRemote<mojom::BrowserInterfaceBrokerInterfaceBase>
           browser_interface_broker,
-      bool pause_worker_context_on_start) = 0;
+      bool pause_worker_context_on_start,
+      std::unique_ptr<blink::WorkerMainScriptLoadParameters>
+          worker_main_script_load_params,
+      scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context,
+      CrossVariantMojoRemote<mojom::SharedWorkerHostInterfaceBase>,
+      WebSharedWorkerClient*,
+      ukm::SourceId ukm_source_id);
 
   // Sends a connect event to the SharedWorker context.
-  virtual void Connect(MessagePortChannel) = 0;
+  virtual void Connect(int connection_request_id,
+                       MessagePortDescriptor port) = 0;
 
   // Invoked to shutdown the worker when there are no more associated documents.
   // This eventually deletes this instance.

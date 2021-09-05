@@ -10,6 +10,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/service/feature_info.h"
@@ -117,9 +118,9 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
     if (!surface || final_msaa_count != surface_msaa_count_ ||
         surface_props != surface->props()) {
       surface = SkSurface::MakeFromBackendTexture(
-          context_state_->gr_context(), backend_texture_,
-          kTopLeft_GrSurfaceOrigin, final_msaa_count, GetSkColorType(),
-          color_space().ToSkColorSpace(), &surface_props);
+          context_state_->gr_context(), backend_texture_, surface_origin(),
+          final_msaa_count, GetSkColorType(), color_space().ToSkColorSpace(),
+          &surface_props);
       if (!surface) {
         LOG(ERROR) << "MakeFromBackendTexture() failed.";
         context_state_->EraseCachedSkSurface(this);
@@ -150,6 +151,8 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
                  viz::ResourceFormat format,
                  const gfx::Size& size,
                  const gfx::ColorSpace& color_space,
+                 GrSurfaceOrigin surface_origin,
+                 SkAlphaType alpha_type,
                  uint32_t usage,
                  size_t estimated_size,
                  SharedContextState* context_state)
@@ -157,6 +160,8 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
                                         format,
                                         size,
                                         color_space,
+                                        surface_origin,
+                                        alpha_type,
                                         usage,
                                         estimated_size,
                                         false /* is_thread_safe */),
@@ -248,6 +253,14 @@ class WrappedSkImage : public ClearTrackingSharedImageBacking {
           tracing_id_ = tex_info.fID;
         break;
       }
+#if defined(OS_MAC)
+      case GrBackendApi::kMetal: {
+        GrMtlTextureInfo image_info;
+        if (backend_texture_.getMtlTextureInfo(&image_info))
+          tracing_id_ = reinterpret_cast<uint64_t>(image_info.fTexture.get());
+        break;
+      }
+#endif
       case GrBackendApi::kVulkan: {
         GrVkImageInfo image_info;
         if (backend_texture_.getVkImageInfo(&image_info))
@@ -353,11 +366,13 @@ std::unique_ptr<SharedImageBacking> WrappedSkImageFactory::CreateSharedImage(
     SurfaceHandle surface_handle,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     bool is_thread_safe) {
   DCHECK(!is_thread_safe);
-  return CreateSharedImage(mailbox, format, size, color_space, usage,
-                           base::span<uint8_t>());
+  return CreateSharedImage(mailbox, format, size, color_space, surface_origin,
+                           alpha_type, usage, base::span<uint8_t>());
 }
 
 std::unique_ptr<SharedImageBacking> WrappedSkImageFactory::CreateSharedImage(
@@ -365,13 +380,15 @@ std::unique_ptr<SharedImageBacking> WrappedSkImageFactory::CreateSharedImage(
     viz::ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     base::span<const uint8_t> data) {
   auto info = MakeSkImageInfo(size, format);
   size_t estimated_size = info.computeMinByteSize();
   std::unique_ptr<WrappedSkImage> texture(
-      new WrappedSkImage(mailbox, format, size, color_space, usage,
-                         estimated_size, context_state_));
+      new WrappedSkImage(mailbox, format, size, color_space, surface_origin,
+                         alpha_type, usage, estimated_size, context_state_));
   if (!texture->Initialize(info, data, /*stride=*/0))
     return nullptr;
   return texture;
@@ -385,6 +402,8 @@ std::unique_ptr<SharedImageBacking> WrappedSkImageFactory::CreateSharedImage(
     SurfaceHandle surface_handle,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage) {
   DCHECK_EQ(handle.type, gfx::SHARED_MEMORY_BUFFER);
 
@@ -409,9 +428,9 @@ std::unique_ptr<SharedImageBacking> WrappedSkImageFactory::CreateSharedImage(
     return nullptr;
 
   auto info = MakeSkImageInfo(size, format);
-  std::unique_ptr<WrappedSkImage> texture(
-      new WrappedSkImage(mailbox, format, size, color_space, usage,
-                         info.computeMinByteSize(), context_state_));
+  std::unique_ptr<WrappedSkImage> texture(new WrappedSkImage(
+      mailbox, format, size, color_space, surface_origin, alpha_type, usage,
+      info.computeMinByteSize(), context_state_));
   if (!texture->InitializeGMB(info, std::move(shm_wrapper)))
     return nullptr;
 
@@ -427,6 +446,9 @@ std::unique_ptr<SharedImageRepresentationSkia> WrappedSkImage::ProduceSkia(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
+  if (context_state_->context_lost())
+    return nullptr;
+
   DCHECK_EQ(context_state_, context_state.get());
   return std::make_unique<WrappedSkImageRepresentation>(manager, this, tracker);
 }

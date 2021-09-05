@@ -18,7 +18,7 @@
 #include "base/time/time_override.h"
 #include "base/trace_event/base_tracing.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -304,7 +304,7 @@ void WorkerThread::RunWorker() {
   // Background threads can take an arbitrary amount of time to complete, do not
   // watch them for hangs. Ignore priority boosting for now.
   const bool watch_for_hangs =
-      base::HangWatcher::GetInstance() != nullptr &&
+      base::HangWatcher::IsThreadPoolHangWatchingEnabled() &&
       GetDesiredThreadPriority() != ThreadPriority::BACKGROUND;
 
   // If this process has a HangWatcher register this thread for watching.
@@ -322,12 +322,13 @@ void WorkerThread::RunWorker() {
   }
 
   while (!ShouldExit()) {
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
     mac::ScopedNSAutoreleasePool autorelease_pool;
 #endif
-    base::Optional<HangWatchScope> hang_watch_scope;
+    base::Optional<HangWatchScopeEnabled> hang_watch_scope;
     if (watch_for_hangs)
-      hang_watch_scope.emplace(base::HangWatchScope::kDefaultHangWatchTime);
+      hang_watch_scope.emplace(
+          base::HangWatchScopeEnabled::kDefaultHangWatchTime);
 
     UpdateThreadPriority(GetDesiredThreadPriority());
 

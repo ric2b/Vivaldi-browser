@@ -18,7 +18,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
@@ -33,6 +32,7 @@
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -150,8 +150,6 @@ void ExtensionActionAPI::DispatchExtensionActionClicked(
   const char* event_name = NULL;
   switch (extension_action.action_type()) {
     case ActionInfo::TYPE_ACTION:
-      // TODO(https://crbug.com/893373): Add testing for this API (currently
-      // restricted to trunk).
       histogram_value = events::ACTION_ON_CLICKED;
       event_name = "action.onClicked";
       break;
@@ -553,9 +551,9 @@ ExtensionFunction::ResponseAction BrowserActionOpenPopupFunction::Run() {
   // extension can operate incognito, then check the last active incognito, too.
   if ((!browser || !browser->window()->IsActive()) &&
       util::IsIncognitoEnabled(extension()->id(), profile) &&
-      profile->HasOffTheRecordProfile()) {
+      profile->HasPrimaryOTRProfile()) {
     browser =
-        chrome::FindLastActiveWithProfile(profile->GetOffTheRecordProfile());
+        chrome::FindLastActiveWithProfile(profile->GetPrimaryOTRProfile());
   }
 
   // If there's no active browser, or the Toolbar isn't visible, abort.

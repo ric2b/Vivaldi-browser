@@ -33,6 +33,7 @@ static_library("utility") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
+    "//chrome/services/machine_learning",
     "//chrome/services/qrcode_generator",
     "//components/mirroring/service:mirroring_service",
     "//components/paint_preview/buildflags",
@@ -116,8 +117,8 @@ static_library("utility") {
     sources += [
       "image_writer/disk_unmounter_mac.cc",
       "image_writer/disk_unmounter_mac.h",
-      "image_writer/error_messages.cc",
-      "image_writer/error_messages.h",
+      "image_writer/error_message_strings.cc",
+      "image_writer/error_message_strings.h",
       "image_writer/image_writer.cc",
       "image_writer/image_writer.h",
       "image_writer/image_writer_handler.cc",

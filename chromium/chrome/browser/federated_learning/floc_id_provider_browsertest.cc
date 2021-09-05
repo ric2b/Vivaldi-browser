@@ -122,11 +122,10 @@ class FlocIdProviderWithCustomizedServicesBrowserTest
   void SetUpInProcessBrowserTestFixture() override {
     subscription_ =
         BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-                base::BindRepeating(
-                    &FlocIdProviderWithCustomizedServicesBrowserTest::
-                        OnWillCreateBrowserContextServices,
-                    base::Unretained(this)));
+            ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+                &FlocIdProviderWithCustomizedServicesBrowserTest::
+                    OnWillCreateBrowserContextServices,
+                base::Unretained(this)));
   }
 
   // FlocIdProviderBrowserTest::RegisterRequestHandler
@@ -190,6 +189,17 @@ class FlocIdProviderWithCustomizedServicesBrowserTest
             base::string16(), history::QueryOptions(),
             base::BindLambdaForTesting(
                 [&](history::QueryResults results) { run_loop.Quit(); }),
+            &tracker);
+    run_loop.Run();
+  }
+
+  void ExpireHistoryBefore(base::Time end_time) {
+    base::RunLoop run_loop;
+    base::CancelableTaskTracker tracker;
+    HistoryServiceFactory::GetForProfile(browser()->profile(),
+                                         ServiceAccessType::EXPLICIT_ACCESS)
+        ->ExpireHistoryBeforeForTesting(
+            end_time, base::BindLambdaForTesting([&]() { run_loop.Quit(); }),
             &tracker);
     run_loop.Run();
   }
@@ -261,7 +271,7 @@ class FlocIdProviderWithCustomizedServicesBrowserTest
   base::test::ScopedFeatureList scoped_feature_list_;
 
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
       subscription_;
 };
 
@@ -279,7 +289,7 @@ IN_PROC_BROWSER_TEST_F(FlocIdProviderWithCustomizedServicesBrowserTest,
 
   EXPECT_EQ(GetFlocId().ToDebugHeaderValue(), FlocId().ToDebugHeaderValue());
 
-  // Turn on sync-history to trigger the start of the 1st floc session.
+  // Turn on sync-history to trigger the 1st floc computation.
   sync_service()->SetActiveDataTypes(syncer::ModelTypeSet::All());
   sync_service()->FireStateChanged();
 
@@ -314,7 +324,7 @@ IN_PROC_BROWSER_TEST_F(FlocIdProviderWithCustomizedServicesBrowserTest,
 
   EXPECT_EQ(GetFlocId().ToDebugHeaderValue(), FlocId().ToDebugHeaderValue());
 
-  // Turn on sync-history to trigger the start of the 1st floc session.
+  // Turn on sync-history to trigger the 1st floc computation.
   sync_service()->SetActiveDataTypes(syncer::ModelTypeSet::All());
   sync_service()->FireStateChanged();
 
@@ -323,6 +333,48 @@ IN_PROC_BROWSER_TEST_F(FlocIdProviderWithCustomizedServicesBrowserTest,
 
   // Expect that the FlocIdComputed user event is not recorded.
   ASSERT_EQ(0u, user_event_service()->GetRecordedUserEvents().size());
+}
+
+IN_PROC_BROWSER_TEST_F(FlocIdProviderWithCustomizedServicesBrowserTest,
+                       HistoryDeleteRecomputeFloc) {
+  net::IPAddress::ConsiderLoopbackIPToBePubliclyRoutableForTesting();
+
+  ConfigureReplacementHostAndPortForRemotePermissionService();
+
+  std::string cookies_to_set = "/set-cookie?user_id=123";
+  ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL(test_host(), cookies_to_set));
+
+  EXPECT_EQ(1u, GetHistoryUrls().size());
+
+  EXPECT_EQ(GetFlocId().ToDebugHeaderValue(), FlocId().ToDebugHeaderValue());
+
+  // Turn on sync-history to trigger the 1st floc computation.
+  sync_service()->SetActiveDataTypes(syncer::ModelTypeSet::All());
+  sync_service()->FireStateChanged();
+
+  FinishOutstandingRemotePermissionQueries();
+  FinishOutstandingHistoryQueries();
+
+  ASSERT_EQ(1u, user_event_service()->GetRecordedUserEvents().size());
+
+  ExpireHistoryBefore(base::Time::Now());
+  FinishOutstandingRemotePermissionQueries();
+  FinishOutstandingHistoryQueries();
+
+  // Expect that the 2nd FlocIdComputed event should be due to history deletion.
+  ASSERT_EQ(2u, user_event_service()->GetRecordedUserEvents().size());
+
+  const sync_pb::UserEventSpecifics& specifics =
+      user_event_service()->GetRecordedUserEvents()[1];
+  EXPECT_EQ(sync_pb::UserEventSpecifics::kFlocIdComputedEvent,
+            specifics.event_case());
+
+  const sync_pb::UserEventSpecifics_FlocIdComputed& event =
+      specifics.floc_id_computed_event();
+  EXPECT_EQ(sync_pb::UserEventSpecifics::FlocIdComputed::HISTORY_DELETE,
+            event.event_trigger());
+  EXPECT_FALSE(event.has_floc_id());
 }
 
 }  // namespace federated_learning

@@ -19,6 +19,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.SadTab;
@@ -29,7 +30,6 @@ import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -85,11 +85,13 @@ public class TabTest {
 
         mActivityTestRule.loadUrl("data:text/html;charset=utf-8,<html><head><title>" + oldTitle
                 + "</title></head><body/></html>");
-        Assert.assertEquals("title does not match initial title", oldTitle, mTab.getTitle());
+        Assert.assertEquals("title does not match initial title", oldTitle,
+                ChromeTabUtils.getTitleOnUiThread(mTab));
         int currentCallCount = mOnTitleUpdatedHelper.getCallCount();
         mActivityTestRule.runJavaScriptCodeInCurrentTab("document.title='" + newTitle + "';");
         mOnTitleUpdatedHelper.waitForCallback(currentCallCount);
-        Assert.assertEquals("title does not update", newTitle, mTab.getTitle());
+        Assert.assertEquals(
+                "title does not update", newTitle, ChromeTabUtils.getTitleOnUiThread(mTab));
     }
 
     /**
@@ -115,24 +117,14 @@ public class TabTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> ChromeTabUtils.simulateRendererKilledForTesting(mTab, false));
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return mTab.isHidden();
-            }
-        });
+        CriteriaHelper.pollUiThread(mTab::isHidden);
         Assert.assertTrue(mTab.needsReload());
         Assert.assertFalse(isShowingSadTab());
 
         ApplicationTestUtils.launchChrome(InstrumentationRegistry.getTargetContext());
 
         // The tab should be restored and visible.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return !mTab.isHidden();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> !mTab.isHidden());
         Assert.assertFalse(mTab.needsReload());
         Assert.assertFalse(isShowingSadTab());
     }

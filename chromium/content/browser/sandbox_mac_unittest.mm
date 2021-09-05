@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/memory/ref_counted.h"
 #include "base/posix/eintr_wrapper.h"
@@ -24,8 +25,8 @@
 #include "crypto/openssl_util.h"
 #include "sandbox/mac/seatbelt.h"
 #include "sandbox/mac/seatbelt_exec.h"
-#include "services/service_manager/sandbox/mac/sandbox_mac.h"
-#include "services/service_manager/sandbox/switches.h"
+#include "sandbox/policy/mac/sandbox_mac.h"
+#include "sandbox/policy/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 #include "third_party/boringssl/src/include/openssl/rand.h"
@@ -53,9 +54,9 @@ class SandboxMacTest : public base::MultiProcessTest {
   }
 
   void ExecuteWithParams(const std::string& procname,
-                         service_manager::SandboxType sandbox_type) {
+                         sandbox::policy::SandboxType sandbox_type) {
     std::string profile =
-        service_manager::SandboxMac::GetSandboxProfile(sandbox_type) +
+        sandbox::policy::SandboxMac::GetSandboxProfile(sandbox_type) +
         kTempDirSuffix;
     sandbox::SeatbeltExecClient client;
     client.SetProfile(profile);
@@ -80,15 +81,15 @@ class SandboxMacTest : public base::MultiProcessTest {
 
   void ExecuteInAllSandboxTypes(const std::string& multiprocess_main,
                                 base::RepeatingClosure after_each) {
-    constexpr service_manager::SandboxType kSandboxTypes[] = {
-        service_manager::SandboxType::kAudio,
-        service_manager::SandboxType::kCdm,
-        service_manager::SandboxType::kGpu,
-        service_manager::SandboxType::kNaClLoader,
-        service_manager::SandboxType::kPpapi,
-        service_manager::SandboxType::kPrintCompositor,
-        service_manager::SandboxType::kRenderer,
-        service_manager::SandboxType::kUtility,
+    constexpr sandbox::policy::SandboxType kSandboxTypes[] = {
+        sandbox::policy::SandboxType::kAudio,
+        sandbox::policy::SandboxType::kCdm,
+        sandbox::policy::SandboxType::kGpu,
+        sandbox::policy::SandboxType::kNaClLoader,
+        sandbox::policy::SandboxType::kPpapi,
+        sandbox::policy::SandboxType::kPrintCompositor,
+        sandbox::policy::SandboxType::kRenderer,
+        sandbox::policy::SandboxType::kUtility,
     };
 
     for (const auto type : kSandboxTypes) {
@@ -141,7 +142,7 @@ MULTIPROCESS_TEST_MAIN(RendererWriteProcess) {
 
 TEST_F(SandboxMacTest, RendererCannotWriteHomeDir) {
   ExecuteWithParams("RendererWriteProcess",
-                    service_manager::SandboxType::kRenderer);
+                    sandbox::policy::SandboxType::kRenderer);
 }
 
 MULTIPROCESS_TEST_MAIN(ClipboardAccessProcess) {
@@ -251,9 +252,33 @@ TEST_F(SandboxMacTest, FontLoadingTest) {
 
   extra_data_ = temp_file_path.value();
   ExecuteWithParams("FontLoadingProcess",
-                    service_manager::SandboxType::kRenderer);
+                    sandbox::policy::SandboxType::kRenderer);
   temp_file.reset();
-  ASSERT_TRUE(base::DeleteFile(temp_file_path, false));
+  ASSERT_TRUE(base::DeleteFile(temp_file_path));
+}
+
+MULTIPROCESS_TEST_MAIN(BuiltinAvailable) {
+  CheckCreateSeatbeltServer();
+
+  if (__builtin_available(macOS 10.10, *)) {
+    // Can't negate a __builtin_available condition. But success!
+  } else {
+    return 10;
+  }
+
+  if (base::mac::IsAtLeastOS10_13()) {
+    if (__builtin_available(macOS 10.13, *)) {
+      // Can't negate a __builtin_available condition. But success!
+    } else {
+      return 13;
+    }
+  }
+
+  return 0;
+}
+
+TEST_F(SandboxMacTest, BuiltinAvailable) {
+  ExecuteInAllSandboxTypes("BuiltinAvailable", {});
 }
 
 }  // namespace content

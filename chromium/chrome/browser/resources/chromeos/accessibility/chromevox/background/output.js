@@ -126,12 +126,10 @@ Output = class {
    * @param {QueueMode|undefined} mode
    */
   static forceModeForNextSpeechUtterance(mode) {
-    // If previous calls to force the mode went unprocessed, try to honor the
-    // first caller's setting which is generally set by key and gesture events
-    // rather than automation events. Make an exception when a caller explicitly
-    // clears the mode .e.g in editing.
     if (Output.forceModeForNextSpeechUtterance_ === undefined ||
-        mode === undefined) {
+        mode === undefined ||
+        // Only allow setting to higher queue modes.
+        mode < Output.forceModeForNextSpeechUtterance_) {
       Output.forceModeForNextSpeechUtterance_ = mode;
     }
   }
@@ -331,10 +329,17 @@ Output = class {
   /**
    * Output a string literal.
    * @param {string} value
+   * @param {AutomationNode=} opt_contextNode A node to help contextualize
+   *     |value| e.g. for locale detection.
    * @return {!Output}
    */
-  withString(value) {
-    this.append_(this.speechBuffer_, value);
+  withString(value, opt_contextNode) {
+    if (opt_contextNode && localStorage['languageSwitching'] === 'true') {
+      this.assignLocaleAndAppend_(
+          value, opt_contextNode, this.speechBuffer_, {annotation: []});
+    } else {
+      this.append_(this.speechBuffer_, value);
+    }
     this.append_(this.brailleBuffer_, value);
     this.speechRulesStr_.write('withString: ' + value + '\n');
     this.brailleRulesStr_.write('withString: ' + value + '\n');
@@ -2146,7 +2151,7 @@ Output.ROLE_INFO_ = {
   article: {msgId: 'role_article', inherits: 'abstractItem'},
   application: {msgId: 'role_application', inherits: 'abstractContainer'},
   banner: {msgId: 'role_banner', inherits: 'abstractContainer'},
-  button: {msgId: 'role_button', earconId: 'BUTTON'},
+  button: {msgId: 'role_button', earconId: 'BUTTON', inherits: 'button'},
   buttonDropDown: {msgId: 'role_button', earconId: 'BUTTON'},
   checkBox: {msgId: 'role_checkbox'},
   columnHeader: {msgId: 'role_columnheader', inherits: 'cell'},
@@ -2415,6 +2420,10 @@ Output.RULES = {
       speak: `$earcon(ALERT_MODAL) $name $nameOrTextContent $description $state
           $role`
     },
+    button: {
+      speak: `$name $node(activeDescendant) $state $restriction $role
+          $description`
+    },
     cell: {
       enter: {
         speak: `$cellIndexText $node(tableCellColumnHeaders) $nameFromNode
@@ -2528,6 +2537,7 @@ Output.RULES = {
     popUpButton: {
       speak: `$name $if($value, $value, $descendants) $role @aria_has_popup
           $if($expanded, @@list_with_items($setSize)) $state $restriction
+          $if($posInSet, @describe_index($posInSet, $setSize))
           $description`
     },
     radioButton: {
@@ -2543,10 +2553,6 @@ Output.RULES = {
       enter: `$node(tableRowHeader)`,
       speak: `$name $node(activeDescendant) $value $state $restriction $role
           $if($selected, @aria_selected_true) $description`
-    },
-    rowHeader: {
-      speak: `$nameOrTextContent $description $roleDescription
-        $state $if($selected, @aria_selected_true)`
     },
     staticText: {speak: `$name= $description`},
     switch: {

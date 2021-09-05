@@ -14,10 +14,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/public/web/web_heap.h"
 #include "third_party/blink/renderer/modules/mediarecorder/buildflags.h"
 #include "third_party/blink/renderer/modules/mediarecorder/fake_encoded_video_frame.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_media_stream_video_source.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -91,7 +91,6 @@ class VideoTrackRecorderTest
     const String track_id("dummy");
     source_ = MakeGarbageCollected<MediaStreamSource>(
         track_id, MediaStreamSource::kTypeVideo, track_id, false /*remote*/);
-    mock_source_->SetOwner(source_);
     source_->SetPlatformSource(base::WrapUnique(mock_source_));
     component_ = MakeGarbageCollected<MediaStreamComponent>(source_);
 
@@ -447,7 +446,6 @@ class VideoTrackRecorderPassthroughTest
     const String track_id("dummy");
     source_ = MakeGarbageCollected<MediaStreamSource>(
         track_id, MediaStreamSource::kTypeVideo, track_id, false /*remote*/);
-    mock_source_->SetOwner(source_);
     source_->SetPlatformSource(base::WrapUnique(mock_source_));
     component_ = MakeGarbageCollected<MediaStreamComponent>(source_);
 

@@ -42,6 +42,7 @@
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_client.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_chooser.h"
@@ -65,7 +66,7 @@ class ViewCreatingClient : public frame_test_helpers::TestWebViewClient {
                       const WebString& name,
                       WebNavigationPolicy,
                       network::mojom::blink::WebSandboxFlags,
-                      const FeaturePolicy::FeatureState&,
+                      const FeaturePolicyFeatureState&,
                       const SessionStorageNamespaceId&) override {
     return web_view_helper_.InitializeWithOpener(opener);
   }
@@ -93,13 +94,13 @@ class CreateWindowTest : public testing::Test {
 TEST_F(CreateWindowTest, CreateWindowFromPausedPage) {
   ScopedPagePauser pauser;
   LocalFrame* frame = To<WebLocalFrameImpl>(main_frame_)->GetFrame();
-  FrameLoadRequest request(frame->GetDocument(), ResourceRequest());
+  FrameLoadRequest request(frame->DomWindow(), ResourceRequest());
   request.SetNavigationPolicy(kNavigationPolicyNewForegroundTab);
   WebWindowFeatures features;
   EXPECT_EQ(nullptr, chrome_client_impl_->CreateWindow(
                          frame, request, "", features,
                          network::mojom::blink::WebSandboxFlags::kNone,
-                         FeaturePolicy::FeatureState(), ""));
+                         FeaturePolicyFeatureState(), ""));
 }
 
 class FakeColorChooserClient : public GarbageCollected<FakeColorChooserClient>,
@@ -113,8 +114,6 @@ class FakeColorChooserClient : public GarbageCollected<FakeColorChooserClient>,
     visitor->Trace(owner_element_);
     ColorChooserClient::Trace(visitor);
   }
-
-  USING_GARBAGE_COLLECTED_MIXIN(FakeColorChooserClient);
 
   // ColorChooserClient
   void DidChooseColor(const Color& color) override {}
@@ -143,8 +142,6 @@ class FakeDateTimeChooserClient
     visitor->Trace(owner_element_);
     DateTimeChooserClient::Trace(visitor);
   }
-
-  USING_GARBAGE_COLLECTED_MIXIN(FakeDateTimeChooserClient);
 
   // DateTimeChooserClient
   Element& OwnerElement() const override { return *owner_element_; }
@@ -236,8 +233,6 @@ TEST_F(PagePopupSuppressionTest, SuppressDateTimeChooser) {
 // A FileChooserClient which makes FileChooser::OpenFileChooser() success.
 class MockFileChooserClient : public GarbageCollected<MockFileChooserClient>,
                               public FileChooserClient {
-  USING_GARBAGE_COLLECTED_MIXIN(MockFileChooserClient);
-
  public:
   explicit MockFileChooserClient(LocalFrame* frame) : frame_(frame) {}
   void Trace(Visitor* visitor) const override {

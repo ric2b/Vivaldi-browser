@@ -207,6 +207,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_ADD_CREDIT_CARD_INVALID_EXPIRATION_DATE_ALERT" desc="The title of the alert view displaying invalid expiration date when a user enters invalid expiration date for the new credit card to save. [iOS only]">
           Invalid Expiration Date
       </message>
+      <message name="IDS_IOS_ADD_CREDIT_CARD_INVALID_NICKNAME_ALERT" desc="The title of the alert view displaying invalid nickname when a user enters an invalid nickname for the new credit card to save. [iOS only]">
+          Invalid Card Nickname
+      </message>
       <message name="IDS_IOS_ADVANCED_SIGNIN_SETTINGS_CANCEL_SYNC_ALERT_BACK_BUTTON" desc="Alert button title to ask if the user really wants to cancel sign-in and sync. This button would let the user return to the sync settings, and let them choose again.">
         Continue Setup
       </message>
@@ -221,9 +224,6 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_SHOW_ALL_PASSWORDS" desc="Button title in the keyboard accessory bar to open the list of all saved passwords. [Length: 20em] [iOS only]">
         Show All...
-      </message>
-      <message name="IDS_IOS_SUGGEST_PASSWORD" desc="Button title in the keyboard accessory bar to show a dialog with a generated password. [Length: 20em] [iOS only]">
-        Suggest  Password...
       </message>
       <message name="IDS_IOS_SUGGESTED_PASSWORD" desc="Text that shows a suggested generated password at user's request [Length: unlimited] [iOS only]">
         Chrome Suggested Password:
@@ -300,6 +300,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_YEAR" desc="The placeholder text for credit card expiration year in the payments card unmask dialog. [Length: 4em] [iOS only]">
         YY
       </message>
+      <message name="IDS_IOS_AUTOFILL_DIALOG_PLACEHOLDER_NICKNAME" desc="The placeholder text for credit card nickname in the payments card unmask dialog. [iOS only]">
+        Nickname
+      </message>
       <message name="IDS_IOS_AUTOFILL_EDIT_ADDRESS" desc="Title for the view in Settings for editing an Autofill profile address. [Length: 20em] [iOS only]">
         Edit Address
       </message>
@@ -314,6 +317,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_AUTOFILL_EXP_YEAR" desc="Title of the field representing the expiration year of a credit card. [Length: 15em] [iOS only]">
         Expiration Year
+      </message>
+      <message name="IDS_IOS_AUTOFILL_NICKNAME" desc="Title of the field representing the user defined nickname of a credit card. [Length: 15em] [iOS only]">
+        Card Nickname
       </message>
       <message name="IDS_IOS_AUTOFILL_CARDHOLDER_NAME" desc="Tile of the field representing the cardholder name of a credit card. [Length: 15em] [iOS only]">
         Cardholder Name
@@ -344,6 +350,21 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_AUTOFILL_ZIP" desc="Title of the field of a profile address representing the postal code of the address. [Length: 15em] [iOS only]">
         Zip Code
+      </message>
+      <message name="IDS_IOS_AUTOFILL_REAUTH_REASON" desc="Message explaining that the reason why we are requiring the user to re-authenticate is to be able to use the password. This is shown by iOS in the Touch ID reauthentication system dialogue, right under the OS string 'Touch ID for $BROWSER_NAME'. [CHAR_LIMIT=22]">
+        Use password
+      </message>
+      <message name="IDS_IOS_AUTOFILL_SET_UP_SCREENLOCK_CONTENT" desc="Message informing the user that in order to use the password, a screen lock needs to be set up on the device. This is shown as an alert message after the user tries to view or copy the password from a settings page. [CHAR_LIMIT=100]">
+        To use passwords, you must first set a passcode on your device.
+      </message>
+      <message name="IDS_IOS_COPY_LINK_ACTION_TITLE" desc="Title of the action used to copy a link to the pasteboard. [iOS only]">
+        Copy Link
+      </message>
+      <message name="IDS_IOS_DELETE_ACTION_TITLE" desc="Title of the action used to delete a selected item. Item types include, for example, a Bookmark or an History Entry. [iOS only]">
+        Delete
+      </message>
+      <message name="IDS_IOS_OPEN_IN_INCOGNITO_ACTION_TITLE" desc="Title of the action used to open an URL in a new Incognito tab. [iOS only]">
+        Open in Incognito
       </message>
       <message name="IDS_IOS_BADGE_INCOGNITO_HINT" desc="Button displayed when the user is in Incognito mode. [iOS only]">
         Current Webpage is on Incognito
@@ -597,8 +618,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CONTENT_CONTEXT_OPEN" desc="The iOS menu item for opening a link. Shorter than the desktop version [Length: 25em] [iOS only]">
         Open
       </message>
+      <message name="IDS_IOS_CONTENT_CONTEXT_OPEN_ALL_LINKS" desc="The iOS menu item for opening a list of links in new tabs. Shorter than the desktop version [iOS only]">
+        Open all
+      </message>
+
       <message name="IDS_IOS_CONTENT_CONTEXT_OPENINNEWWINDOW" desc="The iOS menu item for opening a link in a new window. [iOS only]">
-        Open In New Window
+        Open in New Window
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_OPENIMAGE" desc="The name of the Open Image command in the content area context menu">
         Open Image
@@ -663,6 +688,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CREDIT_CARD_SCANNER_VIEWPORT_CAPTION" desc="Message displayed below the Credit Card scanner viewport instructing the user to position the Credit Card inside the viewport. [Length: unlimited] [iOS only]">
         Position Credit Card in this frame
       </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_MAIN_BUTTON_TEXT" desc="Text of the button that will take the user to the Settings page to configure the default browser [iOS only]">
+        Open Settings
+      </message>
+      <message name="IDS_IOS_DEFAULT_BROWSER_SECONDARY_BUTTON_TEXT" desc="Text of secondary button that will dismiss the default browser modal promo UI [iOS only]">
+        No Thanks
+      </message>
       <message name="IDS_IOS_DISCONNECT_DIALOG_CONTINUE_BUTTON_MOBILE" desc="The title of the continue button on the disconnect dialog [Length: 20em].">
         Sign Out
       </message>
@@ -691,6 +722,36 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       </message>
       <message name="IDS_IOS_DISCONNECT_DIALOG_TITLE_UNITY" desc="The title of the disconnect dialog [Length: 30em].">
         Sign out and turn off sync?
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_HEADER_IPH" desc="In-product help that points at the menu icon for the news feed on Chrome's new tab page. This string instructs the user to open the menu for settings that let them control the content that appears on the feed.">
+        Control your stories and activity here
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_TITLE" desc="The title in the Discover feed menu.">
+        Discover
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_TITLE_NON_DSE" desc="Title in the feed header when the feed is turned on and the default search engine is not Google. Please use the branded term for Discover, as listed under Product Names in the Google Glossary Manager (TC ID 1799975766543019278).">
+        Discover by Google
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_TITLE_OFF_LABEL" desc="The 'Off' label appended to the title in the Discover feed menu.">
+        Off
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_MENU_LEARN_MORE_ITEM" desc="The 'Learn More' action for the Discover feed header menu.">
+        Learn More
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_MENU_MANAGE_ACTIVITY_ITEM" desc="The 'Manage Activity' action for the Discover feed header menu.">
+        Manage Activity
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_MENU_MANAGE_INTERESTS_ITEM" desc="The 'Manage Interests' action for the Discover feed header menu.">
+        Manage Interests
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_MENU_TURN_OFF_ITEM" desc="The 'Turn Off' action for the Discover feed header menu.">
+        Turn Off
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_MENU_TURN_ON_ITEM" desc="The 'Turn On' action for the Discover feed header menu.">
+        Turn On
+      </message>
+      <message name="IDS_IOS_DISCOVER_FEED_MENU_ACCESSIBILITY_LABEL" desc="The accessibility label for the Discover feed header's menu button.">
+        Options for Discover
       </message>
       <message name="IDS_IOS_DOWNLOAD_MANAGER_CANNOT_DETERMINE_FILE_SIZE" desc="Message displayed when the size of the file to be downloaded is unknown. [Length: 30em] [iOS only]">
         Cannot determine file size.
@@ -905,6 +966,15 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_PARAMETER_COMBINATION_TITLE" desc="Apple Shortcuts.app format for displaying the URL input [iOS only].">
         Open ${url}
       </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_INCOGNITO_TITLE" desc="Shortcut name to open URL in Chrome in Incognito [iOS only].">
+        Open URLs in Chrome in Incognito
+      </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_INCOGNITO_DESCRIPTION" desc="Shortcut description to open URLs in Chrome in Incognito [iOS only].">
+        Opens the inputted URLs in Google Chrome in Incognito.
+      </message>
+      <message name="IDS_IOS_INTENTS_OPEN_IN_CHROME_INCOGNITO_PARAMETER_COMBINATION_TITLE" desc="Apple Shortcuts.app format for displaying the URL input [iOS only].">
+        Open ${url} in Incognito
+      </message>
       <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_DESCRIPTION" desc="Siri Shortcut for search in chrome description [iOS only].">
         Start a search in a new Chrome tab.
       </message>
@@ -912,7 +982,11 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
         Search in Chrome
       </message>
       <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_TITLE" desc="Siri Shortcut for search in chrome title [iOS only].">
-        Search in Chrome
+          Search in Chrome
+      </message>
+      <message name="IDS_IOS_INTENTS_SEARCH_IN_CHROME_PARAMETER_COMBINATION_TITLE" desc="Apple Shortcuts App's format for displaying the user search phrase input, shown by the Siri Shortcut app when the
+          user is adding or editing a Search in Chrome shortcut[iOS only].">
+          Search ${searchPhrase} in Chrome
       </message>
       <message name="IDS_IOS_JAVA_SCRIPT_DIALOG_BLOCKING_BUTTON_TEXT" desc="The text used for the button added to JavaScript dialogs to prevent a page from spamming the user with endless alerts. [Length:27em]">
         Suppress Dialogs
@@ -955,6 +1029,9 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
       </message>
       <message name="IDS_IOS_REMOVE_ACCOUNT_LABEL" desc="Button label for removing an account.">
       Remove
+      </message>
+      <message name="IDS_IOS_REMOVE_ACTION_TITLE" desc="Title of the action used to remove a selected item. [iOS only]">
+        Remove
       </message>
       <message name="IDS_IOS_MANAGE_SYNC_ENCRYPTION" desc="Title for the cell to open the encryption dialog.">
         Encryption
@@ -1485,6 +1562,12 @@ While in incognito, sites can't use cookies to see your browsing activity across
       <message name="IDS_IOS_READING_LIST_MARK_ALL_UNREAD_ACTION" desc="Label of the action button to mark all reading list entries as unread. [Length: 25em]" meaning="Mark all entries as unread. [Length: 25em]">
         Mark All Unread
       </message>
+      <message name="IDS_IOS_READING_LIST_MARK_AS_READ_ACTION" desc="Label of the action button to mark a reading list entry as read. [Length: 25em]" meaning="Mark an entry as read. [Length: 25em]">
+        Mark As Read
+      </message>
+      <message name="IDS_IOS_READING_LIST_MARK_AS_UNREAD_ACTION" desc="Label of the action button to mark a reading list entry as unread. [Length: 25em]" meaning="Mark an entry as unread. [Length: 25em]">
+        Mark As Unread
+      </message>
       <message name="IDS_IOS_READING_LIST_MARK_BUTTON" desc="Label of the button to mark the selected reading list as either read or unread [Length: 25em]" meaning="Display options letting the user mark all the selected entries as read or as unread. [Length: 25em]">
         Mark…
       </message>
@@ -1495,10 +1578,13 @@ While in incognito, sites can't use cookies to see your browsing activity across
         Mark Unread
       </message>
       <message name="IDS_IOS_READING_LIST_NO_ENTRIES_MESSAGE" desc="Message shown on the Reading List screen when there are no entries, explaining the purpose of the Reading List screen.">
-          You can save pages to your reading list to find them again or read offline
+          You can save pages to read later or offline
       </message>
       <message name="IDS_IOS_READING_LIST_NO_ENTRIES_TITLE" desc="Title shown on the Reading List screen when there are no entries.">
           You'll find your reading list here
+      </message>
+      <message name="IDS_IOS_READING_LIST_OPEN_OFFLINE_BUTTON" desc="Label of the button to display the Offline version instead of the Online one. [Length: 25em]">
+        Open Offline Version
       </message>
       <message name="IDS_IOS_READING_LIST_READ_HEADER" desc="Heading. Appears above a list of articles the user has already read, in their Reading List. Appears on the same page as an 'Unread' heading, which contains articles the user hasn't read yet. In English, 'Read' can be both verb and adjective so we needed to be more explicit. Does not need to be translated literally. [Length: 40em]" meaning="The entries below this header are read. [Length: 40em]">
         Pages You've Read
@@ -1529,6 +1615,9 @@ While in incognito, sites can't use cookies to see your browsing activity across
       </message>
       <message name="IDS_IOS_RECENT_TABS_RECENTLY_CLOSED" desc="The heading of the recently closed section in the recent tab panel. [Length: 35em] [iOS only]">
         Recently Closed
+      </message>
+      <message name="IDS_IOS_RECENT_TABS_RECENTLY_CLOSED_EMPTY" desc="The content of the Recently Closed section in the Recent Tabs panel when there are no recently closed tabs.">
+        You can come back here to reopen tabs that you've recently closed
       </message>
       <message name="IDS_IOS_RESET_ZOOM" desc="Label for a button to reset the text zoom level to the default state." meaning="Reset text zoom level to the default state">
         Reset
@@ -1573,10 +1662,10 @@ While in incognito, sites can't use cookies to see your browsing activity across
         Passwords
       </message>
       <message name="IDS_IOS_ENTERPRISE_MANAGED_SETTING_DESC_WITH_COMPANY_NAME" desc="Text displayed to inform the user that the browser is managed by Enterprise policies with company name. [iOS only]">
-        Managed by <ph name="COMPANY">$1<ex>Google</ex></ph>.
+        Managed by <ph name="COMPANY">$1<ex>Google</ex></ph>. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
       </message>
       <message name="IDS_IOS_ENTERPRISE_MANAGED_SETTING_DESC_WITHOUT_COMPANY_NAME" desc="Text displayed to inform the user that the browser is managed by Enterprise policies without company name. [iOS only]">
-        Managed by your organization.
+        Managed by your organization. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
       </message>
       <message name="IDS_IOS_ENTERPRISE_MANAGED_SETTING_MESSAGE" desc="Text displayed to inform the user that the setting is managed by an Enterprise policy. [iOS only]">
         This setting is enforced by your administrator.
@@ -1602,6 +1691,9 @@ While in incognito, sites can't use cookies to see your browsing activity across
       <message name="IDS_IOS_EXPORT_PASSWORDS_CANCEL_BUTTON" desc="Label of a confirmation dialog button which allows the user to cancel passwords export. [Length: 22em] [iOS only]">
         Cancel
       </message>
+      <message name="IDS_IOS_SETTINGS_SET_DEFAULT_BROWSER" desc="Title of the button allowing the user to change its default browser">
+Change Default Browser…
+</message>
       <message name="IDS_IOS_SETTINGS_EXPORT_PASSWORDS_SET_UP_SCREENLOCK_CONTENT" desc="Message informing the user that in order to export the passwords, a screen lock needs to be set up on the device. This is shown as an alert message after the user tries to view or copy the password from a settings page. [Length: about two lines]">
         To export passwords, you must first set a passcode on your device.
       </message>
@@ -1614,17 +1706,47 @@ While in incognito, sites can't use cookies to see your browsing activity across
       <message name="IDS_IOS_CHECK_PASSWORDS_DESCRIPTION" desc="Description for the Password Check item in Settings" meaning="Label is shown to explain purpose of Password Check feature. This string is shown only if user didn't run Password Check before or check finished due to error without any results.  [iOS only]">
         Keep your passwords safe from security issues
       </message>
-      <message name="IDS_IOS_CHECK_PASSWORDS_SAFE_STATE" desc="Description for the Password Check item in Settings" meaning="Label is shown when no issues were found during password check. [iOS only]">
-        No passwords compromised
-      </message>
-      <message name="IDS_IOS_CHECK_PASSWORDS_UNSAFE_STATE" desc="Description for the Password Check item in Settings" meaning="Label is shown when compromised credentials were found during password check. [iOS only]">
-        Passwords compromised
+      <message name="IDS_IOS_CHECK_PASSWORDS_COMPROMISED_COUNT" desc="Displays the number of compromised passwords present in the database">
+        {COUNT, plural,
+          =0 {No compromised passwords}
+          =1 {{COUNT} Compromised password}
+          other {{COUNT} Compromised passwords}}
       </message>
       <message name="IDS_IOS_CHECK_PASSWORDS_NOW_BUTTON" desc="Label of a button which starts Password Check [Length: 22em] [iOS only]" meaning="By clicking this button user will start checking all passwords for security issues.">
         Check Now
       </message>
+      <message name="IDS_IOS_CANCEL_PASSWORD_CHECK_BUTTON" desc="Label of a button which stops Password Check [Length: 22em] [iOS only]" meaning="By clicking this button user will stop checking all passwords for security issues.">
+        Cancel
+      </message>
       <message name="IDS_IOS_PASSWORD_ISSUES_DESCRIPTION" desc="Description for the screen with Compromised passwords [iOS only]" meaning="This label explains what is compromised password and why is it compromised. It suggest user fixing the issues as soon as possible.">
         The following accounts use passwords which were exposed in a third-party data breach or entered on a deceptive website. Change these passwords immediately to keep your accounts safe.
+      </message>
+      <message name="IDS_IOS_CHANGE_COMPROMISED_PASSWORD" desc="Button which is shown on Password Details Screen when password is compromised. [iOS only]" meaning="Telling user to change password on a website since it is compromised.">
+        Change Password on Website
+      </message>
+      <message name="IDS_IOS_DELETE_COMPROMISED_PASSWORD_DESCRIPTION" desc="Message on top of the confirmation alert when the user tapped delete password button. [iOS only]" meaning="Explaining to the user that deleting password locally won't delete account on a website.">
+        Deleting this password will not delete your account on <ph name="WEBSITE">$1<ex>twitter.com</ex></ph>. Change your password on <ph name="WEBSITE">$1<ex>twitter.com</ex></ph> to keep it safe from others.
+      </message>
+      <message name="IDS_IOS_EDIT_ACTION_TITLE" desc="Title of the action used to edit a selected item. [iOS only]">
+        Edit
+      </message>
+      <message name="IDS_IOS_EDIT_PASSWORD_DESCRIPTION" desc="Message inside confirmation alert when the user is trying to edit password [iOS only]" meaning="Telling user to ensure provided password matches password on the website.">
+        Make sure the password you are saving matches your password for <ph name="WEBSITE">$1<ex>twitter.com</ex></ph>
+      </message>
+      <message name="IDS_IOS_CONFIRM_PASSWORD_EDIT" desc="Confirm button inside confirmation alert when the user is trying to edit password [iOS only]" meaning="Save edited password">
+        Save Password
+      </message>
+      <message name="IDS_IOS_CANCEL_PASSWORD_EDIT" desc="Cancel button inside confirmation alert when the user is trying to edit password [iOS only]" meaning="Cancels editing">
+        Cancel
+      </message>
+      <message name="IDS_IOS_LAST_COMPLETED_CHECK" desc="Footer for Password Check section which shows the timestamp of the last check." meaning="Time when passwords were checked last time.">
+        Last checked <ph name="TIME">$1<ex>10 minutes ago</ex></ph>.
+      </message>
+      <message name="IDS_IOS_CHECK_FINISHED_JUST_NOW" desc="Used instead of timestamp when Password Check finished less than 1 minute ago." meaning="Check finished just now.">
+        just now
+      </message>
+      <message name="IDS_IOS_CHECK_NEVER_RUN" desc="Used instead of timestamp when Password Check never ran" meaning="Check never run.">
+        Check never run.
       </message>
       <message name="IDS_IOS_SEARCH_COPIED" desc="The message displayed when the search is copied via long press (contextual search) [Length: 10em] [iOS only]">
         Copied
@@ -1635,17 +1757,32 @@ While in incognito, sites can't use cookies to see your browsing activity across
       <message name="IDS_IOS_SEARCH_COPIED_TEXT" desc="If a user has some text on their clipboard, this string will appear as an option when the user long-presses on Chrome's address bar. The user can select this option to search the default search engine for the text. This string is a complete sentence. If necessary for your language, you can translate as 'Search for Text That You Copied.' [iOS only]" meaning="Maximum characters: 32">
           Search for Copied Text
       </message>
-      <message name="IDS_IOS_SEARCH_ENGINE_SETTING_TITLE" desc="The title for Search Engine selection setting [iOS only]">
-        Search Engine
-      </message>
       <message name="IDS_IOS_SEARCH_ENGINE_SETTING_CUSTOM_SECTION_HEADER" desc="The header for custom search engines section in Search Engine selection setting [iOS only]">
         Recently Visited
+      </message>
+      <message name="IDS_IOS_SEARCH_ENGINE_SETTING_DISABLED_STATUS" desc="The status for Search Engine selection setting when the default search engine is disabled by policy [iOS only]">
+        None
+      </message>
+      <message name="IDS_IOS_SEARCH_ENGINE_SETTING_TITLE" desc="The title for Search Engine selection setting [iOS only]">
+        Search Engine
       </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_PASSWORDS_TITLE" desc="Title for the passwords element of safety check" meaning="Row title to access the passowrd check subpage if a probelm is found with user's saved passwords [CHAR_LIMIT=20]">
         Passwords
       </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_TITLE" desc="Title for the safe browsing element of safety check" meaning="Row title to display the user's safe browsing status [CHAR_LIMIT=20]">
         Safe Browsing
+      </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_DISABLED_DESC" desc="Detail text for the Safe Browsing check if the user has Safe Browsing disabled">
+        Off - Not recommended
+      </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_ENABLED_DESC" desc="Detail text for the Safe Browsing check if the user has Safe Browsing enabled">
+        Safe Browsing is on
+      </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_MANAGED_DESC" desc="Detail text for the Safe Browsing check if the user's Safe Browsing setting is managed by their administrator and disabled">
+        Turned off by your administrator
+      </message>
+      <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_SAFE_BROWSING_DISABLED_INFO" desc="String in the popover for the Safe Browsing check to direct the user to the Sync and Google Services page if Safe Browsing is disabled">
+        To turn on Safe Browsing, open <ph name="BEGIN_LINK">BEGIN_LINK</ph>Sync and Google Services<ph name="END_LINK">END_LINK</ph> and tap Safe Browsing.
       </message>
       <message name="IDS_IOS_SETTINGS_SAFETY_CHECK_UPDATES_TITLE" desc="Title for the updates element of safety check" meaning="Row title to display the user's Chrome update status, and access upates [CHAR_LIMIT=20]">
         Updates
@@ -1689,6 +1826,9 @@ While in incognito, sites can't use cookies to see your browsing activity across
       <message name="IDS_IOS_SETTINGS_PASSWORD_REAUTH_REASON_SHOW" desc="Message explaining that the reason why we are requiring the user to re-authenticate is to be able to show the password in plain text. This is shown by iOS in the Touch ID reauthentication system dialogue, right under the OS string 'Touch ID for $BROWSER_NAME'. [Length: 22em]">
         Show password
       </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORD_REAUTH_REASON_EDIT" desc="Message explaining that the reason why we are requiring the user to re-authenticate is to be able to edit the password. This is shown by iOS in the Touch ID reauthentication system dialogue, right under the OS string 'Touch ID for $BROWSER_NAME'. [Length: 22em]">
+        Edit password
+      </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_SHOW_BUTTON" desc="Button that the user can press in order to have the password displayed in plain text. [Length: 12em]">
         Show
       </message>
@@ -1724,6 +1864,9 @@ While in incognito, sites can't use cookies to see your browsing activity across
       </message>
       <message name="IDS_IOS_SETTING_ON" desc="Generic status label displayed in Settings to show that a setting is currently turned on. [Length: 5em] [iOS only]" meaning="The setting is on.">
         On
+      </message>
+      <message name="IDS_IOS_SETTING_OPENED_IN_ANOTHER_WINDOW" desc="Generic status label displayed in Settings to show that a setting cannot be edited because it is currently being opened for edit in another window. [Length: keep it short.] [iOS only]" meaning="The setting is opened for edit in another window.">
+        Opened Elsewhere
       </message>
       <message name="IDS_IOS_SETTINGS_TOOLBAR_DELETE" desc="Label of the button displayed on the bottom toolbar of the settings' collections when they are in edit mode. Pressing this button deletes the currently selected items.">
         Delete
@@ -1840,7 +1983,7 @@ While in incognito, sites can't use cookies to see your browsing activity across
         Cancel
       </message>
       <message name="IDS_IOS_CONFIRM_PASSWORD_DELETION" desc="Label of a confirmation dialogue button which allows the user to confirm deletion of a stored password. [Length: one line] [iOS only]">
-        Delete
+        Delete Password
       </message>
       <message name="IDS_IOS_COOKIES_ALLOW_ALL" desc="Label that informs the user that no cookies are blocked">
         Allow All
@@ -2137,7 +2280,7 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
         Chrome’s Terms of Service are changing March 31. <ph name="BEGIN_LINK"><ex>BEGIN_LINK</ex>BEGIN_LINK</ph>Please review<ph name="END_LINK"><ex>END_LINK</ex>END_LINK</ph>
       </message>
       <message name="IDS_IOS_SET_DEFAULT_BROWSER" desc="Text displayed on the New Tab Page to notify users of the ability to set Chrome as the default browser">
-          New: You can make Chrome your default. <ph name="BEGIN_LINK"><ex>BEGIN_LINK</ex>BEGIN_LINK</ph>Open Settings<ph name="END_LINK"><ex>END_LINK</ex>END_LINK</ph>
+          New: Open sites in Chrome automatically by making it your Default Browser App. <ph name="BEGIN_LINK"><ex>BEGIN_LINK</ex>BEGIN_LINK</ph>Open Settings<ph name="END_LINK"><ex>END_LINK</ex>END_LINK</ph>
       </message>
       <message name="IDS_IOS_TEXT_ZOOM_ZOOM_IN" desc="Accessibility label for a button allowing the user to zoom in." meaning="User is asking page to zoom in">
         Zoom In
@@ -2459,6 +2602,9 @@ New Search
       </message>
       <message name="IDS_IOS_LOCATION_BAR_SIGN_IN" desc="Text shown in the location bar while an HTTP authentication dialog is displayed.">
           Sign in to website
+      </message>
+      <message name="IDS_IOS_SHARE_LINK_TO_TEXT" desc="Option that appears in the iOS Edit Menu when highlighting text (alongside options like Copy, Paste, and Share). When selected, this generates a special URL that will open the current page and jump to/highlight the user's current selection. The user will then have the chance to share this special URL through the normal iOS sharing menu.">
+          Link to Text
       </message>
     </messages>
   </release>

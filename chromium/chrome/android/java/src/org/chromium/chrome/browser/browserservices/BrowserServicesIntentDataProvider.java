@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.customtabs.CustomButtonParams;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.webapps.WebApkExtras;
 import org.chromium.chrome.browser.webapps.WebappExtras;
+import org.chromium.device.mojom.ScreenOrientationLockType;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -167,6 +168,14 @@ public abstract class BrowserServicesIntentDataProvider {
      */
     @Nullable
     public Integer getNavigationBarColor() {
+        return null;
+    }
+
+    /**
+     * @return The navigation bar divider color specified in the intent, or null if not specified.
+     */
+    @Nullable
+    public Integer getNavigationBarDividerColor() {
         return null;
     }
 
@@ -349,6 +358,13 @@ public abstract class BrowserServicesIntentDataProvider {
     @Nullable
     public TrustedWebActivityDisplayMode getTwaDisplayMode() {
         return null;
+    }
+
+    /**
+     * Returns {@link ScreenOrientationLockType} supplied in the intent.
+     */
+    public int getDefaultOrientation() {
+        return ScreenOrientationLockType.DEFAULT;
     }
 
     /**

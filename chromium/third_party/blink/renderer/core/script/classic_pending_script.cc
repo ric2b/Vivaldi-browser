@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/scriptable_document_parser.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -42,9 +43,10 @@ ClassicPendingScript* ClassicPendingScript::Fetch(
     const WTF::TextEncoding& encoding,
     ScriptElementBase* element,
     FetchParameters::DeferOption defer) {
-  FetchParameters params(
-      options.CreateFetchParameters(url, element_document.GetSecurityOrigin(),
-                                    cross_origin, encoding, defer));
+  ExecutionContext* context = element_document.GetExecutionContext();
+  FetchParameters params(options.CreateFetchParameters(
+      url, context->GetSecurityOrigin(), context->GetCurrentWorld(),
+      cross_origin, encoding, defer));
 
   ClassicPendingScript* pending_script =
       MakeGarbageCollected<ClassicPendingScript>(
@@ -120,9 +122,8 @@ ClassicPendingScript::ClassicPendingScript(
 ClassicPendingScript::~ClassicPendingScript() {}
 
 NOINLINE void ClassicPendingScript::CheckState() const {
-  // TODO(hiroshige): Turn these CHECK()s into DCHECK() before going to beta.
-  CHECK(GetElement());
-  CHECK_EQ(is_external_, !!GetResource());
+  DCHECK(GetElement());
+  DCHECK_EQ(is_external_, !!GetResource());
 }
 
 namespace {

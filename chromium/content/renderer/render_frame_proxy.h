@@ -13,7 +13,6 @@
 #include "content/common/frame_messages.h"
 #include "content/common/frame_proxy.mojom.h"
 #include "content/common/frame_visual_properties.h"
-#include "content/public/common/screen_info.h"
 #include "content/renderer/child_frame_compositor.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
@@ -23,6 +22,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
@@ -137,14 +137,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // would only get one update per UpdateVisualProperties IPC received in the
   // RenderWidget, and we would only need to send one update to the browser as
   // a result.
-  void OnScreenInfoChanged(const ScreenInfo& screen_info);
-  void OnZoomLevelChanged(double zoom_level);
+  void DidChangeScreenInfo(const blink::ScreenInfo& screen_info) override;
   void OnRootWindowSegmentsChanged(
       std::vector<gfx::Rect> root_widget_window_segments);
-  void OnPageScaleFactorChanged(float page_scale_factor,
-                                bool is_pinch_gesture_active);
   void OnVisibleViewportSizeChanged(const gfx::Size& visible_viewport_size);
-  void UpdateCaptureSequenceNumber(uint32_t capture_sequence_number);
 
   // Pass replicated information, such as security origin, to this
   // RenderFrameProxy's WebRemoteFrame.
@@ -153,7 +149,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   int routing_id() { return routing_id_; }
   RenderViewImpl* render_view() { return render_view_; }
   blink::WebRemoteFrame* web_frame() { return web_frame_; }
-  const std::string& unique_name() const { return unique_name_; }
+  std::string unique_name() const;
 
   void set_provisional_frame_routing_id(int routing_id) {
     provisional_frame_routing_id_ = routing_id;
@@ -171,7 +167,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
     return pending_visual_properties_.local_frame_size;
   }
 
-  const ScreenInfo& screen_info() const {
+  const blink::ScreenInfo& screen_info() const {
     return pending_visual_properties_.screen_info;
   }
 
@@ -197,7 +193,10 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   void UpdateRemoteViewportIntersection(
       const blink::ViewportIntersectionState& intersection_state) override;
   base::UnguessableToken GetDevToolsFrameToken() override;
-  uint32_t Print(const blink::WebRect& rect, cc::PaintCanvas* canvas) override;
+  void ZoomLevelChanged(double zoom_level) override;
+  void UpdateCaptureSequenceNumber(uint32_t capture_sequence_number) override;
+  void PageScaleFactorChanged(float page_scale_factor,
+                              bool is_pinch_gesture_active) override;
 
   void DidStartLoading();
 
@@ -225,7 +224,6 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   // IPC handlers
   void OnDeleteProxy();
   void OnCompositorFrameSwapped(const IPC::Message& message);
-  void OnDidUpdateName(const std::string& name, const std::string& unique_name);
   void OnEnforceInsecureRequestPolicy(
       blink::mojom::InsecureRequestPolicy policy);
 
@@ -256,7 +254,6 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
 
   // Stores the WebRemoteFrame we are associated with.
   blink::WebRemoteFrame* web_frame_ = nullptr;
-  std::string unique_name_;
 
   // Provides the mojo interface to this RenderFrameProxy's
   // RenderFrameProxyHost.

@@ -106,7 +106,6 @@ class MostVisitedSites : public history::TopSitesObserver,
     virtual ~HomepageClient() = default;
     virtual bool IsHomepageTileEnabled() const = 0;
     virtual GURL GetHomepageUrl() const = 0;
-    // TODO(https://crbug.com/862753): Extract this to another interface.
     virtual void QueryHomepageTitle(TitleCallback title_callback) = 0;
   };
 
@@ -210,8 +209,8 @@ class MostVisitedSites : public history::TopSitesObserver,
   // must be enabled.
   void UndoCustomLinkAction();
 
-  void AddOrRemoveBlacklistedUrl(const GURL& url, bool add_url);
-  void ClearBlacklistedUrls();
+  void AddOrRemoveBlockedUrl(const GURL& url, bool add_url);
+  void ClearBlockedUrls();
 
   // MostVisitedSitesSupervisor::Observer implementation.
   void OnBlockedSitesChanged() override;

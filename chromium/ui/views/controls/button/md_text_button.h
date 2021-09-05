@@ -19,10 +19,9 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
  public:
   METADATA_HEADER(MdTextButton);
 
-  static std::unique_ptr<MdTextButton> Create(
-      ButtonListener* listener,
-      const base::string16& text,
-      int button_context = style::CONTEXT_BUTTON_MD);
+  explicit MdTextButton(ButtonListener* listener = nullptr,
+                        const base::string16& text = base::string16(),
+                        int button_context = style::CONTEXT_BUTTON_MD);
 
   ~MdTextButton() override;
 
@@ -57,12 +56,13 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   void OnFocus() override;
   void OnBlur() override;
 
-  MdTextButton(ButtonListener* listener, int button_context);
-
  private:
   void UpdatePadding();
-  void UpdateColors();
   gfx::Insets CalculateDefaultPadding() const;
+
+  void UpdateTextColor();
+  void UpdateBackgroundColor() override;
+  void UpdateColors();
 
   // True if this button uses prominent styling (blue fill, etc.).
   bool is_prominent_ = false;

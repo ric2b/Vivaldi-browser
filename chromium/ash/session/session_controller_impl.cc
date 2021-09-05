@@ -12,11 +12,11 @@
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/session/session_activation_observer.h"
 #include "ash/public/cpp/session/session_controller_client.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/session/user_info.h"
 #include "ash/session/fullscreen_controller.h"
 #include "ash/session/multiprofiles_intro_dialog.h"
 #include "ash/session/session_aborted_dialog.h"
-#include "ash/session/session_observer.h"
 #include "ash/session/teleport_warning_dialog.h"
 #include "ash/shell.h"
 #include "ash/system/power/power_event_observer.h"
@@ -66,10 +66,6 @@ bool SessionControllerImpl::IsActiveUserSessionStarted() const {
 
 bool SessionControllerImpl::CanLockScreen() const {
   return IsActiveUserSessionStarted() && can_lock_;
-}
-
-bool SessionControllerImpl::IsScreenLocked() const {
-  return state_ == SessionState::LOCKED;
 }
 
 bool SessionControllerImpl::ShouldLockScreenAutomatically() const {
@@ -276,6 +272,10 @@ void SessionControllerImpl::RemoveObserver(SessionObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+bool SessionControllerImpl::IsScreenLocked() const {
+  return state_ == SessionState::LOCKED;
+}
+
 void SessionControllerImpl::SetClient(SessionControllerClient* client) {
   client_ = client;
 }
@@ -403,7 +403,7 @@ void SessionControllerImpl::NotifyChromeTerminating() {
 }
 
 void SessionControllerImpl::SetSessionLengthLimit(base::TimeDelta length_limit,
-                                                  base::TimeTicks start_time) {
+                                                  base::Time start_time) {
   session_length_limit_ = length_limit;
   session_start_time_ = start_time;
   for (auto& observer : observers_)

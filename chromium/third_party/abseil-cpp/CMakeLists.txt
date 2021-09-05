@@ -22,13 +22,24 @@
 cmake_minimum_required(VERSION 3.5)
 
 # Compiler id for Apple Clang is now AppleClang.
-cmake_policy(SET CMP0025 NEW)
+if (POLICY CMP0025)
+  cmake_policy(SET CMP0025 NEW)
+endif (POLICY CMP0025)
 
 # if command can use IN_LIST
-cmake_policy(SET CMP0057 NEW)
+if (POLICY CMP0057)
+  cmake_policy(SET CMP0057 NEW)
+endif (POLICY CMP0057)
 
 # Project version variables are the empty string if version is unspecified
-cmake_policy(SET CMP0048 NEW)
+if (POLICY CMP0048)
+  cmake_policy(SET CMP0048 NEW)
+endif (POLICY CMP0048)
+
+# option() honor variables
+if (POLICY CMP0077)
+  cmake_policy(SET CMP0077 NEW)
+endif (POLICY CMP0077)
 
 project(absl CXX)
 
@@ -41,9 +52,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # when absl is included as subproject (i.e. using add_subdirectory(abseil-cpp))
 # in the source tree of a project that uses it, install rules are disabled.
 if(NOT "^${CMAKE_SOURCE_DIR}$" STREQUAL "^${PROJECT_SOURCE_DIR}$")
-  set(ABSL_ENABLE_INSTALL FALSE)
+  option(ABSL_ENABLE_INSTALL "Enable install rule" OFF)
 else()
-  set(ABSL_ENABLE_INSTALL TRUE)
+  option(ABSL_ENABLE_INSTALL "Enable install rule" ON)
 endif()
 
 list(APPEND CMAKE_MODULE_PATH
@@ -98,7 +109,6 @@ if(${ABSL_RUN_TESTS})
   # enable CTest.  This will set BUILD_TESTING to ON unless otherwise specified
   # on the command line
   include(CTest)
-  enable_testing()
 
   ## check targets
   if (NOT ABSL_USE_EXTERNAL_GOOGLETEST)

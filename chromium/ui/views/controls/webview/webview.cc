@@ -60,9 +60,9 @@ WebView::ScopedWebContentsCreatorForTesting::
 ////////////////////////////////////////////////////////////////////////////////
 // WebView, public:
 
-WebView::WebView(content::BrowserContext* browser_context)
-    : browser_context_(browser_context) {
+WebView::WebView(content::BrowserContext* browser_context) {
   ui::AXPlatformNode::AddAXModeObserver(this);
+  SetBrowserContext(browser_context);
 }
 
 WebView::~WebView() {
@@ -72,6 +72,8 @@ WebView::~WebView() {
 
 content::WebContents* WebView::GetWebContents() {
   if (!web_contents()) {
+    if (!browser_context_)
+      return nullptr;
     wc_owner_ = CreateWebContents(browser_context_);
     wc_owner_->SetDelegate(this);
     SetWebContents(wc_owner_.get());
@@ -109,7 +111,17 @@ void WebView::SetEmbedFullscreenWidgetMode(bool enable) {
   embed_fullscreen_widget_mode_enabled_ = enable;
 }
 
+content::BrowserContext* WebView::GetBrowserContext() {
+  return browser_context_;
+}
+
+void WebView::SetBrowserContext(content::BrowserContext* browser_context) {
+  browser_context_ = browser_context;
+}
+
 void WebView::LoadInitialURL(const GURL& url) {
+  // Loading requires a valid WebContents.
+  DCHECK(GetWebContents());
   GetWebContents()->GetController().LoadURL(url, content::Referrer(),
                                             ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
                                             std::string());
@@ -260,8 +272,17 @@ gfx::NativeViewAccessible WebView::GetNativeViewAccessible() {
   if (web_contents() && !web_contents()->IsCrashed()) {
     content::RenderWidgetHostView* host_view =
         web_contents()->GetRenderWidgetHostView();
-    if (host_view)
-      return host_view->GetNativeViewAccessible();
+    if (host_view) {
+      gfx::NativeViewAccessible accessible =
+          host_view->GetNativeViewAccessible();
+      // |accessible| needs to know whether this is the primary WebContents.
+      if (auto* ax_platform_node =
+              ui::AXPlatformNode::FromNativeViewAccessible(accessible)) {
+        ax_platform_node->SetIsPrimaryWebContentsForWindow(
+            is_primary_web_contents_for_window_);
+      }
+      return accessible;
+    }
   }
   return View::GetNativeViewAccessible();
 }
@@ -338,6 +359,10 @@ void WebView::OnWebContentsFocused(
 
 void WebView::RenderProcessGone(base::TerminationStatus status) {
   UpdateCrashedOverlayView();
+  NotifyAccessibilityWebContentsChanged();
+}
+
+void WebView::AXTreeIDForMainFrameHasChanged() {
   NotifyAccessibilityWebContentsChanged();
 }
 

@@ -133,6 +133,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -171,19 +172,19 @@ void AppendUnsafe(StringBuilder& builder, const String& off_thread_string) {
 
 }  // namespace
 
-using ReattachHook = LayoutShiftTracker::ReattachHook;
+using ReattachHookScope = LayoutShiftTracker::ReattachHookScope;
 
 struct SameSizeAsNode : EventTarget {
   uint32_t node_flags_;
   Member<void*> willbe_member_[4];
   Member<NodeData> member_;
 #if !DCHECK_IS_ON()
-  static_assert(sizeof(Member<NodeData>) == sizeof(void*),
-                "Increasing size of Member increases size of Node");
+  // Increasing size of Member increases size of Node.
+  ASSERT_SIZE(Member<NodeData>, void*);
 #endif  // !DCHECK_IS_ON()
 };
 
-static_assert(sizeof(Node) <= sizeof(SameSizeAsNode), "Node should stay small");
+ASSERT_SIZE(Node, SameSizeAsNode);
 
 #if DUMP_NODE_STATISTICS
 using WeakNodeSet = HeapHashSet<WeakMember<Node>>;
@@ -957,6 +958,40 @@ void Node::ReplaceWith(const HeapVector<NodeOrStringOrTrustedScript>& nodes,
     parent_node->InsertBefore(node, viable_next_sibling, exception_state);
 }
 
+// https://dom.spec.whatwg.org/#dom-parentnode-replacechildren
+void Node::ReplaceChildren(const HeapVector<NodeOrStringOrTrustedScript>& nodes,
+                           ExceptionState& exception_state) {
+  auto* this_node = DynamicTo<ContainerNode>(this);
+  if (!this_node) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kHierarchyRequestError,
+        "This node type does not support this method.");
+    return;
+  }
+
+  // 1. Let node be the result of converting nodes into a node given nodes and
+  // this’s node document.
+  Node* node =
+      ConvertNodesIntoNode(this, nodes, GetDocument(), exception_state);
+  if (exception_state.HadException())
+    return;
+
+  // 2. Ensure pre-insertion validity of node into this before null.
+  if (!this_node->EnsurePreInsertionValidity(*node, nullptr, nullptr,
+                                             exception_state))
+    return;
+
+  // 3. Replace all with node within this.
+  ChildListMutationScope mutation(*this);
+  while (Node* first_child = firstChild()) {
+    removeChild(first_child, exception_state);
+    if (exception_state.HadException())
+      return;
+  }
+
+  appendChild(node, exception_state);
+}
+
 void Node::remove(ExceptionState& exception_state) {
   if (ContainerNode* parent = parentNode())
     parent->RemoveChild(this, exception_state);
@@ -1470,10 +1505,6 @@ bool Node::InActiveDocument() const {
   return isConnected() && GetDocument().IsActive();
 }
 
-const Node* Node::FocusDelegate() const {
-  return this;
-}
-
 bool Node::ShouldHaveFocusAppearance() const {
   DCHECK(IsFocused());
   return true;
@@ -1655,7 +1686,7 @@ Node* Node::CommonAncestor(const Node& other,
 
 void Node::ReattachLayoutTree(AttachContext& context) {
   context.performing_reattach = true;
-  ReattachHook::Scope reattach_scope(*this);
+  ReattachHookScope reattach_scope(*this);
 
   DetachLayoutTree(context.performing_reattach);
   AttachLayoutTree(context);
@@ -1679,7 +1710,7 @@ void Node::AttachLayoutTree(AttachContext& context) {
     cache->UpdateCacheAfterNodeIsAttached(this);
 
   if (context.performing_reattach)
-    ReattachHook::NotifyAttach(*this);
+    ReattachHookScope::NotifyAttach(*this);
 }
 
 void Node::DetachLayoutTree(bool performing_reattach) {
@@ -1689,7 +1720,7 @@ void Node::DetachLayoutTree(bool performing_reattach) {
   DocumentLifecycle::DetachScope will_detach(GetDocument().Lifecycle());
 
   if (performing_reattach)
-    ReattachHook::NotifyDetach(*this);
+    ReattachHookScope::NotifyDetach(*this);
 
   if (GetLayoutObject())
     GetLayoutObject()->DestroyAndCleanupAnonymousWrappers();
@@ -2676,6 +2707,11 @@ void Node::AddedEventListener(const AtomicString& event_type,
   if (auto* frame = GetDocument().GetFrame()) {
     frame->GetEventHandlerRegistry().DidAddEventHandler(
         *this, event_type, registered_listener.Options());
+    // We need to track the existence of the visibilitychange event listeners to
+    // enable/disable sudden terminations.
+    if (IsDocumentNode() && event_type == event_type_names::kVisibilitychange) {
+      frame->AddedSuddenTerminationDisablerListener(*this, event_type);
+    }
   }
 }
 
@@ -2689,6 +2725,11 @@ void Node::RemovedEventListener(
   if (auto* frame = GetDocument().GetFrame()) {
     frame->GetEventHandlerRegistry().DidRemoveEventHandler(
         *this, event_type, registered_listener.Options());
+    // We need to track the existence of the visibilitychange event listeners to
+    // enable/disable sudden terminations.
+    if (IsDocumentNode() && event_type == event_type_names::kVisibilitychange) {
+      frame->RemovedSuddenTerminationDisablerListener(*this, event_type);
+    }
   }
 }
 

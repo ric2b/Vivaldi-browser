@@ -90,13 +90,13 @@ void NetLogExporter::Stop(base::Value polled_data_value,
     return;
   }
 
-  std::unique_ptr<base::DictionaryValue> net_info = net::GetNetInfo(
+  base::Value net_info = net::GetNetInfo(
       network_context_->url_request_context(), net::NET_INFO_ALL_SOURCES);
   if (polled_data)
-    net_info->MergeDictionary(polled_data);
+    net_info.MergeDictionary(polled_data);
 
   file_net_observer_->StopObserving(
-      std::move(net_info),
+      base::Value::ToUniquePtrValue(std::move(net_info)),
       base::BindOnce([](StopCallback sc) { std::move(sc).Run(net::OK); },
                      std::move(callback)));
   file_net_observer_ = nullptr;
@@ -150,14 +150,9 @@ void NetLogExporter::StartWithScratchDirOrCleanup(
     base::ThreadPool::PostTask(
         FROM_HERE,
         {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-        base::BindOnce(
-            [](const base::FilePath& dir) {
-              // The delete is non-recursive (2nd argument
-              // false) since the only time this is invoked
-              // the directory is expected to be empty.
-              base::DeleteFile(dir, false);
-            },
-            scratch_dir_path));
+        // The delete is non-recursive since the only time this is invoked is
+        // when the directory is expected to be empty.
+        base::BindOnce(base::GetDeleteFileCallback(), scratch_dir_path));
   }
 }
 

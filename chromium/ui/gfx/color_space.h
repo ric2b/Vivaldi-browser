@@ -185,12 +185,24 @@ class COLOR_SPACE_EXPORT ColorSpace {
   }
 
   // scRGB uses the same primaries as sRGB but has a linear transfer function
-  // for all real values. The slope of the transfer function may be specified
-  // by |slope|.
-  static ColorSpace CreateSCRGBLinear(float slope = 1.f);
+  // for all real values, and a white point of kDefaultScrgbLinearSdrWhiteLevel.
+  static constexpr ColorSpace CreateSCRGBLinear() {
+    return ColorSpace(PrimaryID::BT709, TransferID::LINEAR_HDR, MatrixID::RGB,
+                      RangeID::FULL);
+  }
+  // Allows specifying a custom SDR white level.  Only used on Windows.
+  static ColorSpace CreateSCRGBLinear(float sdr_white_level);
 
   // HDR10 uses BT.2020 primaries with SMPTE ST 2084 PQ transfer function.
-  static ColorSpace CreateHDR10(float sdr_white_point = 0.f);
+  static constexpr ColorSpace CreateHDR10() {
+    return ColorSpace(PrimaryID::BT2020, TransferID::SMPTEST2084, MatrixID::RGB,
+                      RangeID::FULL);
+  }
+  // Allows specifying a custom SDR white level.  Only used on Windows.
+  static ColorSpace CreateHDR10(float sdr_white_level);
+
+  // HLG uses the BT.2020 primaries with the ARIB_STD_B67 transfer function.
+  static ColorSpace CreateHLG();
 
   // Create a piecewise-HDR color space.
   // - If |primaries| is CUSTOM, then |custom_primary_matrix| must be
@@ -224,9 +236,21 @@ class COLOR_SPACE_EXPORT ColorSpace {
   }
 
   // On macOS and on ChromeOS, sRGB's (1,1,1) always coincides with PQ's 100
-  // nits (which may not be 100 physical nits). Life is more complicated on
-  // Windows.
+  // nits (which may not be 100 physical nits). On Windows, sRGB's (1,1,1)
+  // maps to scRGB linear's (1,1,1) when the SDR white level is set to 80 nits.
+  // See also kDefaultScrgbLinearSdrWhiteLevel.
   static constexpr float kDefaultSDRWhiteLevel = 100.f;
+
+  // The default white level in nits for scRGB linear color space. On Windows,
+  // sRGB's (1,1,1) maps to scRGB linear's (1,1,1) when the SDR white level is
+  // set to 80 nits. On Mac and ChromeOS, sRGB's (1,1,1) maps to PQ's 100 nits.
+  // Using a platform specific value here satisfies both constraints.
+#if defined(OS_WIN)
+  static constexpr float kDefaultScrgbLinearSdrWhiteLevel = 80.0f;
+#else
+  static constexpr float kDefaultScrgbLinearSdrWhiteLevel =
+      kDefaultSDRWhiteLevel;
+#endif  // OS_WIN
 
   bool operator==(const ColorSpace& other) const;
   bool operator!=(const ColorSpace& other) const;
@@ -257,10 +281,6 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // everything will be half as bright in linear lumens.
   ColorSpace GetScaledColorSpace(float factor) const;
 
-  // If |this| is the final output color space, return the color space that
-  // would be appropriate for rasterization.
-  ColorSpace GetRasterColorSpace() const;
-
   // Return true if blending in |this| is close enough to blending in sRGB to
   // be considered acceptable (only PQ and nearly-linear transfer functions
   // return false).
@@ -270,10 +290,10 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // the caller but replacing the matrix and range with the given values.
   ColorSpace GetWithMatrixAndRange(MatrixID matrix, RangeID range) const;
 
-  // If this color space has a PQ transfer function that did not specify an
-  // SDR white level, then return |this| with its SDR white level set to
-  // |sdr_white_level|. Otherwise return |this| unmodified.
-  ColorSpace GetWithPQSDRWhiteLevel(float sdr_white_level) const;
+  // If this color space has a PQ or scRGB linear transfer function, then return
+  // |this| with its SDR white level set to |sdr_white_level|. Otherwise return
+  // |this| unmodified.
+  ColorSpace GetWithSDRWhiteLevel(float sdr_white_level) const;
 
   // This will return nullptr for non-RGB spaces, spaces with non-FULL
   // range, and unspecified spaces.
@@ -284,10 +304,14 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // buffer.
   const _GLcolorSpace* AsGLColorSpace() const;
 
-  // For YUV color spaces, return the closest SkYUVColorSpace.
-  // Returns true if a close match is found. Otherwise, leaves *out unchanged
-  // and returns false.
-  bool ToSkYUVColorSpace(SkYUVColorSpace* out) const;
+  // For YUV color spaces, return the closest SkYUVColorSpace. Returns true if a
+  // close match is found. Otherwise, leaves *out unchanged and returns false.
+  // If |matrix_id| is MatrixID::BT2020_NCL and |bit_depth| is provided, a bit
+  // depth appropriate SkYUVColorSpace will be provided.
+  bool ToSkYUVColorSpace(int bit_depth, SkYUVColorSpace* out) const;
+  bool ToSkYUVColorSpace(SkYUVColorSpace* out) const {
+    return ToSkYUVColorSpace(kDefaultBitDepth, out);
+  }
 
   void GetPrimaryMatrix(skcms_Matrix3x3* to_XYZD50) const;
   void GetPrimaryMatrix(SkMatrix44* to_XYZD50) const;
@@ -361,8 +385,6 @@ class COLOR_SPACE_EXPORT ColorSpace {
   static void GetPrimaryMatrix(PrimaryID, skcms_Matrix3x3* to_XYZD50);
   static bool GetTransferFunction(TransferID, skcms_TransferFunction* fn);
   static size_t TransferParamCount(TransferID);
-
-  void GetPQTransferFunction(skcms_TransferFunction* fn) const;
 
   void SetCustomTransferFunction(const skcms_TransferFunction& fn);
   void SetCustomPrimaries(const skcms_Matrix3x3& to_XYZD50);

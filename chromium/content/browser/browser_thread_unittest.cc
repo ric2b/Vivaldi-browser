@@ -15,6 +15,7 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task/current_thread.h"
 #include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
@@ -159,7 +160,7 @@ class BrowserThreadTest : public testing::Test {
 };
 
 class UIThreadDestructionObserver
-    : public base::MessageLoopCurrent::DestructionObserver {
+    : public base::CurrentThread::DestructionObserver {
  public:
   explicit UIThreadDestructionObserver(bool* did_shutdown,
                                        base::OnceClosure callback)
@@ -172,10 +173,10 @@ class UIThreadDestructionObserver
 
  private:
   static void Watch(UIThreadDestructionObserver* observer) {
-    base::MessageLoopCurrent::Get()->AddDestructionObserver(observer);
+    base::CurrentThread::Get()->AddDestructionObserver(observer);
   }
 
-  // base::MessageLoopCurrent::DestructionObserver:
+  // base::CurrentThread::DestructionObserver:
   void WillDestroyCurrentMessageLoop() override {
     // Ensure that even during MessageLoop teardown the BrowserThread ID is
     // correctly associated with this thread and the BrowserThreadTaskRunner
@@ -183,7 +184,7 @@ class UIThreadDestructionObserver
     EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::UI));
     EXPECT_TRUE(ui_task_runner_->BelongsToCurrentThread());
 
-    base::MessageLoopCurrent::Get()->RemoveDestructionObserver(this);
+    base::CurrentThread::Get()->RemoveDestructionObserver(this);
     *did_shutdown_ = true;
     callback_task_runner_->PostTask(FROM_HERE, std::move(callback_));
   }

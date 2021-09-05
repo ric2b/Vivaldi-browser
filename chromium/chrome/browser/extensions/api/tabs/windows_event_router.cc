@@ -159,7 +159,7 @@ WindowsEventRouter::WindowsEventRouter(Profile* profile)
   // allows windows not created by toolkit-views to be tracked.
   // TODO(tapted): Remove the ifdefs (and NOTIFICATION_NO_KEY_WINDOW) when
   // Chrome on Mac only makes windows with toolkit-views.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   registrar_.Add(this, chrome::NOTIFICATION_NO_KEY_WINDOW,
                  content::NotificationService::AllSources());
 #elif defined(TOOLKIT_VIEWS)
@@ -174,7 +174,7 @@ WindowsEventRouter::WindowsEventRouter(Profile* profile)
 }
 
 WindowsEventRouter::~WindowsEventRouter() {
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MAC)
   views::WidgetFocusManager::GetInstance()->RemoveFocusChangeListener(this);
 #endif
 }
@@ -241,7 +241,30 @@ void WindowsEventRouter::OnWindowControllerRemoved(
                 window_controller, std::move(args));
 }
 
-#if defined(TOOLKIT_VIEWS) && !defined(OS_MACOSX)
+void WindowsEventRouter::OnWindowBoundsChanged(
+    WindowController* window_controller) {
+  if (!HasEventListener(windows::OnBoundsChanged::kEventName))
+    return;
+  if (!profile_->IsSameOrParent(window_controller->profile()))
+    return;
+  // Ignore any windows without an associated browser (e.g., AppWindows).
+  if (!window_controller->GetBrowser())
+    return;
+
+  auto args = std::make_unique<base::ListValue>();
+  // Since we don't populate tab info here, the context type doesn't matter.
+  constexpr ExtensionTabUtil::PopulateTabBehavior populate_behavior =
+      ExtensionTabUtil::kDontPopulateTabs;
+  constexpr Feature::Context context_type = Feature::UNSPECIFIED_CONTEXT;
+  args->Append(ExtensionTabUtil::CreateWindowValueForExtension(
+      *window_controller->GetBrowser(), nullptr, populate_behavior,
+      context_type));
+  DispatchEvent(events::WINDOWS_ON_BOUNDS_CHANGED,
+                windows::OnBoundsChanged::kEventName, window_controller,
+                std::move(args));
+}
+
+#if defined(TOOLKIT_VIEWS) && !defined(OS_MAC)
 void WindowsEventRouter::OnNativeFocusChanged(gfx::NativeView focused_now) {
   if (!focused_now)
     OnActiveWindowChanged(nullptr);
@@ -252,7 +275,7 @@ void WindowsEventRouter::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   DCHECK_EQ(chrome::NOTIFICATION_NO_KEY_WINDOW, type);
   OnActiveWindowChanged(nullptr);
 #endif

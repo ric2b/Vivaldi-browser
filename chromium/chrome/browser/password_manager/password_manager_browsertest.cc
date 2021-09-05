@@ -36,13 +36,18 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/autofill/core/common/renderer_id.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
+#include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/http_auth_observer.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
@@ -77,6 +82,8 @@ using base::ASCIIToUTF16;
 using base::Feature;
 using testing::_;
 using testing::ElementsAre;
+using FieldPrediction =
+    autofill::AutofillQueryResponseContents::Field::FieldPrediction;
 
 namespace password_manager {
 namespace {
@@ -1168,6 +1175,169 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   // The only thing we check here is that there is no use-after-free reported.
 }
 
+// Get form data for /password/nonplaceholder_username.html
+autofill::FormData GetPlaceholderUsernameFormData(
+    autofill::PasswordForm signin_form) {
+  // Build server predictions
+  autofill::FormData form_data;
+  constexpr autofill::FormRendererId form_id(0);
+  form_data.unique_renderer_id = form_id;
+  form_data.name_attribute = ASCIIToUTF16("testform");
+  form_data.name = form_data.name_attribute;
+  form_data.action = GURL(signin_form.action.spec() + "password/done.html");
+  form_data.url = signin_form.url;
+  // Username
+  autofill::FormFieldData username_field;
+  username_field.form_control_type = "text";
+  username_field.id_attribute = ASCIIToUTF16("username_field");
+  username_field.name = username_field.id_attribute;
+  username_field.value = ASCIIToUTF16("example@example.com");
+  username_field.label = username_field.value;
+  username_field.unique_renderer_id = autofill::FieldRendererId(0);
+  form_data.fields.push_back(username_field);
+  // Password
+  autofill::FormFieldData password_field;
+  password_field.form_control_type = "password";
+  password_field.id_attribute = ASCIIToUTF16("password_field");
+  password_field.name = password_field.id_attribute;
+  password_field.value = ASCIIToUTF16("htmlPass");
+  password_field.label = password_field.value;
+  password_field.unique_renderer_id = autofill::FieldRendererId(1);
+  form_data.fields.push_back(password_field);
+
+  return form_data;
+}
+
+// If there is a username and password with prefilled values, do not overwrite
+// the password if the username does not look like a placeholder value
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
+                       NonPlaceholderPasswordNotOverwritten) {
+  // Save a credential to the password store.
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+  autofill::PasswordForm signin_form;
+  signin_form.signon_realm = embedded_test_server()->base_url().spec();
+  signin_form.url = embedded_test_server()->base_url();
+  signin_form.action = embedded_test_server()->base_url();
+  signin_form.username_value = base::ASCIIToUTF16("example@example.com");
+  signin_form.password_value = base::ASCIIToUTF16("savedPass");
+  password_store->AddLogin(signin_form);
+
+  password_manager::PasswordFormManager::
+      set_wait_for_server_predictions_for_filling(true);
+
+  // Get form data
+  autofill::FormData form_data = GetPlaceholderUsernameFormData(signin_form);
+
+  // Username
+  bool is_placeholder = false;
+  autofill::FormStructure form_structure(form_data);
+  form_structure.field(0)->set_server_type(autofill::USERNAME);
+  std::vector<FieldPrediction> username_predictions;
+  FieldPrediction username_prediction;
+  username_prediction.set_type(autofill::USERNAME);
+  username_prediction.set_may_use_prefilled_placeholder(is_placeholder);
+  username_predictions.push_back(username_prediction);
+  form_structure.field(0)->set_server_predictions(username_predictions);
+
+  // Password
+  form_structure.field(1)->set_server_type(autofill::PASSWORD);
+  std::vector<FieldPrediction> password_predictions;
+  FieldPrediction password_prediction;
+  password_prediction.set_type(autofill::PASSWORD);
+  password_predictions.push_back(password_prediction);
+  form_structure.field(1)->set_server_predictions(password_predictions);
+
+  // Navigate to the page
+  NavigateToFile("/password/nonplaceholder_username.html");
+
+  // Use autofill predictions
+  autofill::ChromeAutofillClient* autofill_client =
+      autofill::ChromeAutofillClient::FromWebContents(WebContents());
+  autofill_client->PropagateAutofillPredictions(WebContents()->GetMainFrame(),
+                                                {&form_structure});
+
+  // Check original values before interaction
+  CheckElementValue("username_field", "example@example.com");
+  CheckElementValue("password_field", "htmlPass");
+
+  // Have user interact with the page
+  content::SimulateMouseClickAt(
+      WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(1, 1));
+
+  // Now make sure the fields aren't overwritten
+  CheckElementValue("username_field", "example@example.com");
+  CheckElementValue("password_field", "htmlPass");
+}
+
+// If there is a username and password with prefilled values, overwrite the
+// password if the username looks like a placeholder value
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
+                       PlaceholderPasswordOverwritten) {
+  // Save a credential to the password store.
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+  autofill::PasswordForm signin_form;
+  signin_form.signon_realm = embedded_test_server()->base_url().spec();
+  signin_form.url = embedded_test_server()->base_url();
+  signin_form.action = embedded_test_server()->base_url();
+  signin_form.username_value = base::ASCIIToUTF16("example@example.com");
+  signin_form.password_value = base::ASCIIToUTF16("savedPass");
+  password_store->AddLogin(signin_form);
+
+  password_manager::PasswordFormManager::
+      set_wait_for_server_predictions_for_filling(true);
+
+  // Get form data
+  autofill::FormData form_data = GetPlaceholderUsernameFormData(signin_form);
+
+  // Username
+  bool is_placeholder = true;
+  autofill::FormStructure form_structure(form_data);
+  form_structure.field(0)->set_server_type(autofill::USERNAME);
+  std::vector<FieldPrediction> username_predictions;
+  FieldPrediction username_prediction;
+  username_prediction.set_type(autofill::USERNAME);
+  username_prediction.set_may_use_prefilled_placeholder(is_placeholder);
+  username_predictions.push_back(username_prediction);
+  form_structure.field(0)->set_server_predictions(username_predictions);
+
+  // Password
+  form_structure.field(1)->set_server_type(autofill::PASSWORD);
+  std::vector<FieldPrediction> password_predictions;
+  FieldPrediction password_prediction;
+  password_prediction.set_type(autofill::PASSWORD);
+  password_predictions.push_back(password_prediction);
+  form_structure.field(1)->set_server_predictions(password_predictions);
+
+  // Navigate to the page
+  NavigateToFile("/password/nonplaceholder_username.html");
+
+  // Use autofill predictions
+  autofill::ChromeAutofillClient* autofill_client =
+      autofill::ChromeAutofillClient::FromWebContents(WebContents());
+  autofill_client->PropagateAutofillPredictions(WebContents()->GetMainFrame(),
+                                                {&form_structure});
+
+  // Check original values before interaction
+  CheckElementValue("username_field", "example@example.com");
+  CheckElementValue("password_field", "htmlPass");
+
+  // Have user interact with the page
+  content::SimulateMouseClickAt(
+      WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(1, 1));
+
+  // Now make sure the fields are overwritten
+  CheckElementValue("username_field", "example@example.com");
+  WaitForElementValue("password_field", "savedPass");
+}
+
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                        UsernameAndPasswordValueAccessible) {
   // At first let us save a credential to the password store.
@@ -1423,7 +1593,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, NoLastLoadGoodLastLoad) {
 
   // Teach the embedded server to handle requests by issuing the basic auth
   // challenge.
-  http_test_server.RegisterRequestHandler(base::Bind(&HandleTestAuthRequest));
+  http_test_server.RegisterRequestHandler(
+      base::BindRepeating(&HandleTestAuthRequest));
   ASSERT_TRUE(http_test_server.Start());
 
   LoginPromptBrowserTestObserver login_observer;
@@ -2822,7 +2993,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, BasicAuthSeparateRealms) {
   // already started at this point and adding the request handler to it would
   // not be thread safe.
   net::EmbeddedTestServer http_test_server;
-  http_test_server.RegisterRequestHandler(base::Bind(&HandleTestAuthRequest));
+  http_test_server.RegisterRequestHandler(
+      base::BindRepeating(&HandleTestAuthRequest));
   ASSERT_TRUE(http_test_server.Start());
 
   // Save credentials for "test realm" in the store.
@@ -3300,7 +3472,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, ReattachWebContents) {
 }
 
 // Flaky on Linux and Windows.  http://crbug.com/1022531
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 #define MAYBE_FillWhenFormWithHiddenUsername \
   DISABLED_FillWhenFormWithHiddenUsername
 #else
@@ -3517,7 +3689,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
       "document.body.appendChild(frame);\n";
   ASSERT_TRUE(content::ExecuteScript(WebContents(),
                                      inject_data_frame_with_password_form));
-  content::WaitForLoadStop(WebContents());
+  EXPECT_TRUE(content::WaitForLoadStop(WebContents()));
   content::RenderFrameHost* frame =
       ChildFrameAt(WebContents()->GetMainFrame(), 0);
   EXPECT_TRUE(frame->GetLastCommittedURL().SchemeIs(url::kDataScheme));
@@ -3570,7 +3742,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest, CorrectEntryForHttpAuth) {
 
   // Teach the embedded server to handle requests by issuing the basic auth
   // challenge.
-  http_test_server.RegisterRequestHandler(base::Bind(&HandleTestAuthRequest));
+  http_test_server.RegisterRequestHandler(
+      base::BindRepeating(&HandleTestAuthRequest));
   ASSERT_TRUE(http_test_server.Start());
 
   LoginPromptBrowserTestObserver login_observer;
@@ -3642,11 +3815,11 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                 browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
                 .get());
 
-    autofill::PasswordForm blacklisted_form;
-    blacklisted_form.scheme = autofill::PasswordForm::Scheme::kHtml;
-    blacklisted_form.signon_realm = http_test_server.base_url().spec();
-    blacklisted_form.blacklisted_by_user = true;
-    password_store->AddLogin(blacklisted_form);
+    autofill::PasswordForm blocked_form;
+    blocked_form.scheme = autofill::PasswordForm::Scheme::kHtml;
+    blocked_form.signon_realm = http_test_server.base_url().spec();
+    blocked_form.blocked_by_user = true;
+    password_store->AddLogin(blocked_form);
     WaitForPasswordStore();
     ASSERT_FALSE(password_store->IsEmpty());
 
@@ -3683,21 +3856,21 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
   }
 }
 
-// Test that if HTML login succeeds, and there is a blacklisted entry
+// Test that if HTML login succeeds, and there is a denylisted entry
 // with the HTTP auth PasswordForm::Scheme (i.e., credentials not put
 // through web forms) for that origin, then
 // 1) The bubble is not shown if the auth realm is empty,
 // 2) The bubble is shown if the auth realm is not empty.
 // This inconsistency is a side-effect of only signon_realm, not
-// PasswordForm::Scheme, being used to match blacklisted entries to a form.
+// PasswordForm::Scheme, being used to match denylisted entries to a form.
 // It is a bug, but so rare that it has not been worth fixing yet.
 // TODO(crbug.com/862930) If the inconsistency is fixed, please ensure that the
 // code for removing duplicates in password_manager_util.cc is updated and does
-// not remove blacklisted credentials which are no longer duplicates.
+// not remove denylisted credentials which are no longer duplicates.
 //
 // Disabled due to flakiness: https://crbug.com/1030579.
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
-                       DISABLED_HTMLLoginAfterHTTPAuthIsBlacklisted) {
+                       DISABLED_HTMLLoginAfterHTTPAuthIsDenylisted) {
   for (bool is_realm_empty : {false, true}) {
     scoped_refptr<password_manager::TestPasswordStore> password_store =
         static_cast<password_manager::TestPasswordStore*>(
@@ -3705,13 +3878,13 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTest,
                 browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
                 .get());
 
-    autofill::PasswordForm blacklisted_form;
-    blacklisted_form.scheme = autofill::PasswordForm::Scheme::kBasic;
-    blacklisted_form.signon_realm = embedded_test_server()->base_url().spec();
+    autofill::PasswordForm blocked_form;
+    blocked_form.scheme = autofill::PasswordForm::Scheme::kBasic;
+    blocked_form.signon_realm = embedded_test_server()->base_url().spec();
     if (!is_realm_empty)
-      blacklisted_form.signon_realm += "test realm";
-    blacklisted_form.blacklisted_by_user = true;
-    password_store->AddLogin(blacklisted_form);
+      blocked_form.signon_realm += "test realm";
+    blocked_form.blocked_by_user = true;
+    password_store->AddLogin(blocked_form);
     WaitForPasswordStore();
     ASSERT_FALSE(password_store->IsEmpty());
 

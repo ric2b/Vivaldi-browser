@@ -35,9 +35,12 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
+#include "third_party/blink/renderer/core/accessibility/ax_context.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/inspector/inspector_base_agent.h"
+#include "third_party/blink/renderer/core/inspector/inspector_dom_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_highlight.h"
 #include "third_party/blink/renderer/core/inspector/inspector_overlay_host.h"
 #include "third_party/blink/renderer/core/inspector/protocol/Overlay.h"
@@ -126,9 +129,8 @@ class CORE_EXPORT Hinge final : public GarbageCollected<Hinge> {
 
 class CORE_EXPORT InspectorOverlayAgent final
     : public InspectorBaseAgent<protocol::Overlay::Metainfo>,
+      public InspectorDOMAgent::DOMListener,
       public InspectorOverlayHost::Delegate {
-  USING_GARBAGE_COLLECTED_MIXIN(InspectorOverlayAgent);
-
  public:
   static std::unique_ptr<InspectorGridHighlightConfig> ToGridHighlightConfig(
       protocol::Overlay::GridHighlightConfig*);
@@ -174,6 +176,11 @@ class CORE_EXPORT InspectorOverlayAgent final
       protocol::Maybe<int> backend_node_id,
       protocol::Maybe<String> object_id,
       protocol::Maybe<String> selector_list) override;
+  protocol::Response highlightSourceOrder(
+      std::unique_ptr<protocol::Overlay::SourceOrderConfig>,
+      protocol::Maybe<int> node_id,
+      protocol::Maybe<int> backend_node_id,
+      protocol::Maybe<String> object_id) override;
   protocol::Response hideHighlight() override;
   protocol::Response highlightFrame(
       const String& frame_id,
@@ -186,8 +193,18 @@ class CORE_EXPORT InspectorOverlayAgent final
       protocol::Maybe<String> color_format,
       protocol::Maybe<bool> show_accessibility_info,
       std::unique_ptr<protocol::DictionaryValue>* highlight) override;
+  protocol::Response getGridHighlightObjectsForTest(
+      std::unique_ptr<protocol::Array<int>> node_ids,
+      std::unique_ptr<protocol::DictionaryValue>* highlights) override;
+  protocol::Response getSourceOrderHighlightObjectForTest(
+      int node_id,
+      std::unique_ptr<protocol::DictionaryValue>* highlights) override;
   protocol::Response setShowHinge(
       protocol::Maybe<protocol::Overlay::HingeConfig> hinge_config) override;
+  protocol::Response setShowGridOverlays(
+      std::unique_ptr<
+          protocol::Array<protocol::Overlay::GridNodeHighlightConfig>>
+          grid_node_highlight_configs) override;
 
   // InspectorBaseAgent overrides.
   void Restore() override;
@@ -220,6 +237,12 @@ class CORE_EXPORT InspectorOverlayAgent final
   // InspectorOverlayHost::Delegate implementation.
   void Dispatch(const String& message) override;
 
+  // InspectorDOMAgent::DOMListener implementation
+  void DidAddDocument(Document*) override;
+  void DidRemoveDocument(Document*) override;
+  void WillRemoveDOMNode(Node*) override;
+  void DidModifyDOMAttr(Element*) override;
+
   bool IsEmpty();
 
   LocalFrame* OverlayMainFrame();
@@ -238,6 +261,9 @@ class CORE_EXPORT InspectorOverlayAgent final
   void LoadFrameForTool(int data_resource_id);
   void EnsureEnableFrameOverlay();
   void DisableFrameOverlay();
+  InspectorSourceOrderConfig SourceOrderConfigFromInspectorObject(
+      std::unique_ptr<protocol::Overlay::SourceOrderConfig>
+          source_order_inspector_object);
   protocol::Response HighlightConfigFromInspectorObject(
       protocol::Maybe<protocol::Overlay::HighlightConfig>
           highlight_inspector_object,
@@ -256,6 +282,10 @@ class CORE_EXPORT InspectorOverlayAgent final
   std::unique_ptr<FrameOverlay> frame_overlay_;
   Member<InspectTool> inspect_tool_;
   Member<Hinge> hinge_;
+  // The agent needs to keep AXContext because it enables caching of
+  // a11y attributes shown in the inspector overlay.
+  HeapHashMap<Member<Document>, std::unique_ptr<AXContext>>
+      document_to_ax_context_;
   bool swallow_next_mouse_up_;
   DOMNodeId backend_node_id_to_inspect_;
   InspectorAgentState::Boolean enabled_;

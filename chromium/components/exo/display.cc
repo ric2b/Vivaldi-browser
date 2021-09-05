@@ -40,6 +40,8 @@
 #include "components/exo/client_controlled_shell_surface.h"
 #include "components/exo/input_method_surface.h"
 #include "components/exo/shell_surface.h"
+#include "components/exo/toast_surface.h"
+#include "components/exo/toast_surface_manager.h"
 #include "components/exo/xdg_shell_surface.h"
 #endif
 
@@ -57,14 +59,17 @@ Display::Display()
 }
 
 #if defined(OS_CHROMEOS)
-Display::Display(NotificationSurfaceManager* notification_surface_manager,
-                 InputMethodSurfaceManager* input_method_surface_manager,
-                 std::unique_ptr<FileHelper> file_helper)
-    : Display() {
-  file_helper_ = std::move(file_helper);
-  notification_surface_manager_ = notification_surface_manager;
-  input_method_surface_manager_ = input_method_surface_manager;
-}
+Display::Display(
+    std::unique_ptr<NotificationSurfaceManager> notification_surface_manager,
+    std::unique_ptr<InputMethodSurfaceManager> input_method_surface_manager,
+    std::unique_ptr<ToastSurfaceManager> toast_surface_manager,
+    std::unique_ptr<FileHelper> file_helper)
+    : notification_surface_manager_(std::move(notification_surface_manager)),
+      input_method_surface_manager_(std::move(input_method_surface_manager)),
+      toast_surface_manager_(std::move(toast_surface_manager)),
+      file_helper_(std::move(file_helper)),
+      client_native_pixmap_factory_(
+          gfx::CreateClientNativePixmapFactoryDmabuf()) {}
 #endif  // defined(OS_CHROMEOS)
 
 Display::~Display() {}
@@ -151,10 +156,10 @@ std::unique_ptr<XdgShellSurface> Display::CreateXdgShellSurface(
 }
 
 std::unique_ptr<ClientControlledShellSurface>
-Display::CreateClientControlledShellSurface(
-    Surface* surface,
-    int container,
-    double default_device_scale_factor) {
+Display::CreateClientControlledShellSurface(Surface* surface,
+                                            int container,
+                                            double default_device_scale_factor,
+                                            bool default_scale_cancellation) {
   TRACE_EVENT2("exo", "Display::CreateRemoteShellSurface", "surface",
                surface->AsTracedValue(), "container", container);
 
@@ -167,11 +172,12 @@ Display::CreateClientControlledShellSurface(
   bool can_minimize = container != ash::kShellWindowId_SystemModalContainer;
 
   std::unique_ptr<ClientControlledShellSurface> shell_surface(
-      std::make_unique<ClientControlledShellSurface>(surface, can_minimize,
-                                                     container));
-  DCHECK_GE(default_device_scale_factor, 1.0);
-  shell_surface->SetScale(default_device_scale_factor);
-  shell_surface->CommitPendingScale();
+      std::make_unique<ClientControlledShellSurface>(
+          surface, can_minimize, container, default_scale_cancellation));
+  if (default_scale_cancellation) {
+    shell_surface->SetScale(default_device_scale_factor);
+    shell_surface->CommitPendingScale();
+  }
   return shell_surface;
 }
 
@@ -187,13 +193,14 @@ std::unique_ptr<NotificationSurface> Display::CreateNotificationSurface(
     return nullptr;
   }
 
-  return std::make_unique<NotificationSurface>(notification_surface_manager_,
-                                               surface, notification_key);
+  return std::make_unique<NotificationSurface>(
+      notification_surface_manager_.get(), surface, notification_key);
 }
 
 std::unique_ptr<InputMethodSurface> Display::CreateInputMethodSurface(
     Surface* surface,
-    double default_device_scale_factor) {
+    double default_device_scale_factor,
+    bool default_scale_cancellation) {
   TRACE_EVENT1("exo", "Display::CreateInputMethodSurface", "surface",
                surface->AsTracedValue());
 
@@ -207,8 +214,41 @@ std::unique_ptr<InputMethodSurface> Display::CreateInputMethodSurface(
     return nullptr;
   }
 
-  return std::make_unique<InputMethodSurface>(
-      input_method_surface_manager_, surface, default_device_scale_factor);
+  std::unique_ptr<InputMethodSurface> input_method_surface(
+      std::make_unique<InputMethodSurface>(input_method_surface_manager_.get(),
+                                           surface,
+                                           default_scale_cancellation));
+  if (default_scale_cancellation) {
+    input_method_surface->SetScale(default_device_scale_factor);
+    input_method_surface->CommitPendingScale();
+  }
+  return input_method_surface;
+}
+
+std::unique_ptr<ToastSurface> Display::CreateToastSurface(
+    Surface* surface,
+    double default_device_scale_factor,
+    bool default_scale_cancellation) {
+  TRACE_EVENT1("exo", "Display::CreateToastSurface", "surface",
+               surface->AsTracedValue());
+
+  if (!toast_surface_manager_) {
+    DLOG(ERROR) << "Toast surface cannot be registered";
+    return nullptr;
+  }
+
+  if (surface->HasSurfaceDelegate()) {
+    DLOG(ERROR) << "Surface has already been assigned a role";
+    return nullptr;
+  }
+
+  std::unique_ptr<ToastSurface> toast_surface(std::make_unique<ToastSurface>(
+      toast_surface_manager_.get(), surface, default_scale_cancellation));
+  if (default_scale_cancellation) {
+    toast_surface->SetScale(default_device_scale_factor);
+    toast_surface->CommitPendingScale();
+  }
+  return toast_surface;
 }
 #endif  // defined(OS_CHROMEOS)
 

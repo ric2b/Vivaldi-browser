@@ -84,12 +84,15 @@ const char* const kKnownSettings[] = {
     kDeviceLoginScreenInputMethods,
     kDeviceLoginScreenLocales,
     kDeviceLoginScreenSystemInfoEnforced,
+    kDeviceMinimumVersion,
+    kDeviceMinimumVersionAueMessage,
+    kDeviceShowLowDiskSpaceNotification,
     kDeviceShowNumericKeyboardForPassword,
     kDeviceOffHours,
     kDeviceOwner,
-    kDeviceNativePrintersAccessMode,
-    kDeviceNativePrintersBlacklist,
-    kDeviceNativePrintersWhitelist,
+    kDevicePrintersAccessMode,
+    kDevicePrintersBlocklist,
+    kDevicePrintersAllowlist,
     kDevicePowerwashAllowed,
     kDeviceQuirksDownloadEnabled,
     kDeviceRebootOnUserSignout,
@@ -105,14 +108,14 @@ const char* const kKnownSettings[] = {
     kHeartbeatFrequency,
     kLoginAuthenticationBehavior,
     kLoginVideoCaptureAllowedUrls,
-    kMinimumChromeVersionEnforced,
-    kMinimumChromeVersionEolMessage,
     kPluginVmAllowed,
     kPluginVmLicenseKey,
     kPolicyMissingMitigationMode,
     kRebootOnShutdown,
     kReleaseChannel,
     kReleaseChannelDelegated,
+    kReleaseLtsTag,
+    kDeviceChannelDowngradeBehavior,
     kReportDeviceActivityTimes,
     kReportDeviceBluetoothInfo,
     kReportDeviceBoardStatus,
@@ -134,6 +137,7 @@ const char* const kKnownSettings[] = {
     kReportDeviceVersionInfo,
     kReportDeviceVpdInfo,
     kReportDeviceAppInfo,
+    kReportDeviceSystemInfo,
     kReportOsUpdateStatus,
     kReportRunningKioskApp,
     kReportUploadFrequency,
@@ -510,6 +514,12 @@ void DecodeAutoUpdatePolicies(const em::ChromeDeviceSettingsProto& policy,
                            au_settings_proto.disallowed_time_intervals(),
                            new_values_cache);
     }
+
+    if (au_settings_proto.has_channel_downgrade_behavior()) {
+      new_values_cache->SetValue(
+          kDeviceChannelDowngradeBehavior,
+          base::Value(au_settings_proto.channel_downgrade_behavior()));
+    }
   }
 
   if (policy.has_device_scheduled_update_check()) {
@@ -624,6 +634,10 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
       new_values_cache->SetBoolean(kReportDeviceVpdInfo,
                                    reporting_policy.report_vpd_info());
     }
+    if (reporting_policy.has_report_system_info()) {
+      new_values_cache->SetBoolean(kReportDeviceSystemInfo,
+                                   reporting_policy.report_system_info());
+    }
   }
 }
 
@@ -671,6 +685,13 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
       policy.has_release_channel() &&
           policy.release_channel().has_release_channel_delegated() &&
           policy.release_channel().release_channel_delegated());
+
+  if (policy.has_release_channel()) {
+    if (policy.release_channel().has_release_lts_tag()) {
+      new_values_cache->SetString(kReleaseLtsTag,
+                                  policy.release_channel().release_lts_tag());
+    }
+  }
 
   if (policy.has_system_timezone()) {
     if (policy.system_timezone().has_timezone()) {
@@ -779,21 +800,20 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                                        policy.tpm_firmware_update_settings())));
   }
 
-  if (policy.has_minimum_chrome_version_enforced()) {
-    const em::StringPolicyProto& container(
-        policy.minimum_chrome_version_enforced());
+  if (policy.has_device_minimum_version()) {
+    const em::StringPolicyProto& container(policy.device_minimum_version());
     if (container.has_value()) {
-      SetJsonDeviceSetting(kMinimumChromeVersionEnforced,
-                           policy::key::kMinimumChromeVersionEnforced,
+      SetJsonDeviceSetting(kDeviceMinimumVersion,
+                           policy::key::kDeviceMinimumVersion,
                            container.value(), new_values_cache);
     }
   }
 
-  if (policy.has_minimum_chrome_version_eol_message()) {
+  if (policy.has_device_minimum_version_aue_message()) {
     const em::StringPolicyProto& container(
-        policy.minimum_chrome_version_eol_message());
+        policy.device_minimum_version_aue_message());
     if (container.has_value()) {
-      new_values_cache->SetValue(kMinimumChromeVersionEolMessage,
+      new_values_cache->SetValue(kDeviceMinimumVersionAueMessage,
                                  base::Value(container.value()));
     }
   }
@@ -865,36 +885,61 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
   }
 
   // Default value of the policy in case it's missing.
-  int access_mode = em::DeviceNativePrintersAccessModeProto::ACCESS_MODE_ALL;
-  if (policy.has_native_device_printers_access_mode() &&
-      policy.native_device_printers_access_mode().has_access_mode()) {
-    access_mode = policy.native_device_printers_access_mode().access_mode();
-    if (!em::DeviceNativePrintersAccessModeProto::AccessMode_IsValid(
-            access_mode)) {
+  int access_mode = em::DevicePrintersAccessModeProto::ACCESS_MODE_ALL;
+  // Use DevicePrintersAccessMode policy if present, otherwise Native version.
+  if (policy.has_device_printers_access_mode() &&
+      policy.device_printers_access_mode().has_access_mode()) {
+    access_mode = policy.device_printers_access_mode().access_mode();
+    if (!em::DevicePrintersAccessModeProto::AccessMode_IsValid(access_mode)) {
       LOG(ERROR) << "Unrecognized device native printers access mode";
       // If the policy is outside the range of allowed values, default to
       // AllowAll.
-      access_mode = em::DeviceNativePrintersAccessModeProto::ACCESS_MODE_ALL;
+      access_mode = em::DevicePrintersAccessModeProto::ACCESS_MODE_ALL;
+    }
+  } else if (policy.has_native_device_printers_access_mode() &&
+             policy.native_device_printers_access_mode().has_access_mode()) {
+    access_mode = policy.native_device_printers_access_mode().access_mode();
+    if (!em::DevicePrintersAccessModeProto::AccessMode_IsValid(access_mode)) {
+      LOG(ERROR) << "Unrecognized device native printers access mode";
+      // If the policy is outside the range of allowed values, default to
+      // AllowAll.
+      access_mode = em::DevicePrintersAccessModeProto::ACCESS_MODE_ALL;
     }
   }
-  new_values_cache->SetInteger(kDeviceNativePrintersAccessMode, access_mode);
+  new_values_cache->SetInteger(kDevicePrintersAccessMode, access_mode);
 
-  if (policy.has_native_device_printers_blacklist()) {
+  // Use Blocklist policy if present, otherwise Blacklist version.
+  if (policy.has_device_printers_blocklist()) {
+    base::Value list(base::Value::Type::LIST);
+    const em::DevicePrintersBlocklistProto& proto(
+        policy.device_printers_blocklist());
+    for (const auto& id : proto.blocklist())
+      list.Append(id);
+    new_values_cache->SetValue(kDevicePrintersBlocklist, std::move(list));
+  } else if (policy.has_native_device_printers_blacklist()) {
     base::Value list(base::Value::Type::LIST);
     const em::DeviceNativePrintersBlacklistProto& proto(
         policy.native_device_printers_blacklist());
     for (const auto& id : proto.blacklist())
       list.Append(id);
-    new_values_cache->SetValue(kDeviceNativePrintersBlacklist, std::move(list));
+    new_values_cache->SetValue(kDevicePrintersBlocklist, std::move(list));
   }
 
-  if (policy.has_native_device_printers_whitelist()) {
+  // Use Allowlist policy if present, otherwise Whitelist version.
+  if (policy.has_device_printers_allowlist()) {
+    base::Value list(base::Value::Type::LIST);
+    const em::DevicePrintersAllowlistProto& proto(
+        policy.device_printers_allowlist());
+    for (const auto& id : proto.allowlist())
+      list.Append(id);
+    new_values_cache->SetValue(kDevicePrintersAllowlist, std::move(list));
+  } else if (policy.has_native_device_printers_whitelist()) {
     base::Value list(base::Value::Type::LIST);
     const em::DeviceNativePrintersWhitelistProto& proto(
         policy.native_device_printers_whitelist());
     for (const auto& id : proto.whitelist())
       list.Append(id);
-    new_values_cache->SetValue(kDeviceNativePrintersWhitelist, std::move(list));
+    new_values_cache->SetValue(kDevicePrintersAllowlist, std::move(list));
   }
 
   if (policy.has_device_reboot_on_user_signout()) {
@@ -950,6 +995,22 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                                  base::Value(container.mode()));
     }
   }
+
+  // Default value of the policy in case it's missing.
+  bool show_low_disk_space_notification = true;
+  // Disable the notification by default for enrolled devices.
+  if (InstallAttributes::Get()->IsEnterpriseManaged())
+    show_low_disk_space_notification = false;
+  if (policy.has_device_show_low_disk_space_notification()) {
+    const em::DeviceShowLowDiskSpaceNotificationProto& container(
+        policy.device_show_low_disk_space_notification());
+    if (container.has_device_show_low_disk_space_notification()) {
+      show_low_disk_space_notification =
+          container.device_show_low_disk_space_notification();
+    }
+  }
+  new_values_cache->SetBoolean(kDeviceShowLowDiskSpaceNotification,
+                               show_low_disk_space_notification);
 }
 
 void DecodeLogUploadPolicies(const em::ChromeDeviceSettingsProto& policy,

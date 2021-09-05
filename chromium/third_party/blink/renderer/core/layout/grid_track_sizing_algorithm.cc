@@ -573,6 +573,15 @@ LayoutUnit GridTrackSizingAlgorithmStrategy::MinLogicalSizeForChild(
   bool override_size_has_changed =
       UpdateOverrideContainingBlockContentSizeForChild(
           child, child_inline_direction, available_size);
+  GridTrackSizingDirection child_block_direction =
+      GridLayoutUtils::FlowAwareDirectionForChild(*GetLayoutGrid(), child,
+                                                  kForRows);
+  if (ShouldClearOverrideContainingBlockContentSizeForChild(
+          *GetLayoutGrid(), child, child_block_direction)) {
+    SetOverrideContainingBlockContentSizeForChild(child, child_block_direction,
+                                                  LayoutUnit(-1));
+    override_size_has_changed = true;
+  }
   LayoutGridItemForMinSizeComputation(child, override_size_has_changed);
 
   return child.ComputeLogicalHeightUsing(kMinSize, child_min_size,
@@ -856,14 +865,15 @@ const GridTrackSize& GridTrackSizingAlgorithm::RawGridTrackSize(
     size_t translated_index) const {
   bool is_row_axis = direction == kForColumns;
   const Vector<GridTrackSize>& track_styles =
-      is_row_axis ? layout_grid_->StyleRef().GridTemplateColumns()
-                  : layout_grid_->StyleRef().GridTemplateRows();
+      is_row_axis
+          ? layout_grid_->StyleRef().GridTemplateColumns().LegacyTrackList()
+          : layout_grid_->StyleRef().GridTemplateRows().LegacyTrackList();
   const Vector<GridTrackSize>& auto_repeat_track_styles =
       is_row_axis ? layout_grid_->StyleRef().GridAutoRepeatColumns()
                   : layout_grid_->StyleRef().GridAutoRepeatRows();
   const Vector<GridTrackSize>& auto_track_styles =
-      is_row_axis ? layout_grid_->StyleRef().GridAutoColumns()
-                  : layout_grid_->StyleRef().GridAutoRows();
+      is_row_axis ? layout_grid_->StyleRef().GridAutoColumns().LegacyTrackList()
+                  : layout_grid_->StyleRef().GridAutoRows().LegacyTrackList();
   size_t insertion_point =
       is_row_axis
           ? layout_grid_->StyleRef().GridAutoRepeatColumnsInsertionPoint()

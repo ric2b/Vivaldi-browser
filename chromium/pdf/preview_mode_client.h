@@ -10,7 +10,12 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "pdf/pdf_engine.h"
+
+namespace gfx {
+class Vector2d;
+}  // namespace gfx
 
 namespace chrome_pdf {
 
@@ -29,10 +34,10 @@ class PreviewModeClient : public PDFEngine::Client {
   // PDFEngine::Client implementation.
   void ProposeDocumentLayout(const DocumentLayout& layout) override;
   void Invalidate(const pp::Rect& rect) override;
-  void DidScroll(const pp::Point& point) override;
+  void DidScroll(const gfx::Vector2d& offset) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
-  void ScrollBy(const pp::Point& point) override;
+  void ScrollBy(const gfx::Vector2d& scroll_delta) override;
   void ScrollToPage(int page) override;
   void NavigateTo(const std::string& url,
                   WindowOpenDisposition disposition) override;
@@ -41,7 +46,7 @@ class PreviewModeClient : public PDFEngine::Client {
   void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
   void GetDocumentPassword(
-      pp::CompletionCallbackWithOutput<pp::Var> callback) override;
+      base::OnceCallback<void(const std::string&)> callback) override;
   void Alert(const std::string& message) override;
   bool Confirm(const std::string& message) override;
   std::string Prompt(const std::string& question,

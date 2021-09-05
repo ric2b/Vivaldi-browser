@@ -1,5 +1,4 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
-import("//build/config/jumbo.gni")
 
 source_set("browser") {
   sources = [
@@ -35,7 +34,6 @@ source_set("browser") {
     "//extensions/buildflags",
     "//skia",
     "//third_party/icu",
-    "//third_party/cacheinvalidation",
     "//third_party/libaddressinput",
     "//vivaldi/notes:browser",
     "//vivaldi/prefs:prefs_files_generator",

@@ -1688,6 +1688,16 @@ typedef void(GL_BINDING_CALL* glTexStorageMem2DEXTProc)(GLenum target,
                                                         GLsizei height,
                                                         GLuint memory,
                                                         GLuint64 offset);
+typedef void(GL_BINDING_CALL* glTexStorageMemFlags2DANGLEProc)(
+    GLenum target,
+    GLsizei levels,
+    GLenum internalFormat,
+    GLsizei width,
+    GLsizei height,
+    GLuint memory,
+    GLuint64 offset,
+    GLbitfield createFlags,
+    GLbitfield usageFlags);
 typedef void(GL_BINDING_CALL* glTexSubImage2DProc)(GLenum target,
                                                    GLint level,
                                                    GLint xoffset,
@@ -1946,6 +1956,7 @@ struct ExtensionsGL {
   bool b_GL_ANGLE_framebuffer_blit;
   bool b_GL_ANGLE_framebuffer_multisample;
   bool b_GL_ANGLE_instanced_arrays;
+  bool b_GL_ANGLE_memory_object_flags;
   bool b_GL_ANGLE_memory_object_fuchsia;
   bool b_GL_ANGLE_multi_draw;
   bool b_GL_ANGLE_request_extension;
@@ -1973,6 +1984,7 @@ struct ExtensionsGL {
   bool b_GL_ARB_sampler_objects;
   bool b_GL_ARB_shader_image_load_store;
   bool b_GL_ARB_sync;
+  bool b_GL_ARB_tessellation_shader;
   bool b_GL_ARB_texture_multisample;
   bool b_GL_ARB_texture_storage;
   bool b_GL_ARB_texture_swizzle;
@@ -2033,6 +2045,7 @@ struct ExtensionsGL {
   bool b_GL_OES_draw_buffers_indexed;
   bool b_GL_OES_get_program_binary;
   bool b_GL_OES_mapbuffer;
+  bool b_GL_OES_tessellation_shader;
   bool b_GL_OES_texture_buffer;
   bool b_GL_OES_vertex_array_object;
   bool b_GL_OVR_multiview;
@@ -2493,6 +2506,7 @@ struct ProcsGL {
   glTexStorage2DMultisampleProc glTexStorage2DMultisampleFn;
   glTexStorage3DProc glTexStorage3DFn;
   glTexStorageMem2DEXTProc glTexStorageMem2DEXTFn;
+  glTexStorageMemFlags2DANGLEProc glTexStorageMemFlags2DANGLEFn;
   glTexSubImage2DProc glTexSubImage2DFn;
   glTexSubImage2DRobustANGLEProc glTexSubImage2DRobustANGLEFn;
   glTexSubImage3DProc glTexSubImage3DFn;
@@ -4059,6 +4073,15 @@ class GL_EXPORT GLApi {
                                       GLsizei height,
                                       GLuint memory,
                                       GLuint64 offset) = 0;
+  virtual void glTexStorageMemFlags2DANGLEFn(GLenum target,
+                                             GLsizei levels,
+                                             GLenum internalFormat,
+                                             GLsizei width,
+                                             GLsizei height,
+                                             GLuint memory,
+                                             GLuint64 offset,
+                                             GLbitfield createFlags,
+                                             GLbitfield usageFlags) = 0;
   virtual void glTexSubImage2DFn(GLenum target,
                                  GLint level,
                                  GLint xoffset,
@@ -4926,6 +4949,8 @@ class GL_EXPORT GLApi {
   ::gl::g_current_gl_context->glTexStorage2DMultisampleFn
 #define glTexStorage3D ::gl::g_current_gl_context->glTexStorage3DFn
 #define glTexStorageMem2DEXT ::gl::g_current_gl_context->glTexStorageMem2DEXTFn
+#define glTexStorageMemFlags2DANGLE \
+  ::gl::g_current_gl_context->glTexStorageMemFlags2DANGLEFn
 #define glTexSubImage2D ::gl::g_current_gl_context->glTexSubImage2DFn
 #define glTexSubImage2DRobustANGLE \
   ::gl::g_current_gl_context->glTexSubImage2DRobustANGLEFn

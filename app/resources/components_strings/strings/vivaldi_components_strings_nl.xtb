@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">onbekende naam</translation>
 <translation id="1089439967362294234">Wachtwoord wijzigen</translation>
 <translation id="1110994991967754504">Rechten selecteren voor <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Een <ph name="BEGIN_LINK" />gecachet exemplaar<ph name="END_LINK" /> van <ph name="URL" /> openen</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> heeft de verbinding onverwacht verbroken.</translation>
 <translation id="1161325031994447685">Maak opnieuw verbinding met wifi</translation>
 <translation id="1175364870820465910">&amp;Afdrukken...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Deze website bevat schadelijke programma's</translation>
 <translation id="1916770123977586577">Laad deze pagina opnieuw om de aangepaste instellingen toe te passen op deze website</translation>
 <translation id="1919345977826869612">Advertenties</translation>
-<translation id="194030505837763158">Ga naar <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Geavanceerd</translation>
-<translation id="2030481566774242610">Bedoelde je <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Controleer de proxy en firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Geluid</translation>
 <translation id="2119505898009119320">Verleend aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -97,6 +94,7 @@
 <translation id="4235360514405112390">Geldig</translation>
 <translation id="4250431568374086873">Je verbinding met deze website is niet volledig beveiligd</translation>
 <translation id="4265872034478892965">Toegestaan door je beheerder</translation>
+<translation id="4305666528087210886">Het bestand kan niet worden geopend</translation>
 <translation id="4312866146174492540">Blokkeren (standaard)</translation>
 <translation id="4356973930735388585">Cybercriminelen op deze website proberen mogelijk gevaarlijke programma's op je computer te installeren waarmee je gegevens worden gestolen of verwijderd (bijvoorbeeld foto's, wachtwoorden, berichten en creditcards).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -124,13 +122,12 @@
 <translation id="5287240709317226393">Cookies weergeven</translation>
 <translation id="5355557959165512791">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat het bijbehorende certificaat is ingetrokken. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
 <translation id="5386426401304769735">De certificaatketen voor deze website bevat een certificaat dat is ondertekend met SHA-1.</translation>
-<translation id="5431657950005405462">Je bestand is niet gevonden</translation>
 <translation id="5452270690849572955">Deze pagina op <ph name="HOST_NAME" /> kan niet worden gevonden</translation>
 <translation id="5457113250005438886">Ongeldig</translation>
 <translation id="5492298309214877701">Deze website op het intranet van het bedrijf, de organisatie of de school heeft dezelfde URL als een externe website.
     <ph name="LINE_BREAK" />
     Neem contact op met je systeembeheerder.</translation>
-<translation id="5510766032865166053">Het bestand is mogelijk verplaatst of verwijderd.</translation>
+<translation id="5510766032865166053">Het document is mogelijk verplaatst of verwijderd.</translation>
 <translation id="5556459405103347317">Opnieuw laden</translation>
 <translation id="5610142619324316209">Controleer de verbinding</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> heeft je te vaak omgeleid.</translation>
@@ -169,7 +166,6 @@
 <translation id="6897140037006041989">Gebruikersagent</translation>
 <translation id="7053983685419859001">Blokkeren</translation>
 <translation id="7079718277001814089">Deze website bevat malware</translation>
-<translation id="7090678807593890770">Zoek op Google naar <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Toegestaan door een extensie</translation>
 <translation id="7111012039238467737">(Geldig)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> toestaan op <ph name="DOMAIN" /></translation>
@@ -193,7 +189,6 @@
 <translation id="7716424297397655342">Deze website kan niet worden geladen vanuit het cachegeheugen</translation>
 <translation id="7758069387465995638">De verbinding is mogelijk geblokkeerd door de firewall of antivirussoftware.</translation>
 <translation id="7800304661137206267">De verbinding is versleuteld met <ph name="CIPHER" />, met <ph name="MAC" /> voor berichtverificatie en <ph name="KX" /> als mechanisme voor sleuteluitwisseling.</translation>
-<translation id="7802523362929240268">Website is legitiem</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> gebruikt gewoonlijk versleuteling om je gegevens te beschermen. Toen Vivaldi deze keer probeerde verbinding te maken met <ph name="SITE" />, retourneerde de website ongewone en onjuiste inloggegevens. Dit kan gebeuren wanneer een aanvaller probeert zich als <ph name="SITE" /> voor te doen of wanneer een wifi-inlogscherm de verbinding heeft verbroken. Je gegevens zijn nog steeds veilig omdat Vivaldi de verbinding heeft verbroken voordat er gegevens konden worden uitgewisseld.</translation>
 <translation id="7878562273885520351">Je wachtwoord is mogelijk gehackt</translation>
 <translation id="7951415247503192394">(32-bits)</translation>
@@ -225,6 +220,7 @@
 <translation id="9011424611726486705">Website-instellingen openen</translation>
 <translation id="9025348182339809926">(Ongeldig)</translation>
 <translation id="9039213469156557790">Bovendien bevat deze pagina bronnen die niet beveiligd zijn. Deze bronnen kunnen tijdens verzending door anderen worden bekeken en kunnen door een aanvaller worden gewijzigd om het gedrag van de pagina aan te passen.</translation>
+<translation id="9062620674789239642">Het is mogelijk verplaatst, bewerkt of verwijderd.</translation>
 <translation id="9069693763241529744">Geblokkeerd door een extensie</translation>
 <translation id="9169664750068251925">Altijd blokkeren op deze website</translation>
 <translation id="9180553614777056266">Reclamefilter</translation>

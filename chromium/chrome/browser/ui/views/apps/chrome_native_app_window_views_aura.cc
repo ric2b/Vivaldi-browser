@@ -35,7 +35,7 @@ ChromeNativeAppWindowViewsAura::~ChromeNativeAppWindowViewsAura() {
 ui::WindowShowState
 ChromeNativeAppWindowViewsAura::GetRestorableState(
     const ui::WindowShowState restore_state) const {
-  // Whitelist states to return so that invalid and transient states
+  // Allowlist states to return so that invalid and transient states
   // are not saved and used to restore windows when they are recreated.
   switch (restore_state) {
     case ui::SHOW_STATE_NORMAL:
@@ -76,11 +76,11 @@ void ChromeNativeAppWindowViewsAura::OnBeforeWidgetInit(
                                                  widget);
 }
 
-views::NonClientFrameView*
+std::unique_ptr<views::NonClientFrameView>
 ChromeNativeAppWindowViewsAura::CreateNonStandardAppFrame() {
-  apps::AppWindowFrameView* frame =
-      new apps::AppWindowFrameView(widget(), this, HasFrameColor(),
-                                   ActiveFrameColor(), InactiveFrameColor());
+  auto frame = std::make_unique<apps::AppWindowFrameView>(
+      widget(), this, HasFrameColor(), ActiveFrameColor(),
+      InactiveFrameColor());
   frame->Init();
 
   // Install an easy resize window targeter, which ensures that the root window

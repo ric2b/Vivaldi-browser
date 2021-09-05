@@ -211,6 +211,10 @@ class FormStructure {
   // the fields that are considered composing a first complete phone number.
   void RationalizePhoneNumbersInSection(std::string section);
 
+  // Overrides server predictions with specific heuristic predictions:
+  // * NAME_LAST_SECOND heuristic predictions are unconditionally used.
+  void OverrideServerPredictionsWithHeuristics();
+
   const AutofillField* field(size_t index) const;
   AutofillField* field(size_t index);
   size_t field_count() const;
@@ -284,10 +288,6 @@ class FormStructure {
 
   // Returns the possible form types.
   std::set<FormType> GetFormTypes() const;
-
-  // Returns a collection of ServerFieldTypes corresponding to this
-  // FormStructure's fields.
-  std::vector<ServerFieldType> GetServerFieldTypes() const;
 
   bool passwords_were_revealed() const { return passwords_were_revealed_; }
   void set_passwords_were_revealed(bool passwords_were_revealed) {

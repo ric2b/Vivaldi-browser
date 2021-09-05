@@ -9,6 +9,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,7 +19,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ApplicationState;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.DownloadActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -51,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 /** Unit tests for offline indicator interacting with chrome activity. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@Features.DisableFeatures({ChromeFeatureList.OFFLINE_INDICATOR_V2})
 // TODO(jianli): Add test for disabled feature.
 public class OfflineIndicatorControllerTest {
     @Rule
@@ -350,7 +352,7 @@ public class OfflineIndicatorControllerTest {
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
 
         mActivityTestRule.loadUrl(pageUrl);
-        Assert.assertEquals(pageUrl, tab.getUrlString());
+        Assert.assertEquals(pageUrl, ChromeTabUtils.getUrlStringOnUiThread(tab));
         if (mIsConnected) {
             Assert.assertFalse(isErrorPage(tab));
             Assert.assertFalse(isOfflinePage(tab));
@@ -401,27 +403,21 @@ public class OfflineIndicatorControllerTest {
 
     private static void checkOfflineIndicatorVisibility(
             SnackbarManageable activity, boolean visible) {
-        CriteriaHelper.pollUiThread(
-                new Criteria(visible ? "Offline indicator not shown" : "Offline indicator shown") {
-                    @Override
-                    public boolean isSatisfied() {
-                        return visible == isShowingOfflineIndicator();
-                    }
-
-                    private boolean isShowingOfflineIndicator() {
-                        if (OfflineIndicatorController.isUsingTopSnackbar()) {
-                            TopSnackbarManager snackbarManager =
-                                    OfflineIndicatorController.getInstance()
-                                            .getTopSnackbarManagerForTesting();
-                            return snackbarManager.isShowing();
-                        } else {
-                            SnackbarManager snackbarManager = activity.getSnackbarManager();
-                            if (!snackbarManager.isShowing()) return false;
-                            return snackbarManager.getCurrentSnackbarForTesting().getController()
-                                    == OfflineIndicatorController.getInstance();
-                        }
-                    }
-                });
+        CriteriaHelper.pollUiThread(() -> {
+            if (OfflineIndicatorController.isUsingTopSnackbar()) {
+                TopSnackbarManager snackbarManager =
+                        OfflineIndicatorController.getInstance().getTopSnackbarManagerForTesting();
+                Criteria.checkThat(snackbarManager.isShowing(), Matchers.is(visible));
+            } else {
+                SnackbarManager snackbarManager = activity.getSnackbarManager();
+                Criteria.checkThat(snackbarManager.isShowing(), Matchers.is(visible));
+                if (visible) {
+                    Criteria.checkThat(
+                            snackbarManager.getCurrentSnackbarForTesting().getController(),
+                            Matchers.is(OfflineIndicatorController.getInstance()));
+                }
+            }
+        });
     }
 
     private static void hideOfflineIndicator(ChromeActivity activity) {

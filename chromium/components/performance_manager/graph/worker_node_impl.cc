@@ -12,11 +12,11 @@ namespace performance_manager {
 WorkerNodeImpl::WorkerNodeImpl(const std::string& browser_context_id,
                                WorkerType worker_type,
                                ProcessNodeImpl* process_node,
-                               const base::UnguessableToken& dev_tools_token)
+                               const blink::WorkerToken& worker_token)
     : browser_context_id_(browser_context_id),
       worker_type_(worker_type),
       process_node_(process_node),
-      dev_tools_token_(dev_tools_token) {
+      worker_token_(worker_token) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(process_node);
 }
@@ -120,9 +120,9 @@ const GURL& WorkerNodeImpl::url() const {
   return url_;
 }
 
-const base::UnguessableToken& WorkerNodeImpl::dev_tools_token() const {
+const blink::WorkerToken& WorkerNodeImpl::worker_token() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return dev_tools_token_;
+  return worker_token_;
 }
 
 const base::flat_set<FrameNodeImpl*>& WorkerNodeImpl::client_frames() const {
@@ -172,9 +172,9 @@ const GURL& WorkerNodeImpl::GetURL() const {
   return url();
 }
 
-const base::UnguessableToken& WorkerNodeImpl::GetDevToolsToken() const {
+const blink::WorkerToken& WorkerNodeImpl::GetWorkerToken() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return dev_tools_token();
+  return worker_token();
 }
 
 const base::flat_set<const FrameNode*> WorkerNodeImpl::GetClientFrames() const {

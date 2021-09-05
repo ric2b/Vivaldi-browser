@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_functions.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hasher.h"
@@ -55,8 +56,7 @@ struct SameSizeAsFontDescription {
   FieldsAsUnsignedType bitfields;
 };
 
-static_assert(sizeof(FontDescription) == sizeof(SameSizeAsFontDescription),
-              "FontDescription should stay small");
+ASSERT_SIZE(FontDescription, SameSizeAsFontDescription);
 
 TypesettingFeatures FontDescription::default_typesetting_features_ = 0;
 
@@ -333,9 +333,7 @@ unsigned FontDescription::StyleHashWithoutFamilyList() const {
   if (settings) {
     unsigned num_features = settings->size();
     for (unsigned i = 0; i < num_features; ++i) {
-      const AtomicString& tag = settings->at(i).Tag();
-      for (unsigned j = 0; j < tag.length(); j++)
-        string_hasher.AddCharacter(tag[j]);
+      WTF::AddIntToHash(hash, settings->at(i).Tag());
       WTF::AddIntToHash(hash, settings->at(i).Value());
     }
   }

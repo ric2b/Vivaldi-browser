@@ -7,18 +7,12 @@ import './realbox_button.js';
 import './realbox_match.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {skColorToRgba} from 'chrome://resources/js/color_utils.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BrowserProxy} from './browser_proxy.js';
-import {decodeString16, skColorToRgba} from './utils.js';
-
-/**
- * Indicates a missing suggestion group Id. Based on
- * SearchSuggestionParser::kNoSuggestionGroupId.
- * @type {string}
- */
-export const NO_SUGGESTION_GROUP_ID = '-1';
+import {decodeString16} from './utils.js';
 
 // A dropdown element that contains autocomplete matches. Provides an API for
 // the embedder (i.e., <ntp-realbox>) to change the selection.
@@ -68,7 +62,7 @@ class RealboxDropdownElement extends PolymerElement {
 
       /**
        * The list of suggestion group IDs matches belong to.
-       * @type {!Array<string>}
+       * @type {!Array<number>}
        * @private
        */
       groupIds_: {
@@ -78,7 +72,7 @@ class RealboxDropdownElement extends PolymerElement {
 
       /**
        * The list of suggestion group IDs whose matches should be hidden.
-       * @type {!Array<string>}
+       * @type {!Array<number>}
        * @private
        */
       hiddenGroupIds_: {
@@ -285,8 +279,8 @@ class RealboxDropdownElement extends PolymerElement {
    * @param {!Event} e
    * @private
    */
-  onToggleButtonClick_(e) {
-    const groupId = e.target.dataset.id;
+  onHeaderClick_(e) {
+    const groupId = Number(e.currentTarget.dataset.id);
 
     // Tell the backend to toggle visibility of the given suggestion group ID.
     this.pageHandler_.toggleSuggestionGroupIdVisibility(groupId);
@@ -309,7 +303,7 @@ class RealboxDropdownElement extends PolymerElement {
       return;
     }
 
-    // Simulate a click so that it gets handled by |onToggleButtonClick_|.
+    // Simulate a click so that it gets handled by |onHeaderClick_|.
     e.target.click();
     e.preventDefault();  // Prevents default browser action.
   }
@@ -332,21 +326,23 @@ class RealboxDropdownElement extends PolymerElement {
   }
 
   /**
-   * @returns {!Array<string>}
+   * @returns {!Array<number>}
    * @private
    */
   computeGroupIds_() {
-    if (!this.result) {
+    if (!this.result || !this.result.matches) {
       return [];
     }
 
-    // Add |NO_SUGGESTION_GROUP_ID| to the list of suggestion group IDs.
-    return [NO_SUGGESTION_GROUP_ID].concat(
-        Object.keys(this.result.suggestionGroupsMap));
+    // Extract the suggestion group IDs from autocomplete matches and return the
+    // unique IDs while preserving the order. Autocomplete matches are the
+    // ultimate source of truth for suggestion groups IDs matches belong to.
+    return [...new Set(
+        this.result.matches.map(match => match.suggestionGroupId))];
   }
 
   /**
-   * @returns {!Array<string>}
+   * @returns {!Array<number>}
    * @private
    */
   computeHiddenGroupIds_() {
@@ -355,13 +351,14 @@ class RealboxDropdownElement extends PolymerElement {
     }
 
     return Object.keys(this.result.suggestionGroupsMap)
+        .map(groupId => Number(groupId))
         .filter((groupId => {
                   return this.result.suggestionGroupsMap[groupId].hidden;
                 }).bind(this));
   }
 
   /**
-   * @param {string} groupId
+   * @param {number} groupId
    * @returns {!function(!search.mojom.AutocompleteMatch):boolean} The filter
    *     function to filter matches that belong to the given suggestion group
    *     ID.
@@ -369,21 +366,21 @@ class RealboxDropdownElement extends PolymerElement {
    */
   computeMatchBelongsToGroup_(groupId) {
     return (match) => {
-      return match.suggestionGroupId === Number(groupId);
+      return match.suggestionGroupId === groupId;
     };
   }
 
   /**
-   * @param {string} groupId
+   * @param {number} groupId
    * @returns {boolean} Whether the given suggestion group ID has a header.
    * @private
    */
   groupHasHeader_(groupId) {
-    return groupId !== NO_SUGGESTION_GROUP_ID;
+    return !!this.headerForGroup_(groupId);
   }
 
   /**
-   * @param {string} groupId
+   * @param {number} groupId
    * @returns {boolean} Whether matches with the given suggestion group ID
    *     should be hidden.
    * @private
@@ -393,15 +390,12 @@ class RealboxDropdownElement extends PolymerElement {
   }
 
   /**
-   * @param {string} groupId
+   * @param {number} groupId
    * @returns {string} The header for the given suggestion group ID.
    * @private
    * @suppress {checkTypes}
    */
   headerForGroup_(groupId) {
-    if (!this.groupHasHeader_(groupId)) {
-      return '';
-    }
     return (this.result && this.result.suggestionGroupsMap &&
             this.result.suggestionGroupsMap[groupId]) ?
         decodeString16(this.result.suggestionGroupsMap[groupId].header) :
@@ -409,7 +403,7 @@ class RealboxDropdownElement extends PolymerElement {
   }
 
   /**
-   * @param {string} groupId
+   * @param {number} groupId
    * @returns {string} Tooltip for suggestion group show/hide toggle button.
    * @private
    */
@@ -422,7 +416,7 @@ class RealboxDropdownElement extends PolymerElement {
   }
 
   /**
-   * @param {string} groupId
+   * @param {number} groupId
    * @returns {string} A11y label for suggestion group show/hide toggle button.
    * @private
    */

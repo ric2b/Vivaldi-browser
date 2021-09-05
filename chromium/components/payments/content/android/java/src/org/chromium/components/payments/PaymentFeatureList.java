@@ -17,6 +17,7 @@ import org.chromium.base.annotations.NativeMethods;
 public class PaymentFeatureList {
     /** Alphabetical: */
     public static final String ANDROID_APP_PAYMENT_UPDATE_EVENTS = "AndroidAppPaymentUpdateEvents";
+    public static final String ENFORCE_FULL_DELEGATION = "EnforceFullDelegation";
     public static final String PAYMENT_REQUEST_SKIP_TO_GPAY = "PaymentRequestSkipToGPay";
     public static final String PAYMENT_REQUEST_SKIP_TO_GPAY_IF_NO_CARD =
             "PaymentRequestSkipToGPayIfNoCard";
@@ -27,6 +28,7 @@ public class PaymentFeatureList {
     public static final String WEB_PAYMENTS = "WebPayments";
     public static final String WEB_PAYMENTS_ALWAYS_ALLOW_JUST_IN_TIME_PAYMENT_APP =
             "AlwaysAllowJustInTimePaymentApp";
+    public static final String WEB_PAYMENTS_APP_STORE_BILLING = "AppStoreBilling";
     public static final String WEB_PAYMENTS_APP_STORE_BILLING_DEBUG = "AppStoreBillingDebug";
     public static final String WEB_PAYMENTS_EXPERIMENTAL_FEATURES =
             "WebPaymentsExperimentalFeatures";

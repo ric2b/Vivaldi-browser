@@ -1100,6 +1100,7 @@ void AutofillPopupViewNativeViews::CreateChildViews() {
         rows_.push_back(AutofillPopupSeparatorView::Create(this, line_number));
         break;
 
+      case autofill::PopupItemId::POPUP_ITEM_ID_MIXED_FORM_MESSAGE:
       case autofill::PopupItemId::
           POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE:
         rows_.push_back(AutofillPopupWarningView::Create(this, line_number));
@@ -1268,7 +1269,7 @@ bool AutofillPopupViewNativeViews::DoUpdateBoundsAndRedrawPopup() {
 // static
 AutofillPopupView* AutofillPopupView::Create(
     base::WeakPtr<AutofillPopupController> controller) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // It's possible for the container_view to not be in a window. In that case,
   // cancel the popup since we can't fully set it up.
   if (!platform_util::GetTopLevel(controller->container_view()))
@@ -1279,7 +1280,7 @@ AutofillPopupView* AutofillPopupView::Create(
       views::Widget::GetTopLevelWidgetForNativeView(
           controller->container_view());
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // If the top level widget can't be found, cancel the popup since we can't
   // fully set it up. On Mac Cocoa browser, |observing_widget| is null
   // because the parent is not a views::Widget.

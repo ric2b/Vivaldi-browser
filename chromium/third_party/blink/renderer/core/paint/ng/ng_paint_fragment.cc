@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_fragment.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_box_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment_traversal.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
 namespace blink {
 
@@ -43,8 +44,7 @@ struct SameSizeAsNGPaintFragment : public RefCounted<NGPaintFragment>,
   unsigned flags;
 };
 
-static_assert(sizeof(NGPaintFragment) == sizeof(SameSizeAsNGPaintFragment),
-              "NGPaintFragment should stay small.");
+ASSERT_SIZE(NGPaintFragment, SameSizeAsNGPaintFragment);
 
 LogicalRect ExpandedSelectionRectForSoftLineBreakIfNeeded(
     const LogicalRect& rect,
@@ -517,17 +517,7 @@ PhysicalRect NGPaintFragment::SelfInkOverflow() const {
 
   if (!ink_overflow_)
     return fragment.LocalRect();
-  return ink_overflow_->self_ink_overflow;
-}
-
-PhysicalRect NGPaintFragment::ContentsInkOverflow() const {
-  // Get the cached value in |LayoutBox| if there is one.
-  if (const LayoutBox* box = InkOverflowOwnerBox())
-    return box->PhysicalContentsVisualOverflowRect();
-
-  if (!ink_overflow_)
-    return PhysicalFragment().LocalRect();
-  return ink_overflow_->contents_ink_overflow;
+  return ink_overflow_->ink_overflow;
 }
 
 PhysicalRect NGPaintFragment::InkOverflow() const {
@@ -544,9 +534,9 @@ PhysicalRect NGPaintFragment::InkOverflow() const {
     return fragment.LocalRect();
 
   if (HasOverflowClip())
-    return ink_overflow_->self_ink_overflow;
+    return ink_overflow_->ink_overflow;
 
-  PhysicalRect rect = ink_overflow_->self_ink_overflow;
+  PhysicalRect rect = ink_overflow_->ink_overflow;
   rect.Unite(ink_overflow_->contents_ink_overflow);
   return rect;
 }
@@ -618,54 +608,10 @@ PhysicalRect NGPaintFragment::RecalcInkOverflow() {
     ink_overflow_ =
         std::make_unique<NGContainerInkOverflow>(self_rect, contents_rect);
   } else {
-    ink_overflow_->self_ink_overflow = self_rect;
+    ink_overflow_->ink_overflow = self_rect;
     ink_overflow_->contents_ink_overflow = contents_rect;
   }
   return self_and_contents_rect;
-}
-
-const LayoutObject& NGPaintFragment::VisualRectLayoutObject(
-    bool& this_as_inline_box) const {
-  const NGPhysicalFragment& fragment = PhysicalFragment();
-  if (const LayoutObject* layout_object = fragment.GetLayoutObject()) {
-    // For inline fragments, InlineBox uses one united rect for the LayoutObject
-    // even when it is fragmented across lines. Use the same technique.
-    //
-    // Atomic inlines have two VisualRect; one for the LayoutBox and another as
-    // InlineBox. NG creates two NGPaintFragment, one as the root of an inline
-    // formatting context and another as a child of the inline formatting
-    // context it participates. |Parent()| can distinguish them because a tree
-    // is created for each inline formatting context.
-    this_as_inline_box = Parent();
-    return *layout_object;
-  }
-
-  // Line box does not have corresponding LayoutObject. Use VisualRect of the
-  // containing LayoutBlockFlow as RootInlineBox does so.
-  this_as_inline_box = true;
-  DCHECK(fragment.IsLineBox());
-  // Line box is always a direct child of its containing block.
-  NGPaintFragment* containing_block_fragment = Parent();
-  DCHECK(containing_block_fragment);
-  DCHECK(containing_block_fragment->GetLayoutObject());
-  return *containing_block_fragment->GetLayoutObject();
-}
-
-IntRect NGPaintFragment::VisualRect() const {
-  // VisualRect is computed from fragment tree and set to LayoutObject in
-  // pre-paint. Use the stored value in the LayoutObject.
-  bool this_as_inline_box;
-  const auto& layout_object = VisualRectLayoutObject(this_as_inline_box);
-  return this_as_inline_box ? layout_object.VisualRectForInlineBox()
-                            : layout_object.FragmentsVisualRectBoundingBox();
-}
-
-IntRect NGPaintFragment::PartialInvalidationVisualRect() const {
-  bool this_as_inline_box;
-  const auto& layout_object = VisualRectLayoutObject(this_as_inline_box);
-  return this_as_inline_box
-             ? layout_object.PartialInvalidationVisualRectForInlineBox()
-             : layout_object.PartialInvalidationVisualRect();
 }
 
 base::Optional<PhysicalRect> NGPaintFragment::LocalVisualRectFor(
@@ -989,10 +935,14 @@ PositionWithAffinity NGPaintFragment::PositionForPoint(
     return PositionForPointInText(point);
 
   if (PhysicalFragment().IsBlockFlow()) {
-    // We current fall back to legacy for block formatting contexts, so we
-    // should reach here only for inline formatting contexts.
-    // TODO(xiaochengh): Do not fall back.
-    return PositionForPointInInlineFormattingContext(point);
+    const LayoutObject& layout_object = *PhysicalFragment().GetLayoutObject();
+    if (layout_object.ChildrenInline())
+      return PositionForPointInInlineFormattingContext(point);
+    // |NGInlineCursor::PositionForPointInChild()| calls this function with
+    // inline block with with block formatting context that has block
+    // children[1], e.g: <b style="display:inline-block"><div>b</div></b>
+    // [1] NGInlineCursorTest.PositionForPointInChildBlockChildren
+    return layout_object.PositionForPoint(point);
   }
 
   DCHECK(PhysicalFragment().IsInline() || PhysicalFragment().IsLineBox());

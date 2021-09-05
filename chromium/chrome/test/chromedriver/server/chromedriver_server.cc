@@ -58,8 +58,8 @@ namespace {
 // need to support messages that are too large.
 const int kBufferSize = 256 * 1024 * 1024;  // 256 MB
 
-typedef base::Callback<
-    void(const net::HttpServerRequestInfo&, const HttpResponseSenderFunc&)>
+typedef base::RepeatingCallback<void(const net::HttpServerRequestInfo&,
+                                     const HttpResponseSenderFunc&)>
     HttpRequestHandlerFunc;
 
 int ListenOnIPv4(net::ServerSocket* socket, uint16_t port, bool allow_remote) {
@@ -194,11 +194,9 @@ class HttpServer : public net::HttpServer::Delegate {
       return;
     }
     handle_request_func_.Run(
-        info,
-        base::Bind(&HttpServer::OnResponse,
-                   weak_factory_.GetWeakPtr(),
-                   connection_id,
-                   !info.HasHeaderValue("connection", "close")));
+        info, base::BindRepeating(&HttpServer::OnResponse,
+                                  weak_factory_.GetWeakPtr(), connection_id,
+                                  !info.HasHeaderValue("connection", "close")));
   }
 
   void OnWebSocketRequest(int connection_id,
@@ -318,10 +316,11 @@ void HandleRequestOnIOThread(
     const net::HttpServerRequestInfo& request,
     const HttpResponseSenderFunc& send_response_func) {
   cmd_task_runner->PostTask(
-      FROM_HERE, base::BindOnce(handle_request_on_cmd_func, request,
-                                base::Bind(&SendResponseOnCmdThread,
-                                           base::ThreadTaskRunnerHandle::Get(),
-                                           send_response_func)));
+      FROM_HERE,
+      base::BindOnce(handle_request_on_cmd_func, request,
+                     base::BindRepeating(&SendResponseOnCmdThread,
+                                         base::ThreadTaskRunnerHandle::Get(),
+                                         send_response_func)));
 }
 
 base::LazyInstance<base::ThreadLocalPointer<HttpServer>>::DestructorAtExit
@@ -358,7 +357,7 @@ void StartServerOnIOThread(uint16_t port,
 // to both IPv4 and IPv6 ports, or only IPv6 port. Listening to IPv4 first
 // ensures that we successfully listen to both IPv4 and IPv6.
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   temp_server.reset(
       new HttpServer(url_base, whitelisted_ips, handle_request_func));
   int ipv4_status = temp_server->Start(port, allow_remote, true);
@@ -386,7 +385,7 @@ void StartServerOnIOThread(uint16_t port,
     exit(1);
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   // In some cases, binding to an IPv6 port also binds to the same IPv4 port.
   // The following code determines if it is necessary to bind to IPv4 port.
   enum class NeedIPv4 { NOT_NEEDED, UNKNOWN, NEEDED } need_ipv4;
@@ -397,7 +396,7 @@ void StartServerOnIOThread(uint16_t port,
 // Currently, the network layer provides no way for us to control dual-protocol
 // bind option, or to query the current setting of that option, so we do our
 // best to determine the current setting. See https://crbug.com/858892.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     // On Linux, dual-protocol bind is controlled by a system file.
     // ChromeOS builds also have OS_LINUX defined, so the code below applies.
     std::string bindv6only;
@@ -441,7 +440,7 @@ void StartServerOnIOThread(uint16_t port,
       }
     }
   }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
   if (ipv4_status != net::OK && ipv6_status != net::OK) {
     printf("Unable to start server with either IPv4 or IPv6. Exiting...\n");
@@ -466,14 +465,15 @@ void RunServer(uint16_t port,
   HttpHandler handler(cmd_run_loop.QuitClosure(), io_thread.task_runner(),
                       url_base, adb_port);
   HttpRequestHandlerFunc handle_request_func =
-      base::Bind(&HandleRequestOnCmdThread, &handler, whitelisted_ips);
+      base::BindRepeating(&HandleRequestOnCmdThread, &handler, whitelisted_ips);
 
   io_thread.task_runner()->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          &StartServerOnIOThread, port, allow_remote, url_base, whitelisted_ips,
-          base::Bind(&HandleRequestOnIOThread, main_task_executor.task_runner(),
-                     handle_request_func)));
+      base::BindOnce(&StartServerOnIOThread, port, allow_remote, url_base,
+                     whitelisted_ips,
+                     base::BindRepeating(&HandleRequestOnIOThread,
+                                         main_task_executor.task_runner(),
+                                         handle_request_func)));
   // Run the command loop. This loop is quit after the response for a shutdown
   // request is posted to the IO loop. After the command loop quits, a task
   // is posted to the IO loop to stop the server. Lastly, the IO thread is
@@ -492,7 +492,7 @@ int main(int argc, char *argv[]) {
   base::AtExitManager at_exit;
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Select the locale from the environment by passing an empty string instead
   // of the default "C" locale. This is particularly needed for the keycode
   // conversion code to work.
@@ -532,6 +532,8 @@ int main(int argc, char *argv[]) {
             "base URL path prefix for commands, e.g. wd/url",
         "readable-timestamp",
             "add readable timestamps to log",
+        "enable-chrome-logs",
+            "show logs from the browser (overrides other logging options)"
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
         "disable-dev-shm-usage",
             "do not use /dev/shm "

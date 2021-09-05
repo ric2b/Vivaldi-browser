@@ -13,13 +13,19 @@ const base::Feature kEvDetailsInPageInfo{"EvDetailsInPageInfo",
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Enables using dialogs (instead of bubbles) for the post-install UI when an
 // extension overrides a setting.
+// TODO(devlin): Remove this feature in M88, since this launched as part of
+// https://crbug.com/1084281.
 const base::Feature kExtensionSettingsOverriddenDialogs{
-    "ExtensionSettingsOverriddenDialogs", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ExtensionSettingsOverriddenDialogs", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables an extension menu in the toolbar. See https://crbug.com/943702
 const base::Feature kExtensionsToolbarMenu{"ExtensionsToolbarMenu",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Force enables the legacy chrome://devices page. To be removed in M88.
+const base::Feature kForceEnableDevicesPage{"ForceEnableDevicesPage",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables tabs from different browser types (NORMAL vs APP) and different apps
 // to mix via dragging.
@@ -47,9 +53,18 @@ const base::Feature kPermissionChip{"PermissionChip",
 const base::Feature kProminentDarkModeActiveTabTitle{
     "ProminentDarkModeActiveTabTitle", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Allow users to save tabs for later. Enables a new button and menu for
+// accessing tabs saved for later. https://crbug.com/1109316
+const base::Feature kReadLater{"ReadLater", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables tabs to scroll in the tabstrip. https://crbug.com/951078
 const base::Feature kScrollableTabStrip{"ScrollableTabStrip",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the signin promo page for the profile creation flow.
+// https:://crbug.com/1105865
+const base::Feature kSignInProfileCreationFlow{
+    "SignInProfileCreationFlow", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables grouping tabs together in the tab strip. https://crbug.com/905491
 const base::Feature kTabGroups{"TabGroups", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -58,6 +73,10 @@ const base::Feature kTabGroups{"TabGroups", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kTabGroupsCollapse{"TabGroupsCollapse",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables tabs to be frozen when collapsed. https://crbug.com/1110108
+const base::Feature kTabGroupsCollapseFreezing{
+    "TabGroupsCollapseFreezing", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the feedback through the tab group editor bubble.
 // https://crbug.com/1067062
 const base::Feature kTabGroupsFeedback{"TabGroupsFeedback",
@@ -65,14 +84,8 @@ const base::Feature kTabGroupsFeedback{"TabGroupsFeedback",
 
 // Enables popup cards containing tab information when hovering over a tab.
 // https://crbug.com/910739
-const base::Feature kTabHoverCards {
-  "TabHoverCards",
-#if defined(OS_MACOSX)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif  // defined(OS_MACOSX)
-};
+const base::Feature kTabHoverCards{"TabHoverCards",
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Parameter name used for tab hover cards user study.
 // TODO(corising): Removed this after tab hover cards user study.
@@ -105,15 +118,10 @@ const base::Feature kWebFooterExperiment{"WebFooterExperiment",
 const base::Feature kWebUITabStrip{"WebUITabStrip",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the demo options for the WebUI Tab Strip. This flag will only work
-// if kWebUITabStrip is enabled.
-const base::Feature kWebUITabStripDemoOptions{
-    "WebUITabStripDemoOptions", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables friendly settings for the |chrome://settings/syncSetup| page.
 // https://crbug.com/1035421.
 const base::Feature kSyncSetupFriendlySettings{
-    "SyncSetupFriendlySettings", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SyncSetupFriendlySettings", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_CHROMEOS)
 // Enables a warning about connecting to hidden WiFi networks.

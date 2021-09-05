@@ -84,10 +84,6 @@ const char kDisableAccelerated2dCanvas[]    = "disable-accelerated-2d-canvas";
 // Enable in-progress canvas 2d API features.
 const char kEnableNewCanvas2DAPI[] = "new-canvas-2d-api";
 
-// Disables hardware acceleration of video decode, where available.
-const char kDisableAcceleratedVideoDecode[] =
-    "disable-accelerated-video-decode";
-
 // Disables hardware acceleration of video encode, where available.
 const char kDisableAcceleratedVideoEncode[] =
     "disable-accelerated-video-encode";
@@ -104,6 +100,9 @@ const char kDisableBackgroundingOccludedWindowsForTesting[] =
 // Disable task throttling of timer tasks from background pages.
 const char kDisableBackgroundTimerThrottling[] =
     "disable-background-timer-throttling";
+
+// Disables the BackForwardCache feature.
+const char kDisableBackForwardCache[] = "disable-back-forward-cache";
 
 // Disable one or more Blink runtime-enabled features.
 // Use names from runtime_enabled_features.json5, separated by commas.
@@ -352,6 +351,10 @@ const char kEnableExperimentalWebAssemblyFeatures[] =
 const char kEnableExperimentalWebPlatformFeatures[] =
     "enable-experimental-web-platform-features";
 
+// Enables blink runtime enabled features with status:"test" or
+// status:"experimental", which are enabled when running web tests.
+const char kEnableBlinkTestFeatures[] = "enable-blink-test-features";
+
 // Enables support for FTP URLs. See https://crbug.com/333943.
 const char kEnableFtp[] = "enable-ftp";
 
@@ -470,13 +473,6 @@ const char kDisableOopRasterization[] = "disable-oop-rasterization";
 // Turns on out of process raster for the renderer whenever gpu raster
 // would have been used.  Enables the chromium_raster_transport extension.
 const char kEnableOopRasterization[] = "enable-oop-rasterization";
-
-// Pins the default referrer policy to the pre-M80 value of
-// no-referrer-when-downgrade.
-// TODO(crbug.com/1016541): After M82, remove when the corresponding
-// enterprise policy has been deleted.
-const char kForceLegacyDefaultReferrerPolicy[] =
-    "force-legacy-default-referrer-policy";
 
 // Forces use of hardware overlay for fullscreen video playback. Useful for
 // testing the Android overlay fullscreen functionality on other platforms.
@@ -697,7 +693,7 @@ const char kRendererProcess[]               = "renderer";
 const char kRendererProcessLimit[]          = "renderer-process-limit";
 
 // Causes the renderer process to display a dialog on launch. Passing this flag
-// also adds service_manager::kNoSandbox on Windows non-official builds, since
+// also adds sandbox::policy::kNoSandbox on Windows non-official builds, since
 // that's needed to show a dialog.
 const char kRendererStartupDialog[]         = "renderer-startup-dialog";
 
@@ -904,6 +900,9 @@ const char kWebRtcStunProbeTrialParameter[] = "webrtc-stun-probe-trial";
 // without restarting the browser and relaunching without this flag.
 const char kWebRtcLocalEventLogging[] = "webrtc-event-logging";
 
+// This switch disables the ScrollToTextFragment feature.
+const char kDisableScrollToTextFragment[] = "disable-scroll-to-text-fragment";
+
 // Forcibly enable and select the specified runtime for webxr.
 // Note that this provides an alternative means of enabling a runtime, and will
 // also functionally disable all other runtimes.
@@ -920,8 +919,14 @@ const char kWebXrRuntimeOpenVr[] = "openvr";
 const char kWebXrRuntimeOpenXr[] = "openxr";
 const char kWebXrRuntimeWMR[] = "windows-mixed-reality";
 
-// This switch disables the ScrollToTextFragment feature.
-const char kDisableScrollToTextFragment[] = "disable-scroll-to-text-fragment";
+// Disables hardware acceleration of video decode, where available.
+const char kDisableAcceleratedVideoDecode[] =
+    "disable-accelerated-video-decode";
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+// Enables hardware acceleration of video decoding on linux. (defaults to off)
+const char kEnableAcceleratedVideoDecode[] = "enable-accelerated-video-decode";
+#endif
 
 #if defined(OS_ANDROID)
 // Disable Media Session API
@@ -953,6 +958,10 @@ const char kEnableAdaptiveSelectionHandleOrientation[] =
 // Enable drag manipulation of longpress-triggered text selections.
 const char kEnableLongpressDragSelection[]  = "enable-longpress-drag-selection";
 
+// Prevent the offline indicator from showing.
+const char kForceOnlineConnectionStateForIndicator[] =
+    "force-online-connection-state-for-indicator";
+
 // The telephony region (ISO country code) to use in phone number detection.
 const char kNetworkCountryIso[] = "network-country-iso";
 
@@ -962,6 +971,9 @@ const char kRemoteDebuggingSocketName[]     = "remote-debugging-socket-name";
 // Block ChildProcessMain thread of the renderer's ChildProcessService until a
 // Java debugger is attached.
 const char kRendererWaitForJavaDebugger[] = "renderer-wait-for-java-debugger";
+
+// Disables debug crash dumps for OOPR.
+const char kDisableOoprDebugCrashDump[] = "disable-oopr-debug-crash-dump";
 #endif
 
 // Enable the experimental Accessibility Object Model APIs in development.

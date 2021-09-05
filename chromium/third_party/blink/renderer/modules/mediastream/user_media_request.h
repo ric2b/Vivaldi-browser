@@ -50,8 +50,6 @@ class UserMediaController;
 class MODULES_EXPORT UserMediaRequest final
     : public GarbageCollected<UserMediaRequest>,
       public ExecutionContextLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(UserMediaRequest);
-
  public:
   enum class Error {
     kNotSupported,
@@ -118,7 +116,8 @@ class MODULES_EXPORT UserMediaRequest final
 
   void Start();
 
-  void Succeed(MediaStreamDescriptor*, bool pan_tilt_zoom_allowed);
+  void Succeed(MediaStreamDescriptor*);
+  void OnMediaStreamInitialized(MediaStream* stream);
   void FailConstraint(const String& constraint_name, const String& message);
   void Fail(Error name, const String& message);
 

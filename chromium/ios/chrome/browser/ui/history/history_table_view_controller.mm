@@ -27,7 +27,7 @@
 #import "ios/chrome/browser/ui/history/history_entries_status_item_delegate.h"
 #include "ios/chrome/browser/ui/history/history_entry_inserter.h"
 #import "ios/chrome/browser/ui/history/history_entry_item.h"
-#import "ios/chrome/browser/ui/history/history_entry_item_delegate.h"
+#include "ios/chrome/browser/ui/history/history_menu_provider.h"
 #import "ios/chrome/browser/ui/history/history_ui_constants.h"
 #include "ios/chrome/browser/ui/history/history_ui_delegate.h"
 #include "ios/chrome/browser/ui/history/history_util.h"
@@ -38,6 +38,8 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_favicon_data_source.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/util/menu_util.h"
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
@@ -67,6 +69,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeEntriesStatusWithLink,
   ItemTypeActivityIndicator,
 };
+// Name of the asset to use when history is empty.
+// TODO(crbug.com/1101842): When changing this const with the new asset, delete
+// the old asset.
+NSString* const kEmptyStateImage = @"legacy_empty_history";
 // Section identifier for the header (sync information) section.
 const NSInteger kEntriesStatusSectionIdentifier = kSectionIdentifierEnumZero;
 // Maximum number of entries to retrieve in a single query to history service.
@@ -81,7 +87,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
 @interface HistoryTableViewController () <HistoryEntriesStatusItemDelegate,
                                           HistoryEntryInserterDelegate,
-                                          HistoryEntryItemDelegate,
                                           TableViewTextLinkCellDelegate,
                                           TableViewURLDragDataSource,
                                           UISearchControllerDelegate,
@@ -178,13 +183,15 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // history content.
   self.tableView.tableFooterView = [[UIView alloc] init];
 
-  // Long-press gesture recognizer.
-  UILongPressGestureRecognizer* longPressRecognizer =
-      [[UILongPressGestureRecognizer alloc]
-          initWithTarget:self
-                  action:@selector
-                  (displayContextMenuInvokedByGestureRecognizer:)];
-  [self.tableView addGestureRecognizer:longPressRecognizer];
+  if (!IsNativeContextMenuEnabled()) {
+    // Long-press gesture recognizer.
+    UILongPressGestureRecognizer* longPressRecognizer =
+        [[UILongPressGestureRecognizer alloc]
+            initWithTarget:self
+                    action:@selector
+                    (displayContextMenuInvokedByGestureRecognizer:)];
+    [self.tableView addGestureRecognizer:longPressRecognizer];
+  }
 
   if (DragAndDropIsEnabled()) {
     self.dragDropHandler = [[TableViewURLDragDropHandler alloc] init];
@@ -233,7 +240,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
            forControlEvents:UIControlEventTouchUpInside];
 
   // Place the search bar in the navigation bar.
-  self.navigationItem.searchController = self.searchController;
+  [self updateNavigationBar];
   self.navigationItem.hidesSearchBarWhenScrolling = NO;
 
   // Center search bar and cancel button vertically so it looks centered
@@ -290,18 +297,14 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   // If there are no results and no URLs have been loaded, report that no
   // history entries were found.
   if (results.empty() && self.empty && !self.searchInProgress) {
-    UIImage* emptyImage = [[UIImage imageNamed:@"empty_history"]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    [self addEmptyTableViewWithMessage:l10n_util::GetNSString(
-                                           IDS_HISTORY_NO_RESULTS)
-                                 image:emptyImage];
-    [self updateToolbarButtons];
+    [self addEmptyTableViewBackground];
+    [self updateToolbarButtonsWithAnimation:NO];
     return;
   }
 
   self.finishedLoading = queryResultsInfo.reached_beginning;
   self.empty = NO;
-  [self removeEmptyTableView];
+  [self removeEmptyTableViewBackground];
 
   // Header section should be updated outside of batch updates, otherwise
   // loading indicator removal will not be observed.
@@ -327,7 +330,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     [resultsItems addObject:item];
   }
 
-  [self updateToolbarButtons];
+  [self updateToolbarButtonsWithAnimation:YES];
 
   if ((self.searchInProgress && [searchQuery length] > 0 &&
        [self.currentQuery isEqualToString:searchQuery]) ||
@@ -576,7 +579,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   DCHECK_EQ(tableView, self.tableView);
   if (self.isEditing) {
-    [self updateToolbarButtons];
+    [self updateToolbarButtonsWithAnimation:YES];
   } else {
     TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
     // Only navigate and record metrics if a ItemTypeHistoryEntry was selected.
@@ -603,13 +606,35 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     didDeselectRowAtIndexPath:(NSIndexPath*)indexPath {
   DCHECK_EQ(tableView, self.tableView);
   if (self.editing)
-    [self updateToolbarButtons];
+    [self updateToolbarButtonsWithAnimation:YES];
 }
 
 - (BOOL)tableView:(UITableView*)tableView
     canEditRowAtIndexPath:(NSIndexPath*)indexPath {
   TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
   return (item.type == ItemTypeHistoryEntry);
+}
+
+- (UIContextMenuConfiguration*)tableView:(UITableView*)tableView
+    contextMenuConfigurationForRowAtIndexPath:(NSIndexPath*)indexPath
+                                        point:(CGPoint)point
+    API_AVAILABLE(ios(13.0)) {
+  if (!IsNativeContextMenuEnabled()) {
+    // Returning nil will allow the gesture to be captured and show the old
+    // context menus.
+    return nil;
+  }
+
+  if (self.isEditing) {
+    // Don't show the context menu when currently in editing mode.
+    return nil;
+  }
+
+  HistoryEntryItem* entry = base::mac::ObjCCastStrict<HistoryEntryItem>(
+      [self.tableViewModel itemAtIndexPath:indexPath]);
+  UIView* cell = [self.tableView cellForRowAtIndexPath:indexPath];
+  return [self.menuProvider contextMenuConfigurationForItem:entry
+                                                   withView:cell];
 }
 
 #pragma mark - UITableViewDataSource
@@ -737,15 +762,11 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   if ([self.tableViewModel numberOfSections] == 1) {
     self.empty = YES;
     if (!self.searchInProgress) {
-      UIImage* emptyImage = [[UIImage imageNamed:@"empty_history"]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-      [self addEmptyTableViewWithMessage:l10n_util::GetNSString(
-                                             IDS_HISTORY_NO_RESULTS)
-                                   image:emptyImage];
+      [self addEmptyTableViewBackground];
     }
   }
   [self updateEntriesStatusMessage];
-  [self updateToolbarButtons];
+  [self updateToolbarButtonsWithAnimation:YES];
 }
 
 // Updates header section to provide relevant information about the currently
@@ -976,39 +997,44 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 // Default TableView and NavigationBar UIToolbar configuration.
 - (void)configureViewsForNonEditModeWithAnimation:(BOOL)animated {
   [self setEditing:NO animated:animated];
-  UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
-                           target:nil
-                           action:nil];
-  [self setToolbarItems:@[
-    self.clearBrowsingDataButton, spaceButton, self.editButton
-  ]
-               animated:animated];
+
   [self.searchController.searchBar setUserInteractionEnabled:YES];
   self.searchController.searchBar.alpha = 1.0;
-  [self updateToolbarButtons];
+  [self updateToolbarButtonsWithAnimation:animated];
 }
 
 // Configures the TableView and NavigationBar UIToolbar for edit mode.
 - (void)configureViewsForEditModeWithAnimation:(BOOL)animated {
   [self setEditing:YES animated:animated];
-  UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
-                           target:nil
-                           action:nil];
-  [self setToolbarItems:@[ self.deleteButton, spaceButton, self.cancelButton ]
-               animated:animated];
   [self.searchController.searchBar setUserInteractionEnabled:NO];
   self.searchController.searchBar.alpha =
       kTableViewNavigationAlphaForDisabledSearchBar;
-  [self updateToolbarButtons];
+  [self updateToolbarButtonsWithAnimation:animated];
 }
 
 // Updates the NavigationBar UIToolbar buttons.
-- (void)updateToolbarButtons {
+- (void)updateToolbarButtonsWithAnimation:(BOOL)animated {
   self.deleteButton.enabled =
       [[self.tableView indexPathsForSelectedRows] count];
   self.editButton.enabled = !self.empty;
+  [self setToolbarItems:[self toolbarButtons] animated:animated];
+}
+
+// Configure the navigationItem contents for the current state.
+- (void)updateNavigationBar {
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    if ([self isEmptyState]) {
+      self.navigationItem.searchController = nil;
+      self.navigationItem.largeTitleDisplayMode =
+          UINavigationItemLargeTitleDisplayModeNever;
+    } else {
+      self.navigationItem.searchController = self.searchController;
+      self.navigationItem.largeTitleDisplayMode =
+          UINavigationItemLargeTitleDisplayModeAutomatic;
+    }
+  } else {
+    self.navigationItem.searchController = self.searchController;
+  }
 }
 
 #pragma mark Context Menu
@@ -1061,7 +1087,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
                                          action:openInNewTabAction
                                           style:UIAlertActionStyleDefault];
 
-  if (IsMultiwindowSupported()) {
+  if (IsMultipleScenesSupported()) {
     // Add "Open In New Window" option.
     NSString* openInNewWindowTitle =
         l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENINNEWWINDOW);
@@ -1129,6 +1155,60 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 }
 
 #pragma mark Helper Methods
+
+// Returns YES if the history is actually empty, and the user is neither
+// searching nor editing.
+- (BOOL)isEmptyState {
+  return !self.loading && self.empty && !self.searchInProgress;
+}
+
+- (UIBarButtonItem*)createSpacerButton {
+  return [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+                           target:nil
+                           action:nil];
+}
+
+// Returns the toolbar buttons for the current state.
+- (NSArray<UIBarButtonItem*>*)toolbarButtons {
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates) &&
+      [self isEmptyState]) {
+    return @[
+      [self createSpacerButton], self.clearBrowsingDataButton,
+      [self createSpacerButton]
+    ];
+  }
+  if (self.isEditing) {
+    return @[ self.deleteButton, [self createSpacerButton], self.cancelButton ];
+  }
+  return @[
+    self.clearBrowsingDataButton, [self createSpacerButton], self.editButton
+  ];
+}
+
+// Adds a view as background of the TableView.
+- (void)addEmptyTableViewBackground {
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    [self addEmptyTableViewWithImage:[UIImage imageNamed:@"history_empty"]
+                               title:l10n_util::GetNSString(
+                                         IDS_IOS_HISTORY_EMPTY_TITLE)
+                            subtitle:l10n_util::GetNSString(
+                                         IDS_IOS_HISTORY_EMPTY_MESSAGE)];
+    [self updateNavigationBar];
+  } else {
+    UIImage* emptyImage = [[UIImage imageNamed:kEmptyStateImage]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [self addEmptyTableViewWithMessage:l10n_util::GetNSString(
+                                           IDS_HISTORY_NO_RESULTS)
+                                 image:emptyImage];
+  }
+}
+
+// Clears the background of the TableView.
+- (void)removeEmptyTableViewBackground {
+  [self removeEmptyTableView];
+  [self updateNavigationBar];
+}
 
 // Opens URL in the current tab and dismisses the history view.
 - (void)openURL:(const GURL&)URL {

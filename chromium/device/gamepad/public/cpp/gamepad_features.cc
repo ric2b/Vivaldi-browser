@@ -38,9 +38,16 @@ size_t OverrideIntervalIfValid(base::StringPiece param_value,
 const base::Feature kEnableGamepadButtonAxisEvents{
     "EnableGamepadButtonAxisEvents", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables the Windows.Gaming.Input data fetcher.
+const base::Feature kEnableWindowsGamingInputDataFetcher{
+    "EnableWindowsGamingInputDataFetcher", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Overrides the gamepad polling interval.
 const base::Feature kGamepadPollingInterval{"GamepadPollingInterval",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kRestrictGamepadAccess{"RestrictGamepadAccess",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kGamepadPollingIntervalParamKey[] = "interval-ms";
 

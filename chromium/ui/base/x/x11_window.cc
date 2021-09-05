@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -16,11 +17,11 @@
 #include "net/base/network_interfaces.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/hit_test_x11.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/wm_role_names_linux.h"
 #include "ui/base/x/x11_menu_registrar.h"
 #include "ui/base/x/x11_pointer_grab.h"
 #include "ui/base/x/x11_util.h"
-#include "ui/base/x/x11_util_internal.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/event.h"
@@ -216,7 +217,6 @@ void XWindow::Init(const Configuration& config) {
   if (!activatable_ || config.override_redirect)
     req.override_redirect = x11::Bool32(true);
 
-#if !defined(USE_X11)
   // It seems like there is a difference how tests are instantiated in case of
   // non-Ozone X11 and Ozone. See more details in
   // EnableTestConfigForPlatformWindows. The reason why this must be here is
@@ -227,9 +227,8 @@ void XWindow::Init(const Configuration& config) {
   // PlatformWindow, and non-Ozone X11 uses it, we have to add this workaround
   // here. Otherwise, tests for non-Ozone X11 fail.
   // TODO(msisov): figure out usage of this for non-Ozone X11.
-  if (UseTestConfigForPlatformWindows())
+  if (features::IsUsingOzonePlatform() && UseTestConfigForPlatformWindows())
     req.override_redirect = x11::Bool32(true);
-#endif
 
   override_redirect_ = req.override_redirect.has_value();
 
@@ -258,11 +257,14 @@ void XWindow::Init(const Configuration& config) {
 
   x11::VisualId visual_id = visual_id_;
   uint8_t depth = 0;
+  x11::ColorMap colormap{};
   XVisualManager* visual_manager = XVisualManager::GetInstance();
   if (visual_id_ == x11::VisualId{} ||
-      !visual_manager->GetVisualInfo(visual_id_, &depth, &visual_has_alpha_)) {
-    visual_manager->ChooseVisualForWindow(
-        enable_transparent_visuals, &visual_id, &depth, &visual_has_alpha_);
+      !visual_manager->GetVisualInfo(visual_id_, &depth, &colormap,
+                                     &visual_has_alpha_)) {
+    visual_manager->ChooseVisualForWindow(enable_transparent_visuals,
+                                          &visual_id, &depth, &colormap,
+                                          &visual_has_alpha_);
   }
 
   // x.org will BadMatch if we don't set a border when the depth isn't the
@@ -278,6 +280,7 @@ void XWindow::Init(const Configuration& config) {
   req.depth = depth;
   req.c_class = x11::WindowClass::InputOutput;
   req.visual = visual_id;
+  req.colormap = colormap;
   xwindow_ = connection_->GenerateId<x11::Window>();
   req.wid = xwindow_;
   connection_->CreateWindow(req);
@@ -446,10 +449,10 @@ void XWindow::Map(bool inactive) {
   SetWmNormalHints(xwindow_, size_hints);
 
   ignore_keyboard_input_ = inactive;
-  uint32_t wm_user_time_ms =
-      ignore_keyboard_input_ ? 0
+  auto wm_user_time_ms = ignore_keyboard_input_
+                             ? x11::Time::CurrentTime
                              : X11EventSource::GetInstance()->GetTimestamp();
-  if (inactive || wm_user_time_ms != 0) {
+  if (inactive || wm_user_time_ms != x11::Time::CurrentTime) {
     SetProperty(xwindow_, gfx::GetAtom("_NET_WM_USER_TIME"),
                 x11::Atom::CARDINAL, wm_user_time_ms);
   }
@@ -548,7 +551,7 @@ void XWindow::Activate() {
       GuessWindowManager() != WM_WMII &&
       WmSupportsHint(gfx::GetAtom("_NET_ACTIVE_WINDOW"));
 
-  ::Time timestamp = X11EventSource::GetInstance()->GetTimestamp();
+  x11::Time timestamp = X11EventSource::GetInstance()->GetTimestamp();
 
   // override_redirect windows ignore _NET_ACTIVE_WINDOW.
   // https://crbug.com/940924
@@ -556,7 +559,7 @@ void XWindow::Activate() {
     std::array<uint32_t, 5> data = {
         // We're an app.
         1,
-        timestamp,
+        static_cast<uint32_t>(timestamp),
         // TODO(thomasanderson): if another chrome window is active, specify
         // that here.  The EWMH spec claims this may make the WM more likely to
         // service our _NET_ACTIVE_WINDOW request.
@@ -574,9 +577,9 @@ void XWindow::Activate() {
         ->SetInputFocus({x11::InputFocus::Parent, xwindow_,
                          static_cast<x11::Time>(timestamp)})
         .IgnoreError();
-    // At this point, we know we will receive focus, and some
-    // webdriver tests depend on a window being IsActive() immediately
-    // after an Activate(), so just set this state now.
+    // At this point, we know we will receive focus, and some webdriver tests
+    // depend on a window being IsActive() immediately after an Activate(), so
+    // just set this state now.
     has_pointer_focus_ = false;
     has_window_focus_ = true;
     window_mapped_in_server_ = true;
@@ -603,6 +606,7 @@ bool XWindow::IsActive() const {
   // stacking order in addition to changing the focus state.
   return (has_window_focus_ || has_pointer_focus_) && !ignore_keyboard_input_;
 }
+
 void XWindow::SetSize(const gfx::Size& size_in_pixels) {
   connection_->ConfigureWindow({.window = xwindow_,
                                 .width = size_in_pixels.width(),
@@ -692,7 +696,8 @@ gfx::Rect XWindow::GetOuterBounds() const {
 void XWindow::GrabPointer() {
   // If the pointer is already in |xwindow_|, we will not get a crossing event
   // with a mode of NotifyGrab, so we must record the grab state manually.
-  has_pointer_grab_ |= !ui::GrabPointer(xwindow_, true, x11::None);
+  has_pointer_grab_ |=
+      (ui::GrabPointer(xwindow_, true, nullptr) == x11::GrabStatus::Success);
 }
 
 void XWindow::ReleasePointerGrab() {
@@ -732,9 +737,11 @@ void XWindow::StackXWindowAtTop() {
   RaiseWindow(xwindow_);
 }
 
-void XWindow::SetCursor(::Cursor cursor) {
+void XWindow::SetCursor(scoped_refptr<X11Cursor> cursor) {
   last_cursor_ = cursor;
-  DefineCursor(xwindow_, static_cast<x11::Cursor>(cursor));
+  on_cursor_loaded_.Reset(base::BindOnce(DefineCursor, xwindow_));
+  if (cursor)
+    cursor->OnCursorLoaded(on_cursor_loaded_.callback());
 }
 
 bool XWindow::SetTitle(base::string16 title) {
@@ -1072,12 +1079,15 @@ void XWindow::OnFocusEvent(bool focus_in,
 }
 
 bool XWindow::IsTargetedBy(const x11::Event& x11_event) const {
-  const XEvent& xev = x11_event.xlib_event();
-  auto target_window = static_cast<x11::Window>(
-      xev.type == x11::GeGenericEvent::opcode
-          ? static_cast<XIDeviceEvent*>(xev.xcookie.data)->event
-          : xev.xany.window);
-  return target_window == xwindow_;
+  return x11_event.window() == xwindow_;
+}
+
+bool XWindow::IsTransientWindowTargetedBy(const x11::Event& x11_event) const {
+  return x11_event.window() == transient_window_;
+}
+
+void XWindow::SetTransientWindow(x11::Window window) {
+  transient_window_ = window;
 }
 
 void XWindow::WmMoveResize(int hittest, const gfx::Point& location) const {
@@ -1088,12 +1098,6 @@ void XWindow::WmMoveResize(int hittest, const gfx::Point& location) const {
   DoWMMoveResize(connection_, x_root_window_, xwindow_, location, direction);
 }
 
-// In Ozone, there are no *Event constructors receiving XEvent* as input,
-// in this case PlatformEvent is expected. Furthermore,
-// X11EventSourceLibevent is used in that case, which already translates
-// Mouse/Key/Touch/Scroll events into Events so they should not be handled
-// by PlatformWindow, which is supposed to use XWindow in Ozone builds. So
-// handling these events is disabled for Ozone.
 void XWindow::ProcessEvent(x11::Event* xev) {
   // We can lose track of the window's position when the window is reparented.
   // When the parent window is moved, we won't get an event, so the window's
@@ -1129,7 +1133,7 @@ void XWindow::ProcessEvent(x11::Event* xev) {
     OnConfigureEvent(*configure);
   } else if (auto* crossing = xev->As<x11::Input::CrossingEvent>()) {
     TouchFactory* factory = TouchFactory::GetInstance();
-    if (factory->ShouldProcessXI2Event(&xev->xlib_event())) {
+    if (factory->ShouldProcessCrossingEvent(*crossing)) {
       auto mode = XI2ModeToXMode(crossing->mode);
       auto detail = XI2DetailToXDetail(crossing->detail);
       switch (crossing->opcode) {
@@ -1165,16 +1169,9 @@ void XWindow::ProcessEvent(x11::Event* xev) {
       } else if (protocol == gfx::GetAtom("_NET_WM_PING")) {
         x11::ClientMessageEvent reply_event = *client;
         reply_event.window = x_root_window_;
-
-        auto event_bytes = x11::Write(reply_event);
-        DCHECK_EQ(event_bytes.size(), 32ul);
-
-        x11::SendEventRequest request{false, x_root_window_,
-                                      x11::EventMask::SubstructureNotify |
-                                          x11::EventMask::SubstructureRedirect};
-        std::copy(event_bytes.begin(), event_bytes.end(),
-                  request.event.begin());
-        connection_->SendEvent(request);
+        SendEvent(reply_event, x_root_window_,
+                  x11::EventMask::SubstructureNotify |
+                      x11::EventMask::SubstructureRedirect);
       } else if (protocol == gfx::GetAtom("_NET_WM_SYNC_REQUEST")) {
         pending_counter_value_ =
             client->data.data32[2] +
@@ -1184,29 +1181,14 @@ void XWindow::ProcessEvent(x11::Event* xev) {
     } else {
       OnXWindowDragDropEvent(xev);
     }
-  } else if (auto* mapping = xev->As<x11::MappingNotifyEvent>()) {
-    switch (mapping->request) {
-      case x11::Mapping::Modifier:
-      case x11::Mapping::Keyboard:
-        XRefreshKeyboardMapping(&xev->xlib_event().xmapping);
-        break;
-      case x11::Mapping::Pointer:
-        DeviceDataManagerX11::GetInstance()->UpdateButtonMap();
-        break;
-      default:
-        NOTIMPLEMENTED() << " Unknown request: "
-                         << static_cast<int>(mapping->request);
-        break;
-    }
   } else if (auto* property = xev->As<x11::PropertyNotifyEvent>()) {
     x11::Atom changed_atom = property->atom;
-    if (changed_atom == gfx::GetAtom("_NET_WM_STATE")) {
+    if (changed_atom == gfx::GetAtom("_NET_WM_STATE"))
       OnWMStateUpdated();
-    } else if (changed_atom == gfx::GetAtom("_NET_FRAME_EXTENTS")) {
+    else if (changed_atom == gfx::GetAtom("_NET_FRAME_EXTENTS"))
       OnFrameExtentsUpdated();
-    } else if (changed_atom == gfx::GetAtom("_NET_WM_DESKTOP")) {
+    else if (changed_atom == gfx::GetAtom("_NET_WM_DESKTOP"))
       OnWorkspaceUpdated();
-    }
   } else if (auto* selection = xev->As<x11::SelectionNotifyEvent>()) {
     OnXWindowSelectionEvent(xev);
   }
@@ -1353,14 +1335,13 @@ void XWindow::NotifySwapAfterResize() {
   }
 }
 
-// Removes |delayed_resize_task_| from the task queue (if it's in
-// the queue) and adds it back at the end of the queue.
+// Removes |delayed_resize_task_| from the task queue (if it's in the queue) and
+// adds it back at the end of the queue.
 void XWindow::DispatchResize() {
   if (update_counter_ == x11::Sync::Counter{} ||
       configure_counter_value_ == 0) {
-    // WM doesn't support _NET_WM_SYNC_REQUEST.
-    // Or we are too slow, so _NET_WM_SYNC_REQUEST is disabled by the
-    // compositor.
+    // WM doesn't support _NET_WM_SYNC_REQUEST. Or we are too slow, so
+    // _NET_WM_SYNC_REQUEST is disabled by the compositor.
     delayed_resize_task_.Reset(base::BindOnce(
         &XWindow::DelayedResize, base::Unretained(this), bounds_in_pixels_));
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -1457,7 +1438,7 @@ void XWindow::SetOverrideRedirect(bool override_redirect) {
   if (remap) {
     Map();
     if (has_pointer_grab_)
-      ChangeActivePointerGrabCursor(x11::None);
+      ChangeActivePointerGrabCursor(nullptr);
   }
 }
 
@@ -1587,8 +1568,8 @@ bool XWindow::InitializeAsStatusIcon() {
 
   auto future = SendClientMessage(
       manager, manager, gfx::GetAtom("_NET_SYSTEM_TRAY_OPCODE"),
-      {X11EventSource::GetInstance()->GetTimestamp(), kSystemTrayRequestDock,
-       static_cast<uint32_t>(xwindow_), 0, 0},
+      {static_cast<uint32_t>(X11EventSource::GetInstance()->GetTimestamp()),
+       kSystemTrayRequestDock, static_cast<uint32_t>(xwindow_), 0, 0},
       x11::EventMask::NoEvent);
   return !future.Sync().error;
 }

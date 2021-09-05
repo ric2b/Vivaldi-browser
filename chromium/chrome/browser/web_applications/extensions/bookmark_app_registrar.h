@@ -42,6 +42,8 @@ class BookmarkAppRegistrar : public web_app::AppRegistrar,
   std::string GetAppDescription(const web_app::AppId& app_id) const override;
   base::Optional<SkColor> GetAppThemeColor(
       const web_app::AppId& app_id) const override;
+  base::Optional<SkColor> GetAppBackgroundColor(
+      const web_app::AppId& app_id) const override;
   const GURL& GetAppLaunchURL(const web_app::AppId& app_id) const override;
   base::Optional<GURL> GetAppScopeInternal(
       const web_app::AppId& app_id) const override;
@@ -49,16 +51,20 @@ class BookmarkAppRegistrar : public web_app::AppRegistrar,
       const web_app::AppId& app_id) const override;
   web_app::DisplayMode GetAppUserDisplayMode(
       const web_app::AppId& app_id) const override;
+  std::vector<web_app::DisplayMode> GetAppDisplayModeOverride(
+      const web_app::AppId& app_id) const override;
   base::Time GetAppLastLaunchTime(const web_app::AppId& app_id) const override;
   base::Time GetAppInstallTime(const web_app::AppId& app_id) const override;
   std::vector<WebApplicationIconInfo> GetAppIconInfos(
       const web_app::AppId& app_id) const override;
-  std::vector<SquareSizePx> GetAppDownloadedIconSizes(
+  std::vector<SquareSizePx> GetAppDownloadedIconSizesAny(
       const web_app::AppId& app_id) const override;
-  std::vector<WebApplicationShortcutsMenuItemInfo> GetAppShortcutInfos(
+  std::vector<WebApplicationShortcutsMenuItemInfo> GetAppShortcutsMenuItemInfos(
       const web_app::AppId& app_id) const override;
   std::vector<std::vector<SquareSizePx>>
   GetAppDownloadedShortcutsMenuIconsSizes(
+      const web_app::AppId& app_id) const override;
+  web_app::RunOnOsLoginMode GetAppRunOnOsLoginMode(
       const web_app::AppId& app_id) const override;
   std::vector<web_app::AppId> GetAppIds() const override;
   web_app::WebAppRegistrar* AsWebAppRegistrar() override;
@@ -66,6 +72,11 @@ class BookmarkAppRegistrar : public web_app::AppRegistrar,
 
   syncer::StringOrdinal GetUserPageOrdinal(const web_app::AppId& app_id) const;
   syncer::StringOrdinal GetUserLaunchOrdinal(
+      const web_app::AppId& app_id) const;
+
+  // This is the same as GetAppUserDisplayMode above except it doesn't take
+  // BookmarkAppIsLocallyInstalled() flag into consideration.
+  web_app::DisplayMode GetAppUserDisplayModeForMigration(
       const web_app::AppId& app_id) const;
 
   // ExtensionRegistryObserver:

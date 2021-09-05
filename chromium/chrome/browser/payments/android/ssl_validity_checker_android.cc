@@ -4,8 +4,8 @@
 
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
-#include "chrome/browser/payments/android/jni_headers/SslValidityChecker_jni.h"
 #include "chrome/browser/payments/ssl_validity_checker.h"
+#include "components/payments/content/android/jni_headers/SslValidityChecker_jni.h"
 #include "content/public/browser/web_contents.h"
 
 namespace payments {
@@ -17,6 +17,7 @@ JNI_SslValidityChecker_GetInvalidSslCertificateErrorMessage(
     const base::android::JavaParamRef<jobject>& jweb_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(jweb_contents);
+  // SslValidityChecker checks for null `web_contents` parameter.
   return base::android::ConvertUTF8ToJavaString(
       env,
       SslValidityChecker::GetInvalidSslCertificateErrorMessage(web_contents));
@@ -26,6 +27,7 @@ JNI_SslValidityChecker_GetInvalidSslCertificateErrorMessage(
 jboolean JNI_SslValidityChecker_IsValidPageInPaymentHandlerWindow(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jweb_contents) {
+  // SslValidityChecker checks for null `web_contents` parameter.
   return SslValidityChecker::IsValidPageInPaymentHandlerWindow(
       content::WebContents::FromJavaWebContents(jweb_contents));
 }

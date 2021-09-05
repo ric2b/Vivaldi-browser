@@ -2,9 +2,9 @@
 
 #include "components/datasource/vivaldi_data_url_utils.h"
 
-#include "testing/gtest/include/gtest/gtest.h"
-
 #include "app/vivaldi_constants.h"
+#include "base/strings/string_util.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace vivaldi_data_url_utils {
 
@@ -211,8 +211,8 @@ TEST_F(VivaldiDataUrlUtilsTest, MakeUrl) {
 
   for (PathType i : kTypeList) {
     std::string url = MakeUrl(i, "data");
-    EXPECT_TRUE(base::StringPiece(url).starts_with(vivaldi::kVivaldiUIDataURL));
-    EXPECT_TRUE(base::StringPiece(url).ends_with("/data"));
+    EXPECT_TRUE(base::StartsWith(url, vivaldi::kVivaldiUIDataURL));
+    EXPECT_TRUE(base::EndsWith(url, "/data"));
     type = ParseUrl(url, &data);
     EXPECT_EQ(type, i);
     EXPECT_EQ("data", data);

@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -12,7 +11,7 @@ import("//testing/test.gni")
 # TODO(crbug.com/1018739): remove this when migration is done.
 set_sources_assignment_filter([])
 
-jumbo_component("compositor") {
+component("compositor") {
   sources = [
     "animation_metrics_recorder.cc",
     "animation_metrics_recorder.h",
@@ -125,7 +124,7 @@ jumbo_component("compositor") {
   }
 }
 
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "test/direct_layer_tree_frame_sink.cc",
@@ -209,18 +208,34 @@ jumbo_static_library("test_support") {
   }
 
   if (use_ozone) {
-    sources += [ "test/test_compositor_host_ozone.cc" ]
+    sources += [
+      "test/test_compositor_host_ozone.cc",
+      "test/test_compositor_host_ozone.h",
+    ]
 
     deps += [
       "//ui/ozone",
       "//ui/platform_window",
     ]
-  } else if (use_x11) {
-    sources += [ "test/test_compositor_host_x11.cc" ]
+  }
+
+  if (use_x11) {
+    sources += [
+      "test/test_compositor_host_x11.cc",
+      "test/test_compositor_host_x11.h",
+    ]
+  }
+
+  if (is_linux) {
+    sources += [ "test/test_compositor_host_linux.cc" ]
   }
 }
 
 test("compositor_unittests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   sources = [
     "animation_throughput_reporter_unittest.cc",
     "callback_layer_animation_observer_unittest.cc",
@@ -258,7 +273,7 @@ test("compositor_unittests") {
     "//ui/resources",
   ]
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//third_party/mesa_headers" ]
   }
 }

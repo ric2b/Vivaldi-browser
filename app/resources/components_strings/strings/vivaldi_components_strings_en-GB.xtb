@@ -3,7 +3,6 @@
 <translationbundle lang="en-GB">
 <translation id="1038842779957582377">unknown name</translation>
 <translation id="1110994991967754504">Select permission for <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Access a <ph name="BEGIN_LINK" />cached copy<ph name="END_LINK" /> of <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> unexpectedly closed the connection.</translation>
 <translation id="1161325031994447685">Reconnecting to Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Print...</translation>
@@ -20,9 +19,7 @@
 <translation id="1834321415901700177">This site contains harmful programs</translation>
 <translation id="1916770123977586577">To apply your updated settings to this site, reload this page</translation>
 <translation id="1919345977826869612">Ads</translation>
-<translation id="194030505837763158">Go to <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Advanced</translation>
-<translation id="2030481566774242610">Did you mean <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Checking the proxy and the firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Sound</translation>
 <translation id="2147827593068025794">Background Sync</translation>
@@ -109,7 +106,6 @@
 <translation id="5287240709317226393">Show cookies</translation>
 <translation id="5355557959165512791">You cannot visit <ph name="SITE" /> right now because its certificate has been revoked. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="5386426401304769735">The certificate chain for this site contains a certificate signed using SHA-1.</translation>
-<translation id="5431657950005405462">Your file was not found</translation>
 <translation id="5452270690849572955">This <ph name="HOST_NAME" /> page can’t be found</translation>
 <translation id="5457113250005438886">Invalid</translation>
 <translation id="5492298309214877701">This site on the company, organisation or school intranet has the same URL as an external website.
@@ -154,7 +150,6 @@
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="7079718277001814089">This site contains malware</translation>
-<translation id="7090678807593890770">Search Google for <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Allowed by an extension</translation>
 <translation id="7111012039238467737">(Valid)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> doesn't adhere to security standards.</translation>
@@ -176,7 +171,6 @@
 <translation id="7716424297397655342">This site can’t be loaded from the cache</translation>
 <translation id="7758069387465995638">Firewall or antivirus software may have blocked the connection.</translation>
 <translation id="7800304661137206267">The connection is encrypted using <ph name="CIPHER" />, with <ph name="MAC" /> for message authentication and <ph name="KX" /> as the key exchange mechanism.</translation>
-<translation id="7802523362929240268">Site is legitimate</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> normally uses encryption to protect your information. When Vivaldi tried to connect to <ph name="SITE" /> this time, the website sent back unusual and incorrect credentials. This may happen when an attacker is trying to pretend to be <ph name="SITE" />, or a Wi-Fi sign-in screen has interrupted the connection. Your information is still secure because Vivaldi stopped the connection before any data was exchanged.</translation>
 <translation id="7878562273885520351">Your password may be compromised</translation>
 <translation id="7951415247503192394">(32-bit)</translation>

@@ -15,6 +15,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
+#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_app_interface.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_constants.h"
@@ -182,7 +183,7 @@ void AssertAllEntriesVisible() {
 
 // Asserts that the entry |title| is not visible.
 void AssertEntryNotVisible(NSString* title) {
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
   ScrollToTop();
   NSError* error;
 
@@ -200,7 +201,7 @@ void AssertEntryNotVisible(NSString* title) {
 
 // Asserts |header| is visible.
 void AssertHeaderNotVisible(NSString* header) {
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  [ChromeEarlGreyUI waitForAppToIdle];
   ScrollToTop();
   [[EarlGrey selectElementWithMatcher:
                  chrome_test_util::StaticTextWithAccessibilityLabel(header)]
@@ -212,6 +213,19 @@ void OpenReadingList() {
   [ChromeEarlGreyUI openToolsMenu];
   [ChromeEarlGreyUI
       tapToolsMenuButton:chrome_test_util::ReadingListMenuButton()];
+  // It seems that sometimes there is a delay before the ReadingList is
+  // displayed. See https://crbug.com/1109202 .
+  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
+                 kWaitForUIElementTimeout,
+                 ^BOOL {
+                   NSError* error = nil;
+                   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                                           kReadingListViewID)]
+                       assertWithMatcher:grey_sufficientlyVisible()
+                                   error:&error];
+                   return error == nil;
+                 }),
+             @"Reading List didn't appear.");
 }
 
 // Adds 20 read and 20 unread entries to the model, opens the reading list menu
@@ -413,6 +427,12 @@ void AssertIsShowingDistillablePage(bool online, const GURL& distillable_url) {
 @synthesize serverRespondsWithContent = _serverRespondsWithContent;
 @synthesize serverResponseDelay = _serverResponseDelay;
 
+- (AppLaunchConfiguration)appConfigurationForTestCase {
+  AppLaunchConfiguration config;
+  config.features_enabled.push_back(kPageInfoRefactoring);
+  return config;
+}
+
 - (void)setUp {
   [super setUp];
   GREYAssertNil([ReadingListAppInterface clearEntries],
@@ -482,7 +502,7 @@ void AssertIsShowingDistillablePage(bool online, const GURL& distillable_url) {
   // Verify that the Page Info is about offline pages.
   id<GREYMatcher> pageInfoTitleMatcher =
       chrome_test_util::StaticTextWithAccessibilityLabelId(
-          IDS_IOS_PAGE_INFO_OFFLINE_TITLE);
+          IDS_IOS_PAGE_INFO_OFFLINE_PAGE_LABEL);
   [[EarlGrey selectElementWithMatcher:pageInfoTitleMatcher]
       assertWithMatcher:grey_notNil()];
 
@@ -960,6 +980,10 @@ void AssertIsShowingDistillablePage(bool online, const GURL& distillable_url) {
 
 // Tests that the VC can be dismissed by swiping down.
 - (void)testSwipeDownDismiss {
+  // TODO(crbug.com/1129589): Test disabled on iOS14 iPhones.
+  if (base::ios::IsRunningOnIOS14OrLater() && ![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS14 iPhones.");
+  }
   if (!base::ios::IsRunningOnOrLater(13, 0, 0)) {
     EARL_GREY_TEST_SKIPPED(@"Test disabled on iOS 12 and lower.");
   }

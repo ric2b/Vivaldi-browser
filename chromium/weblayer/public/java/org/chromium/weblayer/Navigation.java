@@ -169,8 +169,8 @@ public class Navigation extends IClientNavigation.Stub {
      * Sets a header for a network request. If a header with the specified name exists it is
      * overwritten. This method can only be called at two times, from
      * {@link NavigationCallback.onNavigationStarted} and {@link
-     * NavigationCallback.onNavigationStarted}. When called during start, the header applies to both
-     * the initial network request as well as redirects.
+     * NavigationCallback.onNavigationRedirected}. When called during start, the header applies to
+     * both the initial network request as well as redirects.
      *
      * This method may be used to set the referer. If the referer is set in navigation start, it is
      * reset during the redirect. In other words, if you need to set a referer that applies to
@@ -216,6 +216,53 @@ public class Navigation extends IClientNavigation.Stub {
         }
         try {
             mNavigationImpl.setUserAgentString(value);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Returns whether the navigation was initiated by the page. Examples of page-initiated
+     * navigations:
+     * * Clicking <a> links.
+     * * changing window.location.href
+     * * redirect via the <meta http-equiv="refresh"> tag
+     * * using window.history.pushState
+     *
+     * This method returns false for navigations initiated by the WebLayer API, including using
+     *  window.history.forward() or window.history.back().
+     *
+     * @return Whether the navigation was initiated by the page.
+     *
+     * @since 86
+     */
+    public boolean isPageInitiated() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mNavigationImpl.isPageInitiated();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Whether the navigation is a reload. Examples of reloads include:
+     * * embedder-specified through NavigationController::Reload
+     * * page-initiated reloads, e.g. location.reload()
+     * * reloads when the network interface is reconnected
+     *
+     * @since 86
+     */
+    public boolean isReload() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 86) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mNavigationImpl.isReload();
         } catch (RemoteException e) {
             throw new APICallException(e);
         }

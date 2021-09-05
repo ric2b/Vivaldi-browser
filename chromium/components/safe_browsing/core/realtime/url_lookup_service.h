@@ -69,20 +69,19 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
 
   // RealTimeUrlLookupServiceBase:
   bool CanPerformFullURLLookup() const override;
-
   bool CanCheckSubresourceURL() const override;
-
   bool CanCheckSafeBrowsingDb() const override;
-
-  void StartLookup(const GURL& url,
-                   RTLookupRequestCallback request_callback,
-                   RTLookupResponseCallback response_callback) override;
 
  private:
   // RealTimeUrlLookupServiceBase:
   net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag() const override;
-
-  GURL GetRealTimeLookupUrl() const override;
+  bool CanPerformFullURLLookupWithToken() const override;
+  void GetAccessToken(const GURL& url,
+                      RTLookupRequestCallback request_callback,
+                      RTLookupResponseCallback response_callback) override;
+  base::Optional<std::string> GetDMTokenString() const override;
+  std::string GetMetricSuffix() const override;
+  bool ShouldIncludeCredentials() const override;
 
   // Called when the access token is obtained from |token_fetcher_|.
   void OnGetAccessToken(
@@ -91,21 +90,6 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
       RTLookupResponseCallback response_callback,
       base::TimeTicks get_token_start_time,
       base::Optional<signin::AccessTokenInfo> access_token_info);
-
-  // Called to send the request to the Safe Browsing backend over the network.
-  // It also attached an auth header if |access_token_info| has a value.
-  void SendRequest(const GURL& url,
-                   base::Optional<signin::AccessTokenInfo> access_token_info,
-                   std::unique_ptr<RTLookupRequest> request,
-                   RTLookupRequestCallback request_callback,
-                   RTLookupResponseCallback response_callback);
-
-  bool IsHistorySyncEnabled();
-
-  std::unique_ptr<RTLookupRequest> FillRequestProto(const GURL& url);
-
-  // Returns true if real time URL lookup with GAIA token is enabled.
-  bool CanPerformFullURLLookupWithToken() const;
 
   // Unowned object used for getting access token when real time url check with
   // token is enabled.
@@ -116,12 +100,6 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
 
   // Unowned object used for getting preference settings.
   PrefService* pref_service_;
-
-  const ChromeUserPopulation::ProfileManagementStatus
-      profile_management_status_;
-
-  // Whether the profile is enrolled in  advanced protection.
-  bool is_under_advanced_protection_;
 
   // The token fetcher used for getting access token.
   std::unique_ptr<SafeBrowsingTokenFetcher> token_fetcher_;

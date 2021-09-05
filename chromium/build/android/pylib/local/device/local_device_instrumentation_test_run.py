@@ -94,12 +94,6 @@ RENDER_TEST_FEATURE_ANNOTATION = 'RenderTest'
 WPR_ARCHIVE_FILE_PATH_ANNOTATION = 'WPRArchiveDirectory'
 WPR_RECORD_REPLAY_TEST_FEATURE_ANNOTATION = 'WPRRecordReplayTest'
 
-# This needs to be kept in sync with formatting in |RenderUtils.imageName|
-RE_RENDER_IMAGE_NAME = re.compile(
-      r'(?P<test_class>\w+)\.'
-      r'(?P<description>[-\w]+)\.'
-      r'(?P<device_model_sdk>[-\w]+)\.png')
-
 _DEVICE_GOLD_DIR = 'skia_gold'
 # A map of Android product models to SDK ints.
 RENDER_TEST_MODEL_SDK_CONFIGS = {
@@ -471,7 +465,8 @@ class LocalDeviceInstrumentationTestRun(
     batched_tests = dict()
     other_tests = []
     for test in tests:
-      if 'Batch' in test['annotations']:
+      if 'Batch' in test['annotations'] and 'RequiresRestart' not in test[
+          'annotations']:
         batch_name = test['annotations']['Batch']['value']
         if not batch_name:
           batch_name = test['class']
@@ -590,8 +585,11 @@ class LocalDeviceInstrumentationTestRun(
       wpr_archive_path = os.path.join(host_paths.DIR_SOURCE_ROOT,
                                       wpr_archive_relative_path)
       if not os.path.isdir(wpr_archive_path):
-        raise RuntimeError('WPRArchiveDirectory annotation should point'
-                           'to a directory only.')
+        raise RuntimeError('WPRArchiveDirectory annotation should point '
+                           'to a directory only. '
+                           '{0} exist: {1}'.format(
+                               wpr_archive_path,
+                               os.path.exists(wpr_archive_path)))
 
       archive_path = os.path.join(wpr_archive_path,
                                   self._GetUniqueTestName(test) + '.wprgo')
@@ -785,24 +783,30 @@ class LocalDeviceInstrumentationTestRun(
       logging.debug('raw output from %s:', test_display_name)
       for l in output:
         logging.debug('  %s', l)
+
     if self._test_instance.store_tombstones:
-      tombstones_url = None
-      for result in results:
-        if result.GetType() == base_test_result.ResultType.CRASH:
-          if not tombstones_url:
-            resolved_tombstones = tombstones.ResolveTombstones(
-                device,
-                resolve_all_tombstones=True,
-                include_stack_symbols=False,
-                wipe_tombstones=True,
-                tombstone_symbolizer=self._test_instance.symbolizer)
-            tombstone_filename = 'tombstones_%s_%s' % (
-                time.strftime('%Y%m%dT%H%M%S-UTC', time.gmtime()),
-                device.serial)
-            with self._env.output_manager.ArchivedTempfile(
-                tombstone_filename, 'tombstones') as tombstone_file:
-              tombstone_file.write('\n'.join(resolved_tombstones))
+      resolved_tombstones = tombstones.ResolveTombstones(
+          device,
+          resolve_all_tombstones=True,
+          include_stack_symbols=False,
+          wipe_tombstones=True,
+          tombstone_symbolizer=self._test_instance.symbolizer)
+      if resolved_tombstones:
+        tombstone_filename = 'tombstones_%s_%s' % (time.strftime(
+            '%Y%m%dT%H%M%S-UTC', time.gmtime()), device.serial)
+        with self._env.output_manager.ArchivedTempfile(
+            tombstone_filename, 'tombstones') as tombstone_file:
+          tombstone_file.write('\n'.join(resolved_tombstones))
+
+        # Associate tombstones with first crashing test.
+        for result in results:
+          if result.GetType() == base_test_result.ResultType.CRASH:
             result.SetLink('tombstones', tombstone_file.Link())
+            break
+        else:
+          # We don't always detect crashes correctly. In this case,
+          # associate with the first test.
+          results[0].SetLink('tombstones', tombstone_file.Link())
     return results, None
 
   def _GetTestsFromRunner(self):
@@ -994,8 +998,8 @@ class LocalDeviceInstrumentationTestRun(
       # Pull everything at once instead of pulling individually, as it's
       # slightly faster since each command over adb has some overhead compared
       # to doing the same thing locally.
-      device.PullFile(gold_dir, host_dir)
       host_dir = os.path.join(host_dir, _DEVICE_GOLD_DIR)
+      device.PullFile(gold_dir, host_dir)
       for image_name in os.listdir(host_dir):
         if not image_name.endswith('.png'):
           continue
@@ -1077,8 +1081,9 @@ class LocalDeviceInstrumentationTestRun(
           _AppendToLog(results,
                        'Gold initialization failed with output %s' % error)
         elif status == status_codes.COMPARISON_FAILURE_REMOTE:
-          triage_link = gold_session.GetTriageLink(render_name)
-          if not triage_link:
+          public_triage_link, internal_triage_link =\
+              gold_session.GetTriageLinks(render_name)
+          if not public_triage_link:
             _AppendToLog(
                 results, 'Failed to get triage link for %s, raw output: %s' %
                 (render_name, error))
@@ -1087,12 +1092,19 @@ class LocalDeviceInstrumentationTestRun(
                 gold_session.GetTriageLinkOmissionReason(render_name))
             continue
           if gold_properties.IsTryjobRun():
-            _SetLinkOnResults(results, 'Skia Gold triage link for entire CL',
-                              triage_link)
-          else:
             _SetLinkOnResults(results,
-                              'Skia Gold triage link for %s' % render_name,
-                              triage_link)
+                              'Public Skia Gold triage link for entire CL',
+                              public_triage_link)
+            _SetLinkOnResults(results,
+                              'Internal Skia Gold triage link for entire CL',
+                              internal_triage_link)
+          else:
+            _SetLinkOnResults(
+                results, 'Public Skia Gold triage link for %s' % render_name,
+                public_triage_link)
+            _SetLinkOnResults(
+                results, 'Internal Skia Gold triage link for %s' % render_name,
+                internal_triage_link)
           _AppendToLog(results, failure_log)
 
         elif status == status_codes.COMPARISON_FAILURE_LOCAL:

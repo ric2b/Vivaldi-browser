@@ -13,6 +13,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 
 class VersionInfo(object):
   def __init__(self, revision_id, full_revision_string, timestamp):
@@ -211,7 +212,7 @@ def main(argv=None):
         out_changed = WriteIfChanged(out_file, contents)
         if out_changed or not os.path.exists(committime_file):
           with open(committime_file, 'w') as timefile:
-            timefile.write(str(version_info.timestamp))
+            timefile.write(str(int(version_info.timestamp) or int(time.time())))
       if header:
         WriteIfChanged(header,
                        GetHeaderContents(header, args.version_macro,

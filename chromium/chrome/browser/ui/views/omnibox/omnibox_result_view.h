@@ -11,10 +11,12 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/events/event_handler.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
@@ -79,9 +81,6 @@ class OmniboxResultView : public views::View,
   // if none exists for this suggestion.
   views::Button* GetSecondaryButton();
 
-  // If this view has a secondary button, triggers the action and returns true.
-  bool MaybeTriggerSecondaryButton(const ui::Event& event);
-
   OmniboxPartState GetThemeState() const;
 
   // Notification that the match icon has changed and schedules a repaint.
@@ -93,12 +92,8 @@ class OmniboxResultView : public views::View,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // Removes the shown |match_| from history, if possible.
-  void RemoveSuggestion() const;
-
   // Helper to emit accessibility events (may only emit if conditions are met).
   void EmitTextChangedAccessiblityEvent();
-  void EmitSelectedChildrenChangedAccessibilityEvent();
 
   // views::View:
   void Layout() override;
@@ -112,6 +107,22 @@ class OmniboxResultView : public views::View,
   void OnThemeChanged() override;
 
  private:
+  // Calls UpdateHoverState() when a target receives a mouse enter/exit.
+  class UpdateOnMouseEnterExit : public ui::EventHandler {
+   public:
+    UpdateOnMouseEnterExit(OmniboxResultView* omnibox_result_view,
+                           View* target);
+    UpdateOnMouseEnterExit(const UpdateOnMouseEnterExit&) = delete;
+    UpdateOnMouseEnterExit& operator=(const UpdateOnMouseEnterExit&) = delete;
+    ~UpdateOnMouseEnterExit() override;
+
+   private:
+    void OnMouseEvent(ui::MouseEvent* event) override;
+
+    OmniboxResultView* const omnibox_result_view_;
+    View* const target_;
+  };
+
   // Returns the height of the text portion of the result view.
   int GetTextHeight() const;
 
@@ -121,10 +132,12 @@ class OmniboxResultView : public views::View,
   // controls that are only visible on row hover.
   void UpdateHoverState();
 
-  // Call model's OpenMatch() with the selected index and provided disposition
-  // and timestamp the match was selected (base::TimeTicks() if unknown).
-  void OpenMatch(WindowOpenDisposition disposition,
-                 base::TimeTicks match_selection_timestamp);
+  // This returns true if the match has a matching tab and will use a
+  // switch-to-tab button inline in Result View. It returns false, for
+  // example, when the switch button is not shown because a keyword match is
+  // taking precedence or when Suggestion Button Row is enabled, as the
+  // Switch-to-tab button will appear in the button row.
+  bool ShouldShowTabMatchButtonInline();
 
   // Sets the visibility of the |remove_suggestion_button_| based on the current
   // state.
@@ -164,6 +177,7 @@ class OmniboxResultView : public views::View,
   // The "X" button at the end of the match cell, used to remove suggestions.
   views::ImageButton* remove_suggestion_button_;
   views::FocusRing* remove_suggestion_focus_ring_ = nullptr;
+  base::Optional<UpdateOnMouseEnterExit> update_on_mouse_enter_exit_;
 
   base::WeakPtrFactory<OmniboxResultView> weak_factory_{this};
 

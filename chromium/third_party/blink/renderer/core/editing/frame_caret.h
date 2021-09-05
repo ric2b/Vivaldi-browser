@@ -39,7 +39,6 @@
 namespace blink {
 
 class CaretDisplayItemClient;
-class DisplayItemClient;
 class FrameCaret;
 class GraphicsContext;
 class LayoutBlock;
@@ -55,7 +54,6 @@ class CORE_EXPORT FrameCaret final : public GarbageCollected<FrameCaret> {
   FrameCaret(LocalFrame&, const SelectionEditor&);
   ~FrameCaret();
 
-  const DisplayItemClient& GetDisplayItemClient() const;
   bool IsActive() const;
 
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded();
@@ -74,7 +72,6 @@ class CORE_EXPORT FrameCaret final : public GarbageCollected<FrameCaret> {
   void SetShouldShowBlockCursor(bool);
 
   // Paint invalidation methods delegating to DisplayItemClient.
-  void ClearPreviousVisualRect(const LayoutBlock&);
   void LayoutBlockWillBeDestroyed(const LayoutBlock&);
   void UpdateStyleAndLayoutIfNeeded();
   void InvalidatePaint(const LayoutBlock&, const PaintInvalidatorContext&);
@@ -83,8 +80,9 @@ class CORE_EXPORT FrameCaret final : public GarbageCollected<FrameCaret> {
   void PaintCaret(GraphicsContext&, const PhysicalOffset&) const;
 
   // For unit tests.
-  const DisplayItemClient& CaretDisplayItemClientForTesting() const;
-  const LayoutBlock* CaretLayoutBlockForTesting() const;
+  const CaretDisplayItemClient& CaretDisplayItemClientForTesting() const {
+    return *display_item_client_;
+  }
   bool ShouldPaintCaretForTesting() const { return should_paint_caret_; }
   void RecreateCaretBlinkTimerForTesting(
       scoped_refptr<base::SingleThreadTaskRunner>);

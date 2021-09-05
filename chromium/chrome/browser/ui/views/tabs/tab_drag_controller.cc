@@ -13,8 +13,8 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
-#include "base/macros.h"
 #include "base/numerics/ranges.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -49,7 +49,6 @@
 #include "ui/views/event_monitor.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/root_view.h"
-#include "ui/views/widget/widget.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/ash_features.h"
@@ -224,6 +223,8 @@ class KeyEventTracker : public ui::EventObserver {
     event_monitor_ = views::EventMonitor::CreateApplicationMonitor(
         this, context, {ui::ET_KEY_PRESSED});
   }
+  KeyEventTracker(const KeyEventTracker&) = delete;
+  KeyEventTracker& operator=(const KeyEventTracker&) = delete;
   ~KeyEventTracker() override = default;
 
  private:
@@ -241,8 +242,6 @@ class KeyEventTracker : public ui::EventObserver {
   base::OnceClosure end_drag_callback_;
   base::OnceClosure revert_drag_callback_;
   std::unique_ptr<views::EventMonitor> event_monitor_;
-
-  DISALLOW_COPY_AND_ASSIGN(KeyEventTracker);
 };
 
 class TabDragController::SourceTabStripEmptinessTracker
@@ -307,6 +306,10 @@ class TabDragController::DeferredTargetTabstripObserver
     : public aura::WindowObserver {
  public:
   DeferredTargetTabstripObserver() = default;
+  DeferredTargetTabstripObserver(const DeferredTargetTabstripObserver&) =
+      delete;
+  DeferredTargetTabstripObserver& operator=(
+      const DeferredTargetTabstripObserver&) = delete;
   ~DeferredTargetTabstripObserver() override {
     if (deferred_target_context_) {
       GetWindowForTabDraggingProperties(deferred_target_context_)
@@ -364,8 +367,6 @@ class TabDragController::DeferredTargetTabstripObserver
 
  private:
   TabDragContext* deferred_target_context_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(DeferredTargetTabstripObserver);
 };
 
 #endif
@@ -410,8 +411,7 @@ TabDragController::~TabDragController() {
   if (g_tab_drag_controller == this)
     g_tab_drag_controller = nullptr;
 
-  if (move_loop_widget_)
-    move_loop_widget_->RemoveObserver(this);
+  widget_observer_.RemoveAll();
 
   if (is_dragging_window())
     GetAttachedBrowserWidget()->EndMoveLoop();
@@ -445,7 +445,7 @@ void TabDragController::Init(TabDragContext* source_context,
   //     synchronous on desktop Linux, so use that.
   // - Chrome OS
   //     Releasing capture on Ash cancels gestures so avoid it.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   can_release_capture_ = false;
 #endif
   start_point_in_screen_ = gfx::Point(source_view_offset, mouse_offset.y());
@@ -686,6 +686,10 @@ void TabDragController::OnWidgetBoundsChanged(views::Widget* widget,
   Drag(GetCursorScreenPoint());
 }
 
+void TabDragController::OnWidgetDestroyed(views::Widget* widget) {
+  widget_observer_.Remove(widget);
+}
+
 void TabDragController::OnSourceTabStripEmpty() {
   // NULL out source_context_ so that we don't attempt to add back to it (in
   // the case of a revert).
@@ -875,7 +879,8 @@ TabDragController::DragBrowserToNewTabStrip(TabDragContext* target_context,
     // results in a move). That'll cause all sorts of problems.  Reset the
     // observer so we don't get notified and process the event.
 #if defined(OS_CHROMEOS)
-    move_loop_widget_->RemoveObserver(this);
+    if (widget_observer_.IsObserving(move_loop_widget_))
+      widget_observer_.Remove(move_loop_widget_);
     move_loop_widget_ = nullptr;
 #endif  // OS_CHROMEOS
     views::Widget* browser_widget = GetAttachedBrowserWidget();
@@ -1177,10 +1182,6 @@ void TabDragController::Attach(TabDragContext* attached_context,
     // Register a new group if necessary, so that the insertion index in the
     // tab strip can be calculated based on the group membership of tabs.
     if (header_drag_) {
-      // Rather than keep the old group ID, generate a new one. This helps with
-      // restore, and allowing broken-up groups to be restored across windows
-      // as separate group IDs.
-      group_ = tab_groups::TabGroupId::GenerateNew();
       attached_context_->GetTabStripModel()->group_model()->AddTabGroup(
           group_.value(),
           source_view_drag_data()->tab_group_data.value().group_visual_data);
@@ -1247,8 +1248,8 @@ void TabDragController::Attach(TabDragContext* attached_context,
                        tabs_to_source.end());
   int new_x = TabStrip::GetSizeNeededForViews(tabs_to_source) -
               views[source_view_index_]->width() +
-              gfx::ToRoundedInt(offset_to_width_ratio_ *
-                                views[source_view_index_]->width());
+              base::ClampRound(offset_to_width_ratio_ *
+                               views[source_view_index_]->width());
   mouse_offset_.set_x(new_x);
 
   // Transfer ownership of us to the new tabstrip as well as making sure the
@@ -1393,7 +1394,7 @@ void TabDragController::RunMoveLoop(const gfx::Vector2d& drag_offset) {
 
   move_loop_widget_ = GetAttachedBrowserWidget();
   DCHECK(move_loop_widget_);
-  move_loop_widget_->AddObserver(this);
+  widget_observer_.Add(move_loop_widget_);
   current_state_ = DragState::kDraggingWindow;
   base::WeakPtr<TabDragController> ref(weak_factory_.GetWeakPtr());
   if (can_release_capture_) {
@@ -1421,10 +1422,10 @@ void TabDragController::RunMoveLoop(const gfx::Vector2d& drag_offset) {
 
   if (!ref)
     return;
-  if (move_loop_widget_) {
-    move_loop_widget_->RemoveObserver(this);
-    move_loop_widget_ = nullptr;
-  }
+
+  if (widget_observer_.IsObserving(move_loop_widget_))
+    widget_observer_.Remove(move_loop_widget_);
+  move_loop_widget_ = nullptr;
 
   if (current_state_ == DragState::kDraggingWindow) {
     current_state_ = DragState::kWaitingToStop;
@@ -1788,7 +1789,7 @@ void TabDragController::CompleteDrag() {
 
 void TabDragController::MaximizeAttachedWindow() {
   GetAttachedBrowserWidget()->Maximize();
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (was_source_fullscreen_)
     GetAttachedBrowserWidget()->SetFullscreen(true);
 #endif
@@ -1989,7 +1990,7 @@ void TabDragController::AdjustBrowserAndTabBoundsForDrag(
     // under the mouse cursor.
     gfx::Rect tab_bounds = (*drag_bounds)[source_view_index_];
     gfx::Point offset(
-        gfx::ToRoundedInt(tab_bounds.width() * offset_to_width_ratio_) +
+        base::ClampRound(tab_bounds.width() * offset_to_width_ratio_) +
             tab_bounds.x(),
         0);
     views::View::ConvertPointToWidget(attached_context_->AsView(), &offset);

@@ -32,7 +32,7 @@ export class Intent {
   /**
    * @param {!URL} url
    * @param {number} intentId
-   * @param {Mode} mode
+   * @param {!Mode} mode
    * @param {boolean} shouldHandleResult
    * @param {boolean} shouldDownScale
    * @param {boolean} isSecure
@@ -52,7 +52,7 @@ export class Intent {
 
     /**
      * Capture mode of intent.
-     * @const {Mode}
+     * @const {!Mode}
      */
     this.mode = mode;
 
@@ -109,7 +109,7 @@ export class Intent {
     }
     this.done_ = true;
     await this.chromeHelper_.finish(this.intentId);
-    metrics.log(metrics.Type.INTENT, this, metrics.IntentResultType.CONFIRMED);
+    this.logResult(metrics.IntentResultType.CONFIRMED);
   }
 
   /**
@@ -122,7 +122,7 @@ export class Intent {
     }
     this.done_ = true;
     await this.chromeHelper_.cancel(this.intentId);
-    metrics.log(metrics.Type.INTENT, this, metrics.IntentResultType.CANCELED);
+    this.logResult(metrics.IntentResultType.CANCELED);
   }
 
   /**
@@ -149,10 +149,24 @@ export class Intent {
   }
 
   /**
+   * Logs the intent result to metrics.
+   * @param {!metrics.IntentResultType} result
+   */
+  logResult(result) {
+    metrics.sendIntentEvent({
+      mode: this.mode,
+      result,
+      shouldHandleResult: this.shouldHandleResult,
+      shouldDownScale: this.shouldDownScale,
+      isSecure: this.isSecure,
+    });
+  }
+
+  /**
    * @param {!URL} url Url passed along with app launch event.
    * @return {!Intent} Created intent object. Returns null if input is not a
    *     valid intent url.
-   * @throws {ParseError}
+   * @throws {!ParseError}
    */
   static create(url) {
     const params = url.searchParams;
@@ -167,7 +181,7 @@ export class Intent {
     if (param === null || !Object.values(Mode).includes(param)) {
       throw new ParseError(url);
     }
-    const mode = /** @type {Mode} */ (param);
+    const mode = /** @type {!Mode} */ (param);
 
     return new Intent(
         url, intentId, mode, getBool('shouldHandleResult'),

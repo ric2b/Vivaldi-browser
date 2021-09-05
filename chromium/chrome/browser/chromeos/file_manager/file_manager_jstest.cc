@@ -106,6 +106,10 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesMessage) {
   RunTestURL("foreground/elements/files_message_unittest_gen.html");
 }
 
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesPasswordDialog) {
+  RunTestURL("foreground/elements/files_password_dialog_unittest_gen.html");
+}
+
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FilesToast) {
   RunTestURL("foreground/elements/files_toast_unittest_gen.html");
 }
@@ -137,6 +141,10 @@ IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileTasks) {
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileTransferController) {
   RunTestURL("foreground/js/file_transfer_controller_unittest_gen.html");
+}
+
+IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileTypeFiltersController) {
+  RunTestURL("foreground/js/file_type_filters_controller_unittest_gen.html");
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerJsTest, FileType) {

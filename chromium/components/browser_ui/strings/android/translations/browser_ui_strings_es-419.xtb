@@ -21,20 +21,19 @@
 <translation id="1620510694547887537">Cámara</translation>
 <translation id="1647391597548383849">Acceso a la cámara</translation>
 <translation id="1660204651932907780">Permitir que los sitios reproduzcan sonido (recomendado)</translation>
+<translation id="1677097821151855053">Se utilizan cookies y otros datos del sitio para recordarte. De esta manera, podrás acceder a tu cuenta y ver anuncios personalizados, entre otras cosas. Para administrar las cookies de todos los sitios, visita la <ph name="BEGIN_LINK" />Configuración<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">¿Quieres borrar los datos del sitio?</translation>
 <translation id="169515064810179024">Impedir que los sitios accedan a los sensores de movimiento</translation>
 <translation id="1717218214683051432">Sensores de movimiento</translation>
 <translation id="1743802530341753419">Preguntar antes de permitir que los sitios se conecten a un dispositivo (recomendado)</translation>
+<translation id="1818308510395330587">Para permitir el uso de la RA en <ph name="APP_NAME" />, también debes activar la cámara en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="1887786770086287077">En este dispositivo, el acceso a la ubicación está desactivado. Actívalo en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="1919345977826869612">Anuncios</translation>
-<translation id="1922076542920281912">Para permitir que Chrome acceda a tu ubicación, actívala también en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="1923695749281512248"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/<ph name="FILE_SIZE_WITH_UNITS" /></translation>
-<translation id="194341124344773587">Activa el permiso para Chrome en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="1984937141057606926">Permitidas, salvo de terceros</translation>
 <translation id="1994173015038366702">URL del sitio</translation>
 <translation id="2025115093177348061">Realidad aumentada</translation>
 <translation id="2030769033451695672">Presiona para volver a <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
-<translation id="2041019821020695769">Para permitir que Chrome te envíe notificaciones, actívalas también en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="2079545284768500474">Deshacer</translation>
 <translation id="2091887806945687916">Sonido</translation>
 <translation id="2107397443965016585">Preguntar antes de permitir que los sitios reproduzcan contenido protegido (recomendado)</translation>
@@ -42,6 +41,7 @@
 <translation id="2148716181193084225">Hoy</translation>
 <translation id="2182457891543959921">Preguntar antes de permitir que los sitios creen un mapa 3D de tu entorno o hagan un seguimiento de la posición de la cámara (recomendado)</translation>
 <translation id="2212565012507486665">Permitir cookies</translation>
+<translation id="2228071138934252756">Para permitir que <ph name="APP_NAME" /> acceda a tu cámara, actívala también en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="2289270750774289114">Preguntarme cuando un sitio intente conectarse a dispositivos Bluetooth cercanos (recomendado)</translation>
 <translation id="2315043854645842844">El sistema operativo no admite la selección de certificados del lado del cliente.</translation>
 <translation id="2359808026110333948">Continuar</translation>
@@ -52,13 +52,13 @@
 <translation id="2490684707762498678">Administradas por <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Ayuda y comentarios</translation>
 <translation id="2501278716633472235">Ir atrás</translation>
-<translation id="2537296579376733324">Todas las cookies, solo en este sitio</translation>
 <translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie bloqueada}other{# cookies bloqueadas}}</translation>
 <translation id="2570922361219980984">El acceso a la ubicación también está desactivado en este dispositivo. Actívalo en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Expandido; haz clic para contraer.</translation>
 <translation id="2586657967955657006">Portapapeles</translation>
 <translation id="2621115761605608342">Permitir la ejecución de JavaScript para un sitio específico</translation>
 <translation id="2653659639078652383">Enviar</translation>
+<translation id="2677748264148917807">Abandonar</translation>
 <translation id="2687403674020088961">Bloquear todas las cookies (opción no recomendada)</translation>
 <translation id="2704606927547763573">Copiado</translation>
 <translation id="2822354292072154809">¿Confirmas que quieres restablecer todos los permisos de sitios para <ph name="CHOSEN_OBJECT_NAME" />?</translation>
@@ -71,8 +71,8 @@
 <translation id="301521992641321250">Bloqueado de forma automática</translation>
 <translation id="3115898365077584848">Mostrar información</translation>
 <translation id="3123473560110926937">Bloqueados en algunos sitios</translation>
-<translation id="3190152372525844641">Activa los permisos para Chrome en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="3198916472715691905">Datos almacenados: <ph name="STORAGE_AMOUNT" /></translation>
+<translation id="321187648315454507">Para permitir que <ph name="APP_NAME" /> te envíe notificaciones, actívalas también en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Micrófono</translation>
 <translation id="3277252321222022663">Permitir que los sitios accedan a los sensores (recomendado)</translation>
 <translation id="3295602654194328831">Ocultar información</translation>
@@ -83,9 +83,7 @@
 <translation id="358794129225322306">Permite que un sitio descargue varios archivos automáticamente.</translation>
 <translation id="3596414637720633074">Bloquear cookies de terceros en modo Incógnito</translation>
 <translation id="3600792891314830896">Silenciar los sitios que reproducen sonido</translation>
-<translation id="3730075448226062617">Para permitir que Chrome acceda a tu micrófono, actívalo también en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="3744111561329211289">Sincronización en segundo plano</translation>
-<translation id="3822502789641063741">¿Borrar el almacenamiento de sitios?</translation>
 <translation id="385051799172605136">Atrás</translation>
 <translation id="3859306556332390985">Buscar más adelante</translation>
 <translation id="3955193568934677022">Permitir que los sitios reproduzcan contenido protegido (recomendado)</translation>
@@ -95,16 +93,20 @@
 <translation id="4008040567710660924">Permite las cookies para un sitio específico.</translation>
 <translation id="4046123991198612571">Siguiente pista</translation>
 <translation id="4165986682804962316">Configuración de sitios</translation>
+<translation id="4200726100658658164">Abrir la configuración de la ubicación</translation>
 <translation id="4226663524361240545">Es posible que las notificaciones hagan vibrar el dispositivo</translation>
 <translation id="4242533952199664413">Abrir la configuración</translation>
 <translation id="4259722352634471385">Navegación bloqueada: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Permitido</translation>
 <translation id="429312253194641664">Un sitio está reproduciendo contenido multimedia</translation>
+<translation id="42981349822642051">Expandir</translation>
+<translation id="4336434711095810371">Borrar todos los datos</translation>
 <translation id="4433925000917964731">Google proporcionó la página básica</translation>
 <translation id="4434045419905280838">Ventanas emergentes y redireccionamientos</translation>
 <translation id="445467742685312942">Permitir que los sitios reproduzcan contenido protegido</translation>
 <translation id="4468959413250150279">Silenciar un sitio específico.</translation>
 <translation id="4479647676395637221">Preguntar primero antes de permitir que los sitios usen tu cámara (recomendado)</translation>
+<translation id="4534723447064627427">Para permitir que <ph name="APP_NAME" /> acceda a tu micrófono, actívalo también en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Detalles</translation>
 <translation id="4645575059429386691">Administrado por tus padres</translation>
 <translation id="4670064810192446073">Realidad virtual</translation>
@@ -112,7 +114,6 @@
 <translation id="4883854917563148705">No puede restablecerse la configuración administrada</translation>
 <translation id="4887024562049524730">Preguntar antes de permitir que los sitios utilicen tus datos y dispositivos de realidad virtual (recomendado)</translation>
 <translation id="4962975101802056554">Revocar todos los permisos del dispositivo</translation>
-<translation id="4964199952259983386">Para permitir el uso de la RA en Chrome, también debes activar la cámara en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Avanzar</translation>
 <translation id="4996978546172906250">Compartir mediante</translation>
 <translation id="5039804452771397117">Permitir</translation>
@@ -120,14 +121,15 @@
 <translation id="5063480226653192405">Uso</translation>
 <translation id="5100237604440890931">Contraído; haz clic para expandir.</translation>
 <translation id="5123685120097942451">Pestaña de incógnito</translation>
+<translation id="528192093759286357">Arrastra el dedo desde la parte superior y toca el botón Atrás para salir de la pantalla completa.</translation>
 <translation id="5300589172476337783">Mostrar</translation>
 <translation id="5301954838959518834">Entendido</translation>
-<translation id="5307446750509046227">Borrar el almacenamiento de sitios</translation>
 <translation id="5313967007315987356">Agregar sitio</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5335288049665977812">Permitir que los sitios ejecuten JavaScript (recomendado)</translation>
 <translation id="534295439873310000">Dispositivos NFC</translation>
 <translation id="5354152178998424783">Esta acción borrará <ph name="DATASIZE" /> de datos y cookies que almacenaron los sitios.</translation>
+<translation id="5384883051496921101">Este sitio está a punto de compartir información con una app fuera del modo de navegación incógnito.</translation>
 <translation id="5391532827096253100">La conexión con este sitio no es segura. Consulta la información del sitio.</translation>
 <translation id="5494752089476963479">Bloquear anuncios de sitios que muestran anuncios intrusivos o engañosos</translation>
 <translation id="5505264765875738116">Los sitios no podrán preguntarte si quieres recibir notificaciones</translation>
@@ -146,6 +148,7 @@
 <translation id="5916664084637901428">Activado</translation>
 <translation id="5922853908706496913">Compartiendo tu pantalla</translation>
 <translation id="5939518447894949180">Restablecer</translation>
+<translation id="6015775454662021376">Controla el acceso de este sitio a tu dispositivo</translation>
 <translation id="6040143037577758943">Cerrar</translation>
 <translation id="6042308850641462728">Más</translation>
 <translation id="6064125863973209585">Descargas completadas</translation>
@@ -153,7 +156,6 @@
 <translation id="6177111841848151710">Se bloqueó para el motor de búsqueda actual</translation>
 <translation id="6181444274883918285">Agregar excepción de sitio web</translation>
 <translation id="6192792657125177640">Excepciones</translation>
-<translation id="6194112207524046168">Para permitir que Chrome acceda a tu cámara, actívala también en <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="6196640612572343990">Bloquear cookies de terceros</translation>
 <translation id="6206551242102657620">La conexión es segura. Consulta la información del sitio.</translation>
 <translation id="6216432067784365534">Opciones de <ph name="NAME_OF_LIST_ITEM" /></translation>
@@ -161,6 +163,7 @@
 <translation id="6295158916970320988">Todos los sitios</translation>
 <translation id="6320088164292336938">Vibrar</translation>
 <translation id="6388207532828177975">Borrar y restablecer</translation>
+<translation id="6423924377271166037">Borrar cookies</translation>
 <translation id="6439114592976064011">Impedir que los sitios utilicen tus datos y dispositivos de realidad virtual</translation>
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6527303717912515753">Compartir</translation>
@@ -168,6 +171,7 @@
 <translation id="6561560012278703671">Usar un tipo de aviso más discreto (bloquear las notificaciones emergentes para evitar interrupciones)</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> GB</translation>
 <translation id="6612358246767739896">Contenido protegido</translation>
+<translation id="662080504995468778">Permanecer aquí</translation>
 <translation id="6643016212128521049">Borrar</translation>
 <translation id="6697925417670533197">Descargas activas</translation>
 <translation id="6746124502594467657">Mover hacia abajo</translation>
@@ -190,6 +194,7 @@
 <translation id="7128222689758636196">Habilitar el motor de búsqueda actual</translation>
 <translation id="7141896414559753902">Bloquea las ventanas emergentes y los redireccionamientos en los sitios (recomendado)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> KB</translation>
+<translation id="7243308994586599757">Opciones disponibles junto a la parte inferior de la pantalla</translation>
 <translation id="7250468141469952378">Elementos seleccionados: <ph name="ITEM_COUNT" /></translation>
 <translation id="7302486331832100261">Por lo general, bloqueas las notificaciones. Para permitirlas, presiona Detalles.</translation>
 <translation id="7423098979219808738">Preguntar primero</translation>
@@ -225,32 +230,38 @@
 <translation id="8261506727792406068">Borrar</translation>
 <translation id="8300705686683892304">Administrados por una app</translation>
 <translation id="8372893542064058268">Permite la sincronización en segundo plano para un sitio específico.</translation>
+<translation id="8376384591331888629">Habilitar también cookies de terceros en este sitio</translation>
 <translation id="83792324527827022">Un sitio está utilizando la cámara y el micrófono</translation>
 <translation id="8380167699614421159">Este sitio muestra anuncios intrusivos o engañosos</translation>
 <translation id="8394832520002899662">Presiona para volver al sitio</translation>
 <translation id="8425213833346101688">Cambiar</translation>
 <translation id="8441146129660941386">Buscar más atrás</translation>
+<translation id="8444433999583714703">Para permitir que <ph name="APP_NAME" /> acceda a tu ubicación, actívala también en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Revocar permiso para el dispositivo</translation>
+<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 cookie en uso}other{# cookies en uso}}</translation>
 <translation id="8463851957836045671">El sitio es rápido</translation>
 <translation id="851751545965956758">Impedir que los sitios se conecten a los dispositivos</translation>
 <translation id="857943718398505171">Permitido (recomendado)</translation>
 <translation id="8609465669617005112">Subir</translation>
 <translation id="8676374126336081632">Borrar entrada</translation>
 <translation id="8702612070107455751">Se borrarán los datos sin conexión.</translation>
+<translation id="8719283222052720129">Activa el permiso para <ph name="APP_NAME" /> en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="8725066075913043281">Intentar nuevamente</translation>
 <translation id="8730621377337864115">Listo</translation>
 <translation id="8737217482364735741">Esta acción borrará todos los datos y cookies almacenados por <ph name="ORIGIN" />.</translation>
 <translation id="8801436777607969138">Bloquea JavaScript para un sitio específico.</translation>
 <translation id="8816026460808729765">Impedir que los sitios accedan a los sensores</translation>
 <translation id="8847988622838149491">USB</translation>
-<translation id="885701979325669005">Almacenamiento</translation>
 <translation id="8926666909099850184">La tecnología NFC está desactivada en este dispositivo. Actívala en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="8929372349074745002">Este sitio se abre y responde rápidamente para la mayoría de las personas</translation>
 <translation id="8941729603749328384">www.ejemplo.com</translation>
+<translation id="894871326938397531">¿Deseas salir del modo de navegación incógnito?</translation>
 <translation id="8958424370300090006">Bloquea las cookies en un sitio específico.</translation>
 <translation id="8959122750345127698">Navegación inaccesible: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Administrado por tus padres</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
+<translation id="913657688200966289">Activa los permisos para <ph name="APP_NAME" /> en la <ph name="BEGIN_LINK" />Configuración de Android<ph name="END_LINK" />.</translation>
 <translation id="945632385593298557">Acceso al micrófono</translation>
 <translation id="965817943346481315">Bloquear si el sitio muestra anuncios intrusivos o engañosos (opción recomendada)</translation>
+<translation id="967624055006145463">Datos almacenados</translation>
 </translationbundle>

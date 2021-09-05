@@ -128,6 +128,7 @@ class CORE_EXPORT NGLayoutInputNode {
     DCHECK(IsListMarker());
     return ToLayoutNGOutsideListMarker(box_)->NeedsOccupyWholeLine();
   }
+  bool IsButton() const { return IsBlock() && box_->IsLayoutNGButton(); }
   bool IsFieldsetContainer() const {
     return IsBlock() && box_->IsLayoutNGFieldset();
   }
@@ -142,6 +143,23 @@ class CORE_EXPORT NGLayoutInputNode {
   bool IsTable() const { return IsBlock() && box_->IsTable(); }
 
   bool IsTableCaption() const { return IsBlock() && box_->IsTableCaption(); }
+
+  // Section with empty rows is considered empty.
+  bool IsEmptyTableSection() const;
+
+  bool IsTableCol() const {
+    return Style().Display() == EDisplay::kTableColumn;
+  }
+
+  bool IsTableColgroup() const {
+    return Style().Display() == EDisplay::kTableColumnGroup;
+  }
+
+  wtf_size_t TableColumnSpan() const;
+
+  wtf_size_t TableCellColspan() const;
+
+  wtf_size_t TableCellRowspan() const;
 
   bool IsMathRoot() const { return box_->IsMathMLRoot(); }
 
@@ -193,7 +211,7 @@ class CORE_EXPORT NGLayoutInputNode {
                      base::Optional<LayoutUnit>* computed_block_size) const;
 
   // Returns the next sibling.
-  NGLayoutInputNode NextSibling();
+  NGLayoutInputNode NextSibling() const;
 
   Document& GetDocument() const { return box_->GetDocument(); }
 

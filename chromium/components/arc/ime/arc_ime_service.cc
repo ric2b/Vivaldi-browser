@@ -10,18 +10,22 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_util.h"
 #include "components/arc/ime/arc_ime_bridge_impl.h"
+#include "components/arc/ime/arc_ime_util.h"
+#include "components/arc/ime/key_event_result_receiver.h"
 #include "components/exo/wm_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/ime/input_method_delegate.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
@@ -153,7 +157,8 @@ ArcImeService::ArcImeService(content::BrowserContext* context,
       ime_type_(ui::TEXT_INPUT_TYPE_NONE),
       ime_flags_(ui::TEXT_INPUT_FLAG_NONE),
       is_personalized_learning_allowed_(false),
-      has_composition_text_(false) {
+      has_composition_text_(false),
+      receiver_(std::make_unique<KeyEventResultReceiver>()) {
   if (aura::Env::HasInstance())
     aura::Env::GetInstance()->AddObserver(this);
   arc_window_delegate_->RegisterFocusObserver();
@@ -387,6 +392,19 @@ void ArcImeService::OnCursorRectChangedWithSurroundingText(
     input_method->OnCaretBoundsChanged(this);
 }
 
+bool ArcImeService::ShouldEnableKeyEventForwarding() {
+  return base::FeatureList::IsEnabled(
+      chromeos::features::kArcPreImeKeyEventSupport);
+}
+
+void ArcImeService::SendKeyEvent(std::unique_ptr<ui::KeyEvent> key_event,
+                                 KeyEventDoneCallback callback) {
+  ui::InputMethod* const input_method = GetInputMethod();
+  receiver_->SetCallback(std::move(callback));
+  if (input_method)
+    ignore_result(input_method->DispatchKeyEvent(key_event.get()));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Overridden from ash::KeyboardControllerObserver
 void ArcImeService::OnKeyboardAppearanceChanged(
@@ -415,7 +433,7 @@ void ArcImeService::SetCompositionText(
   ime_bridge_->SendSetCompositionText(composition);
 }
 
-void ArcImeService::ConfirmCompositionText(bool keep_selection) {
+uint32_t ArcImeService::ConfirmCompositionText(bool keep_selection) {
   if (!keep_selection) {
     InvalidateSurroundingTextAndSelectionRange();
   }
@@ -423,6 +441,7 @@ void ArcImeService::ConfirmCompositionText(bool keep_selection) {
   // Note: SendConfirmCompositonText() will commit the text and
   // keep the selection unchanged
   ime_bridge_->SendConfirmCompositionText();
+  return UINT32_MAX;
 }
 
 void ArcImeService::ClearCompositionText() {
@@ -457,10 +476,7 @@ void ArcImeService::InsertChar(const ui::KeyEvent& event) {
   // For apps that doesn't handle hardware keyboard events well, keys that are
   // typically on software keyboard and lack of them are fatal, namely,
   // unmodified enter and backspace keys are sent through IME.
-  constexpr int kModifierMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
-                                ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN |
-                                ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN;
-  if ((event.flags() & kModifierMask) == 0) {
+  if (!HasModifier(&event) && !ShouldEnableKeyEventForwarding()) {
     if (event.key_code() ==  ui::VKEY_RETURN) {
       has_composition_text_ = false;
       ime_bridge_->SendInsertText(base::ASCIIToUTF16("\n"));
@@ -473,14 +489,7 @@ void ArcImeService::InsertChar(const ui::KeyEvent& event) {
     }
   }
 
-  // Drop 0x00-0x1f (C0 controls), 0x7f (DEL), and 0x80-0x9f (C1 controls).
-  // See: https://en.wikipedia.org/wiki/Unicode_control_characters
-  // They are control characters and not treated as a text insertion.
-  const base::char16 ch = event.GetCharacter();
-  const bool is_control_char = (0x00 <= ch && ch <= 0x1f) ||
-                               (0x7f <= ch && ch <= 0x9f);
-
-  if (!is_control_char && !ui::IsSystemKeyModifier(event.flags())) {
+  if (!IsControlChar(&event) && !ui::IsSystemKeyModifier(event.flags())) {
     has_composition_text_ = false;
     ime_bridge_->SendInsertText(base::string16(1, event.GetText()));
   }
@@ -607,16 +616,74 @@ bool ArcImeService::ShouldDoLearning() {
 bool ArcImeService::SetCompositionFromExistingText(
     const gfx::Range& range,
     const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
+  // TODO(https://crbug.com/952757): Implement this method using
+  // Android API's |SetComposingRegion|.
+  if (!selection_range_.is_empty() || !selection_range_.IsBoundedBy(range)) {
+    return true;
+  }
+
+  // |text_in_range_| might be only a subset of the full text, so make sure that
+  // the composition range is within bounds.
+  const gfx::Range range_relative_to_text(
+      range.GetMin() - text_range_.GetMin(),
+      range.GetMax() - text_range_.GetMin());
+  if (range_relative_to_text.GetMin() < 0 ||
+      range_relative_to_text.length() > text_in_range_.length()) {
+    return true;
+  }
+
+  // Save the text to be composed since we need to recompose it later.
+  base::string16 text = text_in_range_.substr(range_relative_to_text.GetMin(),
+                                              range_relative_to_text.length());
+  const int cursor_relative_to_text =
+      selection_range_.start() - text_range_.GetMin();
+
+  // Confirm the existing composition, delete the text to be composed, and
+  // recompose it.
+  ConfirmCompositionText(/*keep_selection=*/true);
+  ExtendSelectionAndDelete(
+      /*before=*/cursor_relative_to_text - range_relative_to_text.GetMin(),
+      /*after=*/range_relative_to_text.GetMax() - cursor_relative_to_text);
+  ui::CompositionText composition;
+
+  composition.text = std::move(text);
+  composition.selection =
+      gfx::Range(cursor_relative_to_text, cursor_relative_to_text);
+  composition.ime_text_spans = ui_ime_text_spans;
+  SetCompositionText(std::move(composition));
+  return true;
+}
+
+gfx::Range ArcImeService::GetAutocorrectRange() const {
+  // TODO(https:://crbug.com/1091088): Implement this method.
+  return gfx::Range();
+}
+
+gfx::Rect ArcImeService::GetAutocorrectCharacterBounds() const {
   // TODO(https://crbug.com/952757): Implement this method.
   NOTIMPLEMENTED_LOG_ONCE();
-  return false;
+  return gfx::Rect();
 }
 
 bool ArcImeService::SetAutocorrectRange(const base::string16& autocorrect_text,
                                         const gfx::Range& range) {
+  base::UmaHistogramEnumeration("InputMethod.Assistive.Autocorrect.Count",
+                                TextInputClient::SubClass::kArcImeService);
   // TODO(https:://crbug.com/1091088): Implement this method.
   NOTIMPLEMENTED_LOG_ONCE();
   return false;
+}
+
+void ArcImeService::OnDispatchingKeyEventPostIME(ui::KeyEvent* event) {
+  if (ShouldEnableKeyEventForwarding() && receiver_->HasCallback()) {
+    receiver_->DispatchKeyEventPostIME(event);
+    event->SetHandled();
+  }
+}
+
+void ArcImeService::ClearAutocorrectRange() {
+  // TODO(https:://crbug.com/1091088): Implement this method.
+  NOTIMPLEMENTED_LOG_ONCE();
 }
 
 // static

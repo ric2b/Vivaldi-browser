@@ -22,10 +22,11 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/debug/stack_trace.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/memory/singleton.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -35,6 +36,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_local_storage.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -45,8 +47,9 @@
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkTypes.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/x/x11_cursor.h"
+#include "ui/base/x/x11_cursor_loader.h"
 #include "ui/base/x/x11_menu_list.h"
-#include "ui/base/x/x11_util_internal.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/event_utils.h"
@@ -94,7 +97,7 @@ int DefaultX11ErrorHandler(XDisplay* d, XErrorEvent* e) {
   if (TLSDestructionCheckerForX11::HasBeenDestroyed())
     return 0;
 
-  if (base::MessageLoopCurrent::Get()) {
+  if (base::CurrentThread::Get()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(&x11::LogErrorEventDescription, *e));
   } else {
@@ -163,219 +166,6 @@ bool GetWindowManagerName(std::string* wm_name) {
   return !err_tracker.FoundNewError() && result;
 }
 
-unsigned int GetMaxCursorSize() {
-  constexpr unsigned int kQuerySize = std::numeric_limits<uint16_t>::max();
-  auto* connection = x11::Connection::Get();
-  x11::QueryBestSizeRequest request{
-      x11::QueryShapeOf::LargestCursor,
-      static_cast<x11::Window>(GetX11RootWindow()), kQuerySize, kQuerySize};
-  if (auto response = connection->QueryBestSize(request).Sync())
-    return std::min(response->width, response->height);
-  // libXcursor defines MAX_BITMAP_CURSOR_SIZE to 64 in src/xcursorint.h, so use
-  // this as a fallback in case the X server returns zero size, which can happen
-  // on some buggy implementations of XWayland/XMir.
-  return 64;
-}
-
-// A process wide singleton cache for custom X cursors.
-class XCustomCursorCache {
- public:
-  static XCustomCursorCache* GetInstance() {
-    return base::Singleton<XCustomCursorCache>::get();
-  }
-
-  ::Cursor InstallCustomCursor(XcursorImage* image) {
-    XCustomCursor* custom_cursor = new XCustomCursor(image);
-    ::Cursor xcursor = custom_cursor->cursor();
-    cache_[xcursor] = custom_cursor;
-    return xcursor;
-  }
-
-  void Ref(::Cursor cursor) { cache_[cursor]->Ref(); }
-
-  void Unref(::Cursor cursor) {
-    if (cache_[cursor]->Unref())
-      cache_.erase(cursor);
-  }
-
-  void Clear() { cache_.clear(); }
-
-  const XcursorImage* GetXcursorImage(::Cursor cursor) const {
-    return cache_.find(cursor)->second->image();
-  }
-
- private:
-  friend struct base::DefaultSingletonTraits<XCustomCursorCache>;
-
-  class XCustomCursor {
-   public:
-    // This takes ownership of the image.
-    explicit XCustomCursor(XcursorImage* image) : image_(image), ref_(1) {
-      cursor_ = XcursorImageLoadCursor(gfx::GetXDisplay(), image);
-    }
-
-    ~XCustomCursor() {
-      XcursorImageDestroy(image_);
-      XFreeCursor(gfx::GetXDisplay(), cursor_);
-    }
-
-    ::Cursor cursor() const { return cursor_; }
-
-    void Ref() { ++ref_; }
-
-    // Returns true if the cursor was destroyed because of the unref.
-    bool Unref() {
-      if (--ref_ == 0) {
-        delete this;
-        return true;
-      }
-      return false;
-    }
-
-    const XcursorImage* image() const { return image_; }
-
-   private:
-    XcursorImage* image_;
-    int ref_;
-    ::Cursor cursor_;
-
-    DISALLOW_COPY_AND_ASSIGN(XCustomCursor);
-  };
-
-  XCustomCursorCache() = default;
-  ~XCustomCursorCache() { Clear(); }
-
-  std::map<::Cursor, XCustomCursor*> cache_;
-  DISALLOW_COPY_AND_ASSIGN(XCustomCursorCache);
-};
-
-// Converts a SKBitmap to unpremul alpha.
-SkBitmap ConvertSkBitmapToUnpremul(const SkBitmap& bitmap) {
-  DCHECK_NE(bitmap.alphaType(), kUnpremul_SkAlphaType);
-
-  SkImageInfo image_info = SkImageInfo::MakeN32(bitmap.width(), bitmap.height(),
-                                                kUnpremul_SkAlphaType);
-  SkBitmap converted_bitmap;
-  converted_bitmap.allocPixels(image_info);
-  bitmap.readPixels(image_info, converted_bitmap.getPixels(),
-                    image_info.minRowBytes(), 0, 0);
-
-  return converted_bitmap;
-}
-
-// Returns a cursor name, compatible with either X11 or the FreeDesktop.org
-// cursor spec
-// (https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#x_font_cursors
-// and https://www.freedesktop.org/wiki/Specifications/cursor-spec/), followed
-// by fallbacks that can work as replacements in some environments where the
-// original may not be available (e.g. desktop environments other than
-// GNOME and KDE).
-// TODO(hferreiro): each list starts with the FreeDesktop.org icon name but
-// "ns-resize", "ew-resize", "nesw-resize", "nwse-resize", "grab", "grabbing",
-// which were not available in older versions of Breeze, the default KDE theme.
-std::vector<const char*> CursorNamesFromType(mojom::CursorType type) {
-  switch (type) {
-    case mojom::CursorType::kMove:
-      // Returning "move" is the correct thing here, but Blink doesn't make a
-      // distinction between move and all-scroll.  Other platforms use a cursor
-      // more consistent with all-scroll, so use that.
-    case mojom::CursorType::kMiddlePanning:
-    case mojom::CursorType::kMiddlePanningVertical:
-    case mojom::CursorType::kMiddlePanningHorizontal:
-      return {"all-scroll", "fleur"};
-    case mojom::CursorType::kEastPanning:
-    case mojom::CursorType::kEastResize:
-      return {"e-resize", "right_side"};
-    case mojom::CursorType::kNorthPanning:
-    case mojom::CursorType::kNorthResize:
-      return {"n-resize", "top_side"};
-    case mojom::CursorType::kNorthEastPanning:
-    case mojom::CursorType::kNorthEastResize:
-      return {"ne-resize", "top_right_corner"};
-    case mojom::CursorType::kNorthWestPanning:
-    case mojom::CursorType::kNorthWestResize:
-      return {"nw-resize", "top_left_corner"};
-    case mojom::CursorType::kSouthPanning:
-    case mojom::CursorType::kSouthResize:
-      return {"s-resize", "bottom_side"};
-    case mojom::CursorType::kSouthEastPanning:
-    case mojom::CursorType::kSouthEastResize:
-      return {"se-resize", "bottom_right_corner"};
-    case mojom::CursorType::kSouthWestPanning:
-    case mojom::CursorType::kSouthWestResize:
-      return {"sw-resize", "bottom_left_corner"};
-    case mojom::CursorType::kWestPanning:
-    case mojom::CursorType::kWestResize:
-      return {"w-resize", "left_side"};
-    case mojom::CursorType::kNone:
-      return {"none"};
-    case mojom::CursorType::kGrab:
-      return {"openhand", "grab"};
-    case mojom::CursorType::kGrabbing:
-      return {"closedhand", "grabbing", "hand2"};
-    case mojom::CursorType::kCross:
-      return {"crosshair", "cross"};
-    case mojom::CursorType::kHand:
-      return {"pointer", "hand", "hand2"};
-    case mojom::CursorType::kIBeam:
-      return {"text", "xterm"};
-    case mojom::CursorType::kProgress:
-      return {"progress", "left_ptr_watch", "watch"};
-    case mojom::CursorType::kWait:
-      return {"wait", "watch"};
-    case mojom::CursorType::kHelp:
-      return {"help"};
-    case mojom::CursorType::kNorthSouthResize:
-      return {"sb_v_double_arrow", "ns-resize"};
-    case mojom::CursorType::kEastWestResize:
-      return {"sb_h_double_arrow", "ew-resize"};
-    case mojom::CursorType::kColumnResize:
-      return {"col-resize", "sb_h_double_arrow"};
-    case mojom::CursorType::kRowResize:
-      return {"row-resize", "sb_v_double_arrow"};
-    case mojom::CursorType::kNorthEastSouthWestResize:
-      return {"size_bdiag", "nesw-resize", "fd_double_arrow"};
-    case mojom::CursorType::kNorthWestSouthEastResize:
-      return {"size_fdiag", "nwse-resize", "bd_double_arrow"};
-    case mojom::CursorType::kVerticalText:
-      return {"vertical-text"};
-    case mojom::CursorType::kZoomIn:
-      return {"zoom-in"};
-    case mojom::CursorType::kZoomOut:
-      return {"zoom-out"};
-    case mojom::CursorType::kCell:
-      return {"cell", "plus"};
-    case mojom::CursorType::kContextMenu:
-      return {"context-menu"};
-    case mojom::CursorType::kAlias:
-      return {"alias"};
-    case mojom::CursorType::kNoDrop:
-      return {"no-drop"};
-    case mojom::CursorType::kCopy:
-      return {"copy"};
-    case mojom::CursorType::kNotAllowed:
-      return {"not-allowed", "crossed_circle"};
-    case mojom::CursorType::kDndNone:
-      return {"dnd-none", "hand2"};
-    case mojom::CursorType::kDndMove:
-      return {"dnd-move", "hand2"};
-    case mojom::CursorType::kDndCopy:
-      return {"dnd-copy", "hand2"};
-    case mojom::CursorType::kDndLink:
-      return {"dnd-link", "hand2"};
-    case mojom::CursorType::kCustom:
-      // kCustom is for custom image cursors. The platform cursor will be set
-      // at WebCursor::GetPlatformCursor().
-      NOTREACHED();
-      FALLTHROUGH;
-    case mojom::CursorType::kNull:
-    case mojom::CursorType::kPointer:
-      return {"left_ptr"};
-  }
-  NOTREACHED();
-  return {"left_ptr"};
-}
-
 }  // namespace
 
 void DeleteProperty(x11::Window window, x11::Atom name) {
@@ -425,14 +215,9 @@ void WithdrawWindow(x11::Window window) {
 
   auto root = connection->default_root();
   x11::UnmapNotifyEvent event{.event = root, .window = window};
-  auto event_bytes = x11::Write(event);
-  event_bytes.resize(32);
-
   auto mask =
       x11::EventMask::SubstructureNotify | x11::EventMask::SubstructureRedirect;
-  x11::SendEventRequest request{false, root, mask};
-  std::copy(event_bytes.begin(), event_bytes.end(), request.event.begin());
-  connection->SendEvent(request);
+  SendEvent(event, root, mask);
 }
 
 void RaiseWindow(x11::Window window) {
@@ -473,35 +258,57 @@ x11::Window CreateDummyWindow(const std::string& name) {
   return window;
 }
 
-x11::KeyCode KeysymToKeycode(x11::Connection* connection, x11::KeySym keysym) {
-  uint8_t min_keycode = static_cast<uint8_t>(connection->setup().min_keycode);
-  uint8_t max_keycode = static_cast<uint8_t>(connection->setup().max_keycode);
-  uint8_t count = max_keycode - min_keycode + 1;
-  auto future =
-      connection->GetKeyboardMapping({connection->setup().min_keycode, count});
-  if (auto reply = future.Sync()) {
-    DCHECK_EQ(count * reply->keysyms_per_keycode,
-              static_cast<int>(reply->keysyms.size()));
-    for (size_t i = 0; i < reply->keysyms.size(); i++) {
-      if (reply->keysyms[i] == keysym) {
-        return static_cast<x11::KeyCode>(min_keycode +
-                                         i / reply->keysyms_per_keycode);
-      }
-    }
+void DrawPixmap(x11::Connection* connection,
+                x11::VisualId visual,
+                x11::Drawable drawable,
+                x11::GraphicsContext gc,
+                const SkPixmap& skia_pixmap,
+                int src_x,
+                int src_y,
+                int dst_x,
+                int dst_y,
+                int width,
+                int height) {
+  const auto* visual_info = connection->GetVisualInfoFromId(visual);
+  if (!visual_info)
+    return;
+
+  auto bpp = visual_info->format->bits_per_pixel;
+  auto align = visual_info->format->scanline_pad;
+  size_t row_bits = bpp * width;
+  row_bits += (align - (row_bits % align)) % align;
+  size_t row_bytes = (row_bits + 7) / 8;
+
+  auto color_type = ColorTypeForVisual(visual);
+  if (color_type == kUnknown_SkColorType) {
+    // TODO(https://crbug.com/1066670): Add a fallback path in case any users
+    // are running a server that uses visual types for which Skia doesn't have
+    // a corresponding color format.
+    return;
   }
-  return {};
+  SkImageInfo image_info =
+      SkImageInfo::Make(width, height, color_type, kPremul_SkAlphaType);
+
+  std::vector<uint8_t> vec(row_bytes * height);
+  SkPixmap pixmap(image_info, vec.data(), row_bytes);
+  skia_pixmap.readPixels(pixmap, src_x, src_y);
+  x11::PutImageRequest put_image_request{
+      .format = x11::ImageFormat::ZPixmap,
+      .drawable = drawable,
+      .gc = gc,
+      .width = width,
+      .height = height,
+      .dst_x = dst_x,
+      .dst_y = dst_y,
+      .left_pad = 0,
+      .depth = visual_info->format->depth,
+      .data = base::RefCountedBytes::TakeVector(&vec),
+  };
+  connection->PutImage(put_image_request);
 }
 
 bool IsXInput2Available() {
   return DeviceDataManagerX11::GetInstance()->IsXInput2Available();
-}
-
-bool QueryRenderSupport(Display* dpy) {
-  int dummy;
-  // We don't care about the version of Xrender since all the features which
-  // we use are included in every version.
-  static bool render_supported = XRenderQueryExtension(dpy, &dummy, &dummy);
-  return render_supported;
 }
 
 bool QueryShmSupport() {
@@ -518,95 +325,24 @@ int ShmEventBase() {
   return event_base;
 }
 
-::Cursor CreateReffedCustomXCursor(XcursorImage* image) {
-  return XCustomCursorCache::GetInstance()->InstallCustomCursor(image);
-}
-
-void RefCustomXCursor(::Cursor cursor) {
-  XCustomCursorCache::GetInstance()->Ref(cursor);
-}
-
-void UnrefCustomXCursor(::Cursor cursor) {
-  XCustomCursorCache::GetInstance()->Unref(cursor);
-}
-
-XcursorImage* SkBitmapToXcursorImage(const SkBitmap& cursor_image,
-                                     const gfx::Point& hotspot) {
-  // TODO(crbug.com/596782): It is possible for cursor_image to be zeroed out
-  // at this point, which leads to benign debug errors. Once this is fixed, we
-  // should  DCHECK_EQ(cursor_image.colorType(), kN32_SkColorType).
-
-  // X11 expects bitmap with unpremul alpha. If bitmap is premul then convert,
-  // otherwise semi-transparent parts of cursor will look strange.
-  const SkBitmap converted = (cursor_image.alphaType() != kUnpremul_SkAlphaType)
-                                 ? ConvertSkBitmapToUnpremul(cursor_image)
-                                 : cursor_image;
-
-  gfx::Point hotspot_point = hotspot;
-  SkBitmap scaled;
-
-  // X11 seems to have issues with cursors when images get larger than 64
-  // pixels. So rescale the image if necessary.
-  static const float kMaxPixel = GetMaxCursorSize();
-  bool needs_scale = false;
-  if (converted.width() > kMaxPixel || converted.height() > kMaxPixel) {
-    float scale = 1.f;
-    if (converted.width() > converted.height())
-      scale = kMaxPixel / converted.width();
-    else
-      scale = kMaxPixel / converted.height();
-
-    scaled = skia::ImageOperations::Resize(
-        converted, skia::ImageOperations::RESIZE_BETTER,
-        static_cast<int>(converted.width() * scale),
-        static_cast<int>(converted.height() * scale));
-    hotspot_point = gfx::ScaleToFlooredPoint(hotspot, scale);
-    needs_scale = true;
-  }
-
-  const SkBitmap& bitmap = needs_scale ? scaled : converted;
-  XcursorImage* image = XcursorImageCreate(bitmap.width(), bitmap.height());
-  image->xhot = std::min(bitmap.width() - 1, hotspot_point.x());
-  image->yhot = std::min(bitmap.height() - 1, hotspot_point.y());
-
-  if (bitmap.width() && bitmap.height()) {
-    // The |bitmap| contains ARGB image, so just copy it.
-    memcpy(image->pixels, bitmap.getPixels(),
-           bitmap.width() * bitmap.height() * 4);
-  }
-
-  return image;
-}
-
-::Cursor LoadCursorFromType(mojom::CursorType type) {
-  for (auto* name : CursorNamesFromType(type)) {
-    ::Cursor cursor = XcursorLibraryLoadCursor(gfx::GetXDisplay(), name);
-    if (cursor != x11::None)
-      return cursor;
-  }
-  return x11::None;
-}
-
 int CoalescePendingMotionEvents(const x11::Event* x11_event,
                                 x11::Event* last_event) {
-  const XEvent* xev = &x11_event->xlib_event();
-  DCHECK(xev->type == x11::MotionNotifyEvent::opcode ||
-         xev->type == x11::GeGenericEvent::opcode);
+  const auto* motion = x11_event->As<x11::MotionNotifyEvent>();
+  const auto* device = x11_event->As<x11::Input::DeviceEvent>();
+  DCHECK(motion || device);
   auto* conn = x11::Connection::Get();
-  bool is_motion = false;
   int num_coalesced = 0;
 
   conn->ReadResponses();
-  if (xev->type == x11::MotionNotifyEvent::opcode) {
-    is_motion = true;
+  if (motion) {
     for (auto it = conn->events().begin(); it != conn->events().end();) {
-      const auto& next_event = it->xlib_event();
+      const auto& next_event = *it;
       // Discard all but the most recent motion event that targets the same
       // window with unchanged state.
-      if (next_event.type == x11::MotionNotifyEvent::opcode &&
-          next_event.xmotion.window == xev->xmotion.window &&
-          next_event.xmotion.subwindow == xev->xmotion.subwindow &&
-          next_event.xmotion.state == xev->xmotion.state) {
+      const auto* next_motion = next_event.As<x11::MotionNotifyEvent>();
+      if (next_motion && next_motion->event == motion->event &&
+          next_motion->child == motion->child &&
+          next_motion->state == motion->state) {
         *last_event = std::move(*it);
         it = conn->events().erase(it);
       } else {
@@ -614,48 +350,39 @@ int CoalescePendingMotionEvents(const x11::Event* x11_event,
       }
     }
   } else {
-    int event_type = xev->xgeneric.evtype;
-    XIDeviceEvent* xievent = static_cast<XIDeviceEvent*>(xev->xcookie.data);
-    DCHECK(event_type == XI_Motion || event_type == XI_TouchUpdate);
-    is_motion = event_type == XI_Motion;
+    DCHECK(device->opcode == x11::Input::DeviceEvent::Motion ||
+           device->opcode == x11::Input::DeviceEvent::TouchUpdate);
 
     auto* ddmx11 = ui::DeviceDataManagerX11::GetInstance();
     for (auto it = conn->events().begin(); it != conn->events().end();) {
-      auto& next_event = it->xlib_event();
+      auto* next_device = it->As<x11::Input::DeviceEvent>();
 
-      if (next_event.type != x11::GeGenericEvent::opcode ||
-          !next_event.xcookie.data) {
+      if (!next_device)
         break;
-      }
 
       // If this isn't from a valid device, throw the event away, as
       // that's what the message pump would do. Device events come in pairs
       // with one from the master and one from the slave so there will
       // always be at least one pending.
-      if (!ui::TouchFactory::GetInstance()->ShouldProcessXI2Event(
-              &next_event)) {
+      if (!ui::TouchFactory::GetInstance()->ShouldProcessDeviceEvent(
+              *next_device)) {
         it = conn->events().erase(it);
         continue;
       }
 
-      if (next_event.type == x11::GeGenericEvent::opcode &&
-          next_event.xgeneric.evtype == event_type &&
+      if (next_device->opcode == device->opcode &&
           !ddmx11->IsCMTGestureEvent(*it) &&
           ddmx11->GetScrollClassEventDetail(*it) == SCROLL_TYPE_NO_SCROLL) {
-        XIDeviceEvent* next_xievent =
-            static_cast<XIDeviceEvent*>(next_event.xcookie.data);
         // Confirm that the motion event is targeted at the same window
         // and that no buttons or modifiers have changed.
-        if (xievent->event == next_xievent->event &&
-            xievent->child == next_xievent->child &&
-            xievent->detail == next_xievent->detail &&
-            xievent->buttons.mask_len == next_xievent->buttons.mask_len &&
-            (memcmp(xievent->buttons.mask, next_xievent->buttons.mask,
-                    xievent->buttons.mask_len) == 0) &&
-            xievent->mods.base == next_xievent->mods.base &&
-            xievent->mods.latched == next_xievent->mods.latched &&
-            xievent->mods.locked == next_xievent->mods.locked &&
-            xievent->mods.effective == next_xievent->mods.effective) {
+        if (device->event == next_device->event &&
+            device->child == next_device->child &&
+            device->detail == next_device->detail &&
+            device->button_mask == next_device->button_mask &&
+            device->mods.base == next_device->mods.base &&
+            device->mods.latched == next_device->mods.latched &&
+            device->mods.locked == next_device->mods.locked &&
+            device->mods.effective == next_device->mods.effective) {
           *last_event = std::move(*it);
           it = conn->events().erase(it);
           num_coalesced++;
@@ -667,27 +394,6 @@ int CoalescePendingMotionEvents(const x11::Event* x11_event,
   }
 
   return num_coalesced;
-}
-
-void HideHostCursor() {
-  static base::NoDestructor<XScopedCursor> invisible_cursor(
-      CreateInvisibleCursor(), gfx::GetXDisplay());
-  XDefineCursor(gfx::GetXDisplay(), DefaultRootWindow(gfx::GetXDisplay()),
-                invisible_cursor->get());
-}
-
-::Cursor CreateInvisibleCursor() {
-  XDisplay* xdisplay = gfx::GetXDisplay();
-  ::Cursor invisible_cursor;
-  char nodata[] = {0, 0, 0, 0, 0, 0, 0, 0};
-  XColor black;
-  black.red = black.green = black.blue = 0;
-  Pixmap blank = XCreateBitmapFromData(xdisplay, DefaultRootWindow(xdisplay),
-                                       nodata, 8, 8);
-  invisible_cursor =
-      XCreatePixmapCursor(xdisplay, blank, blank, &black, &black, 0, 0);
-  XFreePixmap(xdisplay, blank);
-  return invisible_cursor;
 }
 
 void SetUseOSWindowFrame(x11::Window window, bool use_os_window_frame) {
@@ -894,7 +600,7 @@ bool PropertyExists(x11::Window window, const std::string& property_name) {
 
 bool GetRawBytesOfProperty(x11::Window window,
                            x11::Atom property,
-                           std::vector<uint8_t>* out_data,
+                           scoped_refptr<base::RefCountedMemory>* out_data,
                            x11::Atom* out_type) {
   auto future = x11::Connection::Get()->GetProperty({
       .window = static_cast<x11::Window>(window),
@@ -905,7 +611,7 @@ bool GetRawBytesOfProperty(x11::Window window,
   auto response = future.Sync();
   if (!response || !response->format)
     return false;
-  *out_data = std::move(response->value);
+  *out_data = response->value;
   if (out_type)
     *out_type = response->type;
   return true;
@@ -1249,6 +955,59 @@ std::string GuessWindowManagerName() {
   return "Unknown";
 }
 
+UMALinuxWindowManager GetWindowManagerUMA() {
+  switch (GuessWindowManager()) {
+    case WM_OTHER:
+      return UMALinuxWindowManager::kOther;
+    case WM_UNNAMED:
+      return UMALinuxWindowManager::kUnnamed;
+    case WM_AWESOME:
+      return UMALinuxWindowManager::kAwesome;
+    case WM_BLACKBOX:
+      return UMALinuxWindowManager::kBlackbox;
+    case WM_COMPIZ:
+      return UMALinuxWindowManager::kCompiz;
+    case WM_ENLIGHTENMENT:
+      return UMALinuxWindowManager::kEnlightenment;
+    case WM_FLUXBOX:
+      return UMALinuxWindowManager::kFluxbox;
+    case WM_I3:
+      return UMALinuxWindowManager::kI3;
+    case WM_ICE_WM:
+      return UMALinuxWindowManager::kIceWM;
+    case WM_ION3:
+      return UMALinuxWindowManager::kIon3;
+    case WM_KWIN:
+      return UMALinuxWindowManager::kKWin;
+    case WM_MATCHBOX:
+      return UMALinuxWindowManager::kMatchbox;
+    case WM_METACITY:
+      return UMALinuxWindowManager::kMetacity;
+    case WM_MUFFIN:
+      return UMALinuxWindowManager::kMuffin;
+    case WM_MUTTER:
+      return UMALinuxWindowManager::kMutter;
+    case WM_NOTION:
+      return UMALinuxWindowManager::kNotion;
+    case WM_OPENBOX:
+      return UMALinuxWindowManager::kOpenbox;
+    case WM_QTILE:
+      return UMALinuxWindowManager::kQtile;
+    case WM_RATPOISON:
+      return UMALinuxWindowManager::kRatpoison;
+    case WM_STUMPWM:
+      return UMALinuxWindowManager::kStumpWM;
+    case WM_WMII:
+      return UMALinuxWindowManager::kWmii;
+    case WM_XFWM4:
+      return UMALinuxWindowManager::kXfwm4;
+    case WM_XMONAD:
+      return UMALinuxWindowManager::kXmonad;
+  }
+  NOTREACHED();
+  return UMALinuxWindowManager::kOther;
+}
+
 bool IsCompositingManagerPresent() {
   auto is_compositing_manager_present_impl = []() {
     auto response = x11::Connection::Get()
@@ -1311,10 +1070,10 @@ gfx::ICCProfile GetICCProfileForMonitor(int monitor) {
   std::string atom_name = monitor == 0
                               ? "_ICC_PROFILE"
                               : base::StringPrintf("_ICC_PROFILE_%d", monitor);
-  std::vector<uint8_t> data;
+  scoped_refptr<base::RefCountedMemory> data;
   if (GetRawBytesOfProperty(GetX11RootWindow(), gfx::GetAtom(atom_name), &data,
                             nullptr)) {
-    icc_profile = gfx::ICCProfile::FromData(data.data(), data.size());
+    icc_profile = gfx::ICCProfile::FromData(data->data(), data->size());
   }
   return icc_profile;
 }
@@ -1340,34 +1099,42 @@ bool IsSyncExtensionAvailable() {
 #endif
 }
 
-SkColorType ColorTypeForVisual(void* visual) {
+SkColorType ColorTypeForVisual(x11::VisualId visual) {
   struct {
     SkColorType color_type;
     unsigned long red_mask;
     unsigned long green_mask;
     unsigned long blue_mask;
+    int bpp;
   } color_infos[] = {
-      {kRGB_565_SkColorType, 0xf800, 0x7e0, 0x1f},
-      {kARGB_4444_SkColorType, 0xf000, 0xf00, 0xf0},
-      {kRGBA_8888_SkColorType, 0xff, 0xff00, 0xff0000},
-      {kBGRA_8888_SkColorType, 0xff0000, 0xff00, 0xff},
-      {kRGBA_1010102_SkColorType, 0x3ff, 0xffc00, 0x3ff00000},
-      {kBGRA_1010102_SkColorType, 0x3ff00000, 0xffc00, 0x3ff},
+      {kRGB_565_SkColorType, 0xf800, 0x7e0, 0x1f, 16},
+      {kARGB_4444_SkColorType, 0xf000, 0xf00, 0xf0, 16},
+      {kRGBA_8888_SkColorType, 0xff, 0xff00, 0xff0000, 32},
+      {kBGRA_8888_SkColorType, 0xff0000, 0xff00, 0xff, 32},
+      {kRGBA_1010102_SkColorType, 0x3ff, 0xffc00, 0x3ff00000, 32},
+      {kBGRA_1010102_SkColorType, 0x3ff00000, 0xffc00, 0x3ff, 32},
   };
-  Visual* vis = reinterpret_cast<Visual*>(visual);
-  // When running under Xvfb, a visual may not be set.
-  if (!vis || !vis->red_mask || !vis->green_mask || !vis->blue_mask)
+  auto* connection = x11::Connection::Get();
+  const auto* vis = connection->GetVisualInfoFromId(visual);
+  if (!vis)
     return kUnknown_SkColorType;
+  // We don't currently support anything other than TrueColor and DirectColor.
+  if (!vis->visual_type->red_mask || !vis->visual_type->green_mask ||
+      !vis->visual_type->blue_mask) {
+    return kUnknown_SkColorType;
+  }
   for (const auto& color_info : color_infos) {
-    if (vis->red_mask == color_info.red_mask &&
-        vis->green_mask == color_info.green_mask &&
-        vis->blue_mask == color_info.blue_mask) {
+    if (vis->visual_type->red_mask == color_info.red_mask &&
+        vis->visual_type->green_mask == color_info.green_mask &&
+        vis->visual_type->blue_mask == color_info.blue_mask &&
+        vis->format->bits_per_pixel == color_info.bpp) {
       return color_info.color_type;
     }
   }
   LOG(ERROR) << "Unsupported visual with rgb mask 0x" << std::hex
-             << vis->red_mask << ", 0x" << vis->green_mask << ", 0x"
-             << vis->blue_mask
+             << vis->visual_type->red_mask << ", 0x"
+             << vis->visual_type->green_mask << ", 0x"
+             << vis->visual_type->blue_mask
              << ".  Please report this to https://crbug.com/1025266";
   return kUnknown_SkColorType;
 }
@@ -1379,13 +1146,7 @@ x11::Future<void> SendClientMessage(x11::Window window,
                                     x11::EventMask event_mask) {
   x11::ClientMessageEvent event{.format = 32, .window = window, .type = type};
   event.data.data32 = data;
-  auto event_bytes = x11::Write(event);
-  DCHECK_EQ(event_bytes.size(), 32ul);
-
-  auto* connection = x11::Connection::Get();
-  x11::SendEventRequest request{false, target, event_mask};
-  std::copy(event_bytes.begin(), event_bytes.end(), request.event.begin());
-  return connection->SendEvent(request);
+  return SendEvent(event, target, event_mask);
 }
 
 XRefcountedMemory::XRefcountedMemory(unsigned char* x11_data, size_t length)
@@ -1401,69 +1162,8 @@ size_t XRefcountedMemory::size() const {
 
 XRefcountedMemory::~XRefcountedMemory() = default;
 
-XScopedCursor::XScopedCursor(::Cursor cursor, XDisplay* display)
-    : cursor_(cursor), display_(display) {}
-
-XScopedCursor::~XScopedCursor() {
-  reset(0U);
-}
-
-::Cursor XScopedCursor::get() const {
-  return cursor_;
-}
-
-void XScopedCursor::reset(::Cursor cursor) {
-  if (cursor_)
-    XFreeCursor(display_, cursor_);
-  cursor_ = cursor;
-}
-
 void XImageDeleter::operator()(XImage* image) const {
   XDestroyImage(image);
-}
-
-namespace test {
-
-const XcursorImage* GetCachedXcursorImage(::Cursor cursor) {
-  return XCustomCursorCache::GetInstance()->GetXcursorImage(cursor);
-}
-}  // namespace test
-
-// ----------------------------------------------------------------------------
-// These functions are declared in x11_util_internal.h because they require
-// XLib.h to be included, and it conflicts with many other headers.
-XRenderPictFormat* GetRenderARGB32Format(XDisplay* dpy) {
-  static XRenderPictFormat* pictformat = nullptr;
-  if (pictformat)
-    return pictformat;
-
-  // First look for a 32-bit format which ignores the alpha value
-  XRenderPictFormat templ;
-  templ.depth = 32;
-  templ.type = PictTypeDirect;
-  templ.direct.red = 16;
-  templ.direct.green = 8;
-  templ.direct.blue = 0;
-  templ.direct.redMask = 0xff;
-  templ.direct.greenMask = 0xff;
-  templ.direct.blueMask = 0xff;
-  templ.direct.alphaMask = 0;
-
-  static const unsigned long kMask =
-      PictFormatType | PictFormatDepth | PictFormatRed | PictFormatRedMask |
-      PictFormatGreen | PictFormatGreenMask | PictFormatBlue |
-      PictFormatBlueMask | PictFormatAlphaMask;
-
-  pictformat = XRenderFindFormat(dpy, kMask, &templ, 0 /* first result */);
-
-  if (!pictformat) {
-    // Not all X servers support xRGB32 formats. However, the XRENDER spec says
-    // that they must support an ARGB32 format, so we can always return that.
-    pictformat = XRenderFindStandardFormat(dpy, PictStandardARGB32);
-    CHECK(pictformat) << "XRENDER ARGB32 not supported.";
-  }
-
-  return pictformat;
 }
 
 void SetX11ErrorHandlers(XErrorHandler error_handler,
@@ -1484,7 +1184,7 @@ XVisualManager::XVisualManager() : connection_(x11::Connection::Get()) {
   for (const auto& depth : connection_->default_screen().allowed_depths) {
     for (const auto& visual : depth.visuals) {
       visuals_[visual.visual_id] =
-          std::make_unique<XVisualData>(depth.depth, &visual);
+          std::make_unique<XVisualData>(connection_, depth.depth, &visual);
     }
   }
 
@@ -1515,6 +1215,7 @@ XVisualManager::~XVisualManager() = default;
 void XVisualManager::ChooseVisualForWindow(bool want_argb_visual,
                                            x11::VisualId* visual_id,
                                            uint8_t* depth,
+                                           x11::ColorMap* colormap,
                                            bool* visual_has_alpha) {
   base::AutoLock lock(lock_);
   bool use_argb = want_argb_visual && IsCompositingManagerPresent() &&
@@ -1525,15 +1226,16 @@ void XVisualManager::ChooseVisualForWindow(bool want_argb_visual,
 
   if (visual_id)
     *visual_id = visual;
-  bool success = GetVisualInfoImpl(visual, depth, visual_has_alpha);
+  bool success = GetVisualInfoImpl(visual, depth, colormap, visual_has_alpha);
   DCHECK(success);
 }
 
 bool XVisualManager::GetVisualInfo(x11::VisualId visual_id,
                                    uint8_t* depth,
+                                   x11::ColorMap* colormap,
                                    bool* visual_has_alpha) {
   base::AutoLock lock(lock_);
-  return GetVisualInfoImpl(visual_id, depth, visual_has_alpha);
+  return GetVisualInfoImpl(visual_id, depth, colormap, visual_has_alpha);
 }
 
 bool XVisualManager::OnGPUInfoChanged(bool software_rendering,
@@ -1565,6 +1267,7 @@ bool XVisualManager::ArgbVisualAvailable() const {
 
 bool XVisualManager::GetVisualInfoImpl(x11::VisualId visual_id,
                                        uint8_t* depth,
+                                       x11::ColorMap* colormap,
                                        bool* visual_has_alpha) {
   auto it = visuals_.find(visual_id);
   if (it == visuals_.end())
@@ -1572,8 +1275,12 @@ bool XVisualManager::GetVisualInfoImpl(x11::VisualId visual_id,
   XVisualData& data = *it->second;
   const x11::VisualType& info = *data.info;
 
+  bool is_default_visual = visual_id == default_visual_id_;
+
   if (depth)
     *depth = data.depth;
+  if (colormap)
+    *colormap = is_default_visual ? x11::ColorMap{} : data.GetColormap();
   if (visual_has_alpha) {
     auto popcount = [](auto x) {
       return std::bitset<8 * sizeof(decltype(x))>(x).count();
@@ -1585,13 +1292,22 @@ bool XVisualManager::GetVisualInfoImpl(x11::VisualId visual_id,
   return true;
 }
 
-XVisualManager::XVisualData::XVisualData(uint8_t depth,
+XVisualManager::XVisualData::XVisualData(x11::Connection* connection,
+                                         uint8_t depth,
                                          const x11::VisualType* info)
-    : depth(depth), info(info) {}
+    : depth(depth), info(info), connection_(connection) {}
 
+// Do not free the colormap as this would uninstall the colormap even for
+// non-Chromium clients.
 XVisualManager::XVisualData::~XVisualData() = default;
 
-// ----------------------------------------------------------------------------
-// End of x11_util_internal.h
+x11::ColorMap XVisualManager::XVisualData::GetColormap() {
+  if (colormap_ == x11::ColorMap{}) {
+    colormap_ = connection_->GenerateId<x11::ColorMap>();
+    connection_->CreateColormap({x11::ColormapAlloc::None, colormap_,
+                                 connection_->default_root(), info->visual_id});
+  }
+  return colormap_;
+}
 
 }  // namespace ui

@@ -1,0 +1,10 @@
+include_rules = [
+  "+components/os_crypt",
+  "+components/signin/public",
+  "+components/sync/base",
+  "+components/sync/driver",
+  "+components/sync/protocol",
+  "+crypto",
+  "+services/network/public",
+  "+third_party/boringssl",
+]

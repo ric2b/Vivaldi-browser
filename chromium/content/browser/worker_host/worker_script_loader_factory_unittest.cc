@@ -19,6 +19,7 @@
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace content {
 
@@ -37,8 +38,6 @@ class WorkerScriptLoaderFactoryTest : public testing::Test {
   void SetUp() override {
     // Set up the service worker system.
     helper_ = std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath());
-    ServiceWorkerContextCore* context = helper_->context();
-    context->storage()->LazyInitializeForTest();
 
     browser_context_getter_ =
         base::BindRepeating(&ServiceWorkerContextWrapper::browser_context,
@@ -96,9 +95,9 @@ class WorkerScriptLoaderFactoryTest : public testing::Test {
 TEST_F(WorkerScriptLoaderFactoryTest, ServiceWorkerContainerHost) {
   // Make the factory.
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
-      kProcessId, DedicatedWorkerId(), SharedWorkerId(),
-      service_worker_handle_.get(), /*appcache_host=*/nullptr,
-      browser_context_getter_, network_loader_factory_);
+      kProcessId, DedicatedOrSharedWorkerToken(), service_worker_handle_.get(),
+      /*appcache_host=*/nullptr, browser_context_getter_,
+      network_loader_factory_);
 
   // Load the script.
   GURL url("https://www.example.com/worker.js");
@@ -121,9 +120,9 @@ TEST_F(WorkerScriptLoaderFactoryTest, ServiceWorkerContainerHost) {
 TEST_F(WorkerScriptLoaderFactoryTest, NullServiceWorkerHandle) {
   // Make the factory.
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
-      kProcessId, DedicatedWorkerId(), SharedWorkerId(),
-      service_worker_handle_.get(), nullptr /* appcache_host */,
-      browser_context_getter_, network_loader_factory_);
+      kProcessId, DedicatedOrSharedWorkerToken(), service_worker_handle_.get(),
+      nullptr /* appcache_host */, browser_context_getter_,
+      network_loader_factory_);
 
   // Destroy the handle.
   service_worker_handle_.reset();
@@ -145,9 +144,9 @@ TEST_F(WorkerScriptLoaderFactoryTest, NullServiceWorkerHandle) {
 TEST_F(WorkerScriptLoaderFactoryTest, NullBrowserContext) {
   // Make the factory.
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
-      kProcessId, DedicatedWorkerId(), SharedWorkerId(),
-      service_worker_handle_.get(), nullptr /* appcache_host */,
-      browser_context_getter_, network_loader_factory_);
+      kProcessId, DedicatedOrSharedWorkerToken(), service_worker_handle_.get(),
+      nullptr /* appcache_host */, browser_context_getter_,
+      network_loader_factory_);
 
   // Set a null browser context.
   helper_->context_wrapper()->Shutdown();

@@ -18,8 +18,11 @@ test("chromeos_components_unittests") {
     "//chromeos/components/account_manager:unit_tests",
     "//chromeos/components/cdm_factory_daemon:unit_tests",
     "//chromeos/components/drivefs:unit_tests",
+    "//chromeos/components/local_search_service:unit_tests",
+    "//chromeos/components/local_search_service/mojom:unit_tests",
     "//chromeos/components/mojo_bootstrap:unit_tests",
     "//chromeos/components/multidevice:unit_tests",
+    "//chromeos/components/phonehub:unit_tests",
     "//chromeos/components/power:unit_tests",
     "//chromeos/components/proximity_auth:unit_tests",
     "//chromeos/components/quick_answers:unit_tests",
@@ -45,12 +48,14 @@ group("closure_compile") {
     "//chromeos/components/media_app_ui:closure_compile",
     "//chromeos/components/multidevice/debug_webui/resources:closure_compile",
     "//chromeos/components/print_management:closure_compile",
+    "//chromeos/components/scanning:closure_compile",
+    "//chromeos/components/system_apps:closure_compile",
   ]
 
   if (!is_official_build) {
     deps += [
       "//chromeos/components/sample_system_web_app_ui:closure_compile",
-      "//chromeos/components/telemetry_extension_ui/resources:closure_compile",
+      "//chromeos/components/telemetry_extension_ui:closure_compile",
     ]
   }
 }

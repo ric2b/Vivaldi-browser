@@ -17,7 +17,6 @@
 #include <string>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -54,6 +53,8 @@ class OmniboxView {
   };
 
   virtual ~OmniboxView();
+  OmniboxView(const OmniboxView&) = delete;
+  OmniboxView& operator=(const OmniboxView&) = delete;
 
   // Used by the automation system for getting at the model from the view.
   OmniboxEditModel* model() { return model_.get(); }
@@ -164,7 +165,8 @@ class OmniboxView {
 
   // Updates the accessibility state by enunciating any on-focus text.
   virtual void SetAccessibilityLabel(const base::string16& display_text,
-                                     const AutocompleteMatch& match) {}
+                                     const AutocompleteMatch& match,
+                                     bool notify_text_changed) {}
 
   // Called when the temporary text in the model may have changed.
   // |display_text| is the new text to show; |match_type| is the type of the
@@ -321,8 +323,6 @@ class OmniboxView {
   // |model_| can be NULL in tests.
   std::unique_ptr<OmniboxEditModel> model_;
   OmniboxEditController* controller_;
-
-  DISALLOW_COPY_AND_ASSIGN(OmniboxView);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_VIEW_H_

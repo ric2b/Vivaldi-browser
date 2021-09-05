@@ -1,10 +1,14 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="album_list.html">
 <link rel="import" href="ambient_mode_browser_proxy.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_checkbox/cr_checkbox.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/load_time_data.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="constants.html">
+<link rel="import" href="../localized_link/localized_link.html">
 <link rel="import" href="../os_route.html">
 <link rel="import" href="../../router.html">
 <link rel="import" href="../../settings_shared_css.html">
@@ -13,23 +17,37 @@
   <template>
     <style include="settings-shared">
     </style>
+    <settings-localized-link class="cr-row first"
+        localized-string="[[getTitleInnerHtml_(topicSource)]]">
+    </settings-localized-link>
 
-    <div class="cr-row first">
-      <h2 class="flex">
-        [[getDescription_(topicSource_)]]
-      </h2>
-    </div>
-    <iron-list id="containers" class="list-frame" items="[[photosContainers_]]">
-      <template>
-        <cr-checkbox class="list-item"
-            checked="[[item.checked]]"
-            on-change="onCheckboxChange_"
-            label="[[item.title]]">
-          [[item.title]]
-        </cr-checkbox>
-      </template>
-    </iron-list>
-    </div>
+    <template is="dom-if" if="[[hasNoAlbums_(albums)]]">
+      <settings-localized-link class="cr-row first"
+          localized-string=
+              $i18nPolymer{ambientModeAlbumsSubpageGooglePhotosNoAlbum}
+      </settings-localized-link>
+    </template>
+
+    <!-- Text based album selection. -->
+    <template is="dom-if" if="[[!photoPreviewEnabled]]">
+      <iron-list id="albums" class="list-frame" items="[[albums]]">
+        <template>
+          <cr-checkbox class="list-item"
+              checked="[[item.checked]]"
+              on-change="onCheckboxChange_"
+              data-id$="[[item.albumId]]"
+              label="[[item.title]]">
+            [[item.title]]
+          </cr-checkbox>
+        </template>
+      </iron-list>
+    </template>
+
+    <!-- Photo based album selection. -->
+    <template is="dom-if" if="[[photoPreviewEnabled]]">
+      <album-list albums="{{albums}}" topic-source="[[topicSource]]">
+      </album-list>
+    </template>
   </template>
   <script src="ambient_mode_photos_page.js"></script>
 </dom-module>

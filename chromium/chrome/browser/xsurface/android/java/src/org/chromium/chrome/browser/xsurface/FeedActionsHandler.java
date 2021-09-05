@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.xsurface;
 
+import java.util.Map;
+
 /**
  * Interface to provide chromium calling points for a feed.
  */
@@ -20,6 +22,17 @@ public interface FeedActionsHandler {
      * Sends data back to the server when content is clicked.
      */
     default void processThereAndBackAgainData(byte[] data) {}
+
+    /**
+     * Stores a view FeedAction for eventual upload. 'data' is a serialized FeedAction protobuf
+     * message.
+     */
+    default void processViewAction(byte[] data) {}
+
+    /**
+     * Triggers Chrome to send user feedback for this card.
+     */
+    default void sendFeedback(Map<String, String> productSpecificDataMap) {}
 
     /**
      * Requests to dismiss a card. A change ID will be returned and it can be used to commit or

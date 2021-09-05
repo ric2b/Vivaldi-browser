@@ -43,18 +43,23 @@ PropertyNode PropertyNode::FromPropertyFilter(
   // Property invocation: property_str expected format is
   // prop_name or prop_name(arg1, ... argN).
   PropertyNode root;
-  Parse(&root, filter.property_str.begin(), filter.property_str.end());
+  const std::string& property_str = filter.property_str;
+  Parse(&root, property_str.begin(), property_str.end());
 
   PropertyNode* node = &root.parameters[0];
-  node->original_property = filter.property_str;
+
+  // Expel a trailing wildcard if any.
+  node->original_property =
+      property_str.substr(0, property_str.find_last_of('*'));
 
   // Line indexes filter: filter_str expected format is
   // :line_num_1, ... :line_num_N, a comma separated list of line indexes
   // the property should be queried for. For example, ":1,:5,:7" indicates that
   // the property should called for objects placed on 1, 5 and 7 lines only.
-  if (!filter.filter_str.empty()) {
+  const std::string& filter_str = filter.filter_str;
+  if (!filter_str.empty()) {
     node->line_indexes =
-        base::SplitString(filter.filter_str, base::string16(1, ','),
+        base::SplitString(filter_str, std::string(1, ','),
                           base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   }
 
@@ -83,12 +88,19 @@ PropertyNode::operator bool() const {
   return !name_or_value.empty();
 }
 
+bool PropertyNode::IsMatching(const std::string& pattern) const {
+  // Looking for exact property match. Expel a trailing whildcard from
+  // the property filter to handle filters like AXRole*.
+  return name_or_value.compare(0, name_or_value.find_last_of('*'), pattern) ==
+         0;
+}
+
 bool PropertyNode::IsArray() const {
-  return name_or_value == base::ASCIIToUTF16("[]");
+  return name_or_value == "[]";
 }
 
 bool PropertyNode::IsDict() const {
-  return name_or_value == base::ASCIIToUTF16("{}");
+  return name_or_value == "{}";
 }
 
 base::Optional<int> PropertyNode::AsInt() const {
@@ -99,9 +111,19 @@ base::Optional<int> PropertyNode::AsInt() const {
   return value;
 }
 
-base::Optional<base::string16> PropertyNode::FindKey(const char* refkey) const {
+const PropertyNode* PropertyNode::FindKey(const char* refkey) const {
   for (const auto& param : parameters) {
-    if (param.key == base::ASCIIToUTF16(refkey)) {
+    if (param.key == refkey) {
+      return &param;
+    }
+  }
+  return nullptr;
+}
+
+base::Optional<std::string> PropertyNode::FindStringKey(
+    const char* refkey) const {
+  for (const auto& param : parameters) {
+    if (param.key == refkey) {
       return param.name_or_value;
     }
   }
@@ -110,7 +132,7 @@ base::Optional<base::string16> PropertyNode::FindKey(const char* refkey) const {
 
 base::Optional<int> PropertyNode::FindIntKey(const char* refkey) const {
   for (const auto& param : parameters) {
-    if (param.key == base::ASCIIToUTF16(refkey)) {
+    if (param.key == refkey) {
       return param.AsInt();
     }
   }
@@ -123,16 +145,16 @@ std::string PropertyNode::ToString() const {
     if (!out.empty()) {
       out += ',';
     }
-    out += base::UTF16ToUTF8(index);
+    out += index;
   }
   if (!out.empty()) {
     out += ';';
   }
 
   if (!key.empty()) {
-    out += base::UTF16ToUTF8(key) + ": ";
+    out += key + ": ";
   }
-  out += base::UTF16ToUTF8(name_or_value);
+  out += name_or_value;
   if (parameters.size()) {
     out += '(';
     for (size_t i = 0; i < parameters.size(); i++) {
@@ -149,7 +171,7 @@ std::string PropertyNode::ToString() const {
 // private
 PropertyNode::PropertyNode(PropertyNode::iterator key_begin,
                            PropertyNode::iterator key_end,
-                           const base::string16& name_or_value)
+                           const std::string& name_or_value)
     : key(key_begin, key_end), name_or_value(name_or_value) {}
 PropertyNode::PropertyNode(PropertyNode::iterator begin,
                            PropertyNode::iterator end)
@@ -179,8 +201,7 @@ PropertyNode::iterator PropertyNode::Parse(PropertyNode* node,
     // Subnode begins: a special case for arrays, which have [arg1, ..., argN]
     // form.
     if (*iter == '[') {
-      node->parameters.push_back(
-          PropertyNode(key_begin, key_end, base::UTF8ToUTF16("[]")));
+      node->parameters.push_back(PropertyNode(key_begin, key_end, "[]"));
       key_begin = key_end = end;
       begin = iter = Parse(&node->parameters.back(), ++iter, end);
       continue;
@@ -189,8 +210,7 @@ PropertyNode::iterator PropertyNode::Parse(PropertyNode* node,
     // Subnode begins: a special case for dictionaries of {key1: value1, ...,
     // key2: value2} form.
     if (*iter == '{') {
-      node->parameters.push_back(
-          PropertyNode(key_begin, key_end, base::UTF8ToUTF16("{}")));
+      node->parameters.push_back(PropertyNode(key_begin, key_end, "{}"));
       key_begin = key_end = end;
       begin = iter = Parse(&node->parameters.back(), ++iter, end);
       continue;
@@ -249,7 +269,7 @@ AccessibilityTreeFormatter::PropertyFilter::PropertyFilter(
     const PropertyFilter&) = default;
 
 AccessibilityTreeFormatter::PropertyFilter::PropertyFilter(
-    const base::string16& str,
+    const std::string& str,
     Type type)
     : match_str(str), type(type) {
   size_t index = str.find(';');
@@ -291,17 +311,26 @@ base::string16 AccessibilityTreeFormatterBase::DumpAccessibilityTreeFromManager(
 
 bool AccessibilityTreeFormatter::MatchesPropertyFilters(
     const std::vector<PropertyFilter>& property_filters,
-    const base::string16& text,
+    const std::string& text,
     bool default_result) {
   bool allow = default_result;
   for (const auto& filter : property_filters) {
-    if (base::MatchPattern(text, filter.match_str)) {
+    // Either
+    //   1) the line matches a filter pattern, for example, AXSubrole=* filter
+    //      will match AXSubrole=AXTerm line or
+    //   2) a property on the line is exactly equal to the filter pattern, for
+    //      example, AXSubrole filter will match AXSubrole=AXTerm line.
+    if (base::MatchPattern(text, filter.match_str) ||
+        (filter.match_str.length() > 0 &&
+         filter.match_str.find('=') == std::string::npos &&
+         filter.match_str[filter.match_str.length() - 1] != '*' &&
+         base::MatchPattern(text, filter.match_str + "=*"))) {
       switch (filter.type) {
         case PropertyFilter::ALLOW_EMPTY:
           allow = true;
           break;
         case PropertyFilter::ALLOW:
-          allow = (!base::MatchPattern(text, base::UTF8ToUTF16("*=''")));
+          allow = (!base::MatchPattern(text, "*=''"));
           break;
         case PropertyFilter::DENY:
           allow = false;
@@ -419,14 +448,14 @@ AccessibilityTreeFormatterBase::GetVersionSpecificExpectedFileSuffix() {
   return FILE_PATH_LITERAL("");
 }
 
-PropertyNode AccessibilityTreeFormatterBase::GetMatchingPropertyNode(
-    const base::string16& line_index,
-    const base::string16& property_name) {
-  // Find the first allow-filter matching the line index and the property name.
+std::vector<PropertyNode>
+AccessibilityTreeFormatterBase::PropertyFilterNodesFor(
+    const std::string& line_index) const {
+  std::vector<PropertyNode> list;
   for (const auto& filter : property_filters_) {
     PropertyNode property_node = PropertyNode::FromPropertyFilter(filter);
 
-    // Skip if the line index filter doesn't matched (if specified).
+    // Filter out if doesn't match line index (if specified).
     if (!property_node.line_indexes.empty() &&
         std::find(property_node.line_indexes.begin(),
                   property_node.line_indexes.end(),
@@ -434,27 +463,31 @@ PropertyNode AccessibilityTreeFormatterBase::GetMatchingPropertyNode(
       continue;
     }
 
-    // The filter should be either an exact property match or a wildcard
-    // matching to support filter collections like AXRole* which matches
-    // AXRoleDescription.
-    if (property_name == property_node.name_or_value ||
-        base::MatchPattern(property_name, property_node.name_or_value)) {
-      switch (filter.type) {
-        case PropertyFilter::ALLOW_EMPTY:
-        case PropertyFilter::ALLOW:
-          return property_node;
-        case PropertyFilter::DENY:
-          break;
-        default:
-          break;
-      }
+    switch (filter.type) {
+      case PropertyFilter::ALLOW_EMPTY:
+      case PropertyFilter::ALLOW:
+        list.push_back(std::move(property_node));
+        break;
+      case PropertyFilter::DENY:
+        break;
+      default:
+        break;
     }
   }
-  return PropertyNode();
+  return list;
+}
+
+bool AccessibilityTreeFormatterBase::HasMatchAllPropertyFilter() const {
+  for (const auto& filter : property_filters_) {
+    if (filter.type == PropertyFilter::ALLOW && filter.match_str == "*") {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool AccessibilityTreeFormatterBase::MatchesPropertyFilters(
-    const base::string16& text,
+    const std::string& text,
     bool default_result) const {
   return AccessibilityTreeFormatter::MatchesPropertyFilters(
       property_filters_, text, default_result);
@@ -507,7 +540,7 @@ bool AccessibilityTreeFormatterBase::WriteAttribute(bool include_by_default,
                                                     base::string16* line) {
   if (attr.empty())
     return false;
-  if (!MatchesPropertyFilters(attr, include_by_default))
+  if (!MatchesPropertyFilters(base::UTF16ToUTF8(attr), include_by_default))
     return false;
   if (!line->empty())
     *line += base::ASCIIToUTF16(" ");
@@ -519,7 +552,7 @@ void AccessibilityTreeFormatterBase::AddPropertyFilter(
     std::vector<PropertyFilter>* property_filters,
     std::string filter,
     PropertyFilter::Type type) {
-  property_filters->push_back(PropertyFilter(base::ASCIIToUTF16(filter), type));
+  property_filters->push_back(PropertyFilter(filter, type));
 }
 
 void AccessibilityTreeFormatterBase::AddDefaultFilters(

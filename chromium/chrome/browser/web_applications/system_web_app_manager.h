@@ -11,11 +11,13 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
+#include "chrome/common/web_application_info.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
@@ -52,17 +54,26 @@ enum class SystemAppType {
   MEDIA,
   HELP,
   PRINT_MANAGEMENT,
-  TELEMETRY,
+  SCANNING,
 #if !defined(OFFICIAL_BUILD)
+  TELEMETRY,
   SAMPLE,
 #endif  // !defined(OFFICIAL_BUILD)
 };
 
 using OriginTrialsMap = std::map<url::Origin, std::vector<std::string>>;
+using WebApplicationInfoFactory =
+    base::RepeatingCallback<std::unique_ptr<WebApplicationInfo>()>;
 
 // The configuration options for a System App.
 struct SystemAppInfo {
   SystemAppInfo(const std::string& name_for_logging, const GURL& install_url);
+  // When installing via a WebApplicationInfo, the url is never loaded. It's
+  // needed only for various legacy reasons, maps for tracking state, and
+  // generating the AppId and things of that nature.
+  SystemAppInfo(const std::string& name_for_logging,
+                const GURL& install_url,
+                const WebApplicationInfoFactory& info_factory);
   SystemAppInfo(const SystemAppInfo& other);
   ~SystemAppInfo();
 
@@ -102,9 +113,18 @@ struct SystemAppInfo {
 
   // If set to false, this app will be hidden from the Chrome OS search.
   bool show_in_search = true;
+
+  // If set to true, navigations (e.g. Omnibox URL, anchor link) to this app
+  // will open in the app's window instead of the navigation's context (e.g.
+  // browser tab).
+  bool capture_navigations = false;
+
+  WebApplicationInfoFactory app_info_factory;
 };
 
 // Installs, uninstalls, and updates System Web Apps.
+// System Web Apps are built-in, highly-privileged Web Apps for Chrome OS. They
+// have access to more APIs and are part of the Chrome OS image.
 class SystemWebAppManager {
  public:
   // Policy for when the SystemWebAppManager will update apps/install new apps.
@@ -135,6 +155,11 @@ class SystemWebAppManager {
   void Start();
 
   static bool IsEnabled();
+
+  // This call will instruct System Web App Manager to include all registered
+  // System Apps for installation. Must be called before SystemWebAppManager is
+  // constructed.
+  static void EnableAllSystemAppsForTesting();
 
   // The SystemWebAppManager is disabled in browser tests by default because it
   // pollutes the startup state (several tests expect the Extensions state to be
@@ -182,6 +207,10 @@ class SystemWebAppManager {
   // Returns whether the app should be shown in search.
   bool ShouldShowInSearch(SystemAppType type) const;
 
+  // Returns the SystemAppType that should capture the navigation to |url|.
+  base::Optional<SystemAppType> GetCapturingSystemAppForURL(
+      const GURL& url) const;
+
   // Returns the minimum window size for |app_id| or an empty size if the app
   // doesn't specify a minimum.
   gfx::Size GetMinimumWindowSize(const AppId& app_id) const;
@@ -196,6 +225,8 @@ class SystemWebAppManager {
       base::flat_map<SystemAppType, SystemAppInfo> system_apps);
 
   void SetUpdatePolicyForTesting(UpdatePolicy policy);
+
+  void ResetOnAppsSynchronizedForTesting();
 
   // Updates each system app either disabled/not disabled.
   void OnAppsPolicyChanged();
@@ -219,6 +250,10 @@ class SystemWebAppManager {
                           std::map<GURL, InstallResultCode> install_results,
                           std::map<GURL, bool> uninstall_results);
   bool NeedsUpdate() const;
+  void UpdateLastAttemptedInfo();
+  // Returns if we have exceeded the number of retry attempts allowed for this
+  // version.
+  bool CheckAndIncrementRetryAttempts();
 
   void RecordSystemWebAppInstallMetrics(
       const std::map<GURL, InstallResultCode>& install_results,

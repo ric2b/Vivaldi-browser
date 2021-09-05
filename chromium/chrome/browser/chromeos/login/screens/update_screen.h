@@ -16,6 +16,7 @@
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/version_updater/version_updater.h"
+#include "chromeos/dbus/power/power_manager_client.h"
 
 namespace base {
 class TickClock;
@@ -26,6 +27,7 @@ namespace chromeos {
 class ErrorScreensHistogramHelper;
 class ScreenManager;
 class UpdateView;
+class WizardContext;
 
 // Controller for the update screen.
 //
@@ -53,7 +55,9 @@ class UpdateView;
 // has network connectivity - if the current network is not online (e.g. behind
 // a protal), it will request an ErrorScreen to be shown. Update check will be
 // delayed until the Internet connectivity is established.
-class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
+class UpdateScreen : public BaseScreen,
+                     public VersionUpdater::Delegate,
+                     public PowerManagerClient::Observer {
  public:
   using Result = VersionUpdater::Result;
 
@@ -92,6 +96,9 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
       const VersionUpdater::UpdateInfo& update_info) override;
   void FinishExitUpdate(VersionUpdater::Result result) override;
 
+  // PowerManagerClient::Observer:
+  void PowerChanged(const power_manager::PowerSupplyProperties& proto) override;
+
   void set_exit_callback_for_testing(ScreenExitCallback exit_callback) {
     exit_callback_ = exit_callback;
   }
@@ -100,8 +107,18 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
     tick_clock_ = tick_clock;
   }
 
+  void set_wait_before_reboot_time_for_testing(
+      base::TimeDelta wait_before_reboot_time) {
+    wait_before_reboot_time_ = wait_before_reboot_time;
+  }
+
+  base::OneShotTimer* GetWaitRebootTimerForTesting() {
+    return &wait_reboot_timer_;
+  }
+
  protected:
   // BaseScreen:
+  bool MaybeSkip(WizardContext* context) override;
   void ShowImpl() override;
   void HideImpl() override;
   void OnUserAction(const std::string& action_id) override;
@@ -132,6 +149,16 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
   // screen gets hidden.
   void OnErrorScreenHidden();
 
+  // Updates visibility of the low battery warning message during the update
+  // stages. Called when power or update status changes.
+  void UpdateBatteryWarningVisibility();
+
+  // Show reboot waiting screen.
+  void ShowRebootInProgress();
+
+  // Set update status message.
+  void SetUpdateStatusMessage(int percent, base::TimeDelta time_left);
+
   UpdateView* view_;
   ErrorScreen* error_screen_;
   ScreenExitCallback exit_callback_;
@@ -148,6 +175,9 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
 
   // True if already checked that update is critical.
   bool is_critical_checked_ = false;
+
+  // Caches the result of HasCriticalUpdate function.
+  base::Optional<bool> has_critical_update_;
 
   // True if the update progress should be hidden even if update_info suggests
   // the opposite.
@@ -171,6 +201,13 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
   // If redirect did not happen during this delay, error message is shown
   // instead.
   base::OneShotTimer error_message_timer_;
+
+  // Timer for the interval to wait for the reboot progress screen to be shown
+  // for at least wait_before_reboot_time_ before reboot call.
+  base::OneShotTimer wait_reboot_timer_;
+
+  // Time in seconds after which we initiate reboot.
+  base::TimeDelta wait_before_reboot_time_;
 
   const base::TickClock* tick_clock_;
 

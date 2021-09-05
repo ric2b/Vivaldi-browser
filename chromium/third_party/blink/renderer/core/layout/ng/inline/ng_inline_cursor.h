@@ -110,6 +110,7 @@ class CORE_EXPORT NGInlineCursorPosition {
   LayoutObject* GetMutableLayoutObject() const;
   const Node* GetNode() const;
   const DisplayItemClient* GetDisplayItemClient() const;
+  const DisplayItemClient* GetSelectionDisplayItemClient() const;
   wtf_size_t FragmentId() const;
 
   // True if fragment at the current position can have children.
@@ -415,10 +416,42 @@ class CORE_EXPORT NGInlineCursor {
   // Returns true if the current position moves to last child.
   bool TryToMoveToLastChild();
 
+  //
+  // Moving across fragmentainers.
+  //
+  // When rooted at |LayoutBlockFlow|, |this| can move the current position
+  // across fragmentainers. Other root objects (e.g. |NGFragmentItems|) can
+  // contain only one fragmentainer that such cursors cannot move to different
+  // fragmentainers. See |CanMoveAcrossFragmentainer()|.
+  //
+  // However, |MoveToNext| etc. does not move the current position across
+  // fragmentainers. Use following functions when moving to different
+  // fragmentainers.
+
+  // Move to the first item of the first fragmentainer.
+  void MoveToFirstIncludingFragmentainer();
+
+  // Move to the next fragmentainer. Valid when |CanMoveAcrossFragmentainer|.
+  void MoveToNextFragmentainer();
+
+  // Same as |MoveToNext|, except this moves to the next fragmentainer if
+  // |Current| is at the end of a fragmentainer.
+  void MoveToNextIncludingFragmentainer();
+
+  //
+  // Functions to enumerate fragments for a |LayoutObject|.
+  //
+
   // Move to first |NGFragmentItem| or |NGPaintFragment| associated to
   // |layout_object|. When |layout_object| has no associated fragments, this
   // cursor points nothing.
   void MoveTo(const LayoutObject& layout_object);
+
+  // Same as |MoveTo|, except that this enumerates fragments for descendants
+  // if |layout_object| is a culled inline.
+  //
+  // Note, for a culled inline, fragments may not be in the visual order in
+  // the inline direction if RTL or mixed bidi for a performance reason.
   void MoveToIncludingCulledInline(const LayoutObject& layout_object);
 
   // Move the current position to next fragment on same layout object.
@@ -434,9 +467,27 @@ class CORE_EXPORT NGInlineCursor {
 #endif
 
  private:
+  // Returns true if |this| is only for a part of an inline formatting context;
+  // in other words, if |this| is created by |CursorForDescendants|.
+  bool IsDescendantsCursor() const {
+    if (fragment_items_)
+      return !fragment_items_->Equals(items_);
+    if (root_paint_fragment_)
+      return root_paint_fragment_->Parent();
+    return false;
+  }
+  bool CanMoveAcrossFragmentainer() const {
+    return root_block_flow_ && IsItemCursor() && !IsDescendantsCursor();
+  }
+  bool CanUseLayoutObjectIndex() const;
+
   // True if the current position is a last line in inline block. It is error
   // to call at end or the current position is not line.
   bool IsLastLineInInlineBlock() const;
+
+  // Index conversions for |IsDescendantsCursor()|.
+  wtf_size_t SpanBeginItemIndex() const;
+  wtf_size_t SpanIndexFromItemIndex(unsigned index) const;
 
   // Make the current position points nothing, e.g. cursor moves over start/end
   // fragment, cursor moves to first/last child to parent has no children.
@@ -449,6 +500,9 @@ class CORE_EXPORT NGInlineCursor {
   void SetRoot(const NGFragmentItems& fragment_items, ItemsSpan items);
   void SetRoot(const NGPaintFragment& root_paint_fragment);
   void SetRoot(const LayoutBlockFlow& block_flow);
+  bool SetRoot(const LayoutBlockFlow& block_flow, wtf_size_t fragment_index);
+
+  bool TrySetRootFragmentItems();
 
   void MoveToItem(const ItemsSpan::iterator& iter);
   void MoveToNextItem();
@@ -462,13 +516,44 @@ class CORE_EXPORT NGInlineCursor {
   void MoveToPreviousPaintFragment();
   void MoveToPreviousSiblingPaintFragment();
 
-  static ItemsSpan::iterator SlowFirstItemIteratorFor(
-      const LayoutObject& layout_object,
-      const ItemsSpan& items);
-  static wtf_size_t SlowFirstItemIndexFor(const LayoutObject& layout_object,
-                                          const ItemsSpan& items);
-  wtf_size_t SpanBeginItemIndex() const;
-  wtf_size_t SpanIndexFromItemIndex(unsigned index) const;
+  void SlowMoveToFirstFor(const LayoutObject& layout_object);
+  void SlowMoveToNextForSameLayoutObject(const LayoutObject& layout_object);
+  void SlowMoveToForIfNeeded(const LayoutObject& layout_object);
+
+  // |MoveToNextForSameLayoutObject| that doesn't check |culled_inline_|.
+  void MoveToNextForSameLayoutObjectExceptCulledInline();
+
+  // A helper class to enumerate |LayoutObject|s that contribute to a culled
+  // inline.
+  class CulledInlineTraversal {
+    STACK_ALLOCATED();
+
+   public:
+    CulledInlineTraversal() = default;
+
+    const LayoutInline* GetLayoutInline() const { return layout_inline_; }
+
+    explicit operator bool() const { return layout_inline_; }
+    void Reset() { layout_inline_ = nullptr; }
+
+    bool UseFragmentTree() const { return use_fragment_tree_; }
+    void SetUseFragmentTree(const LayoutInline& layout_inline);
+
+    // Returns first/next |LayoutObject| that contribute to |layout_inline|.
+    const LayoutObject* MoveToFirstFor(const LayoutInline& layout_inline);
+    const LayoutObject* MoveToNext();
+
+   private:
+    const LayoutObject* Find(const LayoutObject* child) const;
+
+    const LayoutObject* current_object_ = nullptr;
+    const LayoutInline* layout_inline_ = nullptr;
+    bool use_fragment_tree_ = false;
+  };
+
+  void MoveToFirstForCulledInline(const LayoutInline& layout_inline);
+  void MoveToNextForCulledInline();
+  void MoveToNextCulledInlineDescendantIfNeeded();
 
   NGInlineCursorPosition current_;
 
@@ -477,8 +562,15 @@ class CORE_EXPORT NGInlineCursor {
 
   const NGPaintFragment* root_paint_fragment_ = nullptr;
 
-  // Used in |MoveToNextForSameLayoutObject()| to support culled inline.
-  const LayoutInline* layout_inline_ = nullptr;
+  CulledInlineTraversal culled_inline_;
+
+  // Used to traverse multiple |NGFragmentItems| when block fragmented.
+  const LayoutBlockFlow* root_block_flow_ = nullptr;
+  wtf_size_t fragment_index_ = 0;
+  wtf_size_t max_fragment_index_ = 0;
+
+  // Used only when |!CanUseLayoutObjectIndex|.
+  const LayoutObject* layout_object_to_slow_move_to_ = nullptr;
 
   friend class NGInlineBackwardCursor;
 };

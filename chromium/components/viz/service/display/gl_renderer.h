@@ -7,11 +7,14 @@
 
 #include <map>
 #include <memory>
+#include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/cancelable_callback.h"
 #include "base/containers/circular_deque.h"
+#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
@@ -31,7 +34,7 @@
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/latency/latency_info.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "components/viz/service/display/ca_layer_overlay.h"
 #endif
 
@@ -69,6 +72,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   class ScopedUseGrContext;
 
   GLRenderer(const RendererSettings* settings,
+             const DebugRendererSettings* debug_settings,
              OutputSurface* output_surface,
              DisplayResourceProvider* resource_provider,
              OverlayProcessorInterface* overlay_processor,
@@ -119,9 +123,6 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   void EnsureScissorTestDisabled() override;
   void CopyDrawnRenderPass(const copy_output::RenderPassGeometry& geometry,
                            std::unique_ptr<CopyOutputRequest> request) override;
-#if defined(OS_WIN)
-  void SetEnableDCLayers(bool enable) override;
-#endif
   void FinishDrawingQuadList() override;
   void GenerateMipmap() override;
 
@@ -163,6 +164,9 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   // the execution of SwapBuffers, and such textures are more expensive to make
   // so we want to reuse them.
   struct OverlayTexture {
+    OverlayTexture();
+    ~OverlayTexture();
+
     RenderPassId render_pass_id;
     ScopedGpuMemoryBufferTexture texture;
     int frames_waiting_for_reuse = 0;
@@ -293,13 +297,16 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
     return shared_geometry_.get();
   }
 
-  // If |dst_color_space| is invalid, then no color conversion (apart from
-  // YUV to RGB conversion) is performed. This explicit argument is available
-  // so that video color conversion can be enabled separately from general color
-  // conversion.
+  // If |dst_color_space| is invalid, then no color conversion (apart from YUV
+  // to RGB conversion) is performed. This explicit argument is available so
+  // that video color conversion can be enabled separately from general color
+  // conversion. If |adjust_src_white_level| is true, then the |src_color_space|
+  // white levels are adjusted to the display SDR white level so that no white
+  // level scaling happens.
   void SetUseProgram(const ProgramKey& program_key,
                      const gfx::ColorSpace& src_color_space,
-                     const gfx::ColorSpace& dst_color_space);
+                     const gfx::ColorSpace& dst_color_space,
+                     bool adjust_src_white_level = false);
 
   bool MakeContextCurrent();
 
@@ -319,7 +326,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   // Schedule overlays sends overlay candidate to the GPU.
 #if defined(OS_ANDROID) || defined(USE_OZONE)
   void ScheduleOverlays();
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   void ScheduleCALayers();
 
   // Schedules the |ca_layer_overlay|, which is guaranteed to have a non-null
@@ -354,6 +361,9 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   void ProcessOverdrawFeedback(base::CheckedNumeric<int> surface_area,
                                unsigned query);
   bool OverdrawTracingEnabled();
+
+  bool CompositeTimeTracingEnabled() override;
+  void AddCompositeTimeTraces(base::TimeTicks ready_timestamp) override;
 
   ResourceFormat CurrentRenderPassResourceFormat() const;
 
@@ -434,6 +444,7 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   bool use_sync_query_ = false;
   bool use_blend_equation_advanced_ = false;
   bool use_blend_equation_advanced_coherent_ = false;
+  bool use_timer_query_ = false;
   bool use_occlusion_query_ = false;
   bool use_swap_with_bounds_ = false;
 
@@ -454,6 +465,10 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
 
   unsigned num_triangles_drawn_ = 0;
   bool prefer_draw_to_copy_ = false;
+
+  // A circular queue of to keep track of timer queries and their associated
+  // quad type as string.
+  base::queue<std::pair<unsigned, std::string>> timer_queries_;
 
   // This may be null if the compositor is run on a thread without a
   // MessageLoop.

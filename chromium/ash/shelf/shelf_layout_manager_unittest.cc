@@ -101,6 +101,7 @@
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/types/event_type.h"
+#include "ui/views/animation/bounds_animator.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -211,6 +212,13 @@ class ShelfLayoutManagerTest : public ShelfLayoutManagerTestBase,
       }
     }
     ShelfLayoutManagerTestBase::SetUp();
+  }
+
+  void SetUpKioskSession() {
+    SessionInfo info;
+    info.is_running_in_app_mode = true;
+    info.state = session_manager::SessionState::ACTIVE;
+    Shell::Get()->session_controller()->SetSessionInfo(info);
   }
 
  private:
@@ -576,6 +584,26 @@ TEST_P(ShelfLayoutManagerTest, VisibleWhenLockScreenShowing) {
             GetShelfWidget()->GetBackgroundType());
 }
 
+// Verifies that the hidden shelf shows after triggering the FOCUS_SHELF
+// accelerator (https://crbug.com/1111426).
+TEST_F(ShelfLayoutManagerTest, ShowHiddenShelfByFocusShelfAccelerator) {
+  // Open a window so that the shelf will auto-hide.
+  std::unique_ptr<aura::Window> window(CreateTestWindow());
+  window->Show();
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+
+  // Focus on the shelf by accelerator.
+  Shell::Get()->accelerator_controller()->PerformActionIfEnabled(FOCUS_SHELF,
+                                                                 {});
+
+  // Shelf should be visible.
+  EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
+}
+
 TEST_F(ShelfLayoutManagerTest, ShelfDoesNotAutoHideWithVoxAndTabletMode) {
   TabletModeControllerTestApi().EnterTabletMode();
   // Open a window so that the shelf will auto-hide.
@@ -756,6 +784,44 @@ TEST_P(ShelfLayoutManagerTest, StatusAreaMoveWithSwipeOnAutoHiddenShelf) {
 
   EXPECT_EQ(hidden_shelf_in_screen_portion,
             GetWidgetOffsetFromBottom(shelf->status_area_widget()));
+}
+
+// Checks that the shelf keeps hidden during the Kiosk mode.
+TEST_P(ShelfLayoutManagerTest, HiddenShelfInKioskMode_FullScreen) {
+  SetUpKioskSession();
+
+  // Create a window and make it full screen; the shelf should be hidden.
+  aura::Window* window = CreateTestWindow();
+  window->SetBounds(gfx::Rect(0, 0, 100, 100));
+  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
+  window->SetProperty(kHideShelfWhenFullscreenKey, false);
+  window->Show();
+  wm::ActivateWindow(window);
+  GetAppListTestHelper()->CheckVisibility(false);
+  EXPECT_EQ(SHELF_HIDDEN, GetPrimaryShelf()->GetVisibilityState());
+  EXPECT_EQ(WorkspaceWindowState::kFullscreen, GetWorkspaceWindowState());
+
+  SwipeUpOnShelf();
+  EXPECT_EQ(SHELF_HIDDEN, GetPrimaryShelf()->GetVisibilityState());
+}
+
+// Checks that the shelf keeps hidden during the Kiosk mode. (Some windows might
+// not be fullscreen, e.g., the a11y setting window.)
+TEST_P(ShelfLayoutManagerTest, HiddenShelfInKioskMode_Default) {
+  SetUpKioskSession();
+
+  // Create a default window; the shelf should be hidden.
+  aura::Window* window = CreateTestWindow();
+  window->SetBounds(gfx::Rect(0, 0, 100, 100));
+  window->SetProperty(kHideShelfWhenFullscreenKey, false);
+  window->Show();
+  wm::ActivateWindow(window);
+  GetAppListTestHelper()->CheckVisibility(false);
+  EXPECT_EQ(SHELF_HIDDEN, GetPrimaryShelf()->GetVisibilityState());
+  EXPECT_EQ(WorkspaceWindowState::kDefault, GetWorkspaceWindowState());
+
+  SwipeUpOnShelf();
+  EXPECT_EQ(SHELF_HIDDEN, GetPrimaryShelf()->GetVisibilityState());
 }
 
 TEST_P(ShelfLayoutManagerTest,
@@ -2699,10 +2765,8 @@ class ShelfLayoutManagerWindowDraggingTest : public ShelfLayoutManagerTestBase {
 
   // ShelfLayoutManagerTestBase:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kShelfHotseat,
-         features::kDragFromShelfToHomeOrOverview},
-        {});
+    scoped_feature_list_.InitWithFeatures({chromeos::features::kShelfHotseat},
+                                          {});
     ShelfLayoutManagerTestBase::SetUp();
 
     TabletModeControllerTestApi().EnterTabletMode();
@@ -3705,6 +3769,69 @@ TEST_F(ShelfLayoutManagerTest, VerifyAutoHideBehaviorOnMultipleDisplays) {
 
   // Verify that the primary shelf is still hidden.
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+}
+
+TEST_F(ShelfLayoutManagerTest, VerifyHomeButtonBounds) {
+  Shell::Get()
+      ->accessibility_controller()
+      ->SetTabletModeShelfNavigationButtonsEnabled(true);
+  TabletModeControllerTestApi().EnterTabletMode();
+
+  ASSERT_EQ(HotseatState::kShownHomeLauncher,
+            GetShelfLayoutManager()->hotseat_state());
+
+  const gfx::Rect display_bounds = GetPrimaryDisplay().bounds();
+  Shelf* shelf = GetPrimaryShelf();
+  ShelfNavigationWidget* navigation_widget = shelf->navigation_widget();
+  const gfx::Size widget_size_in_home_launcher =
+      navigation_widget->GetWindowBoundsInScreen().size();
+
+  auto fetch_home_button_screen_bounds =
+      [](const ShelfNavigationWidget* navigation_widget) -> gfx::Rect {
+    gfx::Rect home_button_bounds_in_screen =
+        navigation_widget->bounds_animator_for_test()->GetTargetBounds(
+            navigation_widget->GetHomeButton());
+    const gfx::Rect navigation_widget_bounds_in_screen =
+        navigation_widget->GetWindowBoundsInScreen();
+    home_button_bounds_in_screen.Offset(
+        navigation_widget_bounds_in_screen.OffsetFromOrigin());
+    return home_button_bounds_in_screen;
+  };
+
+  // Verify home button bounds in home launcher.
+  {
+    const gfx::Rect home_button_bounds_in_screen =
+        fetch_home_button_screen_bounds(navigation_widget);
+    const int horizontal_edge_spacing =
+        ShelfConfig::Get()->control_button_edge_spacing(
+            /*is_primary_axis_edge=*/true);
+    EXPECT_EQ(horizontal_edge_spacing, home_button_bounds_in_screen.x());
+    const int vertical_edge_spacing =
+        ShelfConfig::Get()->control_button_edge_spacing(
+            /*is_primary_axis_edge=*/false);
+    EXPECT_EQ(display_bounds.bottom(),
+              home_button_bounds_in_screen.bottom() + vertical_edge_spacing);
+  }
+
+  // Activate a window and wait for the navigation widget animation to finish.
+  WidgetAnimationWaiter waiter(shelf->navigation_widget());
+  std::unique_ptr<aura::Window> window =
+      AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
+  wm::ActivateWindow(window.get());
+  waiter.WaitForAnimation();
+
+  ASSERT_EQ(HotseatState::kHidden, GetShelfLayoutManager()->hotseat_state());
+
+  const gfx::Size widget_size_in_hidden_state =
+      navigation_widget->GetWindowBoundsInScreen().size();
+  EXPECT_EQ(widget_size_in_home_launcher, widget_size_in_hidden_state);
+
+  // Verify home button bounds in the hidden state.
+  {
+    const gfx::Rect home_button_bounds_in_screen =
+        fetch_home_button_screen_bounds(navigation_widget);
+    EXPECT_EQ(display_bounds.bottom(), home_button_bounds_in_screen.bottom());
+  }
 }
 
 // Tests that pinned app icons are visible on non-primary displays.

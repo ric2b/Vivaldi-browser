@@ -14,10 +14,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/sandbox_type.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/process_type.h"
-#include "services/service_manager/sandbox/win/sandbox_win.h"
+#include "sandbox/policy/win/sandbox_win.h"
 
 using content::BrowserChildProcessHostIterator;
 using content::ChildProcessData;
@@ -46,7 +45,7 @@ base::Value FetchBrowserChildProcesses() {
     proc.SetPath("metricsName", base::Value(process_data.metrics_name));
     proc.SetPath(
         "sandboxType",
-        base::Value(service_manager::SandboxWin::GetSandboxTypeInEnglish(
+        base::Value(sandbox::policy::SandboxWin::GetSandboxTypeInEnglish(
             process_data.sandbox_type)));
     browser_processes.Append(std::move(proc));
   }
@@ -109,7 +108,7 @@ void SandboxHandler::FetchBrowserChildProcessesCompleted(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   browser_processes_ = std::move(browser_processes);
 
-  service_manager::SandboxWin::GetPolicyDiagnostics(
+  sandbox::policy::SandboxWin::GetPolicyDiagnostics(
       base::BindOnce(&SandboxHandler::FetchSandboxDiagnosticsCompleted,
                      weak_ptr_factory_.GetWeakPtr()));
 }

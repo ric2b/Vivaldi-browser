@@ -46,7 +46,7 @@ void TestSessionController::RunUnlockAnimation(
 void TestSessionController::NotifyChromeTerminating() {}
 
 void TestSessionController::SetSessionLengthLimit(base::TimeDelta length_limit,
-                                                  base::TimeTicks start_time) {
+                                                  base::Time start_time) {
   last_session_length_limit_ = length_limit;
   last_session_start_time_ = start_time;
 }
@@ -76,3 +76,12 @@ void TestSessionController::AddSessionActivationObserverForAccountId(
 void TestSessionController::RemoveSessionActivationObserverForAccountId(
     const AccountId& account_id,
     ash::SessionActivationObserver* observer) {}
+
+void TestSessionController::AddObserver(ash::SessionObserver* observer) {}
+
+void TestSessionController::RemoveObserver(ash::SessionObserver* observer) {}
+
+bool TestSessionController::IsScreenLocked() const {
+  NOTIMPLEMENTED();
+  return false;
+}

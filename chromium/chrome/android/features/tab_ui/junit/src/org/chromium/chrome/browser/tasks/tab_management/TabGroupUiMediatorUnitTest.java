@@ -40,6 +40,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -52,6 +53,7 @@ import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
@@ -104,7 +106,7 @@ public class TabGroupUiMediatorUnitTest {
     @Mock
     TabCreatorManager mTabCreatorManager;
     @Mock
-    TabCreatorManager.TabCreator mTabCreator;
+    TabCreator mTabCreator;
     @Mock
     OverviewModeBehavior mOverviewModeBehavior;
     @Mock
@@ -156,6 +158,8 @@ public class TabGroupUiMediatorUnitTest {
     private TabGroupUiMediator mTabGroupUiMediator;
     private InOrder mResetHandlerInOrder;
     private InOrder mVisibilityControllerInOrder;
+    private ObservableSupplierImpl<OverviewModeBehavior> mOverviewModeBehaviorSupplier =
+            new ObservableSupplierImpl<>();
 
     private TabImpl prepareTab(int tabId, int rootId) {
         TabImpl tab = TabUiUnitTestUtils.prepareTab(tabId, rootId);
@@ -200,7 +204,7 @@ public class TabGroupUiMediatorUnitTest {
         TabGridDialogMediator.DialogController controller =
                 TabUiFeatureUtilities.isTabGroupsAndroidEnabled() ? mTabGridDialogController : null;
         mTabGroupUiMediator = new TabGroupUiMediator(mContext, mVisibilityController, mResetHandler,
-                mModel, mTabModelSelector, mTabCreatorManager, mOverviewModeBehavior,
+                mModel, mTabModelSelector, mTabCreatorManager, mOverviewModeBehaviorSupplier,
                 mThemeColorProvider, controller, mActivityLifecycleDispatcher, mSnackbarManageable);
 
         if (currentTab == null) {
@@ -321,6 +325,7 @@ public class TabGroupUiMediatorUnitTest {
         doNothing()
                 .when(mOverviewModeBehavior)
                 .addOverviewModeObserver(mOverviewModeObserverArgumentCaptor.capture());
+        mOverviewModeBehaviorSupplier.set(mOverviewModeBehavior);
 
         // Set up ThemeColorProvider
         doNothing()

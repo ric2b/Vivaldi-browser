@@ -26,6 +26,11 @@ bool IsCoinflipExperimentEnabled() {
                                                  "is_coinflip_exp", false);
 }
 
+bool LiteVideoUseOptimizationGuide() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      ::features::kLiteVideo, "use_optimization_guide", false);
+}
+
 base::Optional<base::Value> GetLiteVideoOriginHintsFromFieldTrial() {
   if (!IsLiteVideoEnabled())
     return base::nullopt;
@@ -85,6 +90,41 @@ net::EffectiveConnectionType MinLiteVideoECT() {
              base::GetFieldTrialParamValueByFeature(::features::kLiteVideo,
                                                     "min_lite_video_ect"))
       .value_or(net::EFFECTIVE_CONNECTION_TYPE_4G);
+}
+
+int MaxOptimizationGuideHintCacheSize() {
+  return LiteVideoUseOptimizationGuide()
+             ? GetFieldTrialParamByFeatureAsInt(
+                   ::features::kLiteVideo, "max_opt_guide_hint_cache_size", 10)
+             : 1;
+}
+
+base::flat_set<std::string> GetLiteVideoPermanentBlocklist() {
+  if (!IsLiteVideoEnabled())
+    return {};
+
+  const std::string permanent_host_blocklist_json =
+      base::GetFieldTrialParamValueByFeature(::features::kLiteVideo,
+                                             "permanent_host_blocklist");
+  if (permanent_host_blocklist_json.empty())
+    return {};
+
+  base::Optional<base::Value> permanent_host_blocklist_parsed =
+      base::JSONReader::Read(permanent_host_blocklist_json);
+
+  if (!permanent_host_blocklist_parsed ||
+      !permanent_host_blocklist_parsed->is_list())
+    return {};
+
+  base::flat_set<std::string> permanent_host_blocklist;
+  permanent_host_blocklist.reserve(
+      permanent_host_blocklist_parsed->GetList().size());
+  for (const auto& host : permanent_host_blocklist_parsed->GetList()) {
+    if (!host.is_string())
+      continue;
+    permanent_host_blocklist.insert(host.GetString());
+  }
+  return permanent_host_blocklist;
 }
 
 }  // namespace features

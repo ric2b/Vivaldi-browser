@@ -26,7 +26,7 @@ FrameNodeImpl::FrameNodeImpl(ProcessNodeImpl* process_node,
                              FrameNodeImpl* parent_frame_node,
                              int frame_tree_node_id,
                              int render_frame_id,
-                             const FrameToken& frame_token,
+                             const blink::LocalFrameToken& frame_token,
                              int32_t browsing_instance_id,
                              int32_t site_instance_id)
     : parent_frame_node_(parent_frame_node),
@@ -38,7 +38,9 @@ FrameNodeImpl::FrameNodeImpl(ProcessNodeImpl* process_node,
       browsing_instance_id_(browsing_instance_id),
       site_instance_id_(site_instance_id),
       render_frame_host_proxy_(content::GlobalFrameRoutingId(
-          process_node->render_process_host_proxy().render_process_host_id(),
+          process_node->render_process_host_proxy()
+              .render_process_host_id()
+              .value(),
           render_frame_id)),
       weak_factory_(this) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
@@ -136,7 +138,7 @@ int FrameNodeImpl::render_frame_id() const {
   return render_frame_id_;
 }
 
-const FrameToken& FrameNodeImpl::frame_token() const {
+const blink::LocalFrameToken& FrameNodeImpl::frame_token() const {
   return frame_token_;
 }
 
@@ -369,7 +371,7 @@ int FrameNodeImpl::GetFrameTreeNodeId() const {
   return frame_tree_node_id();
 }
 
-const FrameToken& FrameNodeImpl::GetFrameToken() const {
+const blink::LocalFrameToken& FrameNodeImpl::GetFrameToken() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return frame_token();
 }

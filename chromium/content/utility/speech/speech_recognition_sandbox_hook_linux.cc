@@ -19,16 +19,14 @@ namespace {
 
 // Gets the file permissions required by the Speech On-Device API (SODA).
 std::vector<BrokerFilePermission> GetSodaFilePermissions(
-    base::FilePath latest_version_dir) {
+    base::FilePath soda_dir) {
   std::vector<BrokerFilePermission> permissions{
       BrokerFilePermission::ReadOnly("/dev/urandom")};
 
   // This may happen if a user doesn't have a SODA installation.
-  if (!latest_version_dir.empty()) {
+  if (!soda_dir.empty()) {
     permissions.push_back(BrokerFilePermission::ReadOnlyRecursive(
-        latest_version_dir.AsEndingWithSeparator().value()));
-    permissions.push_back(
-        BrokerFilePermission::ReadOnly(latest_version_dir.value()));
+        soda_dir.AsEndingWithSeparator().value()));
   }
 
   return permissions;
@@ -37,12 +35,12 @@ std::vector<BrokerFilePermission> GetSodaFilePermissions(
 }  // namespace
 
 bool SpeechRecognitionPreSandboxHook(
-    service_manager::SandboxLinux::Options options) {
+    sandbox::policy::SandboxLinux::Options options) {
   void* soda_library = dlopen(GetSodaBinaryPath().value().c_str(),
                               RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE);
   DCHECK(soda_library);
 
-  auto* instance = service_manager::SandboxLinux::GetInstance();
+  auto* instance = sandbox::policy::SandboxLinux::GetInstance();
   instance->StartBrokerProcess(MakeBrokerCommandSet({
                                    sandbox::syscall_broker::COMMAND_ACCESS,
                                    sandbox::syscall_broker::COMMAND_OPEN,
@@ -50,7 +48,7 @@ bool SpeechRecognitionPreSandboxHook(
                                    sandbox::syscall_broker::COMMAND_STAT,
                                }),
                                GetSodaFilePermissions(GetSodaDirectory()),
-                               service_manager::SandboxLinux::PreSandboxHook(),
+                               sandbox::policy::SandboxLinux::PreSandboxHook(),
                                options);
   instance->EngageNamespaceSandboxIfPossible();
 

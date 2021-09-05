@@ -49,8 +49,11 @@ bool EventHandlerAndroid::ScrollTo(float x, float y) {
 
 void EventHandlerAndroid::OnSizeChanged() {}
 
-void EventHandlerAndroid::OnPhysicalBackingSizeChanged() {}
+void EventHandlerAndroid::OnPhysicalBackingSizeChanged(
+    base::Optional<base::TimeDelta> deadline_override) {}
 
 void EventHandlerAndroid::OnBrowserControlsHeightChanged() {}
+
+void EventHandlerAndroid::OnControlsResizeViewChanged() {}
 
 }  // namespace ui

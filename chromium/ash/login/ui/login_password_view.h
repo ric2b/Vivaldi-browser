@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/login/ui/animated_rounded_image_view.h"
+#include "ash/login/ui/login_palette.h"
 #include "ash/public/cpp/session/user_info.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
@@ -26,12 +27,12 @@ class ToggleImageButton;
 }  // namespace views
 
 namespace ash {
-class LoginButton;
+class ArrowButtonView;
 enum class EasyUnlockIconId;
 
-// Contains a textfield instance with a submit button when the display password
-// button feature is disabled, and a display password button otherwise. The user
-// can type a password into the textfield and hit enter to submit.
+// Contains a textfield and a submit button. When the display password button
+// feature is enabled, the textfield contains a button in the form of an eye
+// icon that the user can click on to reveal the password.
 //
 // This view is always rendered via layers.
 //
@@ -39,18 +40,18 @@ enum class EasyUnlockIconId;
 // When the display password button feature is disabled, the password view looks
 // like this:
 //
-// * * * * * *     =>
+// * * * * * *         (=>)
 // ------------------
 //
 // When the display password button feature is enabled, the password view looks
 // like this by default:
 //
-//  * * * * * *    (\)
+//  * * * * * *    (\)  (=>)
 //  ------------------
 //
 //  or this, in display mode:
 //
-//  1 2 3 4 5 6    (o)
+//  1 2 3 4 5 6    (o)  (=>)
 //  ------------------
 class ASH_EXPORT LoginPasswordView : public views::View,
                                      public views::ButtonListener,
@@ -85,7 +86,7 @@ class ASH_EXPORT LoginPasswordView : public views::View,
   using OnEasyUnlockIconTapped = base::RepeatingClosure;
 
   // Must call |Init| after construction.
-  LoginPasswordView();
+  explicit LoginPasswordView(const LoginPalette& palette);
   ~LoginPasswordView() override;
 
   // |on_submit| is called when the user hits enter (or pressed the submit arrow
@@ -205,10 +206,12 @@ class ASH_EXPORT LoginPasswordView : public views::View,
   // through the password and make the characters read out loud one by one).
   std::unique_ptr<base::RetainingOneShotTimer> hide_password_timer_;
 
+  LoginPalette palette_;
+
   views::View* password_row_ = nullptr;
 
   LoginTextfield* textfield_ = nullptr;
-  LoginButton* submit_button_ = nullptr;
+  ArrowButtonView* submit_button_ = nullptr;
   DisplayPasswordButton* display_password_button_ = nullptr;
   views::ImageView* capslock_icon_ = nullptr;
   views::Separator* separator_ = nullptr;

@@ -13,7 +13,7 @@
 #include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/site_for_cookies.h"
 #include "url/origin.h"
@@ -80,6 +80,22 @@ NET_EXPORT std::string CookieDomainAsHost(const std::string& cookie_domain);
 // supported by Time::FromUTCExplodeded(), then this will return Time(1) or
 // Time::Max(), respectively.
 NET_EXPORT base::Time ParseCookieExpirationTime(const std::string& time_string);
+
+// Get a cookie's URL from it's domain, path, and source scheme.
+// The first field can be the combined domain-and-host-only-flag (e.g. the
+// string returned by CanonicalCookie::Domain()) as opposed to the domain
+// attribute per RFC6265bis. The GURL is constructed after stripping off any
+// leading dot.
+// Note: the GURL returned by this method is not guaranteed to be valid.
+NET_EXPORT GURL CookieDomainAndPathToURL(const std::string& domain,
+                                         const std::string& path,
+                                         const std::string& source_scheme);
+NET_EXPORT GURL CookieDomainAndPathToURL(const std::string& domain,
+                                         const std::string& path,
+                                         bool is_https);
+NET_EXPORT GURL CookieDomainAndPathToURL(const std::string& domain,
+                                         const std::string& path,
+                                         CookieSourceScheme source_scheme);
 
 // Convenience for converting a cookie origin (domain and https pair) to a URL.
 NET_EXPORT GURL CookieOriginToURL(const std::string& domain, bool is_https);
@@ -230,14 +246,14 @@ bool DoesLastHttpSameSiteAccessGrantLegacySemantics(
 // the feature param, and the creation time of the cookie.
 bool DoesCreationTimeGrantLegacySemantics(base::Time creation_date);
 
-// Takes a callback accepting a CookieInclusionStatus and returns a callback
+// Takes a callback accepting a CookieAccessResult and returns a callback
 // that accepts a bool, setting the bool to true if the CookieInclusionStatus
-// was set to "include", else sending false.
+// in CookieAccessResult was set to "include", else sending false.
 //
 // Can be used with SetCanonicalCookie when you don't need to know why a cookie
 // was blocked, only whether it was blocked.
-NET_EXPORT base::OnceCallback<void(CookieInclusionStatus)>
-AdaptCookieInclusionStatusToBool(base::OnceCallback<void(bool)> callback);
+NET_EXPORT base::OnceCallback<void(CookieAccessResult)>
+AdaptCookieAccessResultToBool(base::OnceCallback<void(bool)> callback);
 
 // Turn a CookieAccessResultList into a CookieList by stripping out access
 // results (for callers who only care about cookies).

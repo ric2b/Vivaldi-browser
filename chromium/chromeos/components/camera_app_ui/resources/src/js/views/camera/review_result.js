@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 import {assertInstanceof} from '../../chrome_util.js';
+import {pictureURL} from '../../models/file_system.js';
+// eslint-disable-next-line no-unused-vars
+import {AbstractFileEntry} from '../../models/file_system_entry.js';
 import * as state from '../../state.js';
 import * as util from '../../util.js';
 
@@ -118,7 +121,13 @@ export class ReviewResult {
    */
   async openPhoto(blob) {
     const img = await util.blobToImage(blob);
-    this.reviewPhotoResult_.src = img.src;
+
+    await new Promise((resolve, reject) => {
+      this.reviewPhotoResult_.onload = resolve;
+      this.reviewPhotoResult_.onerror = reject;
+      this.reviewPhotoResult_.src = img.src;
+    });
+
     state.set(state.State.REVIEW_PHOTO_RESULT, true);
     state.set(state.State.REVIEW_RESULT, true);
     this.confirmResultButton_.focus();
@@ -130,12 +139,19 @@ export class ReviewResult {
 
   /**
    * Opens video result file and shows video on review result UI.
-   * @param {!FileEntry} fileEntry Video result file.
+   * @param {!AbstractFileEntry} fileEntry Video result file.
    * @return {!Promise<boolean>} Promise resolved with whether user confirms
    *     with the video result.
    */
   async openVideo(fileEntry) {
-    this.reviewVideoResult_.src = fileEntry.toURL();
+    await new Promise((resolve, reject) => {
+      this.reviewVideoResult_.oncanplay = resolve;
+      this.reviewVideoResult_.onerror = reject;
+      pictureURL(fileEntry).then((url) => {
+        this.reviewVideoResult_.src = url;
+      });
+    });
+
     state.set(state.State.REVIEW_VIDEO_RESULT, true);
     state.set(state.State.REVIEW_RESULT, true);
     this.confirmResultButton_.focus();

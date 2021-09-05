@@ -5,6 +5,7 @@
 #include "components/viz/common/features.h"
 
 #include "base/command_line.h"
+#include "base/system/sys_info.h"
 #include "build/chromecast_buildflags.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/common/viz_utils.h"
@@ -16,8 +17,8 @@
 
 namespace features {
 
-const base::Feature kUseSkiaForGLReadback{"UseSkiaForGLReadback",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kForcePreferredIntervalForVideo{
+    "ForcePreferredIntervalForVideo", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use the SkiaRenderer.
 #if defined(OS_LINUX) && !(defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST))
@@ -53,8 +54,13 @@ const base::Feature kVizForWebView{"VizForWebView",
 const base::Feature kVizFrameSubmissionForWebView{
     "VizFrameSubmissionForWebView", base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(OS_ANDROID)
 const base::Feature kUsePreferredIntervalForVideo{
     "UsePreferredIntervalForVideo", base::FEATURE_DISABLED_BY_DEFAULT};
+#else
+const base::Feature kUsePreferredIntervalForVideo{
+    "UsePreferredIntervalForVideo", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
 
 // Whether we should use the real buffers corresponding to overlay candidates in
 // order to do a pageflip test rather than allocating test buffers.
@@ -77,19 +83,22 @@ const base::Feature kWebRtcLogCapturePipeline{
 
 // The number of frames to wait before toggling to a lower frame rate.
 const base::FeatureParam<int> kNumOfFramesToToggleInterval{
-    &kUsePreferredIntervalForVideo, "NumOfFramesToToggleInterval", 60};
+    &kUsePreferredIntervalForVideo, "NumOfFramesToToggleInterval", 6};
+
+#if defined(OS_WIN)
+// Enables swap chains to call SetPresentDuration to request DWM/OS to reduce
+// vsync.
+const base::Feature kUseSetPresentDuration{"UseSetPresentDuration",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // OS_WIN
+
+bool IsForcePreferredIntervalForVideoEnabled() {
+  return base::FeatureList::IsEnabled(kForcePreferredIntervalForVideo);
+}
 
 bool IsVizHitTestingDebugEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableVizHitTestDebug);
-}
-
-bool IsUsingSkiaForGLReadback() {
-  // Viz for webview requires Skia Readback.
-  if (IsUsingVizForWebView())
-    return true;
-
-  return base::FeatureList::IsEnabled(kUseSkiaForGLReadback);
 }
 
 bool IsUsingSkiaRenderer() {
@@ -104,6 +113,14 @@ bool IsUsingSkiaRenderer() {
   // Viz for webview requires SkiaRenderer.
   if (IsUsingVizForWebView())
     return true;
+
+#if defined(OS_ANDROID)
+  // https://crbug.com/1126490 Mali-400 with <= 512 MB is currently broken.
+  // Must be checked after IsUsingVizForWebView because it requires
+  // SkiaRenderer.
+  if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
+    return false;
+#endif
 
   return base::FeatureList::IsEnabled(kUseSkiaRenderer) ||
          base::FeatureList::IsEnabled(kVulkan);
@@ -140,7 +157,8 @@ bool IsUsingVizFrameSubmissionForWebView() {
 }
 
 bool IsUsingPreferredIntervalForVideo() {
-  return base::FeatureList::IsEnabled(kUsePreferredIntervalForVideo);
+  return IsForcePreferredIntervalForVideoEnabled() ||
+         base::FeatureList::IsEnabled(kUsePreferredIntervalForVideo);
 }
 
 int NumOfFramesToToggleInterval() {
@@ -159,4 +177,9 @@ bool ShouldWebRtcLogCapturePipeline() {
   return base::FeatureList::IsEnabled(kWebRtcLogCapturePipeline);
 }
 
+#if defined(OS_WIN)
+bool ShouldUseSetPresentDuration() {
+  return base::FeatureList::IsEnabled(kUseSetPresentDuration);
+}
+#endif  // OS_WIN
 }  // namespace features

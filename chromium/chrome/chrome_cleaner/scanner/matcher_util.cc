@@ -79,7 +79,7 @@ bool IsKnownFileByDigestInfo(const base::FilePath& fullpath,
 
 bool IsKnownFileByOriginalFilename(const base::FilePath& path,
                                    const SignatureMatcherAPI* signature_matcher,
-                                   const base::char16* const names[],
+                                   const wchar_t* const names[],
                                    size_t names_length) {
   DCHECK(signature_matcher);
   DCHECK(names);
@@ -91,8 +91,8 @@ bool IsKnownFileByOriginalFilename(const base::FilePath& path,
   }
 
   for (size_t i = 0; i < names_length; ++i) {
-    if (String16EqualsCaseInsensitive(version_information.original_filename,
-                                      names[i])) {
+    if (WStringEqualsCaseInsensitive(version_information.original_filename,
+                                     names[i])) {
       return true;
     }
   }
@@ -101,7 +101,7 @@ bool IsKnownFileByOriginalFilename(const base::FilePath& path,
 
 bool IsKnownFileByCompanyName(const base::FilePath& path,
                               const SignatureMatcherAPI* signature_matcher,
-                              const base::char16* const names[],
+                              const wchar_t* const names[],
                               size_t names_length) {
   DCHECK(signature_matcher);
   DCHECK(names);
@@ -113,8 +113,8 @@ bool IsKnownFileByCompanyName(const base::FilePath& path,
   }
 
   for (size_t i = 0; i < names_length; ++i) {
-    if (String16EqualsCaseInsensitive(version_information.company_name,
-                                      names[i])) {
+    if (WStringEqualsCaseInsensitive(version_information.company_name,
+                                     names[i])) {
       return true;
     }
   }

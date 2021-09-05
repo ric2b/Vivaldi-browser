@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <wayland-server-protocol-core.h>
 
+#include "base/observer_list.h"
 #include "ui/display/display.h"
 #include "ui/display/display_observer.h"
 
@@ -19,21 +20,21 @@ class WaylandDisplayOutput;
 
 class WaylandDisplayObserver : public display::DisplayObserver {
  public:
-  class ScaleObserver : public base::SupportsWeakPtr<ScaleObserver> {
+  class ScaleObserver : public base::CheckedObserver {
    public:
     ScaleObserver() {}
 
     virtual void OnDisplayScalesChanged(const display::Display& display) = 0;
 
    protected:
-    virtual ~ScaleObserver() {}
+    ~ScaleObserver() override {}
   };
 
   WaylandDisplayObserver(WaylandDisplayOutput* output,
                          wl_resource* output_resource);
   ~WaylandDisplayObserver() override;
-  void SetScaleObserver(base::WeakPtr<ScaleObserver> scale_observer);
-  bool HasScaleObserver() const;
+  void AddScaleObserver(ScaleObserver* scale_observer);
+  bool HasScaleObserver(ScaleObserver* scale_observer) const;
 
   // Overridden from display::DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
@@ -51,7 +52,7 @@ class WaylandDisplayObserver : public display::DisplayObserver {
   // The output resource associated with the display.
   wl_resource* const output_resource_;
 
-  base::WeakPtr<ScaleObserver> scale_observer_;
+  base::ObserverList<ScaleObserver> scale_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(WaylandDisplayObserver);
 };

@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
@@ -18,13 +20,13 @@
 #include "cc/input/browser_controls_offset_manager.h"
 #include "cc/metrics/compositor_timing_history.h"
 #include "cc/paint/paint_worklet_layer_painter.h"
+#include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/render_frame_metadata_observer.h"
-#include "cc/trees/scroll_and_scale_set.h"
 #include "cc/trees/task_runner_provider.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/frame_timing_details.h"
@@ -389,7 +391,7 @@ bool ProxyImpl::IsBeginMainFrameExpected() {
 void ProxyImpl::RenewTreePriority() {
   DCHECK(IsImplThread());
   const bool user_interaction_in_progress =
-      host_impl_->pinch_gesture_active() ||
+      host_impl_->GetInputHandler().pinch_gesture_active() ||
       host_impl_->page_scale_animation_active() ||
       host_impl_->IsActivelyPrecisionScrolling();
 
@@ -426,7 +428,7 @@ void ProxyImpl::RenewTreePriority() {
   // handling scroll updates within the same frame. The tree itself is still
   // kept in prefer smoothness mode to allow checkerboarding.
   ScrollHandlerState scroll_handler_state =
-      host_impl_->scroll_affects_scroll_handler()
+      host_impl_->ScrollAffectsScrollHandler()
           ? ScrollHandlerState::SCROLL_AFFECTS_SCROLL_HANDLER
           : ScrollHandlerState::SCROLL_DOES_NOT_AFFECT_SCROLL_HANDLER;
   scheduler_->SetTreePrioritiesAndScrollState(tree_priority,
@@ -580,7 +582,7 @@ void ProxyImpl::ScheduledActionSendBeginMainFrame(
       new BeginMainFrameAndCommitState);
   begin_main_frame_state->begin_frame_id = begin_frame_id;
   begin_main_frame_state->begin_frame_args = args;
-  begin_main_frame_state->scroll_info = host_impl_->ProcessScrollDeltas();
+  begin_main_frame_state->commit_data = host_impl_->ProcessCompositorDeltas();
   begin_main_frame_state->completed_image_decode_requests =
       host_impl_->TakeCompletedImageDecodeRequests();
   begin_main_frame_state->mutator_events = host_impl_->TakeMutatorEvents();
@@ -801,6 +803,11 @@ void ProxyImpl::ClearHistory() {
 void ProxyImpl::SetRenderFrameObserver(
     std::unique_ptr<RenderFrameMetadataObserver> observer) {
   host_impl_->SetRenderFrameObserver(std::move(observer));
+}
+
+void ProxyImpl::SetEnableFrameRateThrottling(
+    bool enable_frame_rate_throttling) {
+  host_impl_->SetEnableFrameRateThrottling(enable_frame_rate_throttling);
 }
 
 }  // namespace cc

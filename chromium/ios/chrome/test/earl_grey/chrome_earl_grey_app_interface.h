@@ -80,6 +80,9 @@
 // Returns the number of open incognito tabs.
 + (NSUInteger)incognitoTabCount WARN_UNUSED_RESULT;
 
+// Returns the number of open browsers.
++ (NSUInteger)browserCount WARN_UNUSED_RESULT;
+
 // Simulates a backgrounding.
 // If not succeed returns an NSError indicating  why the
 // operation failed, otherwise nil.
@@ -279,6 +282,9 @@
 // calling this.
 + (NSString*)syncCacheGUID;
 
+// Whether or not the fake sync server has been setup.
++ (BOOL)isFakeSyncServerSetUp;
+
 // Sets up a fake sync server to be used by the ProfileSyncService.
 + (void)setUpFakeSyncServer;
 
@@ -423,6 +429,9 @@
 
 // Returns YES if collections are presented in cards.
 + (BOOL)isCollectionsCardPresentationStyleEnabled WARN_UNUSED_RESULT;
+
+// Returns whether the mobile version of the websites are requested by default.
++ (BOOL)isMobileModeByDefault WARN_UNUSED_RESULT;
 
 #pragma mark - Popup Blocking
 

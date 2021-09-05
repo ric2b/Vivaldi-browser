@@ -8,7 +8,7 @@ import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 import './strings.m.js';
 import './signin_shared_css.js';
 
-import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -20,7 +20,7 @@ Polymer({
 
   _template: html`{__html_template__}`,
 
-  behaviors: [I18nBehavior, WebUIListenerBehavior],
+  behaviors: [WebUIListenerBehavior],
 
   properties: {
     /** @private */
@@ -30,9 +30,6 @@ Polymer({
         return loadTimeData.getString('accountImageUrl');
       },
     },
-
-    /** @private */
-    confirmButtonLabel_: String,
 
     /** @private */
     confirmButtonHidden_: {type: Boolean, value: true},
@@ -52,9 +49,14 @@ Polymer({
     this.signinReauthBrowserProxy_.initialize();
   },
 
-  /** @private */
-  onConfirm_() {
-    this.signinReauthBrowserProxy_.confirm();
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onConfirm_(e) {
+    this.signinReauthBrowserProxy_.confirm(
+        this.getConsentDescription_(),
+        this.getConsentConfirmation_(e.composedPath()));
   },
 
   /** @private */
@@ -70,9 +72,33 @@ Polymer({
   onReauthTypeReceived_(requiresReauth) {
     this.confirmButtonHidden_ = false;
     this.$.confirmButton.focus();
-    this.cancelButtonHidden_ = requiresReauth;
-    this.confirmButtonLabel_ = requiresReauth ?
-        this.i18n('signinReauthNextLabel') :
-        this.i18n('signinReauthConfirmLabel');
+    this.cancelButtonHidden_ = false;
+  },
+
+  /** @return {!Array<string>} Text of the consent description elements. */
+  getConsentDescription_() {
+    const consentDescription =
+        Array.from(this.shadowRoot.querySelectorAll('[consent-description]'))
+            .filter(element => element.clientWidth * element.clientHeight > 0)
+            .map(element => element.innerHTML.trim());
+    assert(consentDescription);
+    return consentDescription;
+  },
+
+  /**
+   * @param {!Array<!HTMLElement>} path Path of the click event. Must contain
+   *     a consent confirmation element.
+   * @return {string} The text of the consent confirmation element.
+   * @private
+   */
+  getConsentConfirmation_(path) {
+    for (const element of path) {
+      if (element.nodeType !== Node.DOCUMENT_FRAGMENT_NODE &&
+          element.hasAttribute('consent-confirmation')) {
+        return element.innerHTML.trim();
+      }
+    }
+    assertNotReached('No consent confirmation element found.');
+    return '';
   },
 });

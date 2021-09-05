@@ -308,7 +308,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
 
   NotesModel* model = GetNotesModel(this);
 
-  int64_t id = model->GetNewIndex();
+  int64_t id = model->generate_next_node_id();
 
   // default to note
   NoteNode::Type type = NoteNode::NOTE;

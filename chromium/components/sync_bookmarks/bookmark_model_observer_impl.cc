@@ -90,8 +90,6 @@ void BookmarkModelObserverImpl::BookmarkNodeAdded(
   // Should be removed after figuring out the reason for the crash.
   CHECK(parent_entity);
 
-  // Similar to the directory implementation here:
-  // https://cs.chromium.org/chromium/src/components/sync/syncable/mutable_entry.cc?l=237&gsn=CreateEntryKernel
   // Assign a temp server id for the entity. Will be overriden by the actual
   // server id upon receiving commit response.
   DCHECK(base::IsValidGUIDOutputString(node->guid()));
@@ -111,8 +109,7 @@ void BookmarkModelObserverImpl::BookmarkNodeAdded(
   const SyncedBookmarkTracker::Entity* entity =
       bookmark_tracker_->GetTombstoneEntityForGuid(node->guid());
   const base::Time creation_time = base::Time::Now();
-  if (entity && base::FeatureList::IsEnabled(
-                    switches::kSyncProcessBookmarkRestoreAfterDeletion)) {
+  if (entity) {
     bookmark_tracker_->UndeleteTombstoneForBookmarkNode(entity, node);
     bookmark_tracker_->Update(entity, entity->metadata()->server_version(),
                               creation_time, unique_position, specifics);
@@ -239,24 +236,11 @@ void BookmarkModelObserverImpl::BookmarkNodeFaviconChanged(
   const sync_pb::EntitySpecifics specifics = CreateSpecificsFromBookmarkNode(
       node, model, /*force_favicon_load=*/false, entity->has_final_guid());
 
-  // Check that we do not ignore changes when there is actual favicon in
-  // specifics.
-  DCHECK(model->GetFaviconType(node) == favicon_base::IconType::kFavicon ||
-         !specifics.bookmark().has_favicon());
-
   // TODO(crbug.com/1094825): implement |base_specifics_hash| similar to
   // ClientTagBasedModelTypeProcessor.
   if (!entity->MatchesFaviconHash(specifics.bookmark().favicon())) {
-    // Skip any changes if the node has touch favicon (which is not used for the
-    // specifics). MatchesFaviconHash would return false in this case and the
-    // entity would been committed without any favicon.
-    if (model->GetFaviconType(node) == favicon_base::IconType::kFavicon ||
-        model->GetFaviconType(node) == favicon_base::IconType::kInvalid ||
-        !base::FeatureList::IsEnabled(
-            switches::kSyncIgnoreChangesInTouchIcons)) {
-      ProcessUpdate(entity, specifics);
-      return;
-    }
+    ProcessUpdate(entity, specifics);
+    return;
   }
 
   // The favicon content didn't actually change, which means this event is

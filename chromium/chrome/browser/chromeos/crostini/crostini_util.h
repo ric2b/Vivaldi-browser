@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/optional.h"
@@ -28,9 +29,10 @@ class Profile;
 
 namespace crostini {
 
+// TODO(crbug.com/1092657): kCrostiniDeletedTerminalId can be removed after M86.
 // We use an arbitrary well-formed extension id for the Terminal app, this
 // is equal to GenerateId("Terminal").
-extern const char kCrostiniTerminalId[];
+extern const char kCrostiniDeletedTerminalId[];
 // web_app::GenerateAppIdFromURL(
 //     GURL("chrome-untrusted://terminal/html/terminal.html"))
 extern const char kCrostiniTerminalSystemAppId[];
@@ -44,6 +46,7 @@ extern const char kCrostiniFolderId[];
 extern const char kCrostiniDefaultImageServerUrl[];
 extern const char kCrostiniStretchImageAlias[];
 extern const char kCrostiniBusterImageAlias[];
+extern const char kCrostiniDlcName[];
 
 extern const base::FilePath::CharType kHomeDirectory[];
 
@@ -69,9 +72,6 @@ inline bool operator!=(const ContainerId& lhs,
 std::ostream& operator<<(std::ostream& ostream,
                          const ContainerId& container_id);
 
-using LaunchCrostiniAppCallback =
-    base::OnceCallback<void(bool success, const std::string& failure_reason)>;
-
 // Checks if user profile is able to a crostini app with a given app_id.
 bool IsUninstallable(Profile* profile, const std::string& app_id);
 
@@ -89,20 +89,14 @@ bool ShouldConfigureDefaultContainer(Profile* profile);
 bool MaybeShowCrostiniDialogBeforeLaunch(Profile* profile,
                                          CrostiniResult result);
 
-// Launches the Crostini app with ID of |app_id| on the display with ID of
-// |display_id|. |app_id| should be a valid Crostini app list id.
-void LaunchCrostiniApp(Profile* profile,
-                       const std::string& app_id,
-                       int64_t display_id);
-
 // Launch a Crostini App with a given set of files, given as absolute paths in
 // the container. For apps which can only be launched with a single file,
 // launch multiple instances.
 void LaunchCrostiniApp(Profile* profile,
                        const std::string& app_id,
                        int64_t display_id,
-                       const std::vector<storage::FileSystemURL>& files,
-                       LaunchCrostiniAppCallback callback);
+                       const std::vector<storage::FileSystemURL>& files = {},
+                       CrostiniSuccessCallback callback = base::DoNothing());
 
 // Retrieves cryptohome_id from profile.
 std::string CryptohomeIdForProfile(Profile* profile);
@@ -173,21 +167,13 @@ void CloseCrostiniUpdateFilesystemView();
 void ShowCrostiniAnsibleSoftwareConfigView(Profile* profile);
 
 // Show the Crostini Recovery dialog when Crostini is still running after a
-// Chrome crash. Returns false if recovery terminal can be launched.
-bool ShowCrostiniRecoveryView(Profile* profile,
+// Chrome crash. The user must either restart the VM, or launch a terminal.
+void ShowCrostiniRecoveryView(Profile* profile,
                               CrostiniUISurface ui_surface,
                               const std::string& app_id,
                               int64_t display_id,
-                              LaunchCrostiniAppCallback callback);
-
-// Returns App ID of the terminal app which is either the older crosh-based
-// terminal, or the new Terminal System App if the TerminalSystemApp feature
-// is enabled.
-const std::string& GetTerminalId();
-
-// Returns the alternative terminal ID to |GetTerminalId|.  This is used when
-// migrating terminals when TerminalSystemApp feature changes.
-const std::string& GetDeletedTerminalId();
+                              const std::vector<storage::FileSystemURL>& files,
+                              CrostiniSuccessCallback callback);
 
 // Add a newly created LXD container to the kCrostiniContainers pref
 void AddNewLxdContainerToPrefs(Profile* profile,
@@ -202,13 +188,6 @@ void RemoveLxdContainerFromPrefs(Profile* profile,
 // left for an operation to run which started and time |start| and is current
 // at |percent| way through.
 base::string16 GetTimeRemainingMessage(base::TimeTicks start, int percent);
-
-// Splits the range between |min_size| and |available_space| into enough
-// evenly-spaced intervals you can use them as ticks on a slider. Will return an
-// empty set if the range is invalid (e.g. any numbers are negative).
-// The number of ticks will fit in a signed integer.
-std::vector<int64_t> GetTicksForDiskSize(int64_t min_size,
-                                         int64_t available_space);
 
 // Returns a pref value stored for a specific container.
 const base::Value* GetContainerPrefValue(Profile* profile,

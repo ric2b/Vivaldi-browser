@@ -99,7 +99,7 @@
 #endif
 
 #include "app/vivaldi_apptools.h"
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/browser/web_contents/web_contents_impl.h"
 #endif
 
@@ -181,6 +181,10 @@ AddressNormalizer* ChromeAutofillClient::GetAddressNormalizer() {
   if (base::FeatureList::IsEnabled(features::kAutofillAddressNormalizer))
     return AddressNormalizerFactory::GetInstance();
   return nullptr;
+}
+
+const GURL& ChromeAutofillClient::GetLastCommittedURL() {
+  return web_contents()->GetLastCommittedURL();
 }
 
 security_state::SecurityLevel
@@ -265,7 +269,7 @@ void ChromeAutofillClient::OnUnmaskVerificationResult(
 
 #if !defined(OS_ANDROID)
 std::vector<std::string>
-ChromeAutofillClient::GetMerchantWhitelistForVirtualCards() {
+ChromeAutofillClient::GetAllowedMerchantsForVirtualCards() {
   if (!prefs::IsAutofillCreditCardEnabled(GetPrefs()))
     return std::vector<std::string>();
 
@@ -274,7 +278,7 @@ ChromeAutofillClient::GetMerchantWhitelistForVirtualCards() {
 }
 
 std::vector<std::string>
-ChromeAutofillClient::GetBinRangeWhitelistForVirtualCards() {
+ChromeAutofillClient::GetAllowedBinRangesForVirtualCards() {
   if (!prefs::IsAutofillCreditCardEnabled(GetPrefs()))
     return std::vector<std::string>();
 
@@ -492,7 +496,7 @@ void ChromeAutofillClient::ShowAutofillPopup(
   gfx::RectF element_bounds_in_screen_space =
       open_args.element_bounds + client_area.OffsetFromOrigin();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // NOTE(tomas@vivaldi.com): when we are vivaldi, the web_contents in autofill
   // client is wrong, so we use the embedder web contents to send the window web
   // contents into the popup controller. This does not fix chrome apps.
@@ -513,7 +517,7 @@ void ChromeAutofillClient::ShowAutofillPopup(
       popup_controller_, delegate, web_contents(),
       web_contents()->GetNativeView(), element_bounds_in_screen_space,
       open_args.text_direction);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   }
 #endif
 

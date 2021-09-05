@@ -20,7 +20,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/intervention_policy_database.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
 #include "chrome/browser/resource_coordinator/tab_activity_watcher.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_observer.h"
@@ -467,7 +466,7 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
     LifecycleUnitDiscardReason discard_reason) {
   UMA_HISTOGRAM_BOOLEAN(
       "TabManager.Discarding.DiscardedTabHasBeforeUnloadHandler",
-      web_contents()->NeedToFireBeforeUnloadOrUnload());
+      web_contents()->NeedToFireBeforeUnloadOrUnloadEvents());
 
   content::WebContents* const old_contents = web_contents();
   content::WebContents::CreateParams create_params(tab_strip_model_->profile());

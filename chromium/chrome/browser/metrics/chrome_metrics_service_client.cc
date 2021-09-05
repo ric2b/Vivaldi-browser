@@ -36,13 +36,14 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/lacros_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/metrics/cached_metrics_profile.h"
+#include "chrome/browser/metrics/chrome_metrics_extensions_helper.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
 #include "chrome/browser/metrics/desktop_platform_features_metrics_provider.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_profile_session_durations_service_factory.h"
 #include "chrome/browser/metrics/https_engagement_metrics_provider.h"
@@ -67,6 +68,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/component_metrics_provider.h"
+#include "components/metrics/content/content_stability_metrics_provider.h"
 #include "components/metrics/content/gpu_metrics_provider.h"
 #include "components/metrics/content/rendering_perf_metrics_provider.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
@@ -109,7 +111,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "ui/base/buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/metrics/chrome_android_metrics_provider.h"
@@ -138,13 +139,14 @@
 #include "chrome/browser/metrics/plugin_metrics_provider.h"
 #endif
 
-#if BUILDFLAG(LACROS)
+#if BUILDFLAG(IS_LACROS)
 #include "chrome/browser/metrics/lacros_metrics_provider.h"
 #endif
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/printing/printer_metrics_provider.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/metrics/ambient_mode_metrics_provider.h"
 #include "chrome/browser/metrics/assistant_service_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chrome/browser/signin/signin_status_metrics_provider_chromeos.h"
@@ -162,7 +164,7 @@
 #include "content/public/browser/system_connector.h"
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_ANDROID)
 #include "third_party/crashpad/crashpad/client/crashpad_info.h"
 #endif
 
@@ -175,7 +177,7 @@
 #include "chrome/browser/metrics/upgrade_metrics_provider.h"
 #endif  //  !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/metrics/power_metrics_provider_mac.h"
 #endif
 
@@ -195,7 +197,7 @@ const int kMaxHistogramGatheringWaitDuration = 60000;  // 60 seconds.
 // third_party/crashpad/crashpad/handler/handler_main.cc.
 const char kCrashpadHistogramAllocatorName[] = "CrashpadMetrics";
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_ANDROID)
 // The stream type assigned to the minidump stream that holds the serialized
 // system profile proto.
 const uint32_t kSystemProfileMinidumpStreamType = 0x4B6B0003;
@@ -206,19 +208,20 @@ const uint32_t kSystemProfileMinidumpStreamType = 0x4B6B0003;
 // not assume it.
 // TODO(manzagop): revisit this if the Crashpad API evolves.
 base::LazyInstance<std::string>::Leaky g_environment_for_crash_reporter;
-#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_ANDROID)
+#endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_ANDROID)
 
 void RegisterFileMetricsPreferences(PrefRegistrySimple* registry) {
-  metrics::FileMetricsProvider::RegisterPrefs(registry, kBrowserMetricsName);
+  metrics::FileMetricsProvider::RegisterSourcePrefs(registry,
+                                                    kBrowserMetricsName);
 
-  metrics::FileMetricsProvider::RegisterPrefs(registry,
-                                              kCrashpadHistogramAllocatorName);
+  metrics::FileMetricsProvider::RegisterSourcePrefs(
+      registry, kCrashpadHistogramAllocatorName);
 
 #if defined(OS_WIN)
-  metrics::FileMetricsProvider::RegisterPrefs(
+  metrics::FileMetricsProvider::RegisterSourcePrefs(
       registry, installer::kSetupHistogramAllocatorName);
 
-  metrics::FileMetricsProvider::RegisterPrefs(
+  metrics::FileMetricsProvider::RegisterSourcePrefs(
       registry, notification_helper::kNotificationHelperHistogramAllocatorName);
 #endif
 }
@@ -498,7 +501,7 @@ std::string ChromeMetricsServiceClient::GetVersionString() {
 }
 
 void ChromeMetricsServiceClient::OnEnvironmentUpdate(std::string* environment) {
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_ANDROID)
   DCHECK(environment);
 
   // Register the environment with the crash reporter. Note this only registers
@@ -519,7 +522,7 @@ void ChromeMetricsServiceClient::OnEnvironmentUpdate(std::string* environment) {
       reinterpret_cast<const void*>(
           g_environment_for_crash_reporter.Get().data()),
       g_environment_for_crash_reporter.Get().size());
-#endif  // OS_WIN || OS_MACOSX || OS_ANDROID
+#endif  // OS_WIN || OS_MAC || OS_ANDROID
 }
 
 void ChromeMetricsServiceClient::CollectFinalMetricsForLog(
@@ -625,7 +628,8 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<OmniboxMetricsProvider>());
 
   metrics_service_->RegisterMetricsProvider(
-      std::make_unique<ChromeStabilityMetricsProvider>(local_state));
+      std::make_unique<metrics::ContentStabilityMetricsProvider>(
+          local_state, std::make_unique<ChromeMetricsExtensionsHelper>()));
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::GPUMetricsProvider>());
@@ -684,11 +688,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<AntiVirusMetricsProvider>());
 #endif  // defined(OS_WIN)
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<DesktopPlatformFeaturesMetricsProvider>());
-#endif  //  defined(OS_WIN) || defined(OS_MACOSX) || \
+#endif  //  defined(OS_WIN) || defined(OS_MAC) || \
         // (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -697,10 +701,10 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::unique_ptr<metrics::MetricsProvider>(plugin_metrics_provider_));
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
-#if BUILDFLAG(LACROS)
+#if BUILDFLAG(IS_LACROS)
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<LacrosMetricsProvider>());
-#endif  // BUILDFLAG(LACROS)
+#endif  // BUILDFLAG(IS_LACROS)
 
 #if defined(OS_CHROMEOS)
   metrics_service_->RegisterMetricsProvider(
@@ -726,6 +730,9 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<AssistantServiceMetricsProvider>());
+
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<AmbientModeMetricsProvider>());
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_CHROMEOS)
@@ -756,7 +763,7 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<UpgradeMetricsProvider>());
 #endif  //! defined(OS_ANDROID) && !defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<PowerMetricsProvider>());
 #endif
@@ -882,13 +889,6 @@ void ChromeMetricsServiceClient::RecordCommandLineMetrics() {
     ++common_commands;
     UMA_HISTOGRAM_COUNTS_100("Chrome.CommandLineAppModeCount", 1);
   }
-
-  // TODO(rohitrao): Should these be logged on iOS as well?
-  // http://crbug.com/375794
-  size_t switch_count = command_line->GetSwitches().size();
-  UMA_HISTOGRAM_COUNTS_100("Chrome.CommandLineFlagCount", switch_count);
-  UMA_HISTOGRAM_COUNTS_100("Chrome.CommandLineUncommonFlagCount",
-                           switch_count - common_commands);
 }
 
 bool ChromeMetricsServiceClient::RegisterForNotifications() {
@@ -950,7 +950,7 @@ bool ChromeMetricsServiceClient::RegisterForProfileEvents(Profile* profile) {
         profile->GetPath());
   }
 #endif
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   // This creates the DesktopProfileSessionDurationsServices if it didn't exist
   // already.

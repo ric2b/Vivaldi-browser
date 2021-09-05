@@ -75,6 +75,26 @@ chrome.quickUnlockPrivate.getAuthToken = function(accountPassword, onComplete) {
 chrome.quickUnlockPrivate.setLockScreenEnabled = function(token, enabled, onComplete) {};
 
 /**
+ * Sets the PIN auto submit enabled state. NOTE: The PIN autosubmit state is
+ * reflected in the pin_unlock_autosubmit_enabled pref, which can be read but
+ * not written using the settings_private API (which also provides policy
+ * information). This API must be used to change the pref.
+ * @param {string} token The authentication token.
+ * @param {string} pin The PIN of the logged in user.
+ * @param {boolean} enabled Whether to enable PIN auto submit.
+ * @param {function(boolean): void} onComplete Called with true if the quick
+ *     unlock state was updated,     false otherwise. The update is treated as a
+ *     single atomic operation.
+ */
+chrome.quickUnlockPrivate.setPinAutosubmitEnabled = function(token, pin, enabled, onComplete) {};
+
+/**
+ * Tests wether it is currently possible to authenticate using PIN.
+ * @param {function(boolean): void} onComplete
+ */
+chrome.quickUnlockPrivate.canAuthenticatePin = function(onComplete) {};
+
+/**
  * Returns the set of quick unlock modes that are available for the user to use.
  * Some quick unlock modes may be disabled by policy.
  * @param {function(!Array<!chrome.quickUnlockPrivate.QuickUnlockMode>): void}

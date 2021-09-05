@@ -30,7 +30,12 @@ class MenuStorage;
 
 class Menu_Model : public KeyedService {
  public:
-  explicit Menu_Model(content::BrowserContext* context);
+  enum Mode {
+    kMainMenu,
+    kContextMenu
+  };
+
+  explicit Menu_Model(content::BrowserContext* context, Mode mode);
   ~Menu_Model() override;
 
   void Load(const scoped_refptr<base::SequencedTaskRunner>& task_runner);
@@ -41,12 +46,14 @@ class Menu_Model : public KeyedService {
   Menu_Node* Add(std::unique_ptr<Menu_Node> node, Menu_Node* parent,
                  size_t index);
   bool SetTitle(Menu_Node* node, const base::string16& title);
+  bool SetParameter(Menu_Node* node, const std::string& parameter);
   bool SetContainerMode(Menu_Node* node, const std::string& mode);
   bool SetContainerEdge(Menu_Node* node, const std::string& edge);
   bool Remove(Menu_Node* node);
   bool Reset(const Menu_Node* node);
   bool Reset(const std::string& menu);
 
+  bool mode() const { return mode_; }
   bool loaded() const { return loaded_; }
   bool IsValidIndex(const Menu_Node* parent, size_t index);
 
@@ -58,6 +65,8 @@ class Menu_Model : public KeyedService {
   Menu_Node& root_node() {return root_;}
   // Returns the fixed node that is the ancestor of main menus.
   Menu_Node* mainmenu_node() {return mainmenu_node_;}
+  // Returns the fixed node that is the ancestor of context menus.
+  Menu_Node* contextmenu_node() {return contextmenu_node_;}
 
   Menu_Control* GetControl() {return control_.get();}
 
@@ -71,10 +80,12 @@ class Menu_Model : public KeyedService {
   bool loaded_ = false;
   base::ObserverList<MenuModelObserver> observers_;
   content::BrowserContext* context_;
+  Mode mode_;
   std::unique_ptr<MenuStorage> store_;
   Menu_Node root_;
   // Managed by the root node. Provides easy access.
   Menu_Node* mainmenu_node_ = nullptr;
+  Menu_Node* contextmenu_node_ = nullptr;
   std::unique_ptr<Menu_Control> control_;
 };
 

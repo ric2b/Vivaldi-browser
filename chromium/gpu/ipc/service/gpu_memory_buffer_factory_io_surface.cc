@@ -9,6 +9,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
+#include "gpu/ipc/common/gpu_client_ids.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/mac/io_surface.h"
 #include "ui/gl/buffer_format_utils.h"
@@ -36,11 +37,13 @@ gfx::GpuMemoryBufferHandle
 GpuMemoryBufferFactoryIOSurface::CreateGpuMemoryBuffer(
     gfx::GpuMemoryBufferId id,
     const gfx::Size& size,
+    const gfx::Size& framebuffer_size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     int client_id,
     SurfaceHandle surface_handle) {
   DCHECK_NE(client_id, kAnonymousClientId);
+  DCHECK_EQ(framebuffer_size, size);
 
   bool should_clear = true;
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
@@ -117,17 +120,27 @@ GpuMemoryBufferFactoryIOSurface::CreateImageForGpuMemoryBuffer(
 
   base::AutoLock lock(io_surfaces_lock_);
 
-  IOSurfaceMapKey key(handle.id, client_id);
-  IOSurfaceMap::iterator it = io_surfaces_.find(key);
-  if (it == io_surfaces_.end()) {
-    DLOG(ERROR) << "Failed to find IOSurface based on key.";
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface;
+  if (handle.id.is_valid()) {
+    // Look up by the handle's ID, if one was specified.
+    IOSurfaceMapKey key(handle.id, client_id);
+    IOSurfaceMap::iterator it = io_surfaces_.find(key);
+    if (it != io_surfaces_.end())
+      io_surface = it->second;
+  } else if (gpu::IsReservedClientId(client_id) && handle.mach_port) {
+    // Use the handle's Mach port, if it was specified by an internal
+    // client.
+    io_surface.reset(IOSurfaceLookupFromMachPort(handle.mach_port.get()));
+  }
+  if (!io_surface) {
+    DLOG(ERROR) << "Failed to find IOSurface based on key or handle.";
     return scoped_refptr<gl::GLImage>();
   }
 
   unsigned internalformat = gl::BufferFormatToGLInternalFormat(format);
   scoped_refptr<gl::GLImageIOSurface> image(
       gl::GLImageIOSurface::Create(size, internalformat));
-  if (!image->Initialize(it->second.get(), handle.id, format)) {
+  if (!image->Initialize(io_surface, handle.id, format)) {
     DLOG(ERROR) << "Failed to initialize GLImage for IOSurface.";
     return scoped_refptr<gl::GLImage>();
   }

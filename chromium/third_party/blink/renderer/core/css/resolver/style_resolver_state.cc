@@ -147,15 +147,6 @@ void StyleResolverState::SetLayoutParentStyle(
   layout_parent_style_ = std::move(parent_style);
 }
 
-void StyleResolverState::CacheUserAgentBorderAndBackground() {
-  // LayoutTheme only needs the cached style if it has an appearance,
-  // and constructing it is expensive so we avoid it if possible.
-  if (!Style()->HasAppearance())
-    return;
-
-  cached_ua_style_ = std::make_unique<CachedUAStyle>(Style());
-}
-
 void StyleResolverState::LoadPendingResources() {
   if (pseudo_request_type_ == PseudoElementStyleRequest::kForComputedStyle ||
       (ParentStyle() && ParentStyle()->IsEnsuredInDisplayNone()) ||
@@ -200,19 +191,6 @@ void StyleResolverState::SetTextOrientation(ETextOrientation text_orientation) {
     style_->SetTextOrientation(text_orientation);
     font_builder_.DidChangeTextOrientation();
   }
-}
-
-HeapHashMap<CSSPropertyID, Member<const CSSValue>>&
-StyleResolverState::ParsedPropertiesForPendingSubstitutionCache(
-    const cssvalue::CSSPendingSubstitutionValue& value) const {
-  HeapHashMap<CSSPropertyID, Member<const CSSValue>>* map =
-      parsed_properties_for_pending_substitution_cache_.at(&value);
-  if (!map) {
-    map = MakeGarbageCollected<
-        HeapHashMap<CSSPropertyID, Member<const CSSValue>>>();
-    parsed_properties_for_pending_substitution_cache_.Set(&value, map);
-  }
-  return *map;
 }
 
 CSSParserMode StyleResolverState::GetParserMode() const {

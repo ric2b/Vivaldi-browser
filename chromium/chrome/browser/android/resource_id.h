@@ -43,8 +43,6 @@ DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SAFETYTIP_SHIELD,
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SAVE_PASSWORD,
                     R.drawable.ic_vpn_key_blue)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_TRANSLATE, R.drawable.infobar_translate)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_PHONE_ICON,
-                    R.drawable.smartphone_black_24dp)
 LINK_RESOURCE_ID(IDR_AUTOFILL_GOOGLE_PAY_WITH_DIVIDER,
                  R.drawable.google_pay_with_divider)
 
@@ -59,6 +57,7 @@ LINK_RESOURCE_ID(IDR_AUTOFILL_CC_GENERIC, R.drawable.ic_credit_card_black)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_JCB, R.drawable.jcb_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_MASTERCARD, R.drawable.mc_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_MIR, R.drawable.mir_card)
+LINK_RESOURCE_ID(IDR_AUTOFILL_CC_TROY, R.drawable.troy_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_UNIONPAY, R.drawable.unionpay_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_VISA, R.drawable.visa_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_GOOGLE_ISSUED_CARD,
@@ -68,9 +67,9 @@ LINK_RESOURCE_ID(IDR_AUTOFILL_GOOGLE_PAY, R.drawable.google_pay)
 DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_CC_SCAN_NEW,
                     R.drawable.ic_photo_camera_black)
 DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_HTTP_WARNING,
-                    R.drawable.ic_info_outline_grey)
+                    R.drawable.ic_info_outline_grey_16dp)
 DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_HTTPS_INVALID_WARNING,
-                    R.drawable.ic_warning_red)
+                    R.drawable.ic_warning_red_16dp)
 
 // We display settings and edit icon for keyboard accessory using Android's
 // |VectorDrawableCompat|. We do not display these icons for autofill popup.

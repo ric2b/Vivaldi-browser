@@ -59,8 +59,16 @@ public class NavigationController {
             throw new UnsupportedOperationException();
         }
         try {
-            mNavigationController.navigate(
-                    uri.toString(), params == null ? null : params.toInterfaceParams());
+            if (params == null || WebLayer.getSupportedMajorVersionInternal() < 86) {
+                mNavigationController.navigate(
+                        uri.toString(), params == null ? null : params.toInterfaceParams());
+            } else {
+                mNavigationController.navigate2(uri.toString(),
+                        params == null ? false : params.getShouldReplaceCurrentEntry(),
+                        params == null ? false : params.isIntentProcessingDisabled(),
+                        params == null ? false : params.isNetworkErrorAutoReloadDisabled(),
+                        params == null ? false : params.isAutoPlayEnabled());
+            }
         } catch (RemoteException e) {
             throw new APICallException(e);
         }

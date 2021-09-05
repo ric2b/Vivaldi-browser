@@ -4,11 +4,16 @@
 
 #include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 
-#include <cmath>
+#include <algorithm>
+#include <string>
+#include <utility>
 
 #include "ash/public/cpp/system_tray.h"
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/memory/ref_counted.h"
+#include "base/numerics/safe_conversions.h"
+#include "base/strings/string16.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -19,8 +24,10 @@
 #include "chrome/browser/chromeos/ui/update_required_notification.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
 #include "chrome/browser/upgrade_detector/build_state.h"
+#include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
@@ -28,6 +35,7 @@
 #include "chromeos/settings/cros_settings_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 using MinimumVersionRequirement =
     policy::MinimumVersionPolicyHandler::MinimumVersionRequirement;
@@ -74,20 +82,37 @@ BuildState* GetBuildState() {
 }
 
 int GetDaysRounded(base::TimeDelta time) {
-  return std::lround(time.InSecondsF() /
-                     base::TimeDelta::FromDays(1).InSecondsF());
+  return base::ClampRound(time / base::TimeDelta::FromDays(1));
 }
 
 chromeos::UpdateEngineClient* GetUpdateEngineClient() {
   return chromeos::DBusThreadManager::Get()->GetUpdateEngineClient();
 }
 
+// Overrides the relaunch notification style to required and configures the
+// relaunch deadline according to the deadline.
+void OverrideRelaunchNotification(base::Time deadline) {
+  UpgradeDetector* upgrade_detector = UpgradeDetector::GetInstance();
+  upgrade_detector->OverrideRelaunchNotificationToRequired(true);
+  upgrade_detector->OverrideHighAnnoyanceDeadline(deadline);
+}
+
+// Resets the overridden relaunch notification style and deadline.
+void ResetRelaunchNotification() {
+  UpgradeDetector* upgrade_detector = UpgradeDetector::GetInstance();
+  upgrade_detector->ResetOverriddenDeadline();
+  upgrade_detector->OverrideRelaunchNotificationToRequired(false);
+}
+
 }  // namespace
 
-const char MinimumVersionPolicyHandler::kChromeVersion[] = "chrome_version";
+const char MinimumVersionPolicyHandler::kRequirements[] = "requirements";
+const char MinimumVersionPolicyHandler::kChromeOsVersion[] = "chromeos_version";
 const char MinimumVersionPolicyHandler::kWarningPeriod[] = "warning_period";
-const char MinimumVersionPolicyHandler::KEolWarningPeriod[] =
-    "eol_warning_period";
+const char MinimumVersionPolicyHandler::kEolWarningPeriod[] =
+    "aue_warning_period";
+const char MinimumVersionPolicyHandler::kUnmanagedUserRestricted[] =
+    "unmanaged_user_restricted";
 
 MinimumVersionRequirement::MinimumVersionRequirement(
     const base::Version version,
@@ -100,16 +125,16 @@ MinimumVersionRequirement::MinimumVersionRequirement(
 std::unique_ptr<MinimumVersionRequirement>
 MinimumVersionRequirement::CreateInstanceIfValid(
     const base::DictionaryValue* dict) {
-  const std::string* version = dict->FindStringPath(kChromeVersion);
+  const std::string* version = dict->FindStringKey(kChromeOsVersion);
   if (!version)
     return nullptr;
   base::Version minimum_version(*version);
   if (!minimum_version.IsValid())
     return nullptr;
-  auto warning = dict->FindIntPath(kWarningPeriod);
+  auto warning = dict->FindIntKey(kWarningPeriod);
   base::TimeDelta warning_time =
       base::TimeDelta::FromDays(warning.has_value() ? warning.value() : 0);
-  auto eol_warning = dict->FindIntPath(KEolWarningPeriod);
+  auto eol_warning = dict->FindIntKey(kEolWarningPeriod);
   base::TimeDelta eol_warning_time = base::TimeDelta::FromDays(
       eol_warning.has_value() ? eol_warning.value() : 0);
   return std::make_unique<MinimumVersionRequirement>(
@@ -135,7 +160,7 @@ MinimumVersionPolicyHandler::MinimumVersionPolicyHandler(
       cros_settings_(cros_settings),
       clock_(base::DefaultClock::GetInstance()) {
   policy_subscription_ = cros_settings_->AddSettingsObserver(
-      chromeos::kMinimumChromeVersionEnforced,
+      chromeos::kDeviceMinimumVersion,
       base::Bind(&MinimumVersionPolicyHandler::OnPolicyChanged,
                  weak_factory_.GetWeakPtr()));
 
@@ -159,7 +184,14 @@ void MinimumVersionPolicyHandler::RemoveObserver(Observer* observer) {
 
 bool MinimumVersionPolicyHandler::CurrentVersionSatisfies(
     const MinimumVersionRequirement& requirement) const {
-  return delegate_->GetCurrentVersion().CompareTo(requirement.version()) >= 0;
+  base::Version platform_version(delegate_->GetCurrentVersion());
+  if (platform_version.IsValid())
+    return delegate_->GetCurrentVersion().CompareTo(requirement.version()) >= 0;
+  return true;
+}
+
+bool MinimumVersionPolicyHandler::IsPolicyRestrictionAppliedForUser() const {
+  return delegate_->IsUserEnterpriseManaged() || unmanaged_user_restricted_;
 }
 
 //  static
@@ -170,7 +202,12 @@ void MinimumVersionPolicyHandler::RegisterPrefs(PrefRegistrySimple* registry) {
                                   base::TimeDelta());
 }
 
-bool MinimumVersionPolicyHandler::IsDeadlineTimerRunningForTesting() {
+bool MinimumVersionPolicyHandler::ShouldShowUpdateRequiredEolBanner() const {
+  return !RequirementsAreSatisfied() && IsPolicyRestrictionAppliedForUser() &&
+         eol_reached_;
+}
+
+bool MinimumVersionPolicyHandler::IsDeadlineTimerRunningForTesting() const {
   return update_required_deadline_timer_.IsRunning();
 }
 
@@ -187,20 +224,29 @@ void MinimumVersionPolicyHandler::OnPolicyChanged() {
                          weak_factory_.GetWeakPtr()));
   if (status != chromeos::CrosSettingsProvider::TRUSTED ||
       !IsPolicyApplicable() ||
-      !chromeos::features::IsMinimumChromeVersionEnabled())
-    return;
-
-  const base::ListValue* entries;
-  std::vector<std::unique_ptr<MinimumVersionRequirement>> configs;
-  if (!cros_settings_->GetList(chromeos::kMinimumChromeVersionEnforced,
-                               &entries) ||
-      !entries->GetSize()) {
-    // Reset state and hide update required screen if policy is not set or set
-    // to empty list.
-    HandleUpdateNotRequired();
+      !chromeos::features::IsMinimumChromeVersionEnabled()) {
+    VLOG(1) << "Ignore policy change - policy is not applicable or settings "
+               "are not trusted.";
     return;
   }
 
+  const base::DictionaryValue* policy_value;
+  if (!cros_settings_->GetDictionary(chromeos::kDeviceMinimumVersion,
+                                     &policy_value)) {
+    VLOG(1) << "Revoke policy - policy is unset or value is incorrect.";
+    HandleUpdateNotRequired();
+    return;
+  }
+  const base::Value* entries = policy_value->FindListKey(kRequirements);
+  if (!entries || entries->GetList().empty()) {
+    VLOG(1) << "Revoke policy - empty policy requirements.";
+    HandleUpdateNotRequired();
+    return;
+  }
+  auto restricted = policy_value->FindBoolKey(kUnmanagedUserRestricted);
+  unmanaged_user_restricted_ = restricted.value_or(false);
+
+  std::vector<std::unique_ptr<MinimumVersionRequirement>> configs;
   for (const auto& item : entries->GetList()) {
     const base::DictionaryValue* dict;
     if (item.GetAsDictionary(&dict)) {
@@ -238,27 +284,29 @@ void MinimumVersionPolicyHandler::OnPolicyChanged() {
     }
   } else {
     // Update is not required as the requirements of all of the configs in the
-    // policy are satisfied by the current chrome version. We could also reach
-    // here at the time of login if the device was rebooted to apply the
+    // policy are satisfied by the current Chrome OS version. We could also
+    // reach here at the time of login if the device was rebooted to apply the
     // downloaded update, in which case it is needed to reset the local state.
     HandleUpdateNotRequired();
   }
 }
 
 void MinimumVersionPolicyHandler::HandleUpdateNotRequired() {
+  VLOG(2) << "Update is not required.";
   // Reset the state including any running timers.
   Reset();
   // Hide update required screen if it is visible and switch back to the login
   // screen.
-  if (delegate_->IsLoginSessionState()) {
+  if (delegate_->IsLoginSessionState())
     delegate_->HideUpdateRequiredScreenIfShown();
-  }
+  ResetRelaunchNotification();
 }
 
 void MinimumVersionPolicyHandler::Reset() {
-  deadline_reached = false;
+  deadline_reached_ = false;
   eol_reached_ = false;
   update_required_deadline_ = base::Time();
+  update_required_time_ = base::Time();
   update_required_deadline_timer_.Stop();
   notification_timer_.Stop();
   GetBuildState()->RemoveObserver(this);
@@ -292,7 +340,8 @@ void MinimumVersionPolicyHandler::FetchEolInfo() {
 
 void MinimumVersionPolicyHandler::OnFetchEolInfo(
     const chromeos::UpdateEngineClient::EolInfo info) {
-  if (info.eol_date.is_null() || info.eol_date > update_required_time_) {
+  if (!chromeos::switches::IsAueReachedForUpdateRequiredForTest() &&
+      (info.eol_date.is_null() || info.eol_date > update_required_time_)) {
     // End of life is not reached. Start update with |warning_time_|.
     eol_reached_ = false;
     HandleUpdateRequired(state_->warning());
@@ -322,6 +371,10 @@ void MinimumVersionPolicyHandler::HandleUpdateRequired(
     update_required_deadline_ =
         stored_timer_start_time + std::max(stored_warning_time, warning_time);
   }
+  VLOG(1) << "Update is required with "
+          << "update required time " << update_required_time_
+          << " warning time " << warning_time
+          << " and update required deadline " << update_required_deadline_;
 
   const bool deadline_reached =
       update_required_deadline_ <= update_required_time_;
@@ -337,8 +390,10 @@ void MinimumVersionPolicyHandler::HandleUpdateRequired(
 
   // Need to start the timer even if the deadline is same as the previous one to
   // handle the case of Chrome reboot.
-  if (update_required_deadline_ == previous_deadline &&
-      update_required_deadline_timer_.IsRunning()) {
+  if (update_required_deadline_timer_.IsRunning() &&
+      update_required_deadline_timer_.desired_run_time() ==
+          update_required_deadline_) {
+    DLOG(WARNING) << "Deadline is same as previous and timer is running.";
     return;
   }
 
@@ -348,9 +403,9 @@ void MinimumVersionPolicyHandler::HandleUpdateRequired(
   // still required.
 
   // Hide update required screen if it is shown on the login screen.
-  if (delegate_->IsLoginSessionState()) {
+  if (delegate_->IsLoginSessionState())
     delegate_->HideUpdateRequiredScreenIfShown();
-  }
+
   // The |deadline| can only be equal to or greater than the
   // |previous_deadline|. No need to update the local state if the deadline has
   // not been extended.
@@ -360,8 +415,8 @@ void MinimumVersionPolicyHandler::HandleUpdateRequired(
   // The device has already downloaded the update in-session and waiting for
   // reboot to apply it.
   if (GetBuildState()->update_type() == BuildState::UpdateType::kNormalUpdate) {
-    // TODO(https://crbug.com/1048607): May be adjust relaunch notification
-    // timer as per new deadline.
+    OverrideRelaunchNotification(update_required_deadline_);
+    DLOG(WARNING) << "Update is already installed.";
     return;
   }
 
@@ -404,25 +459,28 @@ void MinimumVersionPolicyHandler::StartObservingUpdate() {
     build_state->AddObserver(this);
 }
 
-void MinimumVersionPolicyHandler::MaybeShowNotificationOnLogin() {
+base::Optional<int> MinimumVersionPolicyHandler::GetTimeRemainingInDays() {
   const base::Time now = clock_->Now();
-  // This should only be true if |update_required_deadline_timer_| expired while
+  if (!state_ || update_required_deadline_ <= now)
+    return base::nullopt;
+  base::TimeDelta time_remaining = update_required_deadline_ - now;
+  return GetDaysRounded(time_remaining);
+}
+
+void MinimumVersionPolicyHandler::MaybeShowNotificationOnLogin() {
+  // |days| could be null if |update_required_deadline_timer_| expired while
   // login was in progress, else we would have shown the update required screen
   // at startup.
-  if (update_required_deadline_ <= now)
-    return;
-
-  base::TimeDelta time_remaining = update_required_deadline_ - now;
-  int days_remaining = GetDaysRounded(time_remaining);
-  if (days_remaining <= 1)
-    MaybeShowNotification(base::TimeDelta::FromDays(days_remaining));
+  base::Optional<int> days = GetTimeRemainingInDays();
+  if (days && days.value() <= 1)
+    MaybeShowNotification(base::TimeDelta::FromDays(days.value()));
 }
 
 void MinimumVersionPolicyHandler::MaybeShowNotification(
     base::TimeDelta warning) {
   const NetworkStatus status = GetCurrentNetworkStatus();
   if ((!eol_reached_ && status == NetworkStatus::kAllowed) ||
-      !delegate_->IsUserLoggedIn() || !delegate_->IsUserManaged()) {
+      !delegate_->IsUserLoggedIn() || !IsPolicyRestrictionAppliedForUser()) {
     return;
   }
 
@@ -434,24 +492,28 @@ void MinimumVersionPolicyHandler::MaybeShowNotification(
   NotificationType type = NotificationType::kNoConnection;
   base::OnceClosure button_click_callback;
   std::string domain_name = GetEnterpriseDomainName();
+  base::string16 device_type = ui::GetChromeOSDeviceName();
   auto close_callback =
       base::BindOnce(&MinimumVersionPolicyHandler::StopObservingNetwork,
                      weak_factory_.GetWeakPtr());
   if (eol_reached_) {
+    VLOG(2) << "Showing end of life notification.";
     type = NotificationType::kEolReached;
     button_click_callback = base::BindOnce(&OpenEnterpriseInfoPage);
   } else if (status == NetworkStatus::kMetered) {
+    VLOG(2) << "Showing metered network notification.";
     type = NotificationType::kMeteredConnection;
     button_click_callback = base::BindOnce(
         &MinimumVersionPolicyHandler::UpdateOverMeteredPermssionGranted,
         weak_factory_.GetWeakPtr());
   } else if (status == NetworkStatus::kOffline) {
+    VLOG(2) << "Showing no network notification.";
     button_click_callback = base::BindOnce(&OpenNetworkSettings);
   } else {
     NOTREACHED();
     return;
   }
-  notification_handler_->Show(type, warning, domain_name,
+  notification_handler_->Show(type, warning, domain_name, device_type,
                               std::move(button_click_callback),
                               std::move(close_callback));
 
@@ -484,6 +546,7 @@ void MinimumVersionPolicyHandler::ShowAndScheduleNotification(
     expiry = deadline - base::TimeDelta::FromDays(1);
   }
 
+  VLOG(2) << "Next notification scheduled for " << expiry;
   MaybeShowNotification(base::TimeDelta::FromDays(days_remaining));
   if (!expiry.is_null()) {
     notification_timer_.Start(
@@ -497,9 +560,13 @@ void MinimumVersionPolicyHandler::ShowAndScheduleNotification(
 void MinimumVersionPolicyHandler::OnUpdate(const BuildState* build_state) {
   // If the device has been successfully updated, the relaunch notifications
   // will reboot it for applying the updates.
+  VLOG(1) << "Update installed successfully at " << clock_->Now()
+          << " with deadline " << update_required_deadline_;
   GetUpdateEngineClient()->RemoveObserver(this);
-  if (build_state->update_type() == BuildState::UpdateType::kNormalUpdate)
+  if (build_state->update_type() == BuildState::UpdateType::kNormalUpdate) {
     ResetOnUpdateCompleted();
+    OverrideRelaunchNotification(update_required_deadline_);
+  }
 }
 
 void MinimumVersionPolicyHandler::HideNotification() const {
@@ -525,6 +592,7 @@ void MinimumVersionPolicyHandler::StopObservingNetwork() {
 }
 
 void MinimumVersionPolicyHandler::UpdateOverMeteredPermssionGranted() {
+  VLOG(1) << "Permission for update over metered network granted.";
   chromeos::UpdateEngineClient* const update_engine_client =
       GetUpdateEngineClient();
   if (!update_engine_client->HasObserver(this))
@@ -536,6 +604,7 @@ void MinimumVersionPolicyHandler::UpdateOverMeteredPermssionGranted() {
 
 void MinimumVersionPolicyHandler::OnUpdateCheckStarted(
     chromeos::UpdateEngineClient::UpdateCheckResult result) {
+  VLOG(1) << "Update check started.";
   if (result != chromeos::UpdateEngineClient::UPDATE_RESULT_SUCCESS)
     GetUpdateEngineClient()->RemoveObserver(this);
 }
@@ -561,13 +630,15 @@ void MinimumVersionPolicyHandler::OnSetUpdateOverCellularOneTimePermission(
 }
 
 void MinimumVersionPolicyHandler::OnDeadlineReached() {
-  deadline_reached = true;
+  deadline_reached_ = true;
   if (delegate_->IsLoginSessionState() && !delegate_->IsLoginInProgress()) {
     // Show update required screen over the login screen.
     delegate_->ShowUpdateRequiredScreen();
-  } else if (delegate_->IsUserLoggedIn() && delegate_->IsUserManaged()) {
+  } else if (delegate_->IsUserLoggedIn() &&
+             IsPolicyRestrictionAppliedForUser()) {
     // Terminate the current user session to show update required
-    // screen on the login screen if user is managed.
+    // screen on the login screen if the user is managed or
+    // |unmanaged_user_restricted_| is set to true.
     delegate_->RestartToLoginScreen();
   }
   // No action is required if -

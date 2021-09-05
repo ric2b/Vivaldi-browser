@@ -16,6 +16,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -85,7 +86,11 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   // 0 indicates no maximum length for the pin.
   registry->RegisterIntegerPref(prefs::kPinUnlockMaximumLength, 0);
   registry->RegisterBooleanPref(prefs::kPinUnlockWeakPinsAllowed, true);
-  registry->RegisterBooleanPref(prefs::kPinUnlockAutosubmitEnabled, true);
+
+  // Register as true by default only when the feature is enabled.
+  registry->RegisterBooleanPref(
+      prefs::kPinUnlockAutosubmitEnabled,
+      features::IsPinAutosubmitFeatureEnabled());
 }
 
 bool IsPinDisabledByPolicy(PrefService* pref_service) {
@@ -110,8 +115,7 @@ bool IsPinEnabled(PrefService* pref_service) {
   if (user && user->GetType() == user_manager::UserType::USER_TYPE_SUPERVISED)
     return false;
 
-  // Enable quick unlock only if the switch is present.
-  return base::FeatureList::IsEnabled(features::kQuickUnlockPin);
+  return true;
 }
 
 // Returns fingerprint location depending on the commandline switch.
@@ -155,7 +159,7 @@ bool IsFingerprintEnabled(Profile* profile) {
     return false;
 
   // Enable fingerprint unlock only if the switch is present.
-  return base::FeatureList::IsEnabled(features::kQuickUnlockFingerprint);
+  return base::FeatureList::IsEnabled(::features::kQuickUnlockFingerprint);
 }
 
 void EnabledForTesting(bool state) {

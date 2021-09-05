@@ -21,7 +21,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/logging.h"
-#include "chrome/android/chrome_jni_headers/PaintPreviewTabService_jni.h"
+#include "chrome/browser/paint_preview/android/jni_headers/PaintPreviewTabService_jni.h"
 #endif  // defined(OS_ANDROID)
 
 namespace paint_preview {
@@ -227,7 +227,7 @@ void PaintPreviewTabService::CaptureTabInternal(
     return;
   }
   CapturePaintPreview(
-      contents, file_path.value(), gfx::Rect(), kMaxPerCaptureSizeBytes,
+      contents, file_path.value(), gfx::Rect(), true, kMaxPerCaptureSizeBytes,
       base::BindOnce(&PaintPreviewTabService::OnCaptured,
                      weak_ptr_factory_.GetWeakPtr(), tab_id, key,
                      frame_tree_node_id, std::move(callback)));
@@ -239,14 +239,15 @@ void PaintPreviewTabService::OnCaptured(
     int frame_tree_node_id,
     FinishedCallback callback,
     PaintPreviewBaseService::CaptureStatus status,
-    std::unique_ptr<PaintPreviewProto> proto) {
+    std::unique_ptr<CaptureResult> result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto* web_contents =
       content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
   if (web_contents)
     web_contents->DecrementCapturerCount(true);
 
-  if (status != PaintPreviewBaseService::CaptureStatus::kOk || !proto) {
+  if (status != PaintPreviewBaseService::CaptureStatus::kOk ||
+      !result->capture_success) {
     std::move(callback).Run(Status::kCaptureFailed);
     return;
   }
@@ -254,7 +255,7 @@ void PaintPreviewTabService::OnCaptured(
   GetTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&FileManager::SerializePaintPreviewProto, GetFileManager(),
-                     key, *proto, true),
+                     key, result->proto, true),
       base::BindOnce(&PaintPreviewTabService::OnFinished,
                      weak_ptr_factory_.GetWeakPtr(), tab_id,
                      std::move(callback)));

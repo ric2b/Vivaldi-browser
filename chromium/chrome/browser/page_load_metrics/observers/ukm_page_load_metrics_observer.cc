@@ -13,7 +13,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -27,6 +26,8 @@
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/browser/protocol_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/prerender/browser/prerender_manager.h"
+#include "components/prerender/browser/prerender_util.h"
 #include "components/prerender/common/prerender_final_status.h"
 #include "components/prerender/common/prerender_origin.h"
 #include "components/search_engines/template_url_service.h"
@@ -62,16 +63,6 @@ bool IsSupportedProtocol(page_load_metrics::NetworkProtocol protocol) {
     case page_load_metrics::NetworkProtocol::kOther:
       return false;
   }
-}
-
-int64_t LayoutShiftUkmValue(float shift_score) {
-  // Report (shift_score * 100) as an int in the range [0, 1000].
-  return static_cast<int>(roundf(std::min(shift_score, 10.0f) * 100.0f));
-}
-
-int32_t LayoutShiftUmaValue(float shift_score) {
-  // Report (shift_score * 10) as an int in the range [0, 100].
-  return static_cast<int>(roundf(std::min(shift_score, 10.0f) * 10.0f));
 }
 
 bool IsDefaultSearchEngine(content::BrowserContext* browser_context,
@@ -163,6 +154,11 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnStart(
   start_url_is_home_page_ =
       IsUserHomePage(browser_context_, navigation_handle->GetURL());
 
+  if (started_in_foreground) {
+    last_time_shown_ = navigation_handle->NavigationStart();
+  }
+  currently_in_foreground_ = started_in_foreground;
+
   if (!started_in_foreground) {
     was_hidden_ = true;
     return CONTINUE_OBSERVING;
@@ -220,7 +216,13 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnCommit(
   page_transition_ = navigation_handle->GetPageTransition();
   was_cached_ = navigation_handle->WasResponseCached();
   navigation_handle_timing_ = navigation_handle->GetNavigationHandleTiming();
-  RecordNoStatePrefetchMetrics(navigation_handle, source_id);
+  prerender::PrerenderManager* const prerender_manager =
+      prerender::PrerenderManagerFactory::GetForBrowserContext(
+          navigation_handle->GetWebContents()->GetBrowserContext());
+  if (prerender_manager) {
+    prerender::RecordNoStatePrefetchMetrics(navigation_handle, source_id,
+                                            prerender_manager);
+  }
   RecordGeneratedNavigationUKM(source_id, navigation_handle->GetURL());
   navigation_is_cross_process_ = !navigation_handle->IsSameProcess();
   navigation_entry_offset_ = navigation_handle->GetNavigationEntryOffset();
@@ -237,13 +239,17 @@ UkmPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
   if (is_portal_)
     return STOP_OBSERVING;
 
+  base::TimeTicks current_time = base::TimeTicks::Now();
   if (!was_hidden_) {
     RecordNavigationTimingMetrics();
-    RecordPageLoadMetrics(base::TimeTicks::Now(), true /* became_hidden */);
+    RecordPageLoadMetrics(current_time);
     RecordTimingMetrics(timing);
     RecordInputTimingMetrics();
   }
   ReportLayoutStability();
+  // Assume that page ends on this method, as the app could be evicted right
+  // after.
+  RecordPageEndMetrics(&timing, current_time);
   return STOP_OBSERVING;
 }
 
@@ -252,14 +258,27 @@ UkmPageLoadMetricsObserver::ObservePolicy UkmPageLoadMetricsObserver::OnHidden(
   if (is_portal_)
     return CONTINUE_OBSERVING;
 
+  if (currently_in_foreground_ && !last_time_shown_.is_null()) {
+    total_foreground_duration_ += base::TimeTicks::Now() - last_time_shown_;
+  }
+  currently_in_foreground_ = false;
   if (!was_hidden_) {
     RecordNavigationTimingMetrics();
-    RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */,
-                          true /* became_hidden */);
+    RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */);
     RecordTimingMetrics(timing);
     RecordInputTimingMetrics();
     was_hidden_ = true;
   }
+  return CONTINUE_OBSERVING;
+}
+
+UkmPageLoadMetricsObserver::ObservePolicy
+UkmPageLoadMetricsObserver::OnShown() {
+  if (is_portal_)
+    return CONTINUE_OBSERVING;
+
+  currently_in_foreground_ = true;
+  last_time_shown_ = base::TimeTicks::Now();
   return CONTINUE_OBSERVING;
 }
 
@@ -268,17 +287,18 @@ void UkmPageLoadMetricsObserver::OnFailedProvisionalLoad(
   if (is_portal_)
     return;
 
+  RecordPageEndMetrics(nullptr, base::TimeTicks());
   if (was_hidden_)
     return;
-  RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */,
-                        false /* became_hidden */);
+
+  RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */);
 
   // Error codes have negative values, however we log net error code enum values
   // for UMA histograms using the equivalent positive value. For consistency in
   // UKM, we convert to a positive value here.
   int64_t net_error_code = static_cast<int64_t>(failed_load_info.error) * -1;
   DCHECK_GE(net_error_code, 0);
-  ukm::builders::PageLoad(GetDelegate().GetSourceId())
+  ukm::builders::PageLoad(GetDelegate().GetPageUkmSourceId())
       .SetNet_ErrorCode_OnFailedProvisionalLoad(net_error_code)
       .SetPageTiming_NavigationToFailedProvisionalLoad(
           failed_load_info.time_to_failed_provisional_load.InMilliseconds())
@@ -290,14 +310,16 @@ void UkmPageLoadMetricsObserver::OnComplete(
   if (is_portal_)
     return;
 
+  base::TimeTicks current_time = base::TimeTicks::Now();
   if (!was_hidden_) {
     RecordNavigationTimingMetrics();
-    RecordPageLoadMetrics(base::TimeTicks() /* no app_background_time */,
-                          false /* became_hidden */);
+    RecordPageLoadMetrics(current_time /* no app_background_time */);
     RecordTimingMetrics(timing);
     RecordInputTimingMetrics();
   }
   ReportLayoutStability();
+  ReportPerfectHeuristicsMetrics();
+  RecordPageEndMetrics(&timing, current_time);
 }
 
 void UkmPageLoadMetricsObserver::OnResourceDataUseObserved(
@@ -385,7 +407,7 @@ void UkmPageLoadMetricsObserver::RecordNavigationTimingMetrics() {
   DCHECK_LE(timing.first_loader_callback_time,
             timing.final_loader_callback_time);
 
-  ukm::builders::NavigationTiming builder(GetDelegate().GetSourceId());
+  ukm::builders::NavigationTiming builder(GetDelegate().GetPageUkmSourceId());
 
   // Record the elapsed time from the navigation start milestone.
   builder
@@ -431,7 +453,7 @@ void UkmPageLoadMetricsObserver::RecordNavigationTimingMetrics() {
 
 void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
-  ukm::builders::PageLoad builder(GetDelegate().GetSourceId());
+  ukm::builders::PageLoad builder(GetDelegate().GetPageUkmSourceId());
 
   base::Optional<int64_t> rounded_site_engagement_score =
       GetRoundedSiteEngagementScore();
@@ -581,10 +603,10 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
       ukm::GetExponentialBucketMin(js_max_decoded_bytes_, 10));
 
   builder.SetNet_ImageBytes(
-      ukm::GetExponentialBucketMin(image_total_bytes_, 1.3));
+      ukm::GetExponentialBucketMin(image_total_bytes_, 1.15));
   builder.SetNet_ImageSubframeBytes(
-      ukm::GetExponentialBucketMin(image_subframe_bytes_, 1.3));
-  builder.SetNet_MediaBytes(ukm::GetExponentialBucketMin(media_bytes_, 1.3));
+      ukm::GetExponentialBucketMin(image_subframe_bytes_, 1.15));
+  builder.SetNet_MediaBytes(ukm::GetExponentialBucketMin(media_bytes_, 1.15));
 
   if (main_frame_timing_)
     ReportMainResourceTimingMetrics(timing, &builder);
@@ -600,7 +622,8 @@ void UkmPageLoadMetricsObserver::RecordInternalTimingMetrics(
         all_frames_largest_contentful_paint,
     const page_load_metrics::ContentfulPaintTimingInfo&
         all_frames_experimental_largest_contentful_paint) {
-  ukm::builders::PageLoad_Internal debug_builder(GetDelegate().GetSourceId());
+  ukm::builders::PageLoad_Internal debug_builder(
+      GetDelegate().GetPageUkmSourceId());
   LargestContentState lcp_state = LargestContentState::kNotFound;
   if (all_frames_largest_contentful_paint.ContainsValidTime()) {
     if (WasStartedInForegroundOptionalEventInForeground(
@@ -653,9 +676,8 @@ void UkmPageLoadMetricsObserver::RecordInternalTimingMetrics(
 }
 
 void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
-    base::TimeTicks app_background_time,
-    bool became_hidden) {
-  ukm::builders::PageLoad builder(GetDelegate().GetSourceId());
+    base::TimeTicks app_background_time) {
+  ukm::builders::PageLoad builder(GetDelegate().GetPageUkmSourceId());
   base::Optional<base::TimeDelta> foreground_duration =
       page_load_metrics::GetInitialForegroundDuration(GetDelegate(),
                                                       app_background_time);
@@ -663,17 +685,6 @@ void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
     builder.SetPageTiming_ForegroundDuration(
         foreground_duration.value().InMilliseconds());
   }
-
-  bool is_user_initiated_navigation =
-      // All browser initiated page loads are user-initiated.
-      GetDelegate().GetUserInitiatedInfo().browser_initiated ||
-
-      // Renderer-initiated navigations are user-initiated if there is an
-      // associated input event.
-      GetDelegate().GetUserInitiatedInfo().user_input_event;
-
-  builder.SetExperimental_Navigation_UserInitiated(
-      is_user_initiated_navigation);
 
   // Convert to the EffectiveConnectionType as used in SystemProfileProto
   // before persisting the metric.
@@ -702,16 +713,6 @@ void UkmPageLoadMetricsObserver::RecordPageLoadMetrics(
     builder.SetNet_DownstreamKbpsEstimate_OnNavigationStart(
         static_cast<int64_t>(downstream_kbps_estimate_.value()));
   }
-  // page_transition_ fits in a uint32_t, so we can safely cast to int64_t.
-  builder.SetNavigation_PageTransition(static_cast<int64_t>(page_transition_));
-  // GetDelegate().GetPageEndReason() fits in a uint32_t, so we can safely cast
-  // to int64_t.
-  int64_t page_end_reason = GetDelegate().GetPageEndReason();
-  if (page_end_reason == page_load_metrics::PageEndReason::END_NONE &&
-      became_hidden) {
-    page_end_reason = page_load_metrics::PageEndReason::END_HIDDEN;
-  }
-  builder.SetNavigation_PageEndReason2(page_end_reason);
   if (GetDelegate().DidCommit() && was_cached_) {
     builder.SetWasCached(1);
   }
@@ -810,22 +811,25 @@ void UkmPageLoadMetricsObserver::ReportMainResourceTimingMetrics(
 }
 
 void UkmPageLoadMetricsObserver::ReportLayoutStability() {
-  ukm::builders::PageLoad(GetDelegate().GetSourceId())
-      .SetLayoutInstability_CumulativeShiftScore(LayoutShiftUkmValue(
-          GetDelegate().GetPageRenderData().layout_shift_score))
-      .SetLayoutInstability_CumulativeShiftScore_MainFrame(LayoutShiftUkmValue(
-          GetDelegate().GetMainFrameRenderData().layout_shift_score))
+  ukm::builders::PageLoad(GetDelegate().GetPageUkmSourceId())
+      .SetLayoutInstability_CumulativeShiftScore(
+          page_load_metrics::LayoutShiftUkmValue(
+              GetDelegate().GetPageRenderData().layout_shift_score))
+      .SetLayoutInstability_CumulativeShiftScore_MainFrame(
+          page_load_metrics::LayoutShiftUkmValue(
+              GetDelegate().GetMainFrameRenderData().layout_shift_score))
       .SetLayoutInstability_CumulativeShiftScore_MainFrame_BeforeInputOrScroll(
-          LayoutShiftUkmValue(GetDelegate()
-                                  .GetMainFrameRenderData()
-                                  .layout_shift_score_before_input_or_scroll))
+          page_load_metrics::LayoutShiftUkmValue(
+              GetDelegate()
+                  .GetMainFrameRenderData()
+                  .layout_shift_score_before_input_or_scroll))
       .Record(ukm::UkmRecorder::Get());
 
   // TODO(crbug.com/1064483): We should move UMA recording to components/
 
   UMA_HISTOGRAM_COUNTS_100(
       "PageLoad.LayoutInstability.CumulativeShiftScore",
-      LayoutShiftUmaValue(
+      page_load_metrics::LayoutShiftUmaValue(
           GetDelegate().GetPageRenderData().layout_shift_score));
 
   TRACE_EVENT_INSTANT1("loading", "CumulativeShiftScore::AllFrames::UMA",
@@ -838,21 +842,45 @@ void UkmPageLoadMetricsObserver::ReportLayoutStability() {
 
   UMA_HISTOGRAM_COUNTS_100(
       "PageLoad.LayoutInstability.CumulativeShiftScore.MainFrame",
-      LayoutShiftUmaValue(
+      page_load_metrics::LayoutShiftUmaValue(
           GetDelegate().GetMainFrameRenderData().layout_shift_score));
+}
 
-  // Note: This depends on PageLoadMetrics internally processing loading
-  // behavior before timing metrics if they come in the same IPC update.
-  if (font_preload_started_before_rendering_observed_) {
-    UMA_HISTOGRAM_COUNTS_100(
-        "PageLoad.Clients.FontPreload.LayoutInstability.CumulativeShiftScore",
-        LayoutShiftUmaValue(
-            GetDelegate().GetPageRenderData().layout_shift_score));
+void UkmPageLoadMetricsObserver::ReportPerfectHeuristicsMetrics() {
+  ukm::builders::PerfectHeuristics builder(GetDelegate().GetPageUkmSourceId());
+  if (!delay_async_script_execution_before_finished_parsing_seen_)
+    return;
+
+  builder.Setdelay_async_script_execution_before_finished_parsing(1).Record(
+      ukm::UkmRecorder::Get());
+}
+
+void UkmPageLoadMetricsObserver::RecordAbortMetrics(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
+    base::TimeTicks page_end_time,
+    ukm::builders::PageLoad* builder) {
+  PageLoadType page_load_type = PageLoadType::kNeverForegrounded;
+  if (page_load_metrics::WasInForeground(GetDelegate())) {
+    page_load_type = timing.paint_timing->first_contentful_paint.has_value()
+                         ? PageLoadType::kReachedFCP
+                         : PageLoadType::kAborted;
   }
+  if (currently_in_foreground_ && !last_time_shown_.is_null()) {
+    total_foreground_duration_ += page_end_time - last_time_shown_;
+  }
+  UMA_HISTOGRAM_ENUMERATION("PageLoad.Experimental.PageLoadType",
+                            page_load_type);
+  PAGE_LOAD_LONG_HISTOGRAM("PageLoad.Experimental.TotalForegroundDuration",
+                           total_foreground_duration_);
+
+  builder->SetExperimental_PageLoadType(static_cast<int>(page_load_type))
+      .SetExperimental_TotalForegroundDuration(
+          ukm::GetExponentialBucketMinForUserTiming(
+              total_foreground_duration_.InMilliseconds()));
 }
 
 void UkmPageLoadMetricsObserver::RecordInputTimingMetrics() {
-  ukm::builders::PageLoad(GetDelegate().GetSourceId())
+  ukm::builders::PageLoad(GetDelegate().GetPageUkmSourceId())
       .SetInteractiveTiming_NumInputEvents(
           GetDelegate().GetPageInputTiming().num_input_events)
       .SetInteractiveTiming_TotalInputDelay(
@@ -862,6 +890,35 @@ void UkmPageLoadMetricsObserver::RecordInputTimingMetrics() {
               .GetPageInputTiming()
               .total_adjusted_input_delay.InMilliseconds())
       .Record(ukm::UkmRecorder::Get());
+}
+
+void UkmPageLoadMetricsObserver::RecordPageEndMetrics(
+    const page_load_metrics::mojom::PageLoadTiming* timing,
+    base::TimeTicks page_end_time) {
+  ukm::builders::PageLoad builder(GetDelegate().GetPageUkmSourceId());
+  // page_transition_ fits in a uint32_t, so we can safely cast to int64_t.
+  builder.SetNavigation_PageTransition(static_cast<int64_t>(page_transition_));
+
+  // GetDelegate().GetPageEndReason() fits in a uint32_t, so we can safely cast
+  // to int64_t.
+  int64_t page_end_reason = GetDelegate().GetPageEndReason();
+  if (page_end_reason == page_load_metrics::PageEndReason::END_NONE &&
+      was_hidden_) {
+    page_end_reason = page_load_metrics::PageEndReason::END_HIDDEN;
+  }
+  builder.SetNavigation_PageEndReason2(page_end_reason);
+  bool is_user_initiated_navigation =
+      // All browser initiated page loads are user-initiated.
+      GetDelegate().GetUserInitiatedInfo().browser_initiated ||
+      // Renderer-initiated navigations are user-initiated if there is an
+      // associated input event.
+      GetDelegate().GetUserInitiatedInfo().user_input_event;
+  builder.SetExperimental_Navigation_UserInitiated(
+      is_user_initiated_navigation);
+  if (timing)
+    RecordAbortMetrics(*timing, page_end_time, &builder);
+
+  builder.Record(ukm::UkmRecorder::Get());
 }
 
 base::Optional<int64_t>
@@ -1090,8 +1147,9 @@ void UkmPageLoadMetricsObserver::RecordGeneratedNavigationUKM(
 void UkmPageLoadMetricsObserver::OnLoadingBehaviorObserved(
     content::RenderFrameHost* rfh,
     int behavior_flag) {
-  if (behavior_flag & blink::LoadingBehaviorFlag::
-                          kLoadingBehaviorFontPreloadStartedBeforeRendering) {
-    font_preload_started_before_rendering_observed_ = true;
+  if (behavior_flag &
+      blink::LoadingBehaviorFlag::
+          kLoadingBehaviorAsyncScriptReadyBeforeDocumentFinishedParsing) {
+    delay_async_script_execution_before_finished_parsing_seen_ = true;
   }
 }

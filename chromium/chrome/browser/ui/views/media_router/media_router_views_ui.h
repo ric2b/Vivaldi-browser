@@ -116,10 +116,19 @@ class MediaRouterViewsUI
   // Opens a file picker for when the user selected local file casting.
   void OpenFileDialog();
 
+  // Uses LoggerImpl to log current available sinks.
+  void LogMediaSinkStatus();
+
   const std::vector<MediaRoute>& routes() const { return routes_; }
   content::WebContents* initiator() const { return initiator_; }
 
   void SimulateDocumentAvailableForTest();
+
+#if defined(OS_MAC)
+  void set_screen_capture_allowed_for_testing(bool allowed) {
+    screen_capture_allowed_for_testing_ = allowed;
+  }
+#endif
 
  private:
   friend class MediaRouterViewsUITest;
@@ -138,6 +147,8 @@ class MediaRouterViewsUI
                            HidesCloudSinksForIncognito);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest,
                            RouteCreationTimeoutForPresentation);
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest,
+                           DesktopMirroringFailsWhenDisallowedOnMac);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterViewsUITest,
                            RouteCreationLocalFileModeInTab);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest,
@@ -233,8 +244,14 @@ class MediaRouterViewsUI
       const MediaSink::Id& sink_id,
       const base::string16& presentation_request_source_name);
 
+// Creates and sends an issue if casting fails due to lack of screen
+// permissions.
+#if defined(OS_MAC)
+  void SendIssueForScreenPermission(const MediaSink::Id& sink_id);
+#endif
+
   // Creates and sends an issue if casting fails for any reason other than
-  // timeout.
+  // those above.
   void SendIssueForUnableToCast(MediaCastMode cast_mode,
                                 const MediaSink::Id& sink_id);
 
@@ -393,6 +410,11 @@ class MediaRouterViewsUI
   // to make sure we don't show a wired display presentation over the
   // controlling window.
   std::unique_ptr<WebContentsDisplayObserver> display_observer_;
+
+#if defined(OS_MAC)
+  base::Optional<bool> screen_capture_allowed_for_testing_;
+#endif
+  LoggerImpl* logger_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   // Therefore |weak_factory_| must be placed at the end.

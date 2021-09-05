@@ -10,8 +10,8 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/ash_constants.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
-#include "ash/session/session_observer.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -30,18 +30,20 @@ enum class Gesture;
 
 namespace gfx {
 class Point;
+class PointF;
 struct VectorIcon;
 }  // namespace gfx
 
 namespace ash {
 
+class AccessibilityEventRewriter;
 class AccessibilityHighlightController;
 class AccessibilityObserver;
 class FloatingAccessibilityController;
+class PointScanController;
 class ScopedBacklightsForcedOff;
 class SelectToSpeakEventHandler;
 class SwitchAccessMenuBubbleController;
-class SwitchAccessEventHandler;
 
 enum AccessibilityNotificationVisibility {
   A11Y_NOTIFICATION_NONE,
@@ -289,6 +291,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   bool IsSwitchAccessRunning() const;
   bool IsSwitchAccessSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForSwitchAccess();
+  void SetAccessibilityEventRewriter(
+      AccessibilityEventRewriter* accessibility_event_rewriter);
 
   void SetVirtualKeyboardEnabled(bool enabled);
   bool virtual_keyboard_enabled() const { return virtual_keyboard().enabled(); }
@@ -326,7 +330,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   // Forwards an accessibility gesture from the touch exploration controller to
   // ChromeVox.
-  void HandleAccessibilityGesture(ax::mojom::Gesture gesture);
+  void HandleAccessibilityGesture(ax::mojom::Gesture gesture,
+                                  gfx::PointF location);
 
   // Toggle dictation.
   void ToggleDictation();
@@ -368,6 +373,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // accessibility tray menu.
   bool IsAdditionalSettingsSeparatorVisibleInTray();
 
+  // Starts point scanning, to select a point onscreen without using a mouse
+  // (as used by Switch Access).
+  void StartPointScanning();
+
   // AccessibilityController:
   void SetClient(AccessibilityControllerClient* client) override;
   void SetDarkenScreen(bool darken) override;
@@ -380,8 +389,6 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetSelectToSpeakState(SelectToSpeakState state) override;
   void SetSelectToSpeakEventHandlerDelegate(
       SelectToSpeakEventHandlerDelegate* delegate) override;
-  void SetSwitchAccessEventHandlerDelegate(
-      SwitchAccessEventHandlerDelegate* delegate) override;
   void HideSwitchAccessBackButton() override;
   void HideSwitchAccessMenu() override;
   void ShowSwitchAccessBackButton(const gfx::Rect& anchor) override;
@@ -390,14 +397,11 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetDictationActive(bool is_active) override;
   void ToggleDictationFromSource(DictationToggleSource source) override;
   void OnAutoclickScrollableBoundsFound(gfx::Rect& bounds_in_screen) override;
-  void ForwardKeyEventsToSwitchAccess(bool should_forward) override;
   base::string16 GetBatteryDescription() const override;
   void SetVirtualKeyboardVisible(bool is_visible) override;
   void NotifyAccessibilityStatusChanged() override;
   bool IsAccessibilityFeatureVisibleInTrayMenu(
       const std::string& path) override;
-  void SetSwitchAccessIgnoreVirtualKeyEventForTesting(
-      bool should_ignore) override;
   void DisablePolicyRecommendationRestorerForTesting() override;
 
   // SessionObserver:
@@ -405,7 +409,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void OnActiveUserPrefServiceChanged(PrefService* prefs) override;
 
   // Test helpers:
-  SwitchAccessEventHandler* GetSwitchAccessEventHandlerForTest();
+  AccessibilityEventRewriter* GetAccessibilityEventRewriterForTest();
   SwitchAccessMenuBubbleController* GetSwitchAccessBubbleControllerForTest() {
     return switch_access_bubble_controller_.get();
   }
@@ -448,7 +452,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
 
   void SwitchAccessDisableDialogClosed(bool disable_dialog_accepted);
   void MaybeCreateSelectToSpeakEventHandler();
-  void MaybeCreateSwitchAccessEventHandler();
+  void ActivateSwitchAccess();
+  void DeactivateSwitchAccess();
+  void SyncSwitchAccessPrefsToSignInProfile();
+  void UpdateKeyCodesAfterSwitchAccessEnabled();
 
   // Client interface in chrome browser.
   AccessibilityControllerClient* client_ = nullptr;
@@ -472,11 +479,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   std::vector<int> switch_access_keys_to_capture_;
   std::unique_ptr<SwitchAccessMenuBubbleController>
       switch_access_bubble_controller_;
-  std::unique_ptr<SwitchAccessEventHandler> switch_access_event_handler_;
-  SwitchAccessEventHandlerDelegate* switch_access_event_handler_delegate_ =
-      nullptr;
+  AccessibilityEventRewriter* accessibility_event_rewriter_ = nullptr;
   bool no_switch_access_disable_confirmation_dialog_for_testing_ = false;
   bool switch_access_disable_dialog_showing_ = false;
+  bool skip_switch_access_notification_ = false;
 
   // Used to control the highlights of caret, cursor and focus.
   std::unique_ptr<AccessibilityHighlightController>
@@ -489,6 +495,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // postpone the showing of the menu till the splash screen closes. This value
   // makes floating menu visible as soon as it is enabled.
   bool always_show_floating_menu_when_enabled_ = false;
+
+  // Used to control point scanning, or selecting a point onscreen without using
+  // a mouse (as done by Switch Access).
+  std::unique_ptr<PointScanController> point_scan_controller_;
 
   // Used to force the backlights off to darken the screen.
   std::unique_ptr<ScopedBacklightsForcedOff> scoped_backlights_forced_off_;

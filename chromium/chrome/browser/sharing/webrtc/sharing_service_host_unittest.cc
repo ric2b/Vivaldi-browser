@@ -13,6 +13,7 @@
 #include "chrome/browser/sharing/mock_sharing_device_source.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
 #include "chrome/browser/sharing/webrtc/sharing_webrtc_connection_host.h"
+#include "chrome/services/sharing/public/mojom/nearby_connections.mojom.h"
 #include "chrome/services/sharing/public/mojom/webrtc.mojom.h"
 #include "components/sync_device_info/fake_device_info_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -27,29 +28,29 @@
 namespace {
 
 class FakeSharingMojoService : public sharing::mojom::Sharing,
-                               public sharing::mojom::SignallingReceiver {
+                               public sharing::mojom::SignalingReceiver {
  public:
-  using NearbyConnectionsHostMojom =
-      location::nearby::connections::mojom::NearbyConnectionsHost;
+  using NearbyConnectionsDependenciesPtr =
+      location::nearby::connections::mojom::NearbyConnectionsDependenciesPtr;
 
   FakeSharingMojoService() = default;
   ~FakeSharingMojoService() override = default;
 
   // sharing::mojom::Sharing:
   void CreateSharingWebRtcConnection(
-      mojo::PendingRemote<sharing::mojom::SignallingSender> signalling_sender,
-      mojo::PendingReceiver<sharing::mojom::SignallingReceiver>
-          signalling_receiver,
+      mojo::PendingRemote<sharing::mojom::SignalingSender> signaling_sender,
+      mojo::PendingReceiver<sharing::mojom::SignalingReceiver>
+          signaling_receiver,
       mojo::PendingRemote<sharing::mojom::SharingWebRtcConnectionDelegate>
           delegate,
       mojo::PendingReceiver<sharing::mojom::SharingWebRtcConnection> connection,
       mojo::PendingRemote<network::mojom::P2PSocketManager> socket_manager,
       mojo::PendingRemote<network::mojom::MdnsResponder> mdns_responder,
       std::vector<sharing::mojom::IceServerPtr> ice_servers) override {
-    signaling_set.Add(this, std::move(signalling_receiver));
+    signaling_set.Add(this, std::move(signaling_receiver));
   }
   void CreateNearbyConnections(
-      mojo::PendingRemote<NearbyConnectionsHostMojom> host,
+      NearbyConnectionsDependenciesPtr dependencies,
       CreateNearbyConnectionsCallback callback) override {
     NOTIMPLEMENTED();
   }
@@ -67,7 +68,7 @@ class FakeSharingMojoService : public sharing::mojom::Sharing,
       std::vector<sharing::mojom::IceCandidatePtr> ice_candidates) override {}
 
   mojo::Receiver<sharing::mojom::Sharing> receiver{this};
-  mojo::ReceiverSet<sharing::mojom::SignallingReceiver> signaling_set;
+  mojo::ReceiverSet<sharing::mojom::SignalingReceiver> signaling_set;
   std::string answer;
 };
 

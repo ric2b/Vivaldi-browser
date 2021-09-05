@@ -27,6 +27,7 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/clipboard_dlp_controller.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 
 class SkBitmap;
@@ -34,6 +35,7 @@ class SkBitmap;
 namespace ui {
 class TestClipboard;
 class ScopedClipboardWriter;
+class ClipboardDataEndpoint;
 
 // Clipboard:
 // - reads from and writes to the system clipboard.
@@ -51,7 +53,7 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
       case ClipboardBuffer::kCopyPaste:
         return true;
       case ClipboardBuffer::kSelection:
-#if !defined(OS_WIN) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
+#if !defined(OS_WIN) && !defined(OS_APPLE) && !defined(OS_CHROMEOS)
         return true;
 #else
         return false;
@@ -106,9 +108,18 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
   // whether it has changed.
   virtual uint64_t GetSequenceNumber(ClipboardBuffer buffer) const = 0;
 
-  // Tests whether the clipboard contains a certain format
-  virtual bool IsFormatAvailable(const ClipboardFormatType& format,
-                                 ClipboardBuffer buffer) const = 0;
+  // Sets the data leak prevention controller for the clipboard. This function
+  // will be used only on Chrome OS.
+  virtual void SetClipboardDlpController(
+      std::unique_ptr<ClipboardDlpController> dlp_controller) = 0;
+
+  // Tests whether the clipboard contains a certain format.
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
+  virtual bool IsFormatAvailable(
+      const ClipboardFormatType& format,
+      ClipboardBuffer buffer,
+      const ClipboardDataEndpoint* data_dst) const = 0;
 
   // Returns whether the clipboard has data that is marked by its originator as
   // confidential. This is available for opt-in checking by the user of this API
@@ -128,27 +139,42 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
   // TODO(huangdarwin): Rename to ReadAvailablePortableFormatNames().
   // Includes all sanitized types.
   // Also, includes pickled types by splitting them out of the pickled format.
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originated uses.
   virtual void ReadAvailableTypes(ClipboardBuffer buffer,
+                                  const ClipboardDataEndpoint* data_dst,
                                   std::vector<base::string16>* types) const = 0;
   // Includes all types, including unsanitized types.
   // Omits formats held within pickles, as they're different from what a native
   // application would see.
+  // TODO(crbug.com/1103614): Update |dst| in all references to its appropriate
+  // ClipboardDataEndpoint for web-originates uses.
   virtual std::vector<base::string16> ReadAvailablePlatformSpecificFormatNames(
-      ClipboardBuffer buffer) const = 0;
+      ClipboardBuffer buffer,
+      const ClipboardDataEndpoint* data_dst) const = 0;
 
   // Reads Unicode text from the clipboard, if available.
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
   virtual void ReadText(ClipboardBuffer buffer,
+                        const ClipboardDataEndpoint* data_dst,
                         base::string16* result) const = 0;
 
   // Reads ASCII text from the clipboard, if available.
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
   virtual void ReadAsciiText(ClipboardBuffer buffer,
+                             const ClipboardDataEndpoint* data_dst,
                              std::string* result) const = 0;
 
   // Reads HTML from the clipboard, if available. If the HTML fragment requires
   // context to parse, |fragment_start| and |fragment_end| are indexes into
   // markup indicating the beginning and end of the actual fragment. Otherwise,
   // they will contain 0 and markup->size().
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
   virtual void ReadHTML(ClipboardBuffer buffer,
+                        const ClipboardDataEndpoint* data_dst,
                         base::string16* markup,
                         std::string* src_url,
                         uint32_t* fragment_start,
@@ -156,25 +182,42 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
 
   // Reads RTF from the clipboard, if available. Stores the result as a byte
   // vector.
-  virtual void ReadRTF(ClipboardBuffer buffer, std::string* result) const = 0;
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
+  virtual void ReadRTF(ClipboardBuffer buffer,
+                       const ClipboardDataEndpoint* data_dst,
+                       std::string* result) const = 0;
 
   using ReadImageCallback = base::OnceCallback<void(const SkBitmap&)>;
 
   // Reads an image from the clipboard, if available.
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
   virtual void ReadImage(ClipboardBuffer buffer,
+                         const ClipboardDataEndpoint* data_dst,
                          ReadImageCallback callback) const = 0;
 
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
   virtual void ReadCustomData(ClipboardBuffer buffer,
                               const base::string16& type,
+                              const ClipboardDataEndpoint* data_dst,
                               base::string16* result) const = 0;
 
   // Reads a bookmark from the clipboard, if available.
   // |title| or |url| may be null.
-  virtual void ReadBookmark(base::string16* title, std::string* url) const = 0;
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
+  virtual void ReadBookmark(const ClipboardDataEndpoint* data_dst,
+                            base::string16* title,
+                            std::string* url) const = 0;
 
   // Reads raw data from the clipboard with the given format type. Stores result
   // as a byte vector.
+  // TODO(crbug.com/1103614): Update |data_dst| in all references to its
+  // appropriate ClipboardDataEndpoint for web-originates uses.
   virtual void ReadData(const ClipboardFormatType& format,
+                        const ClipboardDataEndpoint* data_dst,
                         std::string* result) const = 0;
 
   // Returns an estimate of the time the clipboard was last updated.  If the
@@ -183,6 +226,12 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
 
   // Resets the clipboard last modified time to Time::Time().
   virtual void ClearLastModifiedTime();
+
+#if defined(USE_OZONE)
+  // Returns whether the selection buffer is available.  This is true for some
+  // Linux platforms.
+  virtual bool IsSelectionBufferAvailable() const = 0;
+#endif  // defined(USE_OZONE)
 
  protected:
   // PortableFormat designates the type of data to be stored in the clipboard.
@@ -250,15 +299,23 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
   virtual ~Clipboard();
 
   // Write a bunch of objects to the system clipboard. Copies are made of the
-  // contents of |objects|.
-  virtual void WritePortableRepresentations(ClipboardBuffer buffer,
-                                            const ObjectMap& objects) = 0;
+  // contents of |objects|. Also, adds the source of the data to the clipboard,
+  // which can be used when we need to restrict the clipboard data between a set
+  // of confidential documents. The data source maybe passed as nullptr.
+  virtual void WritePortableRepresentations(
+      ClipboardBuffer buffer,
+      const ObjectMap& objects,
+      std::unique_ptr<ClipboardDataEndpoint> data_src) = 0;
+
   // Write |platform_representations|, in the order of their appearance in
-  // |platform_representations|.
+  // |platform_representations|. Also, adds the source of the data to the
+  // clipboard, which can be used when we need to restrict the clipboard data
+  // between a set of confidential documents. The data source maybe passed as
+  // nullptr.
   virtual void WritePlatformRepresentations(
       ClipboardBuffer buffer,
-      std::vector<Clipboard::PlatformRepresentation>
-          platform_representations) = 0;
+      std::vector<Clipboard::PlatformRepresentation> platform_representations,
+      std::unique_ptr<ClipboardDataEndpoint> data_src) = 0;
 
   void DispatchPortableRepresentation(PortableFormat format,
                                       const ObjectMapParams& params);

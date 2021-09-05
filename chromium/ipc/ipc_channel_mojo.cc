@@ -74,10 +74,10 @@ class MojoChannelFactory : public ChannelFactory {
 };
 
 base::ProcessId GetSelfPID() {
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (int global_pid = Channel::GetGlobalPid())
     return global_pid;
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 #if defined(OS_NACL)
   return -1;
 #else
@@ -261,7 +261,7 @@ ChannelMojo::CreateThreadSafeChannel() {
       base::BindRepeating(
           &ChannelMojo::ForwardMessageWithResponderFromThreadSafePtr,
           weak_ptr_),
-      *bootstrap_->GetAssociatedGroup());
+      base::DoNothing(), *bootstrap_->GetAssociatedGroup());
 }
 
 void ChannelMojo::OnPeerPidReceived(int32_t peer_pid) {

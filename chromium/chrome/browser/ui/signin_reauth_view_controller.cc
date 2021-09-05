@@ -13,6 +13,7 @@
 #include "base/optional.h"
 #include "base/task_runner.h"
 #include "base/time/time.h"
+#include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/reauth_result.h"
 #include "chrome/browser/signin/reauth_tab_helper.h"
@@ -21,12 +22,15 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/webui/signin/signin_reauth_ui.h"
+#include "components/consent_auditor/consent_auditor.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/web_preferences.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "third_party/blink/public/common/css/preferred_color_scheme.h"
 
 namespace {
 
@@ -66,15 +70,6 @@ SigninReauthViewController::SigninReauthViewController(
   // Show the confirmation dialog unconditionally for now. We may decide to only
   // show it in some cases in the future.
   ShowReauthConfirmationDialog();
-
-  if (!base::FeatureList::IsEnabled(kSigninReauthPrompt)) {
-    // Approve reauth automatically.
-    gaia_reauth_type_ = GaiaReauthType::kAutoApproved;
-    gaia_reauth_page_state_ = GaiaReauthPageState::kDone;
-    gaia_reauth_page_result_ = signin::ReauthResult::kSuccess;
-    OnStateChanged();
-    return;
-  }
 
   // Navigate to the Gaia reauth challenge page in background.
   reauth_web_contents_ =
@@ -134,9 +129,14 @@ void SigninReauthViewController::OnModalSigninClosed() {
   CompleteReauth(signin::ReauthResult::kDismissedByUser);
 }
 
-void SigninReauthViewController::OnReauthConfirmed() {
+void SigninReauthViewController::OnReauthConfirmed(
+    sync_pb::UserConsentTypes::AccountPasswordsConsent consent) {
   if (user_confirmed_reauth_)
     return;
+
+  // Cache the consent. It will be actually recorded later, in CompleteReauth(),
+  // if the user successfully completed the reauth.
+  consent_ = consent;
 
   user_confirmed_reauth_ = true;
   user_confirmed_reauth_time_ = base::TimeTicks::Now();
@@ -228,6 +228,12 @@ void SigninReauthViewController::CompleteReauth(signin::ReauthResult result) {
     raw_reauth_web_contents_ = nullptr;
   }
 
+  if (result == signin::ReauthResult::kSuccess) {
+    CHECK(consent_.has_value());
+    ConsentAuditorFactory::GetForProfile(browser_->profile())
+        ->RecordAccountPasswordsConsent(account_id_, *consent_);
+  }
+
   signin_ui_util::RecordTransactionalReauthResult(access_point_, result);
   if (reauth_callback_)
     std::move(reauth_callback_).Run(result);
@@ -305,8 +311,15 @@ void SigninReauthViewController::ShowReauthConfirmationDialog() {
           browser_, account_id_, access_point_);
   dialog_delegate_observer_.Add(dialog_delegate_);
 
-  SigninReauthUI* web_dialog_ui = static_cast<SigninReauthUI*>(
-      dialog_delegate_->GetWebContents()->GetWebUI()->GetController());
+  // Gaia Reauth page doesn't support dark mode. Force the confirmation dialog
+  // to use the light mode as well to match the style.
+  auto* web_contents = dialog_delegate_->GetWebContents();
+  auto prefs = web_contents->GetOrCreateWebPreferences();
+  prefs.preferred_color_scheme = blink::PreferredColorScheme::kLight;
+  web_contents->SetWebPreferences(prefs);
+
+  SigninReauthUI* web_dialog_ui =
+      web_contents->GetWebUI()->GetController()->GetAs<SigninReauthUI>();
   web_dialog_ui->InitializeMessageHandlerWithReauthController(this);
 }
 

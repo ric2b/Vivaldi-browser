@@ -32,7 +32,7 @@ class MEDIA_EXPORT WMFAudioDecoder : public AudioDecoder {
                   const OutputCB& output_cb,
                   const WaitingCB& waiting_for_decryption_key_cb) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer,
-              const DecodeCB& decode_cb) override;
+              DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
 
  private:

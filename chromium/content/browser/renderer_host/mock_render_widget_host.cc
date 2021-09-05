@@ -7,28 +7,6 @@
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 
-namespace {
-class TestFrameTokenMessageQueue : public content::FrameTokenMessageQueue {
- public:
-  TestFrameTokenMessageQueue() = default;
-  ~TestFrameTokenMessageQueue() override = default;
-
-  uint32_t processed_frame_messages_count() {
-    return processed_frame_messages_count_;
-  }
-
- protected:
-  void ProcessSwapMessages(std::vector<IPC::Message> messages) override {
-    processed_frame_messages_count_++;
-  }
-
- private:
-  uint32_t processed_frame_messages_count_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(TestFrameTokenMessageQueue);
-};
-}  // namespace
-
 namespace content {
 
 MockRenderWidgetHost::~MockRenderWidgetHost() {}
@@ -59,19 +37,26 @@ void MockRenderWidgetHost::SetupForInputRouterTest() {
   input_router_.reset(new MockInputRouter(this));
 }
 
-uint32_t MockRenderWidgetHost::processed_frame_messages_count() {
-  CHECK(frame_token_message_queue_);
-  return static_cast<TestFrameTokenMessageQueue*>(
-             frame_token_message_queue_.get())
-      ->processed_frame_messages_count();
-}
-
 // static
 MockRenderWidgetHost* MockRenderWidgetHost::Create(
     RenderWidgetHostDelegate* delegate,
     RenderProcessHost* process,
     int32_t routing_id) {
-  return new MockRenderWidgetHost(delegate, process, routing_id);
+  mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
+  auto blink_widget_receiver =
+      blink_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+  return new MockRenderWidgetHost(delegate, process, routing_id,
+                                  blink_widget.Unbind());
+}
+
+MockRenderWidgetHost* MockRenderWidgetHost::Create(
+    RenderWidgetHostDelegate* delegate,
+    RenderProcessHost* process,
+    int32_t routing_id,
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> pending_blink_widget) {
+  DCHECK(pending_blink_widget);
+  return new MockRenderWidgetHost(delegate, process, routing_id,
+                                  std::move(pending_blink_widget));
 }
 
 blink::mojom::WidgetInputHandler*
@@ -83,24 +68,23 @@ void MockRenderWidgetHost::NotifyNewContentRenderingTimeoutForTesting() {
   new_content_rendering_timeout_fired_ = true;
 }
 
-MockRenderWidgetHost::MockRenderWidgetHost(RenderWidgetHostDelegate* delegate,
-                                           RenderProcessHost* process,
-                                           int routing_id)
+MockRenderWidgetHost::MockRenderWidgetHost(
+    RenderWidgetHostDelegate* delegate,
+    RenderProcessHost* process,
+    int routing_id,
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> pending_blink_widget)
     : RenderWidgetHostImpl(delegate,
                            process,
                            routing_id,
                            /*hidden=*/false,
-                           std::make_unique<TestFrameTokenMessageQueue>()),
+                           std::make_unique<FrameTokenMessageQueue>()),
       new_content_rendering_timeout_fired_(false),
       fling_scheduler_(std::make_unique<FlingScheduler>(this)) {
   acked_touch_event_type_ = blink::WebInputEvent::Type::kUndefined;
   mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
-  mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
-  auto blink_widget_receiver =
-      blink_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
   BindWidgetInterfaces(
       blink_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
-      blink_widget.Unbind());
+      std::move(pending_blink_widget));
 }
 
 }  // namespace content

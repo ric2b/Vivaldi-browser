@@ -7,7 +7,6 @@
 #include "media/base/video_frame.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_frame.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_track_writer_parameters.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -15,6 +14,7 @@
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream_default_controller.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_frame.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -105,7 +105,7 @@ class VideoTrackWritableStreamSink final : public UnderlyingSinkBase {
     source_->PushFrame(video_frame->frame(), estimated_capture_time);
 
     if (release_frames_)
-      video_frame->release();
+      video_frame->destroy();
 
     return ScriptPromise::CastUndefined(script_state);
   }
@@ -138,7 +138,6 @@ MediaStreamTrack* CreateVideoTrackFromSource(
       MakeGarbageCollected<MediaStreamSource>(
           track_id, MediaStreamSource::kTypeVideo, track_id /* name */,
           false /* remote */);
-  video_source->SetOwner(video_source_owner);
   video_source_owner->SetPlatformSource(std::move(video_source));
 
   return MakeGarbageCollected<MediaStreamTrack>(
@@ -188,7 +187,6 @@ MediaStreamTrack* VideoTrackWriter::track() {
 void VideoTrackWriter::Trace(Visitor* visitor) const {
   visitor->Trace(track_);
   visitor->Trace(writable_);
-  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

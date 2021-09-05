@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.ResultReceiver;
@@ -208,33 +207,29 @@ public class ImeAdapterImpl
         mCurrentConfig = new Configuration(getContainerView().getResources().getConfiguration());
 
         // CursorAnchroInfo is supported only after L.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            mCursorAnchorInfoController = CursorAnchorInfoController.create(
-                    wrapper, new CursorAnchorInfoController.ComposingTextDelegate() {
-                        @Override
-                        public CharSequence getText() {
-                            return mLastText;
-                        }
-                        @Override
-                        public int getSelectionStart() {
-                            return mLastSelectionStart;
-                        }
-                        @Override
-                        public int getSelectionEnd() {
-                            return mLastSelectionEnd;
-                        }
-                        @Override
-                        public int getComposingTextStart() {
-                            return mLastCompositionStart;
-                        }
-                        @Override
-                        public int getComposingTextEnd() {
-                            return mLastCompositionEnd;
-                        }
-                    });
-        } else {
-            mCursorAnchorInfoController = null;
-        }
+        mCursorAnchorInfoController = CursorAnchorInfoController.create(
+                wrapper, new CursorAnchorInfoController.ComposingTextDelegate() {
+                    @Override
+                    public CharSequence getText() {
+                        return mLastText;
+                    }
+                    @Override
+                    public int getSelectionStart() {
+                        return mLastSelectionStart;
+                    }
+                    @Override
+                    public int getSelectionEnd() {
+                        return mLastSelectionEnd;
+                    }
+                    @Override
+                    public int getComposingTextStart() {
+                        return mLastCompositionStart;
+                    }
+                    @Override
+                    public int getComposingTextEnd() {
+                        return mLastCompositionEnd;
+                    }
+                });
         mInputMethodManagerWrapper = wrapper;
         mNativeImeAdapterAndroid = ImeAdapterImplJni.get().init(ImeAdapterImpl.this, mWebContents);
         WindowEventObserverManager.from(mWebContents).addObserver(this);
@@ -317,9 +312,10 @@ public class ImeAdapterImpl
         }
         if (mInputConnectionFactory == null) return null;
         View containerView = getContainerView();
+        if (DEBUG_LOGS) Log.i(TAG, "Last text: " + mLastText);
         setInputConnection(mInputConnectionFactory.initializeAndGet(containerView, this,
                 mTextInputType, mTextInputFlags, mTextInputMode, mTextInputAction,
-                mLastSelectionStart, mLastSelectionEnd, outAttrs));
+                mLastSelectionStart, mLastSelectionEnd, mLastText, outAttrs));
         if (DEBUG_LOGS) Log.i(TAG, "onCreateInputConnection: " + mInputConnection);
 
         if (mCursorAnchorInfoController != null) {
@@ -839,7 +835,6 @@ public class ImeAdapterImpl
         return true;
     }
 
-    @VisibleForTesting
     boolean finishComposingText() {
         if (!isValid()) return false;
         ImeAdapterImplJni.get().finishComposingText(mNativeImeAdapterAndroid, ImeAdapterImpl.this);

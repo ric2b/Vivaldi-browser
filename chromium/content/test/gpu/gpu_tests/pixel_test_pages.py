@@ -5,9 +5,20 @@
 # This is more akin to a .pyl/JSON file, so it's expected to be long.
 # pylint: disable=too-many-lines
 
+from gpu_tests import common_browser_args as cba
 from gpu_tests import skia_gold_matching_algorithms as algo
 
 CRASH_TYPE_GPU = 'gpu'
+
+# These tests attempt to use test rects that are larger than the small screen
+# on some Fuchsia devices, so we need to use a less-desirable screenshot capture
+# method to get the entire page contents instead of just the visible portion.
+PROBLEMATIC_FUCHSIA_TESTS = [
+    'Maps_maps',
+    'Pixel_BackgroundImage',
+    'Pixel_PrecisionRoundedCorner',
+    'Pixel_SolidColorBackground',
+]
 
 # Meant to be used when we know a test is going to be noisy, and we want any
 # images it generates to be auto-triaged until we have enough data to calculate
@@ -24,20 +35,21 @@ class PixelTestPage(object):
   from the old-style GPU tests.
   """
 
-  def __init__(self,
-               url,
-               name,
-               test_rect,
-               tolerance=2,
-               browser_args=None,
-               expected_colors=None,
-               gpu_process_disabled=False,
-               optional_action=None,
-               restart_browser_after_test=False,
-               other_args=None,
-               grace_period_end=None,
-               expected_per_process_crashes=None,
-               matching_algorithm=None):
+  def __init__(  # pylint: disable=too-many-arguments
+      self,
+      url,
+      name,
+      test_rect,
+      tolerance=2,
+      browser_args=None,
+      expected_colors=None,
+      gpu_process_disabled=False,
+      optional_action=None,
+      restart_browser_after_test=False,
+      other_args=None,
+      grace_period_end=None,
+      expected_per_process_crashes=None,
+      matching_algorithm=None):
     super(PixelTestPage, self).__init__()
     self.url = url
     self.name = name
@@ -150,7 +162,7 @@ SCALE_FACTOR_OVERRIDES = {
 class PixelTestPages(object):
   @staticmethod
   def DefaultPages(base_name):
-    sw_compositing_args = ['--disable-gpu-compositing']
+    sw_compositing_args = [cba.DISABLE_GPU_COMPOSITING]
 
     # The optimizer script spat out pretty similar values for most MP4 tests, so
     # combine into a single set of parameters.
@@ -218,7 +230,7 @@ class PixelTestPages(object):
         # Surprisingly stable, does not appear to require inexact matching.
         PixelTestPage('pixel_video_mp4.html',
                       base_name + '_Video_MP4_DXVA',
-                      browser_args=['--disable-features=D3D11VideoDecoder'],
+                      browser_args=[cba.DISABLE_FEATURES_D3D11_VIDEO_DECODER],
                       test_rect=[0, 0, 240, 135]),
         PixelTestPage('pixel_video_mp4_four_colors_aspect_4x3.html',
                       base_name + '_Video_MP4_FourColors_Aspect_4x3',
@@ -255,7 +267,7 @@ class PixelTestPages(object):
                           edge_threshold=20)),
         PixelTestPage('pixel_video_vp9.html',
                       base_name + '_Video_VP9_DXVA',
-                      browser_args=['--disable-features=D3D11VideoDecoder'],
+                      browser_args=[cba.DISABLE_FEATURES_D3D11_VIDEO_DECODER],
                       test_rect=[0, 0, 240, 135],
                       matching_algorithm=algo.SobelMatchingAlgorithm(
                           max_different_pixels=31100,
@@ -291,7 +303,12 @@ class PixelTestPages(object):
                       }),
         PixelTestPage('pixel_video_backdrop_filter.html',
                       base_name + '_Video_BackdropFilter',
-                      test_rect=[0, 0, 240, 135]),
+                      test_rect=[0, 0, 240, 135],
+                      matching_algorithm=algo.SobelMatchingAlgorithm(
+                          max_different_pixels=1000,
+                          pixel_delta_threshold=20,
+                          edge_threshold=40,
+                          ignored_border_thickness=1)),
         PixelTestPage('pixel_webgl_premultiplied_alpha_false.html',
                       base_name + '_WebGL_PremultipliedAlpha_False',
                       test_rect=[0, 0, 150, 150]),
@@ -344,7 +361,8 @@ class PixelTestPages(object):
   @staticmethod
   def GpuRasterizationPages(base_name):
     browser_args = [
-        '--force-gpu-rasterization', '--disable-software-compositing-fallback'
+        cba.FORCE_GPU_RASTERIZATION,
+        cba.DISABLE_SOFTWARE_COMPOSITING_FALLBACK,
     ]
     return [
         PixelTestPage('pixel_background.html',
@@ -385,14 +403,14 @@ class PixelTestPages(object):
   @staticmethod
   def ExperimentalCanvasFeaturesPages(base_name):
     browser_args = [
-        '--enable-experimental-web-platform-features',
+        cba.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES,
     ]
     accelerated_args = [
-        '--disable-software-compositing-fallback',
+        cba.DISABLE_SOFTWARE_COMPOSITING_FALLBACK,
     ]
     unaccelerated_args = [
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu-compositing',
+        cba.DISABLE_ACCELERATED_2D_CANVAS,
+        cba.DISABLE_GPU_COMPOSITING,
     ]
 
     return [
@@ -428,12 +446,12 @@ class PixelTestPages(object):
                       base_name + '_OffscreenCanvasWebGLSoftwareCompositing',
                       test_rect=[0, 0, 360, 200],
                       browser_args=browser_args +
-                      ['--disable-gpu-compositing']),
+                      [cba.DISABLE_GPU_COMPOSITING]),
         PixelTestPage(
             'pixel_offscreenCanvas_webgl_commit_worker.html',
             base_name + '_OffscreenCanvasWebGLSoftwareCompositingWorker',
             test_rect=[0, 0, 360, 200],
-            browser_args=browser_args + ['--disable-gpu-compositing']),
+            browser_args=browser_args + [cba.DISABLE_GPU_COMPOSITING]),
         PixelTestPage('pixel_offscreenCanvas_2d_commit_main.html',
                       base_name + '_OffscreenCanvasAccelerated2D',
                       test_rect=[0, 0, 360, 200],
@@ -454,12 +472,12 @@ class PixelTestPages(object):
             'pixel_offscreenCanvas_2d_commit_main.html',
             base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositing',
             test_rect=[0, 0, 360, 200],
-            browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
+            browser_args=browser_args + [cba.DISABLE_ACCELERATED_2D_CANVAS]),
         PixelTestPage(
             'pixel_offscreenCanvas_2d_commit_worker.html',
             base_name + '_OffscreenCanvasUnaccelerated2DGPUCompositingWorker',
             test_rect=[0, 0, 360, 200],
-            browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
+            browser_args=browser_args + [cba.DISABLE_ACCELERATED_2D_CANVAS]),
         PixelTestPage('pixel_offscreenCanvas_2d_resize_on_worker.html',
                       base_name + '_OffscreenCanvas2DResizeOnWorker',
                       test_rect=[0, 0, 200, 200],
@@ -480,14 +498,14 @@ class PixelTestPages(object):
             'pixel_canvas_display_srgb.html',
             base_name + '_CanvasDisplaySRGBUnaccelerated2DGPUCompositing',
             test_rect=[0, 0, 140, 140],
-            browser_args=browser_args + ['--disable-accelerated-2d-canvas']),
+            browser_args=browser_args + [cba.DISABLE_ACCELERATED_2D_CANVAS]),
     ]
 
   @staticmethod
   def LowLatencyPages(base_name):
     unaccelerated_args = [
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu-compositing',
+        cba.DISABLE_ACCELERATED_2D_CANVAS,
+        cba.DISABLE_GPU_COMPOSITING,
     ]
     return [
         PixelTestPage('pixel_canvas_low_latency_2d.html',
@@ -518,7 +536,7 @@ class PixelTestPages(object):
   # Currently this is Windows and Linux.
   @staticmethod
   def SwiftShaderPages(base_name):
-    browser_args = ['--disable-gpu']
+    browser_args = [cba.DISABLE_GPU]
     suffix = "_SwiftShader"
     return [
         PixelTestPage('pixel_canvas2d.html',
@@ -542,7 +560,7 @@ class PixelTestPages(object):
   # Test rendering where GPU process is blocked.
   @staticmethod
   def NoGpuProcessPages(base_name):
-    browser_args = ['--disable-gpu', '--disable-software-rasterizer']
+    browser_args = [cba.DISABLE_GPU, cba.DISABLE_SOFTWARE_RASTERIZER]
     suffix = "_NoGpuProcess"
     return [
         PixelTestPage(
@@ -667,20 +685,14 @@ class PixelTestPages(object):
         '--enable-direct-composition-video-overlays',
         # All bots are connected with a power source, however, we want to to
         # test with the code path that's enabled with battery power.
-        '--disable_vp_scaling=1'
-    ]
-    browser_args_Nonroot = browser_args + [
-        '--enable-features=DirectCompositionNonrootOverlays,' +
-        'DirectCompositionUnderlays'
-    ]
-    browser_args_Complex = browser_args + [
-        '--enable-features=DirectCompositionComplexOverlays,' +
-        'DirectCompositionNonrootOverlays,' + 'DirectCompositionUnderlays'
+        cba.DISABLE_VP_SCALING,
     ]
     browser_args_YUY2 = browser_args + [
         '--disable-features=DirectCompositionPreferNV12Overlays'
     ]
-    browser_args_DXVA = browser_args + ['--disable-features=D3D11VideoDecoder']
+    browser_args_DXVA = browser_args + [
+        cba.DISABLE_FEATURES_D3D11_VIDEO_DECODER
+    ]
 
     # Most tests fall roughly into 3 tiers of noisiness.
     # Parameter values were determined using the automated optimization script,
@@ -803,17 +815,6 @@ class PixelTestPages(object):
                       test_rect=[0, 0, 960, 540],
                       browser_args=browser_args,
                       other_args={'zero_copy': True},
-                      matching_algorithm=strict_dc_sobel_algorithm),
-        # Surprisingly stable, does not need inexact matching at this time.
-        PixelTestPage('pixel_video_nonroot.html',
-                      base_name + '_DirectComposition_Nonroot',
-                      test_rect=[0, 0, 240, 136],
-                      browser_args=browser_args_Nonroot),
-        PixelTestPage('pixel_video_complex_overlays.html',
-                      base_name + '_DirectComposition_ComplexOverlays',
-                      test_rect=[0, 0, 240, 136],
-                      browser_args=browser_args_Complex,
-                      other_args={'video_is_rotated': True},
                       matching_algorithm=strict_dc_sobel_algorithm),
         PixelTestPage('pixel_video_mp4_rounded_corner.html',
                       base_name + '_DirectComposition_Video_MP4_Rounded_Corner',

@@ -89,9 +89,9 @@ class StartupBrowserCreatorTriggeredResetTest : public InProcessBrowserTest {
 
  protected:
   void SetUpInProcessBrowserTestFixture() override {
-    will_create_browser_context_services_subscription_ =
+    create_services_subscription_ =
         BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+            ->RegisterCreateServicesCallbackForTesting(
                 base::Bind(&StartupBrowserCreatorTriggeredResetTest::
                                OnWillCreateBrowserContextServices,
                            base::Unretained(this)));
@@ -104,8 +104,8 @@ class StartupBrowserCreatorTriggeredResetTest : public InProcessBrowserTest {
   }
 
   std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
+      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
+      create_services_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(StartupBrowserCreatorTriggeredResetTest);
 };
@@ -169,7 +169,7 @@ class StartupBrowserCreatorTriggeredResetFirstRunTest
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetFirstRunTest,
                        TestTriggeredResetDoesNotShowWithFirstRunURLs) {
   // The presence of First Run tabs (in production code, these commonly come
-  // from master_preferences) should suppress the reset UI. Check that this is
+  // from initial preferences) should suppress the reset UI. Check that this is
   // the case.
   ASSERT_TRUE(embedded_test_server()->Start());
   StartupBrowserCreator browser_creator;
@@ -245,8 +245,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTriggeredResetTest,
         Profile::CreateProfile(path, nullptr, Profile::CREATE_MODE_SYNCHRONOUS);
   }
   Profile* other_profile_ptr = other_profile.get();
-  profile_manager->RegisterTestingProfile(std::move(other_profile), true,
-                                          false);
+  profile_manager->RegisterTestingProfile(std::move(other_profile), true);
 
   // Use a couple same-site HTTP URLs.
   ASSERT_TRUE(embedded_test_server()->Start());

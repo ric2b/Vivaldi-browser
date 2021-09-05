@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">ukendt navn</translation>
 <translation id="1089439967362294234">Skift adgangskode</translation>
 <translation id="1110994991967754504">Vælg tilladelse til <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Få adgang til en <ph name="BEGIN_LINK" />cachelagret kopi<ph name="END_LINK" /> af <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> lukkede forbindelsen uventet.</translation>
 <translation id="1161325031994447685">Genopretter forbindelse til Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Udskriv...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Dette website indeholder skadelige programmer</translation>
 <translation id="1916770123977586577">Anvend dine opdaterede indstillinger ved at genindlæse denne side</translation>
 <translation id="1919345977826869612">Annoncer</translation>
-<translation id="194030505837763158">Gå til <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Avanceret</translation>
-<translation id="2030481566774242610">Mente du <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerer din proxy og din firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Lyd</translation>
 <translation id="2119505898009119320">Udstedt til: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -101,6 +98,7 @@
 <translation id="4235360514405112390">Gyldig</translation>
 <translation id="4250431568374086873">Din forbindelse til dette website er ikke helt sikker</translation>
 <translation id="4265872034478892965">Tilladt af din administrator</translation>
+<translation id="4305666528087210886">Der var ikke adgang til din fil</translation>
 <translation id="4312866146174492540">Bloker (standard)</translation>
 <translation id="4356973930735388585">Hackere på dette website vil muligvis forsøge at installere skadelige programmer på din computer, som stjæler eller sletter dine oplysninger (f.eks. billeder, adgangskoder, beskeder og kreditkortoplysninger).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -128,7 +126,6 @@
 <translation id="5287240709317226393">Vis cookies</translation>
 <translation id="5355557959165512791">Du kan ikke besøge <ph name="SITE" /> lige nu, da dets certifikat er blevet tilbagekaldt. Netværksfejl og angreb er normalt midlertidige, så siden vil sandsynligvis fungere igen senere.</translation>
 <translation id="5386426401304769735">Certifikatkæden for dette website indeholder et certifikat, der er signeret med SHA-1.</translation>
-<translation id="5431657950005405462">Din fil blev ikke fundet</translation>
 <translation id="5452270690849572955">Denne side fra <ph name="HOST_NAME" /> blev ikke fundet</translation>
 <translation id="5457113250005438886">Ugyldig</translation>
 <translation id="5492298309214877701">Dette website på virksomhedens, organisationens eller skolens intranet har samme webadresse som et eksternt website.
@@ -174,7 +171,6 @@
 <translation id="6897140037006041989">Brugeragent</translation>
 <translation id="7053983685419859001">Bloker</translation>
 <translation id="7079718277001814089">Dette website indeholder malware</translation>
-<translation id="7090678807593890770">Søg efter <ph name="LINK" /> på Google</translation>
 <translation id="7108819624672055576">Tilladt med en udvidelse</translation>
 <translation id="7111012039238467737">(gyldigt)</translation>
 <translation id="7113310725918019676">Tillad <ph name="BLOCKED_TYPE" /> fra <ph name="DOMAIN" /></translation>
@@ -198,7 +194,6 @@
 <translation id="7716424297397655342">Dette website kan ikke indlæses fra cachen</translation>
 <translation id="7758069387465995638">Firewall- eller antivirussoftware kan have blokeret forbindelsen.</translation>
 <translation id="7800304661137206267">Forbindelsen er krypteret ved hjælp af <ph name="CIPHER" /> med <ph name="MAC" /> til meddelelsesgodkendelse og <ph name="KX" /> som hovedudvekslingsmekanisme.</translation>
-<translation id="7802523362929240268">Websitet er pålideligt</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> bruger normalt kryptering til at beskytte dine oplysninger. Da Vivaldi forsøgte at oprette forbindelse til <ph name="SITE" /> denne gang, returnerede websitet usædvanlige og forkerte loginoplysninger. Dette kan skyldes, at en hacker forsøger at udgive sig for at være <ph name="SITE" />, eller at en Wi-Fi-loginskærm har forstyrret forbindelsen. Dine oplysninger er stadig sikre, idet Vivaldi afbrød forbindelsen, inden der blev udvekslet data.</translation>
 <translation id="7878562273885520351">Din adgangskode kan være kompromitteret</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
@@ -230,6 +225,7 @@
 <translation id="9011424611726486705">Åbn indstillinger for website</translation>
 <translation id="9025348182339809926">(ugyldigt)</translation>
 <translation id="9039213469156557790">Desuden indeholder denne side andre ressourcer, som ikke er sikre. Disse ressourcer kan ses af andre under overførslen og kan ændres af en hacker, så siden opfører sig anderledes.</translation>
+<translation id="9062620674789239642">Det kan være blevet flyttet, redigeret eller slettet.</translation>
 <translation id="9069693763241529744">Blokeret af en udvidelse</translation>
 <translation id="9169664750068251925">Bloker altid på dette website</translation>
 <translation id="9180553614777056266">Annonceblokering</translation>

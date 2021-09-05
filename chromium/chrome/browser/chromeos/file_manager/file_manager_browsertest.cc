@@ -112,8 +112,14 @@ struct TestCase {
     return *this;
   }
 
+  // TODO(crbug.com/912236) Remove once transition to new ZIP system is done.
   TestCase& ZipNoNaCl() {
     options.zip_no_nacl = true;
+    return *this;
+  }
+
+  TestCase& EnableSharesheet() {
+    options.enable_sharesheet = true;
     return *this;
   }
 
@@ -323,7 +329,6 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FilesAppBrowserTest,
     ::testing::Values(ZipCase("zipFileOpenDownloads").InGuestMode(),
                       ZipCase("zipFileOpenDownloads"),
-                      ZipCase("zipFileCannotOpen").ZipNoNaCl(),
                       ZipCase("zipFileOpenDownloadsShiftJIS"),
                       ZipCase("zipFileOpenDownloadsMacOs"),
                       ZipCase("zipFileOpenDownloadsWithAbsolutePaths"),
@@ -430,14 +435,19 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Toolbar, /* toolbar.js */
     FilesAppBrowserTest,
-    ::testing::Values(TestCase("toolbarDeleteWithMenuItemNoEntrySelected"),
-                      TestCase("toolbarDeleteButtonKeepFocus"),
-                      TestCase("toolbarDeleteEntry").InGuestMode(),
-                      TestCase("toolbarDeleteEntry"),
-                      TestCase("toolbarRefreshButtonWithSelection").EnableArc(),
-                      TestCase("toolbarAltACommand").FilesNg(),
-                      TestCase("toolbarRefreshButtonHiddenInRecents"),
-                      TestCase("toolbarMultiMenuFollowsButton")));
+    ::testing::Values(
+        TestCase("toolbarDeleteWithMenuItemNoEntrySelected"),
+        TestCase("toolbarDeleteButtonKeepFocus"),
+        TestCase("toolbarDeleteEntry").InGuestMode(),
+        TestCase("toolbarDeleteEntry"),
+        TestCase("toolbarRefreshButtonWithSelection").EnableArc(),
+        TestCase("toolbarAltACommand").FilesNg(),
+        TestCase("toolbarRefreshButtonHiddenInRecents"),
+        TestCase("toolbarMultiMenuFollowsButton"),
+        TestCase("toolbarSharesheetButtonWithSelection").EnableSharesheet(),
+        TestCase("toolbarSharesheetContextMenuWithSelection")
+            .EnableSharesheet(),
+        TestCase("toolbarSharesheetNoEntrySelected").EnableSharesheet()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     QuickView, /* quick_view.js */
@@ -588,6 +598,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(TestCase("driveOpenSidebarOffline"),
                       TestCase("driveOpenSidebarSharedWithMe"),
                       TestCase("driveAutoCompleteQuery"),
+                      TestCase("drivePinMultiple"),
                       TestCase("drivePinFileMobileNetwork"),
                       TestCase("driveClickFirstSearchResult"),
                       TestCase("drivePressEnterToSearch"),
@@ -621,6 +632,13 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("transferFromDownloadsToTeamDrive").FilesNg(),
         TestCase("transferBetweenTeamDrives").DisableFilesNg(),
         TestCase("transferBetweenTeamDrives").FilesNg(),
+        TestCase("transferDragDropActiveLeave"),
+        TestCase("transferDragDropActiveDrop"),
+        TestCase("transferDragDropTreeItemAccepts").FilesNg(),
+        TestCase("transferDragDropTreeItemDenies").FilesNg(),
+        TestCase("transferDragAndHoverTreeItemEntryList"),
+        TestCase("transferDragAndHoverTreeItemFakeEntry"),
+        TestCase("transferDragFileListItemSelects"),
         TestCase("transferDragAndDrop"),
         TestCase("transferDragAndHover"),
         TestCase("transferFromDownloadsToDownloads"),
@@ -687,6 +705,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("defaultTaskDialogDownloads"),
                       TestCase("defaultTaskDialogDownloads").InGuestMode(),
                       TestCase("defaultTaskDialogDrive"),
+                      TestCase("changeDefaultDialogScrollList"),
                       TestCase("genericTaskIsNotExecuted"),
                       TestCase("genericTaskAndNonGenericTask"),
                       TestCase("noActionBarOpenForDirectories")));
@@ -913,6 +932,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("recentsCrostiniMounted"),
         TestCase("recentsDownloadsAndDrive"),
         TestCase("recentsDownloadsAndDriveWithOverlap"),
+        TestCase("recentsNested"),
         TestCase("recentAudioDownloads").EnableUnifiedMediaView(),
         TestCase("recentAudioDownloadsAndDrive").EnableUnifiedMediaView(),
         TestCase("recentImagesDownloads").EnableUnifiedMediaView(),

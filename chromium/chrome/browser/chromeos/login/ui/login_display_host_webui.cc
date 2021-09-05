@@ -46,6 +46,7 @@
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_mojo.h"
 #include "chrome/browser/chromeos/login/ui/login_display_webui.h"
+#include "chrome/browser/chromeos/login/ui/webui_accelerator_mapping.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/net/delay_network_call.h"
@@ -68,6 +69,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/device_disabled_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
@@ -232,7 +234,8 @@ void ShowLoginWizardFinish(
     // Tests may have already allocated an instance for us to use.
     display_host = chromeos::LoginDisplayHost::default_host();
   } else if (ShouldShowSigninScreen(first_screen)) {
-    display_host = new chromeos::LoginDisplayHostMojo();
+    display_host = new chromeos::LoginDisplayHostMojo(
+        LoginDisplayHostMojo::DisplayedScreen::SIGN_IN_SCREEN);
   } else {
     display_host = new chromeos::LoginDisplayHostWebUI();
   }
@@ -244,6 +247,7 @@ void ShowLoginWizardFinish(
         prefs::kSigninScreenTimezone);
   }
 
+  // TODO(crbug.com/1105387): Part of initial screen logic.
   if (ShouldShowSigninScreen(first_screen)) {
     display_host->StartSignInScreen();
   } else {
@@ -267,6 +271,7 @@ void ShowLoginWizardFinish(
   DCHECK(session_manager::SessionManager::Get());
   DCHECK(chromeos::LoginDisplayHost::default_host());
   WallpaperControllerClient::Get()->SetInitialWallpaper();
+  // TODO(crbug.com/1105387): Part of initial screen logic.
   MaybeShowDeviceDisabledScreen();
 }
 
@@ -569,7 +574,7 @@ void LoginDisplayHostWebUI::StartWizard(OobeScreenId first_screen) {
   // Keep parameters to restore if renderer crashes.
   restore_path_ = RESTORE_WIZARD;
   first_screen_ = first_screen;
-  is_showing_login_ = false;
+  is_showing_login_ = WizardController::IsSigninScreen(first_screen);
 
   VLOG(1) << "Login WebUI >> wizard";
 
@@ -621,10 +626,6 @@ void LoginDisplayHostWebUI::OnStartUserAdding() {
 
   CreateExistingUserController();
 
-  if (!signin_screen_controller_.get()) {
-    signin_screen_controller_.reset(new SignInScreenController(GetOobeUI()));
-  }
-
   SetOobeProgressBarVisible(oobe_progress_bar_visible_ = false);
   SetStatusAreaVisible(true);
   existing_user_controller_->Init(
@@ -663,10 +664,6 @@ void LoginDisplayHostWebUI::OnStartSignInScreen() {
 
   DVLOG(1) << "Starting sign in screen";
   CreateExistingUserController();
-
-  if (!signin_screen_controller_.get()) {
-    signin_screen_controller_.reset(new SignInScreenController(GetOobeUI()));
-  }
 
   // TODO(crbug.com/784495): This is always false, since
   // LoginDisplayHost::StartSignInScreen marks the device as registered.
@@ -910,7 +907,8 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
   login_window_ = new views::Widget;
   login_window_->Init(std::move(params));
 
-  login_view_ = new WebUILoginView(WebUILoginView::WebViewSettings());
+  login_view_ = new WebUILoginView(WebUILoginView::WebViewSettings(),
+                                   weak_factory_.GetWeakPtr());
   login_view_->Init();
   if (login_view_->webui_visible())
     OnLoginPromptVisible();
@@ -1008,14 +1006,6 @@ void LoginDisplayHostWebUI::HideOobeDialog() {
 
 void LoginDisplayHostWebUI::UpdateOobeDialogState(ash::OobeDialogState state) {
   ash::LoginScreen::Get()->GetModel()->NotifyOobeDialogState(state);
-}
-
-void LoginDisplayHostWebUI::ShowFeedback() {
-  NOTREACHED();
-}
-
-void LoginDisplayHostWebUI::ShowResetScreen() {
-  NOTREACHED();
 }
 
 void LoginDisplayHostWebUI::HandleDisplayCaptivePortal() {

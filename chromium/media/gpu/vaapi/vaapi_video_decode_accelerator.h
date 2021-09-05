@@ -40,6 +40,10 @@ namespace gl {
 class GLImage;
 }
 
+namespace gpu {
+class GpuDriverBugWorkarounds;
+}
+
 namespace media {
 
 class AcceleratedVideoDecoder;
@@ -88,7 +92,8 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
       const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner)
       override;
 
-  static VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles();
+  static VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles(
+      const gpu::GpuDriverBugWorkarounds& workarounds);
 
   // DecodeSurfaceHandler implementation.
   scoped_refptr<VASurface> CreateSurface() override;
@@ -111,6 +116,7 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
 
   // Notify the client that an error has occurred and decoding cannot continue.
   void NotifyError(Error error);
+  void NotifyStatus(Status status);
 
   // Queue a input buffer for decode.
   void QueueInputBuffer(scoped_refptr<DecoderBuffer> buffer,
@@ -198,9 +204,11 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
   enum class BufferAllocationMode {
     // Only using |client_|s provided PictureBuffers, none internal.
     kNone,
+
     // Using a reduced amount of |client_|s provided PictureBuffers and
     // |decoder_|s GetNumReferenceFrames() internallly.
     kSuperReduced,
+
     // Similar to kSuperReduced, but we have to increase slightly the amount of
     // PictureBuffers allocated for the |client_|.
     kReduced,

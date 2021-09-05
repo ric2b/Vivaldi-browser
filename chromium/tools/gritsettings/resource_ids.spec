@@ -114,6 +114,10 @@
     "includes": [1300],
   },
   "chrome/browser/resources/chromeos/cellular_setup/cellular_setup_resources.grd": {
+    "structures": [1360],
+  },
+  "chrome/browser/resources/chromeos/multidevice_internals/multidevice_internals_resources.grd": {
+    "includes": [1370],
     "structures": [1380],
   },
   "chrome/browser/resources/chromeos/multidevice_setup/multidevice_setup_resources.grd": {
@@ -150,7 +154,7 @@
     "includes": [1630],
   },
   "chrome/browser/resources/nearby_share/nearby_share_dialog_resources.grd": {
-    "includes": [1650],
+    "includes": [1640],
   },
   "chrome/browser/resources/new_tab_page/new_tab_page_resources_vulcanized.grd": {
     "includes": [1660],
@@ -186,22 +190,22 @@
     "includes": [1860],
     "structures": [1870],
   },
+  "chrome/browser/resources/tab_search/tab_search_resources.grd": {
+    "includes": [1880],
+  },
   "chrome/browser/resources/tab_strip/tab_strip_resources.grd": {
-    "structures": [1880],
-    "includes": [1900],
+    "structures": [1900],
+    "includes": [1920],
   },
   "chrome/browser/resources/welcome/welcome_resources.grd": {
-    "includes": [1920],
-    "structures": [1940],
+    "includes": [1940],
+    "structures": [1960],
   },
   "chrome/browser/supervised_user/supervised_user_unscaled_resources.grd": {
-    "includes": [1950],
+    "includes": [1970],
   },
   "chrome/browser/test_dummy/internal/android/resources/resources.grd": {
-    "includes": [1960],
-  },
-  "chrome/browser/vr/testapp/vr_testapp_resources.grd": {
-    "includes": [1970],
+    "includes": [1980],
   },
   # END chrome/browser section.
 
@@ -352,6 +356,9 @@
   },
   "chromeos/components/sample_system_web_app_ui/resources/sample_system_web_app_resources.grd": {
     "includes": [2640],
+  },
+  "chromeos/components/scanning/resources/scanning_app_resources.grd": {
+    "includes": [2645],
   },
   "chromeos/components/telemetry_extension_ui/resources/telemetry_extension_resources.grd": {
     "includes": [2650],

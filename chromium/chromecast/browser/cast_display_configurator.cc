@@ -19,7 +19,6 @@
 #include "chromecast/graphics/cast_screen.h"
 #include "chromecast/public/graphics_properties_shlib.h"
 #include "ui/display/types/display_snapshot.h"
-#include "ui/display/types/native_display_delegate.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/ozone/public/ozone_platform.h"
 
@@ -127,6 +126,32 @@ void CastDisplayConfigurator::OnConfigurationChanged() {
       false /* force_initial_configure */));
 }
 
+void CastDisplayConfigurator::EnableDisplay(
+    display::ConfigureCallback callback) {
+  if (!delegate_ || !display_)
+    return;
+
+  display::DisplayConfigurationParams display_config_params(
+      display_->display_id(), gfx::Point(), display_->native_mode());
+  std::vector<display::DisplayConfigurationParams> config_request;
+  config_request.push_back(std::move(display_config_params));
+
+  delegate_->Configure(config_request, std::move(callback));
+}
+
+void CastDisplayConfigurator::DisableDisplay(
+    display::ConfigureCallback callback) {
+  if (!delegate_ || !display_)
+    return;
+
+  display::DisplayConfigurationParams display_config_params(
+      display_->display_id(), gfx::Point(), nullptr);
+  std::vector<display::DisplayConfigurationParams> config_request;
+  config_request.push_back(std::move(display_config_params));
+
+  delegate_->Configure(config_request, std::move(callback));
+}
+
 void CastDisplayConfigurator::ConfigureDisplayFromCommandLine() {
   const gfx::Size size = GetScreenResolution();
   UpdateScreen(kStubDisplayId, gfx::Rect(size), GetDeviceScaleFactor(size),
@@ -189,8 +214,13 @@ void CastDisplayConfigurator::OnDisplaysAcquired(
                  RotationFromPanelOrientation(display_->panel_orientation()));
   }
 
+  display::DisplayConfigurationParams display_config_params(
+      display_->display_id(), origin, display_->native_mode());
+  std::vector<display::DisplayConfigurationParams> config_request;
+  config_request.push_back(std::move(display_config_params));
+
   delegate_->Configure(
-      *display_, display_->native_mode(), origin,
+      config_request,
       base::BindRepeating(&CastDisplayConfigurator::OnDisplayConfigured,
                           weak_factory_.GetWeakPtr(), display_,
                           display_->native_mode(), origin));
@@ -200,12 +230,14 @@ void CastDisplayConfigurator::OnDisplayConfigured(
     display::DisplaySnapshot* display,
     const display::DisplayMode* mode,
     const gfx::Point& origin,
-    bool success) {
+    const base::flat_map<int64_t, bool>& statuses) {
   DCHECK(display);
   DCHECK(mode);
   DCHECK_EQ(display, display_);
+  DCHECK_EQ(statuses.size(), 1UL);
 
   const gfx::Rect bounds(origin, mode->size());
+  bool success = statuses.at(display_->display_id());
   DVLOG(1) << __func__ << " success=" << success
            << " bounds=" << bounds.ToString();
   if (success) {

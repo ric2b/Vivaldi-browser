@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
+#include "third_party/blink/renderer/core/layout/layout_button.h"
 #include "third_party/blink/renderer/core/layout/layout_deprecated_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/layout_fieldset.h"
 #include "third_party/blink/renderer/core/layout/layout_file_upload_control.h"
@@ -14,6 +15,7 @@
 #include "third_party/blink/renderer/core/layout/layout_grid.h"
 #include "third_party/blink/renderer/core/layout/layout_inside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_list_item.h"
+#include "third_party/blink/renderer/core/layout/layout_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_outside_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_table.h"
 #include "third_party/blink/renderer/core/layout/layout_table_caption.h"
@@ -29,6 +31,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
+#include "third_party/blink/renderer/core/layout/ng/layout_ng_button.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_fieldset.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_progress.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_ruby_as_block.h"
@@ -148,12 +151,20 @@ LayoutObject* LayoutObjectFactory::CreateListMarker(Node& node,
   bool is_inside =
       parent_style->ListStylePosition() == EListStylePosition::kInside ||
       (IsA<HTMLLIElement>(parent) && !parent_style->IsInsideListElement());
-  if (is_inside) {
-    return CreateObject<LayoutObject, LayoutNGInsideListMarker,
+  if (style.ContentBehavesAsNormal()) {
+    if (is_inside) {
+      return CreateObject<LayoutObject, LayoutNGInsideListMarker,
+                          LayoutListMarker>(node, style, legacy);
+    }
+    return CreateObject<LayoutObject, LayoutNGOutsideListMarker,
                         LayoutListMarker>(node, style, legacy);
   }
+  if (is_inside) {
+    return CreateObject<LayoutObject, LayoutNGInsideListMarker,
+                        LayoutInsideListMarker>(node, style, legacy);
+  }
   return CreateObject<LayoutObject, LayoutNGOutsideListMarker,
-                      LayoutListMarker>(node, style, legacy);
+                      LayoutOutsideListMarker>(node, style, legacy);
 }
 
 LayoutBlock* LayoutObjectFactory::CreateTable(Node& node,
@@ -214,6 +225,16 @@ LayoutBox* LayoutObjectFactory::CreateTableSection(Node& node,
   if (disable_ng_for_type)
     UseCounter::Count(node.GetDocument(), WebFeature::kLegacyLayoutByTable);
   return CreateObject<LayoutBox, LayoutNGTableSection, LayoutTableSection>(
+      node, style, legacy, disable_ng_for_type);
+}
+
+LayoutObject* LayoutObjectFactory::CreateButton(Node& node,
+                                                const ComputedStyle& style,
+                                                LegacyLayout legacy) {
+  bool disable_ng_for_type = !RuntimeEnabledFeatures::LayoutNGFlexBoxEnabled();
+  if (disable_ng_for_type)
+    UseCounter::Count(node.GetDocument(), WebFeature::kLegacyLayoutByFlexBox);
+  return CreateObject<LayoutBlock, LayoutNGButton, LayoutButton>(
       node, style, legacy, disable_ng_for_type);
 }
 

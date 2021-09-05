@@ -65,6 +65,7 @@ class TestPlatformWindowDelegate : public PlatformWindowDelegate {
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override {
     widget_ = widget;
   }
+  void OnWillDestroyAcceleratedWidget() override {}
   void OnAcceleratedWidgetDestroyed() override {
     widget_ = gfx::kNullAcceleratedWidget;
   }
@@ -100,7 +101,8 @@ class ShapedX11ExtensionDelegate : public X11ExtensionDelegate {
     window_mask->close();
   }
 #if BUILDFLAG(USE_ATK)
-  bool OnAtkKeyEvent(AtkKeyEventStruct* atk_key_event) override {
+  bool OnAtkKeyEvent(AtkKeyEventStruct* atk_key_event,
+                     bool transient) override {
     return false;
   }
 #endif
@@ -185,8 +187,8 @@ class X11WindowTest : public testing::Test {
   ~X11WindowTest() override = default;
 
   void SetUp() override {
-    XDisplay* display = gfx::GetXDisplay();
-    event_source_ = std::make_unique<X11EventSource>(display);
+    auto* connection = x11::Connection::Get();
+    event_source_ = std::make_unique<X11EventSource>(connection);
 
     std::vector<int> pointer_devices;
     pointer_devices.push_back(kPointerDeviceId);
@@ -218,11 +220,9 @@ class X11WindowTest : public testing::Test {
   }
 
   void DispatchSingleEventToWidget(x11::Event* x11_event, x11::Window window) {
-    XEvent* xev = &x11_event->xlib_event();
-    XIDeviceEvent* device_event =
-        static_cast<XIDeviceEvent*>(xev->xcookie.data);
-    device_event->event = static_cast<uint32_t>(window);
-    LOG(ERROR) << "____PROCESS " << xev;
+    auto* device_event = x11_event->As<x11::Input::DeviceEvent>();
+    DCHECK(device_event);
+    device_event->event = window;
     event_source_->ProcessXEvent(x11_event);
   }
 

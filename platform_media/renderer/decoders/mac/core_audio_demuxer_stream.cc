@@ -247,10 +247,6 @@ void CoreAudioDemuxerStream::ReadCompleted(uint8_t* read_data, int read_size) {
                frames_decoded_));
 }
 
-bool CoreAudioDemuxerStream::IsReadPending() const {
-  return !read_cb_.is_null();
-}
-
 AudioDecoderConfig CoreAudioDemuxerStream::audio_decoder_config() {
   if (!audio_config_.IsValidConfig())
     InitializeAudioDecoderConfig();

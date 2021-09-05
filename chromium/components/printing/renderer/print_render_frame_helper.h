@@ -10,7 +10,6 @@
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -27,10 +26,10 @@
 #include "printing/common/metafile_utils.h"
 #include "printing/mojom/print.mojom-forward.h"
 #include "third_party/blink/public/web/web_node.h"
+#include "third_party/blink/public/web/web_print_client.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "ui/gfx/geometry/size.h"
 
-struct PrintMsg_Print_Params;
 struct PrintMsg_PrintPages_Params;
 
 // RenderViewTest-based tests crash on Android
@@ -52,7 +51,7 @@ class DictionaryValue;
 namespace blink {
 class WebLocalFrame;
 class WebView;
-}
+}  // namespace blink
 
 namespace content {
 class AXTreeSnapshotter;
@@ -73,6 +72,8 @@ class FrameReference {
  public:
   explicit FrameReference(blink::WebLocalFrame* frame);
   FrameReference();
+  FrameReference(const FrameReference&) = delete;
+  FrameReference& operator=(const FrameReference&) = delete;
   ~FrameReference();
 
   void Reset(blink::WebLocalFrame* frame);
@@ -83,15 +84,14 @@ class FrameReference {
  private:
   blink::WebView* view_;
   blink::WebLocalFrame* frame_;
-
-  DISALLOW_COPY_AND_ASSIGN(FrameReference);
 };
 
 // PrintRenderFrameHelper handles most of the printing grunt work for
 // RenderView. We plan on making print asynchronous and that will require
 // copying the DOM of the document and creating a new WebView with the contents.
 class PrintRenderFrameHelper
-    : public content::RenderFrameObserver,
+    : public blink::WebPrintClient,
+      public content::RenderFrameObserver,
       public content::RenderFrameObserverTracker<PrintRenderFrameHelper>,
       public mojom::PrintRenderFrame {
  public:
@@ -120,6 +120,8 @@ class PrintRenderFrameHelper
 
   PrintRenderFrameHelper(content::RenderFrame* render_frame,
                          std::unique_ptr<Delegate> delegate);
+  PrintRenderFrameHelper(const PrintRenderFrameHelper&) = delete;
+  PrintRenderFrameHelper& operator=(const PrintRenderFrameHelper&) = delete;
   ~PrintRenderFrameHelper() override;
 
   // Minimum valid value for scaling. Since scaling is originally an integer
@@ -139,6 +141,8 @@ class PrintRenderFrameHelper
   // |is_pdf| is false, and 1.0f otherwise.
   static double GetScaleFactor(double input_scale_factor, bool is_pdf);
 
+  const mojo::AssociatedRemote<mojom::PrintManagerHost>& GetPrintManagerHost();
+
  private:
   friend class PrintRenderFrameHelperTestBase;
   FRIEND_TEST_ALL_PREFIXES(MAYBE_PrintRenderFrameHelperPreviewTest,
@@ -149,10 +153,10 @@ class PrintRenderFrameHelper
                            BlockScriptInitiatedPrinting);
   FRIEND_TEST_ALL_PREFIXES(MAYBE_PrintRenderFrameHelperTest,
                            BlockScriptInitiatedPrintingFromPopup);
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_APPLE)
   FRIEND_TEST_ALL_PREFIXES(MAYBE_PrintRenderFrameHelperTest, PrintLayoutTest);
   FRIEND_TEST_ALL_PREFIXES(MAYBE_PrintRenderFrameHelperTest, PrintWithIframe);
-#endif  // defined(OS_WIN) || defined(OS_MACOSX)
+#endif  // defined(OS_WIN) || defined(OS_APPLE)
 
   // CREATE_IN_PROGRESS signifies that the preview document is being rendered
   // asynchronously by a PrintRenderer.
@@ -212,7 +216,10 @@ class PrintRenderFrameHelper
     const base::WeakPtr<PrintRenderFrameHelper> weak_this_;
   };
 
-  // RenderFrameObserver implementation.
+  // blink::WebPrintClient:
+  void WillBeDestroyed() override;
+
+  // RenderFrameObserver:
   void OnDestruct() override;
   void DidStartNavigation(
       const GURL& url,
@@ -341,7 +348,7 @@ class PrintRenderFrameHelper
                            const blink::WebNode& node);
 
   // Platform-specific helper function for rendering page(s) to |metafile|.
-  void PrintPageInternal(const PrintMsg_Print_Params& params,
+  void PrintPageInternal(const mojom::PrintParams& params,
                          int page_number,
                          int page_count,
                          double scale_factor,
@@ -373,7 +380,7 @@ class PrintRenderFrameHelper
   static void ComputePageLayoutInPointsForCss(
       blink::WebLocalFrame* frame,
       int page_index,
-      const PrintMsg_Print_Params& default_params,
+      const mojom::PrintParams& default_params,
       bool ignore_css_margins,
       double* scale_factor,
       mojom::PageSizeMargins* page_layout_in_points);
@@ -393,7 +400,7 @@ class PrintRenderFrameHelper
       const blink::WebLocalFrame& source_frame,
       float webkit_scale_factor,
       const mojom::PageSizeMargins& page_layout_in_points,
-      const PrintMsg_Print_Params& params);
+      const mojom::PrintParams& params);
 
   // Script Initiated Printing ------------------------------------------------
 
@@ -467,12 +474,20 @@ class PrintRenderFrameHelper
   class PrintPreviewContext {
    public:
     PrintPreviewContext();
+    PrintPreviewContext(const PrintPreviewContext&) = delete;
+    PrintPreviewContext& operator=(const PrintPreviewContext&) = delete;
     ~PrintPreviewContext();
 
     // Initializes the print preview context. Need to be called to set
     // the |web_frame| / |web_node| to generate the print preview for.
     void InitWithFrame(blink::WebLocalFrame* web_frame);
     void InitWithNode(const blink::WebNode& web_node);
+
+    // Dispatchs onbeforeprint/onafterprint events. Use these instead of calling
+    // the WebLocalFrame version on source_frame().
+    void DispatchBeforePrintEvent(
+        base::WeakPtr<PrintRenderFrameHelper> weak_this);
+    void DispatchAfterPrintEvent();
 
     // Does bookkeeping at the beginning of print preview.
     void OnPrintPreview();
@@ -535,8 +550,9 @@ class PrintRenderFrameHelper
 
     int total_page_count() const;
     const std::vector<int>& pages_to_render() const;
-    int pages_rendered_count() const;
+    size_t pages_rendered_count() const;
     MetafileSkia* metafile();
+    ContentProxySet* typeface_content_info();
     int last_error() const;
 
    private:
@@ -557,6 +573,9 @@ class PrintRenderFrameHelper
     blink::WebNode source_node_;
 
     std::unique_ptr<PrepareFrameAndViewForPrint> prep_frame_view_;
+
+    // The typefaces encountered in the content during document serialization.
+    ContentProxySet typeface_content_info_;
 
     // A document metafile is needed when not using the print compositor.
     std::unique_ptr<MetafileSkia> metafile_;
@@ -592,13 +611,13 @@ class PrintRenderFrameHelper
     enum PrintPreviewErrorBuckets error_ = PREVIEW_ERROR_NONE;
 
     State state_ = UNINITIALIZED;
-
-    DISALLOW_COPY_AND_ASSIGN(PrintPreviewContext);
   };
 
   class ScriptingThrottler {
    public:
     ScriptingThrottler();
+    ScriptingThrottler(const ScriptingThrottler&) = delete;
+    ScriptingThrottler& operator=(const ScriptingThrottler&) = delete;
 
     // Returns false if script initiated printing occurs too often.
     bool IsAllowed(blink::WebLocalFrame* frame);
@@ -610,7 +629,6 @@ class PrintRenderFrameHelper
    private:
     base::Time last_print_;
     int count_ = 0;
-    DISALLOW_COPY_AND_ASSIGN(ScriptingThrottler);
   };
 
   ScriptingThrottler scripting_throttler_;
@@ -635,9 +653,9 @@ class PrintRenderFrameHelper
   // parameters so that it can be invoked after DidStopLoading.
   base::OnceClosure on_stop_loading_closure_;
 
-  base::WeakPtrFactory<PrintRenderFrameHelper> weak_ptr_factory_{this};
+  mojo::AssociatedRemote<mojom::PrintManagerHost> print_manager_host_;
 
-  DISALLOW_COPY_AND_ASSIGN(PrintRenderFrameHelper);
+  base::WeakPtrFactory<PrintRenderFrameHelper> weak_ptr_factory_{this};
 };
 
 }  // namespace printing

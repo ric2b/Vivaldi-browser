@@ -2,10 +2,29 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/blink/renderer/build/scripts/scripts.gni")
+
+blink_python_runner("make_generated_feature_policy_features") {
+  script = "../renderer/build/scripts/make_feature_policy_features.py"
+
+  inputs =
+      scripts_for_json5_files + [
+        "../renderer/build/scripts/make_feature_policy_features.py",
+        "../renderer/core/feature_policy/feature_policy_features.json5",
+        "../renderer/build/scripts/templates/feature_policy_features.cc.tmpl",
+      ]
+  outputs = [ "$root_gen_dir/third_party/blink/common/feature_policy/feature_policy_features.cc" ]
+
+  args = [
+    rebase_path("../renderer/core/feature_policy/feature_policy_features.json5",
+                root_build_dir),
+    "--output_dir",
+    rebase_path("$root_gen_dir/third_party/blink/common/feature_policy",
+                root_build_dir),
+  ]
+}
 
 blink_python_runner("make_generated_document_policy_features") {
   script = "../renderer/build/scripts/make_document_policy_features.py"
@@ -32,7 +51,7 @@ config("blink_common_implementation") {
   defines = [ "BLINK_COMMON_IMPLEMENTATION=1" ]
 }
 
-jumbo_source_set("common") {
+source_set("common") {
   # No target should directly depend on this target since this is just the
   # source set rather than the actual component that can be linked to.
   # Dependencies instead should be to //third_party/blink/public/common:common.
@@ -86,6 +105,8 @@ jumbo_source_set("common") {
     "input/web_touch_event.cc",
     "loader/mime_sniffing_throttle.cc",
     "loader/mime_sniffing_url_loader.cc",
+    "loader/network_utils.cc",
+    "loader/referrer_utils.cc",
     "loader/resource_type_util.cc",
     "loader/throttling_url_loader.cc",
     "loader/url_loader_factory_bundle.cc",
@@ -126,15 +147,21 @@ jumbo_source_set("common") {
     "service_worker/service_worker_utils.cc",
     "switches.cc",
     "thread_safe_browser_interface_broker_proxy.cc",
+    "tokens/tokens_mojom_traits.cc",
     "user_agent/user_agent_metadata.cc",
     "web_package/signed_exchange_consts.cc",
     "web_package/web_package_request_matcher.cc",
+    "widget/device_emulation_params_mojom_traits.cc",
+    "widget/screen_info_mojom_traits.cc",
+    "widget/visual_properties_mojom_traits.cc",
   ]
 
   sources += get_target_outputs(":make_generated_document_policy_features")
+  sources += get_target_outputs(":make_generated_feature_policy_features")
 
   public_deps = [
     ":make_generated_document_policy_features",
+    ":make_generated_feature_policy_features",
     "//third_party/blink/common/privacy_budget:privacy_budget",
     "//third_party/blink/public/common:headers",
   ]
@@ -192,7 +219,7 @@ test("blink_common_unittests") {
   }
 }
 
-jumbo_source_set("common_unittests_sources") {
+source_set("common_unittests_sources") {
   testonly = true
 
   sources = [
@@ -207,6 +234,7 @@ jumbo_source_set("common_unittests_sources") {
     "input/synthetic_web_input_event_builders_unittest.cc",
     "input/web_input_event_unittest.cc",
     "loader/mime_sniffing_throttle_unittest.cc",
+    "loader/referrer_utils_unittest.cc",
     "loader/throttling_url_loader_unittest.cc",
     "manifest/manifest_icon_selector_unittest.cc",
     "manifest/manifest_util_unittest.cc",
@@ -217,6 +245,8 @@ jumbo_source_set("common_unittests_sources") {
     "origin_trials/trial_token_unittest.cc",
     "origin_trials/trial_token_validator_unittest.cc",
     "test/run_all_unittests.cc",
+    "tokens/multi_token_unittest.cc",
+    "tokens/tokens_mojom_traits_unittest.cc",
     "user_agent/user_agent_metadata_unittest.cc",
     "web_package/web_package_request_matcher_unittest.cc",
   ]
@@ -226,6 +256,7 @@ jumbo_source_set("common_unittests_sources") {
     "//base/test:test_support",
     "//mojo/core/embedder",
     "//net",
+    "//services/device:test_support",
     "//services/network:test_support",
     "//skia/public/mojom",
     "//testing/gmock",

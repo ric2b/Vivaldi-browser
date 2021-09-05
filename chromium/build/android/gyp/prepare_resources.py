@@ -194,13 +194,13 @@ def _OnStaleMd5(options):
         rjava_build_options.ExportAllResources()
         rjava_build_options.ExportAllStyleables()
         if options.shared_resources:
-          rjava_build_options.GenerateOnResourcesLoaded()
+          rjava_build_options.GenerateOnResourcesLoaded(fake=True)
 
         # Not passing in custom_root_package_name or parent to keep
         # file names unique.
-        resource_utils.CreateRJavaFiles(
-            build.srcjar_dir, package, r_txt_path, options.extra_res_packages,
-            options.extra_r_text_files, rjava_build_options, options.srcjar_out)
+        resource_utils.CreateRJavaFiles(build.srcjar_dir, package, r_txt_path,
+                                        options.extra_res_packages,
+                                        rjava_build_options, options.srcjar_out)
 
       build_utils.ZipDir(options.srcjar_out, build.srcjar_dir)
 
@@ -239,7 +239,6 @@ def main(args):
   possible_input_paths += options.include_resources
   input_paths = [x for x in possible_input_paths if x]
   input_paths.extend(options.dependencies_res_zips)
-  input_paths.extend(options.extra_r_text_files)
 
   # Resource files aren't explicitly listed in GN. Listing them in the depfile
   # ensures the target will be marked stale when resource files are removed.

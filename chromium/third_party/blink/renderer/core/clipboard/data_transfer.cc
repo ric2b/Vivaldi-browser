@@ -29,7 +29,7 @@
 
 #include "base/optional.h"
 #include "build/build_config.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
@@ -136,8 +136,10 @@ class DraggedNodeImageBuilder {
         DocumentLifecycle::kPaintClean);
 
     FloatPoint paint_offset = bounding_box.Location();
-    PropertyTreeState border_box_properties =
-        layer->GetLayoutObject().FirstFragment().LocalBorderBoxProperties();
+    PropertyTreeState border_box_properties = layer->GetLayoutObject()
+                                                  .FirstFragment()
+                                                  .LocalBorderBoxProperties()
+                                                  .Unalias();
     // We paint in the containing transform node's space. Add the offset from
     // the layer to this transform space.
     paint_offset +=

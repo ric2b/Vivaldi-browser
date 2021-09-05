@@ -29,7 +29,7 @@
 #include "platform_media/renderer/decoders/ipc_factory.h"
 #include "platform_media/renderer/pipeline/protocol_sniffer.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 

@@ -27,7 +27,7 @@ group("sandbox") {
       "//sandbox/mac:system_services",
       "//sandbox/mac/mojom",
     ]
-  } else if (is_linux || is_android) {
+  } else if (is_linux || is_chromeos || is_android) {
     public_deps = [ "//sandbox/linux:sandbox" ]
   }
 }
@@ -56,7 +56,10 @@ fuzzer_test("sandbox_ipc_fuzzer") {
   if (!is_win) {
     defines = [ "SANDBOX_FUZZ_TARGET" ]
   }
-  deps = [ "//base" ]
+  deps = [
+    ":sandbox",
+    "//base",
+  ]
   dict = "ipc.dict"
   libfuzzer_options = [ "max_len=1024" ]
 }

@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType} from 'chrome://print/print_preview.js';
+import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, PrinterState, PrinterStatusReason, PrinterStatusSeverity} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {keyDownOn, move} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
+import {eventToPromise} from '../test_util.m.js';
+
+import {getGoogleDriveDestination, getSaveAsPdfDestination} from './print_preview_test_utils.js';
 
 window.destination_dropdown_cros_test = {};
 const destination_dropdown_cros_test = window.destination_dropdown_cros_test;
@@ -15,13 +19,16 @@ destination_dropdown_cros_test.suiteName =
 /** @enum {string} */
 destination_dropdown_cros_test.TestNames = {
   CorrectListItems: 'correct list items',
-  ClickRemovesSelected: 'click removes selected',
   ClickCloses: 'click closes dropdown',
-  TabCloses: 'tab closes dropdown',
-  SelectedAfterUpDown: 'selected after keyboard press up and down',
+  HighlightedAfterUpDown: 'highlighted after keyboard press up and down',
+  DestinationChangeAfterUpDown:
+      'destination changes after keyboard press up and down',
   EnterOpensCloses: 'enter opens and closes dropdown',
-  SelectedFollowsMouse: 'selected follows mouse',
+  HighlightedFollowsMouse: 'highlighted follows mouse',
   Disabled: 'disabled',
+  NewStatusUpdatesDestinationIcon: 'new status updates destination icon',
+  ChangingDestinationUpdatesIcon: 'changing destination updates icon',
+  HighlightedWhenOpened: 'highlighted when opened',
 };
 
 suite(destination_dropdown_cros_test.suiteName, function() {
@@ -39,50 +46,52 @@ suite(destination_dropdown_cros_test.suiteName, function() {
     return dropdown.shadowRoot.querySelectorAll('.list-item');
   }
 
-  /** @param {?Element} element */
-  function pointerDown(element) {
-    element.dispatchEvent(new PointerEvent('pointerdown', {
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-      buttons: 1,
-    }));
+  function clickDropdown() {
+    dropdown.$$('#destination-dropdown').click();
+  }
+
+  function clickDropdownFocus() {
+    dropdown.$$('#destination-dropdown').click();
+    dropdown.$$('#destination-dropdown').focus();
+  }
+
+  function clickOutsideDropdown() {
+    document.body.click();
+    dropdown.$$('#destination-dropdown').blur();
   }
 
   function down() {
-    keyDownOn(dropdown.$$('#dropdownInput'), 'ArrowDown', [], 'ArrowDown');
+    keyDownOn(
+        dropdown.$$('#destination-dropdown'), 'ArrowDown', [], 'ArrowDown');
   }
 
   function up() {
-    keyDownOn(dropdown.$$('#dropdownInput'), 'ArrowUp', [], 'ArrowUp');
+    keyDownOn(dropdown.$$('#destination-dropdown'), 'ArrowUp', [], 'ArrowUp');
   }
 
   function enter() {
-    keyDownOn(dropdown.$$('#dropdownInput'), 'Enter', [], 'Enter');
-  }
-
-  function tab() {
-    keyDownOn(dropdown.$$('#dropdownInput'), 'Tab', [], 'Tab');
+    keyDownOn(dropdown.$$('#destination-dropdown'), 'Enter', [], 'Enter');
   }
 
   /** @return {?Element} */
-  function getSelectedElement() {
-    return dropdown.$$('[selected_]');
+  function getHighlightedElement() {
+    return dropdown.$$('.highlighted');
   }
 
   /** @return {string} */
-  function getSelectedElementText() {
-    return getSelectedElement().textContent.trim();
+  function getHighlightedElementText() {
+    return getHighlightedElement().textContent.trim();
   }
 
   /**
    * @param {string} displayName
+   * @param {!DestinationOrigin} destinationOrigin
    * @return {!Destination}
    */
-  function createDestination(displayName) {
+  function createDestination(displayName, destinationOrigin) {
     return new Destination(
-        displayName, DestinationType.LOCAL, DestinationOrigin.LOCAL,
-        displayName, DestinationConnectionStatus.ONLINE);
+        displayName, DestinationType.LOCAL, destinationOrigin, displayName,
+        DestinationConnectionStatus.ONLINE);
   }
 
   /** @override */
@@ -94,14 +103,17 @@ suite(destination_dropdown_cros_test.suiteName, function() {
         (document.createElement('print-preview-destination-dropdown-cros'));
     document.body.appendChild(dropdown);
     dropdown.noDestinations = false;
+    dropdown.driveDestinationKey = getGoogleDriveDestination('account').key;
+    dropdown.pdfDestinationKey = getSaveAsPdfDestination().key;
   });
 
   test(
       assert(destination_dropdown_cros_test.TestNames.CorrectListItems),
       function() {
         setItemList([
-          createDestination('One'), createDestination('Two'),
-          createDestination('Three')
+          createDestination('One', DestinationOrigin.CROS),
+          createDestination('Two', DestinationOrigin.CROS),
+          createDestination('Three', DestinationOrigin.CROS)
         ]);
 
         const itemList = getList();
@@ -112,80 +124,93 @@ suite(destination_dropdown_cros_test.suiteName, function() {
       });
 
   test(
-      assert(destination_dropdown_cros_test.TestNames.ClickRemovesSelected),
-      function() {
-        setItemList([createDestination('One'), createDestination('Two')]);
-        dropdown.destination = createDestination('One');
-
-        getList()[1].setAttribute('selected_', '');
-        assertTrue(getList()[1].hasAttribute('selected_'));
-
-        getList()[1].click();
-        assertFalse(getList()[1].hasAttribute('selected_'));
-      });
-
-  test(
       assert(destination_dropdown_cros_test.TestNames.ClickCloses), function() {
-        setItemList([createDestination('One')]);
+        const destinationOne = createDestination('One', DestinationOrigin.CROS);
+        setItemList([destinationOne]);
+        dropdown.value = destinationOne;
         const ironDropdown = dropdown.$$('iron-dropdown');
 
-        pointerDown(dropdown.$$('#dropdownInput'));
+        clickDropdownFocus();
         assertTrue(ironDropdown.opened);
 
         getList()[0].click();
         assertFalse(ironDropdown.opened);
 
-        pointerDown(dropdown.$$('#dropdownInput'));
+        clickDropdownFocus();
         assertTrue(ironDropdown.opened);
 
-        // Click outside dropdown to close the dropdown.
-        pointerDown(document.body);
+        // Clicking outside the dropdown will cause it to lose focus and close.
+        // This will verify on-blur closes the dropdown.
+        clickOutsideDropdown();
         assertFalse(ironDropdown.opened);
       });
 
-  test(assert(destination_dropdown_cros_test.TestNames.TabCloses), function() {
-    setItemList([createDestination('One')]);
-    const ironDropdown = dropdown.$$('iron-dropdown');
+  test(
+      assert(destination_dropdown_cros_test.TestNames.HighlightedAfterUpDown),
+      function() {
+        const destinationOne = createDestination('One', DestinationOrigin.CROS);
+        setItemList([destinationOne]);
+        dropdown.value = destinationOne;
+        clickDropdown();
 
-    pointerDown(dropdown.$$('#dropdownInput'));
-    assertTrue(ironDropdown.opened);
+        assertEquals('One', getHighlightedElementText());
+        down();
+        assertEquals('Save as PDF', getHighlightedElementText());
+        down();
+        assertEquals('Save to Google Drive', getHighlightedElementText());
+        down();
+        assertEquals('See more…', getHighlightedElementText());
+        down();
+        assertEquals('See more…', getHighlightedElementText());
 
-    tab();
-    assertFalse(ironDropdown.opened);
-  });
+        up();
+        assertEquals('Save to Google Drive', getHighlightedElementText());
+        up();
+        assertEquals('Save as PDF', getHighlightedElementText());
+        up();
+        assertEquals('One', getHighlightedElementText());
+        up();
+        assertEquals('One', getHighlightedElementText());
+      });
 
   test(
-      assert(destination_dropdown_cros_test.TestNames.SelectedAfterUpDown),
+      assert(destination_dropdown_cros_test.TestNames
+                 .DestinationChangeAfterUpDown),
       function() {
-        setItemList([createDestination('One')]);
+        const destinationOne = createDestination('One', DestinationOrigin.CROS);
+        const pdfDestination = getSaveAsPdfDestination();
+        setItemList([destinationOne]);
+        dropdown.value = pdfDestination;
 
-        pointerDown(dropdown.$$('#dropdownInput'));
+        // Verify an up press sends |destinationOne| as the next value selected.
+        const whenSelectedAfterUpPress =
+            eventToPromise('dropdown-value-selected', dropdown);
+        up();
+        whenSelectedAfterUpPress.then(event => {
+          assertEquals(destinationOne.key, event.detail.value);
+        });
 
-        down();
-        assertEquals('One', getSelectedElementText());
-        down();
-        assertEquals('Save as PDF', getSelectedElementText());
-        down();
-        assertEquals('Save to Google Drive', getSelectedElementText());
-        down();
-        assertEquals('See more…', getSelectedElementText());
-        down();
-        assertEquals('One', getSelectedElementText());
+        // Key press does not directly update |value| so it is expected for the
+        // |value| to not change here in this test.
+        assert(dropdown.value === pdfDestination);
 
-        up();
-        assertEquals('See more…', getSelectedElementText());
-        up();
-        assertEquals('Save to Google Drive', getSelectedElementText());
-        up();
-        assertEquals('Save as PDF', getSelectedElementText());
-        up();
-        assertEquals('One', getSelectedElementText());
+        // Verify a down press sends the Save to Google Drive destination as the
+        // next value selected.
+        const whenSelectedAfterDownPress =
+            eventToPromise('dropdown-value-selected', dropdown);
+        down();
+        whenSelectedAfterDownPress.then(event => {
+          assertEquals(
+              getGoogleDriveDestination('account').key, event.detail.value);
+        });
       });
 
   test(
       assert(destination_dropdown_cros_test.TestNames.EnterOpensCloses),
       function() {
-        setItemList([createDestination('One')]);
+        const destinationOne = createDestination('One', DestinationOrigin.CROS);
+        setItemList([destinationOne]);
+        dropdown.value = destinationOne;
 
         assertFalse(dropdown.$$('iron-dropdown').opened);
         enter();
@@ -195,39 +220,114 @@ suite(destination_dropdown_cros_test.suiteName, function() {
       });
 
   test(
-      assert(destination_dropdown_cros_test.TestNames.SelectedFollowsMouse),
+      assert(destination_dropdown_cros_test.TestNames.HighlightedFollowsMouse),
       function() {
+        const destinationOne = createDestination('One', DestinationOrigin.CROS);
         setItemList([
-          createDestination('One'), createDestination('Two'),
-          createDestination('Three')
+          destinationOne, createDestination('Two', DestinationOrigin.CROS),
+          createDestination('Three', DestinationOrigin.CROS)
         ]);
-
-        pointerDown(dropdown.$$('#dropdownInput'));
+        dropdown.value = destinationOne;
+        clickDropdown();
 
         move(getList()[1], {x: 0, y: 0}, {x: 0, y: 0}, 1);
-        assertEquals('Two', getSelectedElementText());
+        assertEquals('Two', getHighlightedElementText());
         move(getList()[2], {x: 0, y: 0}, {x: 0, y: 0}, 1);
-        assertEquals('Three', getSelectedElementText());
+        assertEquals('Three', getHighlightedElementText());
 
-        // Interacting with the keyboard should update the selected element.
+        // Interacting with the keyboard should update the highlighted element.
         up();
-        assertEquals('Two', getSelectedElementText());
+        assertEquals('Two', getHighlightedElementText());
 
-        // When the user moves the mouse again, the selected element should
+        // When the user moves the mouse again, the highlighted element should
         // change.
         move(getList()[0], {x: 0, y: 0}, {x: 0, y: 0}, 1);
-        assertEquals('One', getSelectedElementText());
+        assertEquals('One', getHighlightedElementText());
       });
 
   test(assert(destination_dropdown_cros_test.TestNames.Disabled), function() {
-    setItemList([createDestination('One')]);
+    const destinationOne = createDestination('One', DestinationOrigin.CROS);
+    setItemList([destinationOne]);
+    dropdown.value = destinationOne;
     dropdown.disabled = true;
 
-    pointerDown(dropdown.$$('#dropdownInput'));
+    clickDropdown();
     assertFalse(dropdown.$$('iron-dropdown').opened);
+    assertEquals(
+        '-1', dropdown.$$('#destination-dropdown').getAttribute('tabindex'));
 
     dropdown.disabled = false;
-    pointerDown(dropdown.$$('#dropdownInput'));
+    clickDropdown();
     assertTrue(dropdown.$$('iron-dropdown').opened);
+    assertEquals(
+        '0', dropdown.$$('#destination-dropdown').getAttribute('tabindex'));
   });
+
+  test(
+      assert(destination_dropdown_cros_test.TestNames
+                 .NewStatusUpdatesDestinationIcon),
+      function() {
+        const destinationBadge = dropdown.$$('#destination-badge');
+        dropdown.value = createDestination('One', DestinationOrigin.CROS);
+
+        dropdown.value.printerStatusReason = PrinterStatusReason.NO_ERROR;
+        dropdown.notifyPath(`value.printerStatusReason`);
+        assertEquals(PrinterState.GOOD, destinationBadge.printerState);
+
+        dropdown.value.printerStatusReason = PrinterStatusReason.OUT_OF_INK;
+        dropdown.notifyPath(`value.printerStatusReason`);
+        assertEquals(PrinterState.ERROR, destinationBadge.printerState);
+
+        dropdown.value.printerStatusReason = PrinterStatusReason.UNKNOWN_REASON;
+        dropdown.notifyPath(`value.printerStatusReason`);
+        assertEquals(PrinterState.UNKNOWN, destinationBadge.printerState);
+      });
+
+  test(
+      assert(destination_dropdown_cros_test.TestNames
+                 .ChangingDestinationUpdatesIcon),
+      function() {
+        const goodDestination =
+            createDestination('One', DestinationOrigin.CROS);
+        goodDestination.printerStatusReason = PrinterStatusReason.NO_ERROR;
+        const errorDestination =
+            createDestination('Two', DestinationOrigin.CROS);
+        errorDestination.printerStatusReason = PrinterStatusReason.OUT_OF_INK;
+        const unknownDestination =
+            createDestination('Three', DestinationOrigin.CROS);
+        unknownDestination.printerStatusReason =
+            PrinterStatusReason.UNKNOWN_REASON;
+        const destinationBadge = dropdown.$$('#destination-badge');
+
+        dropdown.value = goodDestination;
+        assertEquals(PrinterState.GOOD, destinationBadge.printerState);
+
+        dropdown.value = errorDestination;
+        assertEquals(PrinterState.ERROR, destinationBadge.printerState);
+
+        dropdown.value = unknownDestination;
+        assertEquals(PrinterState.UNKNOWN, destinationBadge.printerState);
+      });
+
+  test(
+      assert(destination_dropdown_cros_test.TestNames.HighlightedWhenOpened),
+      function() {
+        const destinationTwo = createDestination('Two', DestinationOrigin.CROS);
+        const destinationThree =
+            createDestination('Three', DestinationOrigin.CROS);
+        setItemList([
+          createDestination('One', DestinationOrigin.CROS),
+          destinationTwo,
+          destinationThree,
+        ]);
+
+        dropdown.value = destinationTwo;
+        clickDropdown();
+        assertEquals('Two', getHighlightedElementText());
+        clickDropdown();
+
+        dropdown.value = destinationThree;
+        clickDropdown();
+        assertEquals('Three', getHighlightedElementText());
+      });
 });

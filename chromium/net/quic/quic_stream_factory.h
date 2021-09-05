@@ -41,7 +41,6 @@
 #include "net/socket/client_socket_pool.h"
 #include "net/ssl/ssl_config_service.h"
 #include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
-#include "net/third_party/quiche/src/quic/core/http/quic_client_push_promise_index.h"
 #include "net/third_party/quiche/src/quic/core/quic_config.h"
 #include "net/third_party/quiche/src/quic/core/quic_crypto_stream.h"
 #include "net/third_party/quiche/src/quic/core/quic_packets.h"
@@ -75,6 +74,7 @@ class QuicCryptoClientStreamFactory;
 class QuicServerInfo;
 class QuicStreamFactory;
 class QuicContext;
+class SCTAuditingDelegate;
 class SocketPerformanceWatcherFactory;
 class SocketTag;
 class TransportSecurityState;
@@ -243,6 +243,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       CTPolicyEnforcer* ct_policy_enforcer,
       TransportSecurityState* transport_security_state,
       CTVerifier* cert_transparency_verifier,
+      SCTAuditingDelegate* sct_auditing_delegate,
       SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
       QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory,
       QuicContext* context);
@@ -342,6 +343,11 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   }
 
   bool allow_server_migration() const { return params_.allow_server_migration; }
+
+  // Returns true is gQUIC 0-RTT is disabled from quic_context.
+  bool gquic_zero_rtt_disabled() const {
+    return params_.disable_gquic_zero_rtt;
+  }
 
   void set_is_quic_known_to_work_on_current_network(
       bool is_quic_known_to_work_on_current_network);
@@ -495,6 +501,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   CTPolicyEnforcer* const ct_policy_enforcer_;
   TransportSecurityState* const transport_security_state_;
   CTVerifier* const cert_transparency_verifier_;
+  SCTAuditingDelegate* const sct_auditing_delegate_;
   QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory_;
   quic::QuicRandom* random_generator_;  // Unowned.
   const quic::QuicClock* clock_;        // Unowned.
@@ -573,8 +580,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   int num_push_streams_created_;
 
   QuicConnectivityMonitor connectivity_monitor_;
-
-  quic::QuicClientPushPromiseIndex push_promise_index_;
 
   const base::TickClock* tick_clock_;
 

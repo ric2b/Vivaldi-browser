@@ -7,6 +7,8 @@
 #include "chrome/browser/extensions/api/input_ime/input_ime_api.h"
 
 #include "ash/public/cpp/ash_pref_names.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,6 +23,7 @@
 #include "components/autofill/core/browser/ui/label_formatter_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/strings/grit/components_strings.h"
 #include "third_party/re2/src/re2/re2.h"
 
 namespace chromeos {
@@ -42,8 +45,22 @@ const char kPhoneNumberRegex[] =
 const char kFirstNameRegex[] = "first name";
 const char kLastNameRegex[] = "last name";
 
-const char kAnnounceAnnotation[] =
-    "Press down to navigate and enter to insert.";
+const char kShowPersonalInfoSuggestionMessage[] =
+    "Personal info suggested. Press down arrow to access; escape to ignore.";
+const char kDismissPersonalInfoSuggestionMessage[] = "Suggestion dismissed.";
+const char kAcceptPersonalInfoSuggestionMessage[] = "Suggestion inserted.";
+
+// The current personal information would only provide one suggestion, so there
+// could be only two possible UI: 1. only one suggestion, 2. one suggestion and
+// one learn more button, and the suggestion is always before the learn more
+// button. So suggestion could be 1 of 1 or 1 of 2 depending on whether the
+// learn more button is displayed, but learn more button can only be 2 of 2.
+const char kSuggestionMessageTemplate[] =
+    "Suggestion %s. Button. Menu item 1 of %d. Press enter to insert; escape "
+    "to dismiss.";
+const char kLearnMoreMessage[] =
+    "Learn more about suggestions. Link. Menu item 2 of 2. Press enter to "
+    "activate; escape to dismiss.";
 const int kNoneHighlighted = -1;
 
 constexpr base::TimeDelta kTtsShowDelay =
@@ -64,6 +81,17 @@ const std::vector<autofill::ServerFieldType>& GetHomeAddressTypes() {
            autofill::ServerFieldType::ADDRESS_HOME_COUNTRY}};
   return *homeAddressTypes;
 }
+
+void RecordTimeToAccept(base::TimeDelta delta) {
+  base::UmaHistogramTimes("InputMethod.Assistive.TimeToAccept.PersonalInfo",
+                          delta);
+}
+
+void RecordTimeToDismiss(base::TimeDelta delta) {
+  base::UmaHistogramTimes("InputMethod.Assistive.TimeToDismiss.PersonalInfo",
+                          delta);
+}
+
 }  // namespace
 
 TtsHandler::TtsHandler(Profile* profile) : profile_(profile) {}
@@ -150,15 +178,16 @@ PersonalInfoSuggester::PersonalInfoSuggester(
               ? personal_data_manager
               : autofill::PersonalDataManagerFactory::GetForProfile(profile)),
       tts_handler_(tts_handler ? std::move(tts_handler)
-                               : std::make_unique<TtsHandler>(profile)) {
+                               : std::make_unique<TtsHandler>(profile)),
+      highlighted_index_(kNoneHighlighted) {
   suggestion_button_.id = ui::ime::ButtonId::kSuggestion;
   suggestion_button_.window_type =
       ui::ime::AssistiveWindowType::kPersonalInfoSuggestion;
   suggestion_button_.index = 0;
-  link_button_.id = ui::ime::ButtonId::kSmartInputsSettingLink;
-  link_button_.window_type =
+  settings_button_.id = ui::ime::ButtonId::kSmartInputsSettingLink;
+  settings_button_.announce_string = kLearnMoreMessage;
+  settings_button_.window_type =
       ui::ime::AssistiveWindowType::kPersonalInfoSuggestion;
-  highlighted_index_ = kNoneHighlighted;
 }
 
 PersonalInfoSuggester::~PersonalInfoSuggester() {}
@@ -181,8 +210,8 @@ SuggestionStatus PersonalInfoSuggester::HandleKeyEvent(
     return SuggestionStatus::kDismiss;
   }
   if (highlighted_index_ == kNoneHighlighted && buttons_.size() > 0) {
-    if (event.key == "Down") {
-      highlighted_index_ = 0;
+    if (event.key == "Down" || event.key == "Up") {
+      highlighted_index_ = event.key == "Down" ? 0 : buttons_.size() - 1;
       SetButtonHighlighted(buttons_[highlighted_index_], true);
       return SuggestionStatus::kBrowsing;
     }
@@ -292,8 +321,7 @@ base::string16 PersonalInfoSuggester::GetSuggestion(
 
 void PersonalInfoSuggester::ShowSuggestion(const base::string16& text,
                                            const size_t confirmed_length) {
-  auto* keyboard_client = ChromeKeyboardControllerClient::Get();
-  if (keyboard_client->is_keyboard_enabled()) {
+  if (ChromeKeyboardControllerClient::Get()->is_keyboard_visible()) {
     const std::vector<std::string> args{base::UTF16ToUTF8(text)};
     suggestion_handler_->OnSuggestionsChanged(args);
     return;
@@ -320,24 +348,25 @@ void PersonalInfoSuggester::ShowSuggestion(const base::string16& text,
     LOG(ERROR) << "Fail to show suggestion. " << error;
   }
 
-  suggestion_button_.announce_string = base::UTF16ToUTF8(text);
+  suggestion_button_.announce_string = base::StringPrintf(
+      kSuggestionMessageTemplate, base::UTF16ToUTF8(text).c_str(),
+      details.show_setting_link ? 2 : 1);
   buttons_.clear();
   buttons_.push_back(suggestion_button_);
   if (details.show_setting_link)
-    buttons_.push_back(link_button_);
+    buttons_.push_back(settings_button_);
 
   if (suggestion_shown_) {
     first_shown_ = false;
   } else {
+    session_start_ = base::TimeTicks::Now();
     first_shown_ = true;
     IncrementPrefValueTilCapped(kPersonalInfoSuggesterShowSettingCount,
                                 kMaxShowSettingCount);
     tts_handler_->Announce(
-        // TODO(jiwan): Add translation to other languages when we support more
-        // than English.
-        base::StringPrintf("Suggestion %s. %s", base::UTF16ToUTF8(text).c_str(),
-                           show_annotation ? kAnnounceAnnotation : ""),
-        kTtsShowDelay);
+        // TODO(jiwan): Add translation to other languages when we support
+        // more than English.
+        kShowPersonalInfoSuggestionMessage, kTtsShowDelay);
   }
 
   suggestion_shown_ = true;
@@ -378,22 +407,25 @@ bool PersonalInfoSuggester::AcceptSuggestion(size_t index) {
     return false;
   }
 
+  RecordTimeToAccept(base::TimeTicks::Now() - session_start_);
   IncrementPrefValueTilCapped(kPersonalInfoSuggesterAcceptanceCount,
                               kMaxAcceptanceCount);
   suggestion_shown_ = false;
-  tts_handler_->Announce(base::StringPrintf(
-      "Inserted suggestion %s.", base::UTF16ToUTF8(suggestion_).c_str()));
+  tts_handler_->Announce(kAcceptPersonalInfoSuggestionMessage);
 
   return true;
 }
 
 void PersonalInfoSuggester::DismissSuggestion() {
   std::string error;
-  suggestion_shown_ = false;
   suggestion_handler_->DismissSuggestion(context_id_, &error);
   if (!error.empty()) {
     LOG(ERROR) << "Failed to dismiss suggestion. " << error;
+    return;
   }
+  suggestion_shown_ = false;
+  RecordTimeToDismiss(base::TimeTicks::Now() - session_start_);
+  tts_handler_->Announce(kDismissPersonalInfoSuggestionMessage);
 }
 
 void PersonalInfoSuggester::SetButtonHighlighted(

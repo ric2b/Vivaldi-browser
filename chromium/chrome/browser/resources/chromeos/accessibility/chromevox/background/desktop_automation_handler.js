@@ -17,6 +17,7 @@ goog.require('editing.TextEditHandler');
 
 goog.scope(function() {
 const AutomationNode = chrome.automation.AutomationNode;
+const Dir = constants.Dir;
 const EventType = chrome.automation.EventType;
 const RoleType = chrome.automation.RoleType;
 const StateType = chrome.automation.StateType;
@@ -54,18 +55,16 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     /** @private {number?} */
     this.delayedAttributeOutputId_;
 
-    /** @private {!Date} */
-    this.lastHoverExit_ = new Date();
-
-    /** @private {!AutomationNode|undefined} */
-    this.lastHoverTarget_;
+    /** @private {number} */
+    this.currentPage_ = -1;
+    /** @private {number} */
+    this.totalPages_ = -1;
 
     this.addListener_(EventType.ALERT, this.onAlert);
     this.addListener_(EventType.BLUR, this.onBlur);
     this.addListener_(
         EventType.DOCUMENT_SELECTION_CHANGED, this.onDocumentSelectionChanged);
     this.addListener_(EventType.FOCUS, this.onFocus);
-    this.addListener_(EventType.HOVER, this.onHover);
 
     // Note that live region changes from views are really announcement
     // events. Their target nodes contain no live region semantics and have no
@@ -97,14 +96,6 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
   /** @type {editing.TextEditHandler} */
   get textEditHandler() {
     return this.textEditHandler_;
-  }
-
-  /**
-   * @return {!AutomationNode|undefined} The target of the last observed hover
-   *     event.
-   */
-  get lastHoverTarget() {
-    return this.lastHoverTarget_;
   }
 
   /** @override */
@@ -151,64 +142,6 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       output.withRichSpeechAndBraille(range, null, Output.EventType.NAVIGATE)
           .go();
     });
-  }
-
-  /**
-   * @param {!ChromeVoxEvent} evt
-   */
-  onHover(evt) {
-    if (!GestureCommandHandler.getEnabled()) {
-      return;
-    }
-
-    EventSourceState.set(EventSourceType.TOUCH_GESTURE);
-
-    // Save the last hover target for use by the gesture handler.
-    this.lastHoverTarget_ = evt.target;
-
-    let target = evt.target;
-    let targetLeaf = null;
-    let targetObject = null;
-    while (target && target != target.root) {
-      if (!targetObject && AutomationPredicate.touchObject(target)) {
-        targetObject = target;
-      }
-      if (AutomationPredicate.touchLeaf(target)) {
-        targetLeaf = target;
-      }
-      target = target.parent;
-    }
-
-    target = targetLeaf || targetObject;
-    if (!target) {
-      // This clears the anchor point in the TouchExplorationController (so
-      // things like double tap won't be directed to the previous target). It
-      // also ensures if a user touch explores back to the previous range, it
-      // will be announced again.
-      ChromeVoxState.instance.setCurrentRange(null);
-
-      // Play a earcon to let the user know they're in the middle of nowhere.
-      if ((new Date() - this.lastHoverExit_) >
-          DesktopAutomationHandler.MIN_HOVER_EXIT_SOUND_DELAY_MS) {
-        ChromeVox.earcons.playEarcon(Earcon.TOUCH_EXIT);
-        this.lastHoverExit_ = new Date();
-      }
-      chrome.tts.stop();
-      return;
-    }
-
-    if (ChromeVoxState.instance.currentRange &&
-        target == ChromeVoxState.instance.currentRange.start.node) {
-      return;
-    }
-
-    if (!this.createTextEditHandlerIfNeeded_(target)) {
-      this.textEditHandler_ = null;
-    }
-
-    Output.forceModeForNextSpeechUtterance(QueueMode.FLUSH);
-    this.onEventDefault(new CustomAutomationEvent(
-        evt.type, target, evt.eventFrom, evt.intents));
   }
 
   /**
@@ -279,7 +212,7 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       this.textEditHandler_ = null;
     }
 
-    const node = evt.target;
+    let node = evt.target;
 
     // Discard focus events on embeddedObject and webView.
     if (node.role == RoleType.EMBEDDED_OBJECT ||
@@ -288,7 +221,15 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     }
 
     if (node.role == RoleType.UNKNOWN) {
-      return;
+      // Ideally, we'd get something more meaningful than focus on an unknown
+      // node, but this does sometimes occur. Sync downward to a more reasonable
+      // target.
+      node = AutomationUtil.findNodePre(
+          node, Dir.FORWARD, AutomationPredicate.object);
+
+      if (!node) {
+        return;
+      }
     }
 
     if (!node.root) {
@@ -482,7 +423,6 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       this.lastValueChanged_ = new Date();
 
       const output = new Output();
-      output.withQueueMode(QueueMode.CATEGORY_FLUSH);
 
       if (fromDesktop &&
           (!this.lastValueTarget_ || this.lastValueTarget_ !== t)) {
@@ -494,6 +434,8 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
         output.format(
             '$if($value, $value, $if($valueForRange, $valueForRange))', t);
       }
+
+      Output.forceModeForNextSpeechUtterance(QueueMode.INTERJECT);
       output.go();
     }
   }
@@ -506,6 +448,33 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     const currentRange = ChromeVoxState.instance.currentRange;
     if (currentRange && currentRange.isValid()) {
       new Output().withLocation(currentRange, null, evt.type).go();
+
+      if (EventSourceState.get() != EventSourceType.TOUCH_GESTURE) {
+        return;
+      }
+
+      const root = AutomationUtil.getTopLevelRoot(currentRange.start.node);
+      if (!root || root.scrollY === undefined) {
+        return;
+      }
+
+      const currentPage = Math.ceil(root.scrollY / root.location.height) || 1;
+      const totalPages =
+          Math.ceil(
+              (root.scrollYMax - root.scrollYMin) / root.location.height) ||
+          1;
+
+      // Ignore announcements if we've already announced something for this page
+      // change. Note that this need not care about the root if it changed as
+      // well.
+      if (this.currentPage_ == currentPage && this.totalPages_ == totalPages) {
+        return;
+      }
+      this.currentPage_ = currentPage;
+      this.totalPages_ = totalPages;
+      ChromeVox.tts.speak(
+          Msgs.getMsg('describe_pos_by_page', [currentPage, totalPages]),
+          QueueMode.QUEUE);
     }
   }
 
@@ -697,9 +666,6 @@ DesktopAutomationHandler.ATTRIBUTE_DELAY_MS = 1500;
  * @type {boolean}
  */
 DesktopAutomationHandler.announceActions = false;
-
-/** @const {number} */
-DesktopAutomationHandler.MIN_HOVER_EXIT_SOUND_DELAY_MS = 500;
 
 /**
  * Global instance.

@@ -1,6 +1,9 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+//
+// NOTE: This mojom should be kept in sync with the copy in the Chromium OS
+// repo: src/platform2/diagnostics/mojo/network_diagnostics.mojom.
 
 module chromeos.network_diagnostics.mojom;
 
@@ -37,7 +40,7 @@ enum GatewayCanBePingedProblem {
   kNonDefaultNetworksAboveLatencyThreshold,
 };
 
-// Messages related to the HasSecureWiFiConnection routine.
+// Problems related to the HasSecureWiFiConnection routine.
 [Extensible]
 enum HasSecureWiFiConnectionProblem {
   kSecurityTypeNone,
@@ -46,7 +49,7 @@ enum HasSecureWiFiConnectionProblem {
   kUnknownSecurityType,
 };
 
-// Messages related to the DnsResolverPresent routine.
+// Problems related to the DnsResolverPresent routine.
 [Extensible]
 enum DnsResolverPresentProblem {
   kNoNameServersFound,
@@ -54,7 +57,7 @@ enum DnsResolverPresentProblem {
   kEmptyNameServers,
 };
 
-// Messages related to the DnsLatencyProblem routine.
+// Problems related to the DnsLatencyProblem routine.
 [Extensible]
 enum DnsLatencyProblem {
   // The routine was unable to successfully resolve all the hosts. Note that
@@ -66,11 +69,34 @@ enum DnsLatencyProblem {
   kSignificantlyAboveThreshold,
 };
 
-// Messages related to the DnsResolution routine.
+// Problems related to the DnsResolution routine.
 [Extensible]
 enum DnsResolutionProblem {
   // The routine was unable to successfully resolve the test host
   kFailedToResolveHost,
+};
+
+// Problems related to the CaptivePortal routine.
+[Extensible]
+enum CaptivePortalProblem {
+  // No active networks found.
+  kNoActiveNetworks,
+  // The active network is detected to be behind a captive portal and have
+  // restricted connectivity.
+  kRestrictedConnectivity,
+  // The active network is detected to be behind a captive portal.
+  kCaptivePortalState,
+};
+
+// Problems related to the HttpFirewall routine.
+[Extensible]
+enum HttpFirewallProblem {
+  // DNS resolution failures above threshold.
+  kDnsResolutionFailuresAboveThreshold,
+  // Firewall detected.
+  kFirewallDetected,
+  // A firewall may potentially exist.
+  kPotentialFirewall,
 };
 
 // This interface is to be used by any clients that need to run specific
@@ -81,7 +107,7 @@ interface NetworkDiagnosticsRoutines {
   // Tests whether the device is connected to a LAN. It is possible that the
   // device may be trapped in a captive portal yet pass this test successfully.
   // Captive portal checks are done separately and are outside of the scope of
-  // this routine.
+  // this routine. See CaptivePortal() below.
   LanConnectivity() => (RoutineVerdict verdict);
 
   // Tests whether there is an acceptable signal strength on wireless networks.
@@ -108,4 +134,12 @@ interface NetworkDiagnosticsRoutines {
   // Tests whether a DNS resolution can be completed successfully.
   DnsResolution() => (RoutineVerdict verdict,
       array<DnsResolutionProblem> problems);
+
+  // Tests whether the internet connection is behind a captive portal.
+  CaptivePortal() => (RoutineVerdict verdict,
+      array<CaptivePortalProblem> problems);
+
+  // Tests whether a firewall is blocking HTTP port 80.
+  HttpFirewall() => (RoutineVerdict verdict,
+      array<HttpFirewallProblem> problems);
 };

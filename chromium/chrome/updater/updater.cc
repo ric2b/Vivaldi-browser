@@ -8,8 +8,11 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/message_loop/message_pump_type.h"
+#include "base/task/single_thread_task_executor.h"
 #include "build/build_config.h"
 #include "chrome/updater/app/app.h"
+#include "chrome/updater/app/app_install.h"
 #include "chrome/updater/app/app_uninstall.h"
 #include "chrome/updater/app/app_wake.h"
 #include "chrome/updater/configurator.h"
@@ -23,13 +26,10 @@
 #if defined(OS_WIN)
 #include "chrome/updater/app/server/win/server.h"
 #include "chrome/updater/app/server/win/service_main.h"
-#include "chrome/updater/win/install_app.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/updater/app/server/mac/server.h"
-#include "chrome/updater/mac/setup/app_swap.h"
-#include "chrome/updater/mac/setup/install_app.h"
 #endif
 
 // Instructions For Windows.
@@ -82,6 +82,7 @@ void InitializeCrashReporting() {
 
 int HandleUpdaterCommands(const base::CommandLine* command_line) {
   DCHECK(!command_line->HasSwitch(kCrashHandlerSwitch));
+  base::SingleThreadTaskExecutor main_task_executor(base::MessagePumpType::UI);
 
   if (command_line->HasSwitch(kCrashMeSwitch)) {
     // Records a backtrace in the log, crashes the program, saves a crash dump,
@@ -98,6 +99,11 @@ int HandleUpdaterCommands(const base::CommandLine* command_line) {
 #endif
   }
 
+#if defined(OS_MAC)
+  if (command_line->HasSwitch(kUpdateSwitch))
+    return MakeAppInstall()->Run();
+#endif  // OS_MAC
+
 #if defined(OS_WIN)
   if (command_line->HasSwitch(kComServiceSwitch))
     return ServiceMain::RunComService(command_line);
@@ -105,13 +111,6 @@ int HandleUpdaterCommands(const base::CommandLine* command_line) {
 
   if (command_line->HasSwitch(kInstallSwitch))
     return MakeAppInstall()->Run();
-
-#if defined(OS_MACOSX)
-  if (command_line->HasSwitch(kPromoteCandidateSwitch))
-    return MakeAppPromoteCandidate()->Run();
-  if (command_line->HasSwitch(kUninstallCandidateSwitch))
-    return MakeAppUninstallCandidate()->Run();
-#endif  // OS_MACOSX
 
   if (command_line->HasSwitch(kUninstallSwitch))
     return MakeAppUninstall()->Run();

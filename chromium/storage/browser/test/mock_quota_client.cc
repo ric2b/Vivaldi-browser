@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/location.h"
@@ -13,10 +14,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "net/base/url_util.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace storage {
 
@@ -82,7 +83,7 @@ void MockQuotaClient::OnQuotaManagerDestroyed() {}
 
 void MockQuotaClient::GetOriginUsage(const url::Origin& origin,
                                      blink::mojom::StorageType type,
-                                     GetUsageCallback callback) {
+                                     GetOriginUsageCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&MockQuotaClient::RunGetOriginUsage,
                                 weak_factory_.GetWeakPtr(), origin, type,
@@ -90,7 +91,7 @@ void MockQuotaClient::GetOriginUsage(const url::Origin& origin,
 }
 
 void MockQuotaClient::GetOriginsForType(blink::mojom::StorageType type,
-                                        GetOriginsCallback callback) {
+                                        GetOriginsForTypeCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&MockQuotaClient::RunGetOriginsForType,
@@ -99,7 +100,7 @@ void MockQuotaClient::GetOriginsForType(blink::mojom::StorageType type,
 
 void MockQuotaClient::GetOriginsForHost(blink::mojom::StorageType type,
                                         const std::string& host,
-                                        GetOriginsCallback callback) {
+                                        GetOriginsForHostCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&MockQuotaClient::RunGetOriginsForHost,
                                 weak_factory_.GetWeakPtr(), type, host,
@@ -108,21 +109,22 @@ void MockQuotaClient::GetOriginsForHost(blink::mojom::StorageType type,
 
 void MockQuotaClient::DeleteOriginData(const url::Origin& origin,
                                        blink::mojom::StorageType type,
-                                       DeletionCallback callback) {
+                                       DeleteOriginDataCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&MockQuotaClient::RunDeleteOriginData,
                                 weak_factory_.GetWeakPtr(), origin, type,
                                 std::move(callback)));
 }
 
-void MockQuotaClient::PerformStorageCleanup(blink::mojom::StorageType type,
-                                            base::OnceClosure callback) {
+void MockQuotaClient::PerformStorageCleanup(
+    blink::mojom::StorageType type,
+    PerformStorageCleanupCallback callback) {
   std::move(callback).Run();
 }
 
 void MockQuotaClient::RunGetOriginUsage(const url::Origin& origin,
                                         blink::mojom::StorageType type,
-                                        GetUsageCallback callback) {
+                                        GetOriginUsageCallback callback) {
   auto it = origin_data_.find(std::make_pair(origin, type));
   if (it == origin_data_.end()) {
     std::move(callback).Run(0);
@@ -132,32 +134,32 @@ void MockQuotaClient::RunGetOriginUsage(const url::Origin& origin,
 }
 
 void MockQuotaClient::RunGetOriginsForType(blink::mojom::StorageType type,
-                                           GetOriginsCallback callback) {
-  std::set<url::Origin> origins;
+                                           GetOriginsForTypeCallback callback) {
+  std::vector<url::Origin> origins;
   for (const auto& origin_type_usage : origin_data_) {
     if (type == origin_type_usage.first.second)
-      origins.insert(origin_type_usage.first.first);
+      origins.push_back(origin_type_usage.first.first);
   }
-  std::move(callback).Run(origins);
+  std::move(callback).Run(std::move(origins));
 }
 
 void MockQuotaClient::RunGetOriginsForHost(blink::mojom::StorageType type,
                                            const std::string& host,
-                                           GetOriginsCallback callback) {
-  std::set<url::Origin> origins;
+                                           GetOriginsForHostCallback callback) {
+  std::vector<url::Origin> origins;
   for (const auto& origin_type_usage : origin_data_) {
-    std::string host_or_spec =
-        net::GetHostOrSpecFromURL(origin_type_usage.first.first.GetURL());
-    if (type == origin_type_usage.first.second && host == host_or_spec)
-      origins.insert(origin_type_usage.first.first);
+    if (type == origin_type_usage.first.second &&
+        host == origin_type_usage.first.first.host()) {
+      origins.push_back(origin_type_usage.first.first);
+    }
   }
-  std::move(callback).Run(origins);
+  std::move(callback).Run(std::move(origins));
 }
 
 void MockQuotaClient::RunDeleteOriginData(
     const url::Origin& origin,
     blink::mojom::StorageType storage_type,
-    DeletionCallback callback) {
+    DeleteOriginDataCallback callback) {
   auto error_it = error_origins_.find(std::make_pair(origin, storage_type));
   if (error_it != error_origins_.end()) {
     std::move(callback).Run(

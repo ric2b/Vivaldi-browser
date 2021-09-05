@@ -7,13 +7,10 @@
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/crostini/crostini_disk.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
@@ -75,6 +72,14 @@ const std::vector<SearchConcept>& GetCrostiniOptedInSearchConcepts() {
        {IDS_OS_SETTINGS_TAG_CROSTINI_SHARED_FOLDERS_ALT1,
         IDS_OS_SETTINGS_TAG_CROSTINI_SHARED_FOLDERS_ALT2,
         IDS_OS_SETTINGS_TAG_CROSTINI_SHARED_FOLDERS_ALT3,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_CROSTINI_MIC_ACCESS,
+       mojom::kCrostiniDetailsSubpagePath,
+       mojom::SearchResultIcon::kPenguin,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kCrostiniMicAccess},
+       {IDS_OS_SETTINGS_TAG_CROSTINI_MIC_ACCESS_ALT1,
         SearchConcept::kAltTagEnd}},
   });
   return *tags;
@@ -178,28 +183,12 @@ const std::vector<SearchConcept>& GetCrostiniDiskResizingSearchConcepts() {
   return *tags;
 }
 
-const std::vector<SearchConcept>& GetCrostiniMicSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_CROSTINI_MIC_ACCESS,
-       mojom::kCrostiniDetailsSubpagePath,
-       mojom::SearchResultIcon::kPenguin,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kCrostiniMicAccess},
-       {IDS_OS_SETTINGS_TAG_CROSTINI_MIC_ACCESS_ALT1,
-        SearchConcept::kAltTagEnd}},
-  });
-  return *tags;
-}
-
 bool IsProfileManaged(Profile* profile) {
   return profile->GetProfilePolicyConnector()->IsManaged();
 }
 
 bool IsDeviceManaged() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return connector->IsEnterpriseManaged();
+  return webui::IsEnterpriseManaged();
 }
 
 bool IsAdbSideloadingAllowed() {
@@ -208,10 +197,6 @@ bool IsAdbSideloadingAllowed() {
 
 bool IsDiskResizingAllowed() {
   return base::FeatureList::IsEnabled(features::kCrostiniDiskResizing);
-}
-
-bool IsMicSettingAllowed() {
-  return base::FeatureList::IsEnabled(features::kCrostiniShowMicSetting);
 }
 
 }  // namespace
@@ -438,7 +423,6 @@ void CrostiniSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean("showCrostiniContainerUpgrade",
                           IsContainerUpgradeAllowed());
   html_source->AddBoolean("showCrostiniDiskResize", IsDiskResizingAllowed());
-  html_source->AddBoolean("showCrostiniMic", IsMicSettingAllowed());
 }
 
 void CrostiniSection::AddHandlers(content::WebUI* web_ui) {
@@ -558,7 +542,6 @@ void CrostiniSection::UpdateSearchTags() {
   updater.RemoveSearchTags(GetCrostiniPortForwardingSearchConcepts());
   updater.RemoveSearchTags(GetCrostiniContainerUpgradeSearchConcepts());
   updater.RemoveSearchTags(GetCrostiniDiskResizingSearchConcepts());
-  updater.RemoveSearchTags(GetCrostiniMicSearchConcepts());
 
   if (!IsCrostiniAllowed())
     return;
@@ -586,9 +569,6 @@ void CrostiniSection::UpdateSearchTags() {
 
   if (IsDiskResizingAllowed())
     updater.AddSearchTags(GetCrostiniDiskResizingSearchConcepts());
-
-  if (IsMicSettingAllowed())
-    updater.AddSearchTags(GetCrostiniMicSearchConcepts());
 }
 
 }  // namespace settings

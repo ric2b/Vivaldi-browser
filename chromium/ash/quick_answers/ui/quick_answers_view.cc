@@ -215,18 +215,10 @@ std::vector<views::View*> QuickAnswersView::GetFocusableViews() {
 }
 
 void QuickAnswersView::StateChanged(views::Button::ButtonState old_state) {
-  switch (state()) {
-    case Button::ButtonState::STATE_NORMAL: {
-      SetBackgroundState(false);
-      break;
-    }
-    case Button::ButtonState::STATE_HOVERED: {
-      SetBackgroundState(true);
-      break;
-    }
-    default:
-      break;
-  }
+  Button::StateChanged(old_state);
+  const bool hovered = GetState() == Button::STATE_HOVERED;
+  if (hovered || (GetState() == Button::STATE_NORMAL))
+    SetBackgroundState(hovered);
 }
 
 void QuickAnswersView::ButtonPressed(views::Button* sender,

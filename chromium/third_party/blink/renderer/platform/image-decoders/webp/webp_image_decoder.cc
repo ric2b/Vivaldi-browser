@@ -34,6 +34,7 @@
 #include "build/build_config.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkYUVAIndex.h"
 
@@ -402,6 +403,9 @@ void WEBPImageDecoder::OnInitFrameBuffer(size_t frame_index) {
 
 void WEBPImageDecoder::DecodeToYUV() {
   DCHECK(IsDoingYuvDecode());
+
+  // Only 8-bit YUV decode is currently supported.
+  DCHECK_EQ(image_planes_->color_type(), kGray_8_SkColorType);
 
   if (Failed())
     return;

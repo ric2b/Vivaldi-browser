@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">အရာ စာရင်း</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">ညာဘက်သို့ လက်နှစ်ချောင်းဖြင့် ပွတ်ဆွဲပါ</translation>
+<translation id="1016393160682012902">၎င်း၏လုပ်ဆောင်ချက်ကို လေ့လာရန် qwerty ခလုတ်၊ ပြန်လည်စတင်နိုင်သော မျက်မမြင်ခလုတ် သို့မဟုတ် ထိတွေ့လက်ဟန်ကို နှိပ်ပါ။ ထွက်ရန် control နှင့် w သို့မဟုတ် escape ကို နှိပ်ပါ။</translation>
 <translation id="1022586497894531524">ChromeVox ၏ စကားပြော၍ တုံ့ပြန်မှုစနစ်ကို ပထမဆုံးအကြိမ် အသုံးပြုခြင်း ဟုတ်ပါသလား။ ChromeVox ကို စတင်အသုံးပြုနိုင်ရန်အတွက် အရေးကြီးသည့် အချက်အလက်များကို ဤသင်ခန်းစာက မြန်ဆန်စွာ ရှင်းပြပေးပါလိမ့်မည်။</translation>
 <translation id="1025074108959230262">စေးကပ် မုဒ် ပိတ်ထား</translation>
 <translation id="1031961866430398710">ထိုစဉ်</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">အတွင်းပိုင်း လင့်</translation>
 <translation id="4909019435900810068">စကားလုံးတစ်လုံးစာ အနောက်ဆုတ်ရန်</translation>
 <translation id="4911349081560453449">ယခင် အမှန်ခြစ်ရန်အကွက် မရှိပါ</translation>
-<translation id="4915087353619183190">'လေ့လာခြင်းမုဒ်' ကို စတင်နေသည်။ ၎င်း၏ လုပ်ဆောင်ချက်ကို လေ့လာရန် qwerty ခလုတ်၊ ပြောင်းနိုင်သည့် မျက်မမြင်စာခလုတ်ကို နှိပ်ပါ သို့မဟုတ် လက်ဟန်ကို ထိပါ။ ထွက်ရန် control နှင့် w သို့မဟုတ် escape ခလုတ်ကို နှိပ်ပါ။</translation>
 <translation id="492295894462528572">စကားချီး</translation>
 <translation id="495046168593986294">အပေါ်သို့ လှိမ့်ရန်</translation>
 <translation id="495170559598752135">လုပ်ဆောင်ချက်များ</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">အစိမ်းရောင်</translation>
 <translation id="602001110135236999">ဘယ်သို့ လှိမ့်ရန်</translation>
 <translation id="6034000775414344507">မီးခိုးဖျော့</translation>
+<translation id="6036135911048686884">စူးစမ်းလေ့လာရန်ကို တို့ပါ</translation>
 <translation id="6037602951055904232">ရှေ့သို့ ရွေ့ပြောင်း</translation>
 <translation id="6044160928851315051">ဖန်သားပြင်ကို မှောင်အောင်ပြုလုပ်ရန်</translation>
 <translation id="6082768461603900813">အခြေခံလမ်းညွှန်မှု</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ပေါင်}other{# ပေါင် သင်္ကေတ}}</translation>
 <translation id="8378855320830505539">ဒေသ</translation>
 <translation id="8382679411218029383">လိုင်းအတွင်းနှင့် စာရင်းတွင် အလိုအလျောက်ဖြည့်စွက်ခြင်း</translation>
+<translation id="8394908167088220973">မီဒီယာ ဖွင့်ရန်/ဆိုင်းငံ့ထားရန်</translation>
 <translation id="8428213095426709021">ဆက်တင်များ</translation>
 <translation id="8428603554127842284">အဆင့် <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">ဇယားများလို ပုံစံချထားသည့် အကြောင်းအရာမှ ထွက်ရန်</translation>
 <translation id="8779057862865475116">ယခင် လင့်ခ် မရှိပါ</translation>
 <translation id="8796411681063377102">နောက် အဆင့် ၃ ခေါင်းစီး</translation>
+<translation id="8823311177246872527">စာမျက်နှာ <ph name="TOTALPAGES" /> အနက် <ph name="CURRENTPAGE" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">ပင်မ</translation>
 <translation id="8882002077197914455">အတန်း ခေါင်းစီး</translation>

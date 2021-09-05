@@ -17,16 +17,15 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.AutofillSaveCardInfoBar;
 import org.chromium.chrome.browser.sync.SyncTestRule;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.infobars.InfoBarLayout;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -81,12 +80,9 @@ public class AutofillUpstreamTest {
 
     private void waitForSaveCardInfoBar() {
         CriteriaHelper.pollUiThread(
-                new Criteria("Autofill Save Card Infobar view was never added.") {
-                    @Override
-                    public boolean isSatisfied() {
-                        return hasAutofillSaveCardInfobar(mActivityTestRule.getInfoBars());
-                    }
-                });
+                ()
+                        -> hasAutofillSaveCardInfobar(mActivityTestRule.getInfoBars()),
+                "Autofill Save Card Infobar view was never added.");
     }
 
     private boolean hasAutofillSaveCardInfobar(List<InfoBar> infobars) {

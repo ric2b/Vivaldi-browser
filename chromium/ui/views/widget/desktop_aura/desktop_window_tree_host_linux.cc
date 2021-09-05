@@ -14,12 +14,13 @@
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/platform_window/extensions/x11_extension.h"
-#include "ui/platform_window/platform_window_handler/wm_move_resize_handler.h"
 #include "ui/platform_window/platform_window_init_properties.h"
+#include "ui/platform_window/wm/wm_move_resize_handler.h"
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/desktop_aura/window_event_filter_linux.h"
@@ -161,6 +162,8 @@ void DesktopWindowTreeHostLinux::OnNativeWidgetCreated(
 
 base::flat_map<std::string, std::string>
 DesktopWindowTreeHostLinux::GetKeyboardLayoutMap() {
+  if (features::IsUsingOzonePlatform())
+    return DesktopWindowTreeHostPlatform::GetKeyboardLayoutMap();
   if (views::LinuxUI::instance())
     return views::LinuxUI::instance()->GetKeyboardLayoutMap();
   return {};
@@ -293,8 +296,9 @@ const ui::X11Extension* DesktopWindowTreeHostLinux::GetX11Extension() const {
 }
 
 #if BUILDFLAG(USE_ATK)
-bool DesktopWindowTreeHostLinux::OnAtkKeyEvent(AtkKeyEventStruct* atk_event) {
-  if (!IsActive() && !HasCapture())
+bool DesktopWindowTreeHostLinux::OnAtkKeyEvent(AtkKeyEventStruct* atk_event,
+                                               bool transient) {
+  if (!transient && !IsActive() && !HasCapture())
     return false;
   return ui::AtkUtilAuraLinux::HandleAtkKeyEvent(atk_event) ==
          ui::DiscardAtkKeyEvent::Discard;
@@ -386,11 +390,6 @@ std::list<gfx::AcceleratedWidget>& DesktopWindowTreeHostLinux::open_windows() {
   return *open_windows_;
 }
 
-// As DWTHX11 subclasses DWTHPlatform through DWTHLinux now (during transition
-// period. see https://crbug.com/990756), we need to guard this factory method.
-// TODO(msisov): remove this guard once DWTHX11 is finally merged into
-// DWTHPlatform and .
-#if !defined(USE_X11)
 // static
 DesktopWindowTreeHost* DesktopWindowTreeHost::Create(
     internal::NativeWidgetDelegate* native_widget_delegate,
@@ -398,6 +397,5 @@ DesktopWindowTreeHost* DesktopWindowTreeHost::Create(
   return new DesktopWindowTreeHostLinux(native_widget_delegate,
                                         desktop_native_widget_aura);
 }
-#endif
 
 }  // namespace views

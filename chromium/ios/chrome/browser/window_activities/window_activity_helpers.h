@@ -34,16 +34,14 @@ typedef NS_ENUM(NSInteger, WindowActivityOrigin) {
   WindowActivityRecentTabsOrigin,
   // The command origin comes from the location bar steady view.
   WindowActivityLocationBarSteadyViewOrigin,
+  // The command origin comes from the NTP content suggestions.
+  WindowActivityContentSuggestionsOrigin,
   // Size of enum.
-  kMaxValue = WindowActivityToolsOrigin
+  kMaxValue = WindowActivityContentSuggestionsOrigin
 };
 
 // Helper functions to create NSUserActivity instances that encode specific
 // actions in the browser, and to decode those actions from those activities.
-
-// Create a new activity that opens a new, empty tab. |in_incognito| indicates
-// if the new tab should be incognito.
-NSUserActivity* ActivityToOpenNewTab(bool in_incognito);
 
 // Create a new activity that opens a new tab, loading |url| with the referrer
 // |referrer|. |in_incognito| indicates if the new tab should be incognito.
@@ -74,5 +72,8 @@ UrlLoadParams LoadParamsFromActivity(NSUserActivity* activity);
 
 // Returns the recorded origin for the given activity.
 WindowActivityOrigin OriginOfActivity(NSUserActivity* activity);
+
+// Returns the tab identifier from the given activity.
+NSString* GetTabIDFromActivity(NSUserActivity* activity);
 
 #endif  // IOS_CHROME_BROWSER_WINDOW_ACTIVITIES_WINDOW_ACTIVITY_HELPERS_H_

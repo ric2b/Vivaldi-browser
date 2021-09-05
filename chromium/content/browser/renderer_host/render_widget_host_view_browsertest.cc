@@ -8,10 +8,10 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -219,7 +219,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
   // blank content is shown.
   EXPECT_TRUE(rwhvb);
   // Mac does not initialize RenderWidgetHostViewBase as visible.
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   EXPECT_TRUE(rwhvb->IsShowing());
 #endif
   EXPECT_TRUE(rwhvb->GetLocalSurfaceIdAllocation().IsValid());
@@ -231,7 +231,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
 
 // TODO(jonross): Update Mac to also invalidate its viz::LocalSurfaceIds when
 // performing navigations while hidden. https://crbug.com/935364
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 // When a navigation occurs while the RenderWidgetHostViewBase is hidden, it
 // should invalidate it's viz::LocalSurfaceId. When subsequently being shown,
 // a new surface should be generated with a new viz::LocalSurfaceId
@@ -293,7 +293,7 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
   EXPECT_NE(initial_local_surface_id, new_local_surface_id);
 #endif
 }
-#endif  // !defined(OS_MACOSX)
+#endif  // !defined(OS_MAC)
 
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewBrowserTestBase,
                        CompositorWorksWhenReusingRenderer) {
@@ -356,7 +356,7 @@ class CompositingRenderWidgetHostViewBrowserTest
   void SetUp() override {
     if (compositing_mode_ == SOFTWARE_COMPOSITING)
       UseSoftwareCompositing();
-    EnablePixelOutput();
+    EnablePixelOutput(scale());
     RenderWidgetHostViewBrowserTest::SetUp();
   }
 
@@ -380,6 +380,8 @@ class CompositingRenderWidgetHostViewBrowserTest
     WaitForCopySourceReady();
     return true;
   }
+
+  virtual float scale() const { return 1.f; }
 
  private:
   const CompositingMode compositing_mode_;
@@ -743,12 +745,6 @@ class CompositingRenderWidgetHostViewBrowserTestTabCaptureHighDPI
   CompositingRenderWidgetHostViewBrowserTestTabCaptureHighDPI() {}
 
  protected:
-  void SetUpCommandLine(base::CommandLine* cmd) override {
-    CompositingRenderWidgetHostViewBrowserTestTabCapture::SetUpCommandLine(cmd);
-    cmd->AppendSwitchASCII(switches::kForceDeviceScaleFactor,
-                           base::StringPrintf("%f", scale()));
-  }
-
   bool ShouldContinueAfterTestURLLoad() override {
     // Short-circuit a pass for platforms where setting up high-DPI fails.
     const float actual_scale_factor =
@@ -764,7 +760,7 @@ class CompositingRenderWidgetHostViewBrowserTestTabCaptureHighDPI
     return true;
   }
 
-  static float scale() { return 2.0f; }
+  float scale() const override { return 2.0f; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(
@@ -822,12 +818,6 @@ class CompositingRenderWidgetHostViewBrowserTestHiDPI
   CompositingRenderWidgetHostViewBrowserTestHiDPI() {}
 
  protected:
-  void SetUpCommandLine(base::CommandLine* cmd) override {
-    CompositingRenderWidgetHostViewBrowserTest::SetUpCommandLine(cmd);
-    cmd->AppendSwitchASCII(switches::kForceDeviceScaleFactor,
-                           base::StringPrintf("%f", scale()));
-  }
-
   GURL TestUrl() override { return GURL(test_url_); }
 
   void SetTestUrl(const std::string& url) { test_url_ = url; }
@@ -848,7 +838,7 @@ class CompositingRenderWidgetHostViewBrowserTestHiDPI
     return true;
   }
 
-  static float scale() { return 2.0f; }
+  float scale() const override { return 2.0f; }
 
  private:
   std::string test_url_;

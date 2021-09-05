@@ -12,10 +12,14 @@
     NSUserDefaults* ud = [NSUserDefaults standardUserDefaults];
     NSString* appleActionOnDoubleClick =
       [ud stringForKey:@"AppleActionOnDoubleClick"];
-    if ([appleActionOnDoubleClick isEqual:@"Minimize"]) {
-      [self miniaturize:event];
-    } else if ([appleActionOnDoubleClick isEqual:@"Maximize"]) {
+    if (appleActionOnDoubleClick == nil ||
+       [appleActionOnDoubleClick isEqual:@"Maximize"]) {
+      // Note(tomas@vivaldi.com): VB-71676 There is a bug in some macOS versions
+      // where this value is nil after a fresh install of macOS.
+      // The default action is to zoom
       [self zoom:event];
+    } else if ([appleActionOnDoubleClick isEqual:@"Minimize"]) {
+      [self miniaturize:event];
     }
   }
   [super mouseDown:event];

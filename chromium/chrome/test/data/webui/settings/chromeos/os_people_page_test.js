@@ -2,7 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import 'chrome://os-settings/chromeos/os_settings.js';
+
+// #import {TestBrowserProxy} from '../../test_browser_proxy.m.js';
+// #import {Router, pageVisibility, routes, AccountManagerBrowserProxyImpl, SyncBrowserProxyImpl, ProfileInfoBrowserProxyImpl, ProfileInfoBrowserProxy} from 'chrome://os-settings/chromeos/os_settings.js';
+// #import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+// #import {assert} from 'chrome://resources/js/assert.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {TestProfileInfoBrowserProxy} from 'chrome://test/settings/test_profile_info_browser_proxy.m.js';
+// #import {TestSyncBrowserProxy} from './test_os_sync_browser_proxy.m.js';
+// #import {FakeQuickUnlockPrivate} from './fake_quick_unlock_private.m.js';
+
+// clang-format on
+
 cr.define('settings_people_page', function() {
+  let quickUnlockPrivateApi = null;
+
   /** @implements {settings.AccountManagerBrowserProxy} */
   class TestAccountManagerBrowserProxy extends TestBrowserProxy {
     constructor() {
@@ -245,7 +261,12 @@ cr.define('settings_people_page', function() {
       const fingerprintTrigger =
           peoplePage.$$('#fingerprint-list').$$('#addFingerprint');
       fingerprintTrigger.click();
-      peoplePage.authToken_ = undefined;
+
+      // Invalidate the auth token by firing an event.
+      assertFalse(peoplePage.authToken_ === undefined);
+      const event = new CustomEvent('invalidate-auth-token-requested');
+      lockScreenPage.dispatchEvent(event);
+      assertTrue(peoplePage.authToken_ === undefined);
 
       assertEquals(
           settings.Router.getInstance().getCurrentRoute(),
@@ -253,4 +274,7 @@ cr.define('settings_people_page', function() {
       assertTrue(peoplePage.showPasswordPromptDialog_);
     });
   });
+
+  // #cr_define_end
+  return {};
 });

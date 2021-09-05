@@ -18,7 +18,10 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
 
 import android.content.res.Configuration;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * This class is responsible for reacting to events from the outside world, interacting with other
@@ -170,9 +173,20 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
      * visibility changes.
      */
     private void updateCompositedViewVisibility() {
+        // Note(david@vivaldi.com): Don't update when in swipe layout.
+        if (ChromeApplication.isVivaldi() && mIsInSwipeLayout) return;
+
         final boolean isCompositedViewVisible =
                 mIsBottomControlsVisible && !mIsKeyboardVisible && !isInFullscreenMode();
+        // Note(david@vivaldi.com): Always hide the composited view when toolbar is at the bottom.
+        if(!VivaldiUtils.isTopToolbarOn())
+            mModel.set(BottomControlsProperties.COMPOSITED_VIEW_VISIBLE, false);
+        else
         mModel.set(BottomControlsProperties.COMPOSITED_VIEW_VISIBLE, isCompositedViewVisible);
+
+        // Note(david@vivaldi.com): The bottom controls height will be set in the
+        // |VivaldiTopToolbarCoordinator|
+        if (!ChromeApplication.isVivaldi())
         mBrowserControlsSizer.setBottomControlsHeight(
                 isCompositedViewVisible ? mBottomControlsHeight : 0,
                 mBrowserControlsSizer.getBottomControlsMinHeight());
@@ -194,10 +208,16 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
             if (mIsInSwipeLayout && !mChromeActivity.isTablet()
                             && mChromeActivity.getResources().getConfiguration().orientation
                                     == Configuration.ORIENTATION_PORTRAIT
+                            && VivaldiUtils.isTopToolbarOn()
                     || mChromeActivity.isInOverviewMode()) {
                 mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE, true);
                 return;
             }
+        }
+        // Note(david@vivaldi.com): When toolbar is at the bottom we hide the android view.
+        if(!VivaldiUtils.isTopToolbarOn()) {
+            mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE, false);
+            return;
         }
         mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE,
                 mIsBottomControlsVisible && !mIsKeyboardVisible && !mIsOverlayPanelShowing
@@ -205,8 +225,14 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
                         && !isInFullscreenMode());
     }
 
+    /** Vivaldi **/
     public void setChromeActivity(ChromeActivity activity)
     {
         mChromeActivity = activity;
+    }
+
+    /** Vivaldi **/
+    void setToolbarSwipeHandler(EdgeSwipeHandler swipeHandler) {
+        mModel.set(BottomControlsProperties.TOOLBAR_SWIPE_HANDLER, swipeHandler);
     }
 }

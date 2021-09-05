@@ -8,8 +8,13 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -22,6 +27,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
+
+const char kProfileTestName[] = "profile_test_name";
 
 std::unique_ptr<TestingProfile> BuildTestingProfile(const base::FilePath& path,
                                                     Profile::Delegate* delegate,
@@ -153,11 +160,13 @@ class DiceSignedInProfileCreatorTest : public testing::Test,
 TEST_F(DiceSignedInProfileCreatorTest, CreateWithTokensLoaded) {
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("bob@example.com");
+  size_t kTestIcon = profiles::GetModernAvatarIconStartIndex();
+  base::string16 kProfileTestName16 = base::UTF8ToUTF16(kProfileTestName);
 
   base::RunLoop loop;
   std::unique_ptr<DiceSignedInProfileCreator> creator =
       std::make_unique<DiceSignedInProfileCreator>(
-          profile(), account_info.account_id,
+          profile(), account_info.account_id, kProfileTestName16, kTestIcon,
           base::BindOnce(&DiceSignedInProfileCreatorTest::OnProfileCreated,
                          base::Unretained(this), loop.QuitClosure()));
   loop.Run();
@@ -174,6 +183,16 @@ TEST_F(DiceSignedInProfileCreatorTest, CreateWithTokensLoaded) {
                     .size());
   EXPECT_TRUE(IdentityManagerFactory::GetForProfile(signed_in_profile())
                   ->HasAccountWithRefreshToken(account_info.account_id));
+
+  // Check the profile name and icon.
+  ProfileAttributesEntry* entry = nullptr;
+  ProfileAttributesStorage& storage =
+      profile_manager()->GetProfileAttributesStorage();
+  ASSERT_TRUE(storage.GetProfileAttributesWithPath(
+      signed_in_profile()->GetPath(), &entry));
+  ASSERT_TRUE(entry);
+  EXPECT_EQ(kProfileTestName16, entry->GetLocalProfileName());
+  EXPECT_EQ(kTestIcon, entry->GetAvatarIconIndex());
 }
 
 TEST_F(DiceSignedInProfileCreatorTest, CreateWithTokensNotLoaded) {
@@ -186,7 +205,7 @@ TEST_F(DiceSignedInProfileCreatorTest, CreateWithTokensNotLoaded) {
   set_profile_added_closure(profile_added_loop.QuitClosure());
   std::unique_ptr<DiceSignedInProfileCreator> creator =
       std::make_unique<DiceSignedInProfileCreator>(
-          profile(), account_info.account_id,
+          profile(), account_info.account_id, base::string16(), base::nullopt,
           base::BindOnce(&DiceSignedInProfileCreatorTest::OnProfileCreated,
                          base::Unretained(this), creator_loop.QuitClosure()));
   profile_added_loop.Run();
@@ -221,7 +240,7 @@ TEST_F(DiceSignedInProfileCreatorTest, DeleteWhileCreating) {
       identity_test_env()->MakeAccountAvailable("bob@example.com");
   std::unique_ptr<DiceSignedInProfileCreator> creator =
       std::make_unique<DiceSignedInProfileCreator>(
-          profile(), account_info.account_id,
+          profile(), account_info.account_id, base::string16(), base::nullopt,
           base::BindOnce(&DiceSignedInProfileCreatorTest::OnProfileCreated,
                          base::Unretained(this), base::OnceClosure()));
   EXPECT_FALSE(creator_callback_called());
@@ -240,7 +259,7 @@ TEST_F(DiceSignedInProfileCreatorTest, DeleteProfile) {
   set_profile_added_closure(profile_added_loop.QuitClosure());
   std::unique_ptr<DiceSignedInProfileCreator> creator =
       std::make_unique<DiceSignedInProfileCreator>(
-          profile(), account_info.account_id,
+          profile(), account_info.account_id, base::string16(), base::nullopt,
           base::BindOnce(&DiceSignedInProfileCreatorTest::OnProfileCreated,
                          base::Unretained(this), creator_loop.QuitClosure()));
   profile_added_loop.Run();

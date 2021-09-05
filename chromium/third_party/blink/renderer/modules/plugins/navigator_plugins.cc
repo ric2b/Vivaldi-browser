@@ -5,12 +5,14 @@
 #include "third_party/blink/renderer/modules/plugins/navigator_plugins.h"
 
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token_builder.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/modules/plugins/dom_mime_type_array.h"
 #include "third_party/blink/renderer/modules/plugins/dom_plugin_array.h"
+#include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 
 namespace blink {
 
@@ -55,7 +57,7 @@ DOMPluginArray* NavigatorPlugins::plugins(LocalFrame* frame) const {
     plugins_ = MakeGarbageCollected<DOMPluginArray>(frame);
 
   DOMPluginArray* result = plugins_.Get();
-  if (!frame)
+  if (!IdentifiabilityStudySettings::Get()->IsActive() || !frame)
     return result;
   Document* document = frame->GetDocument();
   if (!document)
@@ -65,14 +67,14 @@ DOMPluginArray* NavigatorPlugins::plugins(LocalFrame* frame) const {
   IdentifiableTokenBuilder builder;
   for (unsigned i = 0; i < result->length(); i++) {
     DOMPlugin* plugin = result->item(i);
-    builder.AddAtomic(StringToBytesSafe(plugin->name()))
-        .AddAtomic(StringToBytesSafe(plugin->description()))
-        .AddAtomic(StringToBytesSafe(plugin->filename()));
+    builder.AddToken(IdentifiabilityBenignStringToken(plugin->name()))
+        .AddToken(IdentifiabilityBenignStringToken(plugin->description()))
+        .AddToken(IdentifiabilityBenignStringToken(plugin->filename()));
     for (unsigned j = 0; j < plugin->length(); j++) {
       DOMMimeType* mimeType = plugin->item(j);
-      builder.AddAtomic(StringToBytesSafe(mimeType->type()))
-          .AddAtomic(StringToBytesSafe(mimeType->description()))
-          .AddAtomic(StringToBytesSafe(mimeType->suffixes()));
+      builder.AddToken(IdentifiabilityBenignStringToken(mimeType->type()))
+          .AddToken(IdentifiabilityBenignStringToken(mimeType->description()))
+          .AddToken(IdentifiabilityBenignStringToken(mimeType->suffixes()));
     }
   }
   // ...and report to UKM.
@@ -81,10 +83,6 @@ DOMPluginArray* NavigatorPlugins::plugins(LocalFrame* frame) const {
       .Record(document->UkmRecorder());
 
   return result;
-}
-
-base::span<const uint8_t> NavigatorPlugins::StringToBytesSafe(String str) const {
-  return str.Is8Bit() ? str.Span8() : as_bytes(str.Span16());
 }
 
 DOMMimeTypeArray* NavigatorPlugins::mimeTypes(LocalFrame* frame) const {

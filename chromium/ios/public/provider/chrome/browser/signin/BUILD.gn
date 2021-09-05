@@ -16,6 +16,7 @@ source_set("signin") {
     "chrome_trusted_vault_service.mm",
     "signin_error_provider.h",
     "signin_error_provider.mm",
+    "signin_presenter.h",
     "signin_resources_provider.h",
     "signin_resources_provider.mm",
   ]
@@ -41,6 +42,7 @@ source_set("test_support") {
     ":fake_chrome_identity",
     ":signin",
     "//base",
+    "//base/test:test_support",
     "//components/signin/public/identity_manager",
     "//google_apis",
     "//ios/public/provider/chrome/browser",
@@ -59,6 +61,7 @@ source_set("fake_chrome_identity") {
   deps = [
     ":signin",
     "//base",
+    "//base/test:test_support",
   ]
 }
 

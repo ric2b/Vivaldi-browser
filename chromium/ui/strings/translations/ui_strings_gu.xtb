@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">પસંદ કરો</translation>
 <translation id="1859234291848436338">લેખનના દિશાનિર્દેશ</translation>
 <translation id="1860796786778352021">સૂચના બંધ છે</translation>
+<translation id="186476001994626254">વેબ સ્માર્ટ પેસ્ટ કન્ટેન્ટ</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">&amp;બધા પસંદ કરો</translation>
+<translation id="19085484004813472">આ નવી સુવિધા છે</translation>
 <translation id="2006524834898217237">ખાતરી કરો કે આ ડિવાઇસ ઇન્ટરનેટ સાથે કનેક્ટ કરેલું છે.</translation>
 <translation id="208586643495776849">કૃપા કરીને ફરી પ્રયાસ કરો</translation>
 <translation id="2090963878406559571"><ph name="ORIGIN" />થી તમારા Android ફોન પર નંબર મોકલવા માટે, સેટિંગમાં બંને ડિવાઇસ માટે <ph name="TROUBLESHOOT_LINK" />.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">સેટિંગને મેનેજ કરો</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{1ક. માં}one{#ક. માં}other{#ક. માં}}</translation>
 <translation id="2583543531130364912">તમારી ટચસ્ક્રીનને કેલિબ્રેટ કરો</translation>
+<translation id="2586657967955657006">ક્લિપબોર્ડ</translation>
 <translation id="2666092431469916601">ઉપર</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" />માંથી શેર કર્યું</translation>
 <translation id="271033894570825754">નવું</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ફોલ્ડર ખોલો</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{1 વર્ષ પહેલાં}one{# વર્ષ પહેલાં}other{# વર્ષ પહેલાં}}</translation>
+<translation id="2878511608894704031">બધું ડિલીટ કરો</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{1દિ. માં}one{#દિ. માં}other{#દિ. માં}}</translation>
 <translation id="2931838996092594335">ક્લિક કરો</translation>
 <translation id="2981684127883932071">સૂચનો બતાવી રહ્યાં છીએ</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">બોલવાનું પ્રારંભ કરો</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" />ને ફોલ્ડર <ph name="FOLDER_NAME" />માં ખસેડી.</translation>
 <translation id="4316910396681052118">બધી ઍપ્લિકેશનો</translation>
+<translation id="4491109536499578614">છબી</translation>
 <translation id="4588090240171750605">જમણે સ્ક્રોલ કરો</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, સ્ટાર રેટિંગ <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, ઍપ માટે સુઝાવ</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 દિવસ અને }one{# દિવસ અને }other{# દિવસ અને }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1વ. માં}one{#વ. માં}other{#વ. માં}}</translation>
+<translation id="588258955323874662">પૂર્ણસ્ક્રીન</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 સેકન્ડ બાકી}one{# સેકન્ડ બાકી}other{# સેકન્ડ બાકી}}</translation>
 <translation id="5941711191222866238">નાનું કરો</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 કલાક}one{# કલાક}other{# કલાક}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">આ ઍપના બધા નોટિફિકેશનો અવરોધિત કરો</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{1 સેકંડ પહેલાં}one{# સેકંડ પહેલાં}other{# સેકંડ પહેલાં}}</translation>
+<translation id="6503257047630241175">RTF કન્ટેન્ટ</translation>
 <translation id="6539092367496845964">કંઈક ખોટું થયું હતું. થોડીવાર પછી ફરી પ્રયાસ કરો.</translation>
 <translation id="654149438358937226">તમામ નોટિફિકેશનને બ્લૉક કરો</translation>
 <translation id="6567071839949112727">ઍન્સેસ્ટર પર ક્લિક કરો</translation>

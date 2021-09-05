@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">ລາຍ​ການ​​ລາຍ​ຊື່</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">ປັດສອງນິ້ວມືໄປຂວາ</translation>
+<translation id="1016393160682012902">ກົດປຸ່ມ qwerty, ປຸ່ມອັກສອນນູນແບບໂຫຼດຂໍ້ມູນໃໝ່ໄດ້ ຫຼື ແຕະທ່າທາງເພື່ອຮຽນຮູ້ຟັງຊັນຂອງມັນ. ກົດປຸ່ມ Control ພ້ອມກັບ w ຫຼື escape ເພື່ອອອກ.</translation>
 <translation id="1022586497894531524">ທ່ານກຳລັງໃຊ້ການຕອບສະໜອງແບບສຽງເວົ້າຂອງ ChromeVox ເປັນຄັ້ງທຳອິດບໍ? ການສອນການນຳໃຊ້ໂດຍຫຍໍ້ນີ້ອະທິບາຍສິ່ງສຳຄັນຕ່າງໆສຳລັບການເລີ່ມນຳໃຊ້ ChromeVox.</translation>
 <translation id="1025074108959230262">ໂໝດໜຽວປິດໃຊ້ງານແລ້ວ</translation>
 <translation id="1031961866430398710">ຈາກນັ້ນ</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">ລິ້ງພາຍໃນ</translation>
 <translation id="4909019435900810068">ຍ້າຍກັບຫຼັງໜຶ່ງຄຳສັບ</translation>
 <translation id="4911349081560453449">ບໍ່ມີກ່ອງໝາຍກ່ອນໜ້າ</translation>
-<translation id="4915087353619183190">ກຳລັງເລີ່ມໂໝດການຮຽນຮູ້. ກົດປຸ່ມ qwerty, ປຸ່ມອັກສອນນູນແບບໂຫຼດຂໍ້ມູນໃໝ່ໄດ້ ຫຼື ແຕະທ່າທາງເພື່ອຮຽນຮູ້ຟັງຊັນຂອງມັນ. ກົດປຸ່ມ Control ພ້ອມກັບ w ຫຼື escape ເພື່ອອອກ.</translation>
 <translation id="492295894462528572">ຄຳນຳ</translation>
 <translation id="495046168593986294">ເລື່ອນຂຶ້ນ</translation>
 <translation id="495170559598752135">ການກະທໍາ</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">ສີ​ຂຽວ</translation>
 <translation id="602001110135236999">ເລື່ອນໄປຊ້າຍ</translation>
 <translation id="6034000775414344507">ສີເທົາອ່ອນ</translation>
+<translation id="6036135911048686884">ແຕະສຳຫຼວດ</translation>
 <translation id="6037602951055904232">ແພນໄປຕໍ່</translation>
 <translation id="6044160928851315051">ເຮັດໃຫ້ໜ້າຈໍມືດລົງ</translation>
 <translation id="6082768461603900813">ການນຳທາງພື້ນຖານ</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ ປອນ}other{ # ສັນຍາລັກປອນ}}</translation>
 <translation id="8378855320830505539">ພາກພື້ນ</translation>
 <translation id="8382679411218029383">ໃນແຖວ ແລະລາຍຊື່ການຕື່ມເຕັມອັດຕະໂນມັດ</translation>
+<translation id="8394908167088220973">ຫຼິ້ນ/</translation>
 <translation id="8428213095426709021">ການ​ຕັ້ງຄ່າ</translation>
 <translation id="8428603554127842284">ລະ​ດັບ <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">ອອກ​ເນື້ອ​ໃນທີ່ເຮັດເປັນໂຄງຮ່າງໄວ້​, ເຊັ່ນ​: ຕາ​ຕະ​ລາງ</translation>
 <translation id="8779057862865475116">ບໍ່ມີລິ້ງກ່ອນໜ້າ</translation>
 <translation id="8796411681063377102">ຫົວຂໍ້ລະ​ດັບ​ 3 ຕໍ່​ໄປ</translation>
+<translation id="8823311177246872527">ໜ້າທີ <ph name="CURRENTPAGE" /> ຈາກທັງໝົດ <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">ປ້າຍຄໍາຂັວນ</translation>
 <translation id="8851136666856101339">ຕົ້ນ​ຕໍ</translation>
 <translation id="8882002077197914455">ຫົວແຖວ</translation>

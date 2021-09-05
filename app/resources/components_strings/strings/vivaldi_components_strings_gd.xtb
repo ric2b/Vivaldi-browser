@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="gd">
-<translation id="1152921474424827756">Dèan inntrigeadh dha a <ph name="BEGIN_LINK" />lethbhreac taisgte<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885">Dhùin <ph name="HOST_NAME" /> an ceangal gu h-obann.</translation>
 <translation id="1161325031994447685">Dèan ceangal ris a’ WiFi às ùr</translation>
 <translation id="1175364870820465910">&amp;Clò-bhuail...</translation>
@@ -14,9 +13,7 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Tha thu a’ coimhead air a’ chòd tùsail aig làrach-lìn</translation>
 <translation id="1734878702283171397">Feuch is cuir fios gu rianaire an t-siostaim.</translation>
-<translation id="194030505837763158">Tadhail air <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Adhartach</translation>
-<translation id="2030481566774242610">An e <ph name="LINK" /> a bha fa-near dhut?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />A’ sgrùdadh a’ phrogsaidh agus na cachaileith-theine<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Chan urrainn dhan làrach ceangal tèarainte a thoirt seachad</translation>
 <translation id="2230458221926704099">Càirich an ceangal agad leis an <ph name="BEGIN_LINK" />aplacaid diagnosachd<ph name="END_LINK" /></translation>
@@ -62,7 +59,6 @@
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />A’ sgrùdadh seòladh a’ phrogsaidh<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
 <translation id="5355557959165512791">Chan urrainn dhut tadhal air <ph name="SITE" /> an-dràsta fhèin a chionn ’s gun deach an teisteanas aige a ghairm air ais. Cha mhair mearachdan lìonraidh is ionnsaighean mar is trice agus tha deagh-theans gun obraich an duilleag seo an ceann greis.</translation>
-<translation id="5431657950005405462">Cha deach am faidhle agad a lorg</translation>
 <translation id="5452270690849572955">Chan urrainn dhuinn an duilleag “<ph name="HOST_NAME" />” a lorg</translation>
 <translation id="5492298309214877701">Tha an aon URL aig an làrach seo air eadra-lìon a’ chompanaidh, a’ bhuidhinn no na sgoile ’s a tha aig làrach-lìn air an taobh a-muigh.
 <ph name="LINE_BREAK" />

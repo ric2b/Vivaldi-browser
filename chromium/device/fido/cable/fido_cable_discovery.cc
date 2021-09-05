@@ -26,6 +26,7 @@
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 #include "device/fido/cable/fido_ble_uuids.h"
 #include "device/fido/cable/fido_cable_handshake_handler.h"
+#include "device/fido/cable/fido_tunnel_device.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_parsing_utils.h"
 
@@ -43,7 +44,7 @@ std::unique_ptr<BluetoothAdvertisement::Data> ConstructAdvertisementData(
   auto advertisement_data = std::make_unique<BluetoothAdvertisement::Data>(
       BluetoothAdvertisement::AdvertisementType::ADVERTISEMENT_TYPE_BROADCAST);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   auto list = std::make_unique<BluetoothAdvertisement::UUIDList>();
   list->emplace_back(kCableAdvertisementUUID16);
   list->emplace_back(fido_parsing_utils::ConvertBytesToUuid(client_eid));
@@ -129,13 +130,14 @@ enum class FidoCableDiscovery::CableV1DiscoveryEvent : int {
 
 FidoCableDiscovery::Result::Result() = default;
 
-FidoCableDiscovery::Result::Result(const CableDiscoveryData& in_discovery_data,
-                                   const CableNonce& in_nonce,
-                                   const CableEidArray& in_eid,
-                                   base::Optional<int> in_ticks_back)
+FidoCableDiscovery::Result::Result(
+    const CableDiscoveryData& in_discovery_data,
+    const CableEidArray& in_eid,
+    base::Optional<CableEidArray> in_decrypted_eid,
+    base::Optional<int> in_ticks_back)
     : discovery_data(in_discovery_data),
-      nonce(in_nonce),
       eid(in_eid),
+      decrypted_eid(std::move(in_decrypted_eid)),
       ticks_back(in_ticks_back) {}
 
 FidoCableDiscovery::Result::Result(const Result& other) = default;
@@ -154,12 +156,14 @@ FidoCableDiscovery::FidoCableDiscovery(
     base::Optional<QRGeneratorKey> qr_generator_key,
     base::Optional<
         base::RepeatingCallback<void(std::unique_ptr<CableDiscoveryData>)>>
-        pairing_callback)
+        pairing_callback,
+    network::mojom::NetworkContext* network_context)
     : FidoDeviceDiscovery(
           FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy),
       discovery_data_(std::move(discovery_data)),
       qr_generator_key_(std::move(qr_generator_key)),
-      pairing_callback_(std::move(pairing_callback)) {
+      pairing_callback_(std::move(pairing_callback)),
+      network_context_(network_context) {
 // Windows currently does not support multiple EIDs, thus we ignore any extra
 // discovery data.
 // TODO(https://crbug.com/837088): Add support for multiple EIDs on Windows.
@@ -190,12 +194,11 @@ FidoCableDiscovery::~FidoCableDiscovery() {
     adapter_->RemoveObserver(this);
 }
 
-base::Optional<std::unique_ptr<FidoCableHandshakeHandler>>
-FidoCableDiscovery::CreateHandshakeHandler(
+std::unique_ptr<FidoCableHandshakeHandler>
+FidoCableDiscovery::CreateV1HandshakeHandler(
     FidoCableDevice* device,
     const CableDiscoveryData& discovery_data,
-    const CableNonce& nonce,
-    const CableEidArray& eid) {
+    const CableEidArray& authenticator_eid) {
   std::unique_ptr<FidoCableHandshakeHandler> handler;
   switch (discovery_data.version) {
     case CableDiscoveryData::Version::V1: {
@@ -205,34 +208,15 @@ FidoCableDiscovery::CreateHandshakeHandler(
           discovery_data.v1->client_eid, 0, &nonce);
       DCHECK(ok);
 
-      handler.reset(new FidoCableV1HandshakeHandler(
-          device, nonce, discovery_data.v1->session_pre_key));
-      break;
+      return std::make_unique<FidoCableV1HandshakeHandler>(
+          device, nonce, discovery_data.v1->session_pre_key);
     }
 
-    case CableDiscoveryData::Version::V2: {
-      if (!base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
-        return base::nullopt;
-      }
-      if (!pairing_callback_) {
-        FIDO_LOG(DEBUG) << "Discarding caBLE v2 handshake because of missing "
-                           "pairing callback";
-        return base::nullopt;
-      }
-
-      handler.reset(new FidoCableV2HandshakeHandler(
-          device, discovery_data.v2->psk_gen_key, nonce, eid,
-          discovery_data.v2->peer_identity,
-          discovery_data.v2->local_identity_seed, *pairing_callback_));
-      break;
-    }
-
+    case CableDiscoveryData::Version::V2:
     case CableDiscoveryData::Version::INVALID:
       CHECK(false);
-      return base::nullopt;
+      return nullptr;
   }
-
-  return handler;
 }
 
 // static
@@ -372,17 +356,13 @@ void FidoCableDiscovery::AdapterDiscoveringChanged(BluetoothAdapter* adapter,
 
 void FidoCableDiscovery::FidoCableDeviceConnected(FidoCableDevice* device,
                                                   bool success) {
-  if (!success || !IsObservedV1Device(device->GetAddress())) {
-    return;
+  if (success) {
+    RecordCableV1DiscoveryEventOnce(
+        CableV1DiscoveryEvent::kFirstCableDeviceGATTConnected);
   }
-  RecordCableV1DiscoveryEventOnce(
-      CableV1DiscoveryEvent::kFirstCableDeviceGATTConnected);
 }
 
 void FidoCableDiscovery::FidoCableDeviceTimeout(FidoCableDevice* device) {
-  if (!IsObservedV1Device(device->GetAddress())) {
-    return;
-  }
   RecordCableV1DiscoveryEventOnce(
       CableV1DiscoveryEvent::kFirstCableDeviceTimeout);
 }
@@ -521,24 +501,41 @@ void FidoCableDiscovery::CableDeviceFound(BluetoothAdapter* adapter,
   }
 #endif  // defined(OS_CHROMEOS) || defined(OS_LINUX)
 
-  auto cable_device =
-      std::make_unique<FidoCableDevice>(adapter, device_address);
-  cable_device->set_observer(this);
+  switch (result->discovery_data.version) {
+    case CableDiscoveryData::Version::V1: {
+      auto cable_device =
+          std::make_unique<FidoCableDevice>(adapter, device_address);
+      cable_device->set_observer(this);
 
-  base::Optional<std::unique_ptr<FidoCableHandshakeHandler>> handshake_handler =
-      CreateHandshakeHandler(cable_device.get(), result->discovery_data,
-                             result->nonce, result->eid);
-  if (!handshake_handler) {
-    return;
+      std::unique_ptr<FidoCableHandshakeHandler> handshake_handler =
+          CreateV1HandshakeHandler(cable_device.get(), result->discovery_data,
+                                   result->eid);
+      auto* const handshake_handler_ptr = handshake_handler.get();
+      active_handshakes_.emplace_back(std::move(cable_device),
+                                      std::move(handshake_handler));
+
+      StopAdvertisements(
+          base::BindOnce(&FidoCableDiscovery::ConductEncryptionHandshake,
+                         weak_factory_.GetWeakPtr(), handshake_handler_ptr,
+                         result->discovery_data.version));
+      break;
+    }
+
+    case CableDiscoveryData::Version::V2: {
+      if (!base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport) ||
+          !network_context_) {
+        return;
+      }
+      AddDevice(std::make_unique<cablev2::FidoTunnelDevice>(
+          network_context_, *result->discovery_data.v2, result->eid,
+          *result->decrypted_eid));
+      break;
+    }
+
+    case CableDiscoveryData::Version::INVALID:
+      CHECK(false);
+      return;
   }
-  auto* const handshake_handler_ptr = handshake_handler->get();
-  active_handshakes_.emplace_back(std::move(cable_device),
-                                  std::move(*handshake_handler));
-
-  StopAdvertisements(
-      base::BindOnce(&FidoCableDiscovery::ConductEncryptionHandshake,
-                     weak_factory_.GetWeakPtr(), handshake_handler_ptr,
-                     result->discovery_data.version));
 }
 
 void FidoCableDiscovery::ConductEncryptionHandshake(
@@ -635,9 +632,6 @@ FidoCableDiscovery::GetCableDiscoveryData(const BluetoothDevice* device) const {
   auto observed_data = std::make_unique<ObservedDeviceData>();
   observed_data->service_data = maybe_eid_from_service_data;
   observed_data->uuids = uuids;
-  if (result) {
-    observed_data->maybe_discovery_data = result->discovery_data;
-  }
   observed_devices_.insert_or_assign(address, std::move(observed_data));
 
   return result;
@@ -688,9 +682,9 @@ base::Optional<FidoCableDiscovery::Result>
 FidoCableDiscovery::GetCableDiscoveryDataFromAuthenticatorEid(
     CableEidArray authenticator_eid) const {
   for (const auto& candidate : discovery_data_) {
-    auto maybe_nonce = candidate.Match(authenticator_eid);
-    if (maybe_nonce) {
-      return Result(candidate, *maybe_nonce, authenticator_eid, base::nullopt);
+    if (candidate.version == CableDiscoveryData::Version::V1 &&
+        candidate.MatchV1(authenticator_eid)) {
+      return Result(candidate, authenticator_eid, base::nullopt, base::nullopt);
     }
   }
 
@@ -708,9 +702,9 @@ FidoCableDiscovery::GetCableDiscoveryDataFromAuthenticatorEid(
       auto identity_key_seed = CableDiscoveryData::DeriveIdentityKeySeed(
           *qr_generator_key_, current_tick - i);
       CableDiscoveryData candidate(qr_secret, identity_key_seed);
-      auto maybe_nonce = candidate.Match(authenticator_eid);
-      if (maybe_nonce) {
-        return Result(candidate, *maybe_nonce, authenticator_eid, i);
+      CableEidArray decrypted;
+      if (candidate.MatchV2(authenticator_eid, &decrypted)) {
+        return Result(candidate, authenticator_eid, decrypted, i);
       }
     }
 
@@ -720,7 +714,8 @@ FidoCableDiscovery::GetCableDiscoveryDataFromAuthenticatorEid(
         auto qr_secret = CableDiscoveryData::DeriveQRSecret(*qr_generator_key_,
                                                             current_tick - i);
         CableDiscoveryData candidate(qr_secret, dummy_seed);
-        if (candidate.Match(authenticator_eid)) {
+        CableEidArray decrypted;
+        if (candidate.MatchV2(authenticator_eid, &decrypted)) {
           noted_obsolete_eids_.insert(authenticator_eid);
           FIDO_LOG(DEBUG)
               << "(EID " << base::HexEncode(authenticator_eid) << " is " << i
@@ -732,13 +727,6 @@ FidoCableDiscovery::GetCableDiscoveryDataFromAuthenticatorEid(
   }
 
   return base::nullopt;
-}
-
-bool FidoCableDiscovery::IsObservedV1Device(const std::string& address) const {
-  const auto it = observed_devices_.find(address);
-  return it != observed_devices_.end() && it->second->maybe_discovery_data &&
-         it->second->maybe_discovery_data->version ==
-             CableDiscoveryData::Version::V1;
 }
 
 void FidoCableDiscovery::RecordCableV1DiscoveryEventOnce(

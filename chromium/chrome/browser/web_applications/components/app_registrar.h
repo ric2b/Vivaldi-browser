@@ -87,6 +87,8 @@ class AppRegistrar {
   virtual std::string GetAppDescription(const AppId& app_id) const = 0;
   virtual base::Optional<SkColor> GetAppThemeColor(
       const AppId& app_id) const = 0;
+  virtual base::Optional<SkColor> GetAppBackgroundColor(
+      const AppId& app_id) const = 0;
   virtual const GURL& GetAppLaunchURL(const AppId& app_id) const = 0;
 
   // TODO(crbug.com/910016): Replace uses of this with GetAppScope().
@@ -95,6 +97,8 @@ class AppRegistrar {
 
   virtual DisplayMode GetAppDisplayMode(const AppId& app_id) const = 0;
   virtual DisplayMode GetAppUserDisplayMode(const AppId& app_id) const = 0;
+  virtual std::vector<DisplayMode> GetAppDisplayModeOverride(
+      const AppId& app_id) const = 0;
 
   virtual base::Time GetAppLastLaunchTime(const AppId& app_id) const = 0;
   virtual base::Time GetAppInstallTime(const AppId& app_id) const = 0;
@@ -105,16 +109,20 @@ class AppRegistrar {
       const AppId& app_id) const = 0;
 
   // Represents which icon sizes we successfully downloaded from the IconInfos.
-  virtual std::vector<SquareSizePx> GetAppDownloadedIconSizes(
+  virtual std::vector<SquareSizePx> GetAppDownloadedIconSizesAny(
       const AppId& app_id) const = 0;
 
   // Returns the "shortcuts" field from the app manifest, use |AppIconManager|
   // to load shortcuts menu icons bitmaps data.
-  virtual std::vector<WebApplicationShortcutsMenuItemInfo> GetAppShortcutInfos(
+  virtual std::vector<WebApplicationShortcutsMenuItemInfo>
+  GetAppShortcutsMenuItemInfos(const AppId& app_id) const = 0;
+
+  // Returns the Run on OS Login mode.
+  virtual RunOnOsLoginMode GetAppRunOnOsLoginMode(
       const AppId& app_id) const = 0;
 
   // Represents which icon sizes we successfully downloaded from the
-  // ShortcutInfos.
+  // ShortcutsMenuItemInfos.
   virtual std::vector<std::vector<SquareSizePx>>
   GetAppDownloadedShortcutsMenuIconsSizes(const AppId& app_id) const = 0;
 
@@ -159,7 +167,13 @@ class AppRegistrar {
   // complete installation via the PendingAppManager.
   bool IsPlaceholderApp(const AppId& app_id) const;
 
+  // Computes and returns the DisplayMode, accounting for user preference
+  // to launch in a browser window and entries in the web app manifest.
   DisplayMode GetAppEffectiveDisplayMode(const AppId& app_id) const;
+
+  // Computes and returns the DisplayMode only accounting for
+  // entries in the web app manifest.
+  DisplayMode GetEffectiveDisplayModeFromManifest(const AppId& app_id) const;
 
   // TODO(crbug.com/897314): Finish experiment by legitimising it as a
   // DisplayMode or removing entirely.

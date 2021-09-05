@@ -89,10 +89,6 @@ void FakeAssistantManagerServiceImpl::StartTextInteraction(
 
 void FakeAssistantManagerServiceImpl::StartVoiceInteraction() {}
 
-void FakeAssistantManagerServiceImpl::StartWarmerWelcomeInteraction(
-    int num_warmer_welcome_triggered,
-    bool allow_tts) {}
-
 void FakeAssistantManagerServiceImpl::StopActiveInteraction(
     bool cancel_conversation) {}
 
@@ -103,11 +99,11 @@ void FakeAssistantManagerServiceImpl::RemoveAssistantInteractionSubscriber(
     AssistantInteractionSubscriber* subscriber) {}
 
 void FakeAssistantManagerServiceImpl::RetrieveNotification(
-    const mojom::AssistantNotification& notification,
+    const AssistantNotification& notification,
     int action_index) {}
 
 void FakeAssistantManagerServiceImpl::DismissNotification(
-    const mojom::AssistantNotification& notification) {}
+    const AssistantNotification& notification) {}
 
 void FakeAssistantManagerServiceImpl::OnAccessibilityStatusChanged(
     bool spoken_feedback_enabled) {}

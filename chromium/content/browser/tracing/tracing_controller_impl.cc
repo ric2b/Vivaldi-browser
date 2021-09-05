@@ -13,6 +13,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
+#include "base/dcheck_is_on.h"
 #include "base/files/file_tracing.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -40,6 +41,7 @@
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/network_change_notifier.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
+#include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 #include "services/tracing/public/cpp/trace_event_agent.h"
 #include "services/tracing/public/cpp/traced_process_impl.h"
 #include "services/tracing/public/cpp/tracing_features.h"
@@ -188,6 +190,9 @@ TracingControllerImpl::TracingControllerImpl()
           base::BindOnce(&TracingControllerImpl::OnMachineStatisticsLoaded,
                          weak_ptr_factory_.GetWeakPtr()));
 #endif
+
+  tracing::PerfettoTracedProcess::Get()->SetConsumerConnectionFactory(
+      &GetTracingService, base::ThreadTaskRunnerHandle::Get());
 }
 
 TracingControllerImpl::~TracingControllerImpl() = default;
@@ -253,6 +258,10 @@ TracingControllerImpl::GenerateMetadataDict() {
 #endif  // defined(OS_ANDROID)
   metadata_dict->SetInteger("chrome-bitness", 8 * sizeof(uintptr_t));
 
+#if DCHECK_IS_ON()
+  metadata_dict->SetInteger("chrome-dcheck-on", 1);
+#endif
+
   // OS
 #if defined(OS_CHROMEOS)
   metadata_dict->SetString("os-name", "CrOS");
@@ -306,7 +315,7 @@ TracingControllerImpl::GenerateMetadataDict() {
   metadata_dict->SetString("gpu-psver", gpu_info.pixel_shader_version);
   metadata_dict->SetString("gpu-vsver", gpu_info.vertex_shader_version);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   metadata_dict->SetString("gpu-glver", gpu_info.gl_version);
 #elif defined(OS_POSIX)
   metadata_dict->SetString("gpu-gl-vendor", gpu_info.gl_vendor);

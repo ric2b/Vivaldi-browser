@@ -29,16 +29,17 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/policy/browser_dm_token_storage.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/chrome_policy_conversions_client.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/schema_registry_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
+#include "chrome/browser/ui/webui/version_ui.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/grit/chromium_strings.h"
+#include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/browser/cloud/message_util.h"
 #include "components/policy/core/browser/configuration_policy_handler_list.h"
@@ -93,7 +94,7 @@
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -1221,9 +1222,7 @@ std::string PolicyUIHandler::GetPoliciesAsJson() const {
                                    : IDS_VERSION_UI_UNOFFICIAL)
           .c_str(),
       (channel_name.empty() ? "" : " " + channel_name).c_str(),
-      l10n_util::GetStringUTF8(sizeof(void*) == 8 ? IDS_VERSION_UI_64BIT
-                                                  : IDS_VERSION_UI_32BIT)
-          .c_str(),
+      l10n_util::GetStringUTF8(VersionUI::VersionProcessorVariation()).c_str(),
       cohort_name.c_str());
   chrome_metadata.SetKey("version", base::Value(version));
 
@@ -1231,7 +1230,7 @@ std::string PolicyUIHandler::GetPoliciesAsJson() const {
   chrome_metadata.SetKey("platform",
                          base::Value(chromeos::version_loader::GetVersion(
                              chromeos::version_loader::VERSION_FULL)));
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   chrome_metadata.SetKey("OS", base::Value(base::mac::GetOSDisplayName()));
 #else
   std::string os = version_info::GetOSType();

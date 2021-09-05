@@ -223,20 +223,19 @@ const SiteSettingsBehaviorImpl = {
         ContentSettingsTypes.PAYMENT_HANDLER,
         'enablePaymentHandlerContentSetting');
     addOrRemoveSettingWithFlag(
-        ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE,
-        'enableNativeFileSystemWriteContentSetting');
+        ContentSettingsTypes.FILE_SYSTEM_WRITE,
+        'enableFileSystemWriteContentSetting');
     addOrRemoveSettingWithFlag(
         ContentSettingsTypes.MIXEDSCRIPT,
         'enableInsecureContentContentSetting');
-    addOrRemoveSettingWithFlag(
-        ContentSettingsTypes.HID_DEVICES,
-        'enableExperimentalWebPlatformFeatures');
     addOrRemoveSettingWithFlag(
         ContentSettingsTypes.BLUETOOTH_DEVICES,
         'enableWebBluetoothNewPermissionsBackend');
     addOrRemoveSettingWithFlag(
         ContentSettingsTypes.WINDOW_PLACEMENT,
         'enableExperimentalWebPlatformFeatures');
+    addOrRemoveSettingWithFlag(
+        ContentSettingsTypes.FONT_ACCESS, 'enableFontAccessContentSetting');
     return this.contentTypes_.slice(0);
   },
 

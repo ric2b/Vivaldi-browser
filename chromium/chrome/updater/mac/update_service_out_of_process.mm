@@ -18,8 +18,8 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #import "chrome/updater/app/server/mac/service_protocol.h"
 #import "chrome/updater/app/server/mac/update_service_wrappers.h"
-#import "chrome/updater/mac/setup/info_plist.h"
 #import "chrome/updater/mac/xpc_service_names.h"
+#include "chrome/updater/service_scope.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_version.h"
 #include "components/update_client/update_client_errors.h"
@@ -48,7 +48,7 @@ using base::SysUTF8ToNSString;
 - (instancetype)initWithConnectionOptions:(NSXPCConnectionOptions)options {
   if ((self = [super init])) {
     _updateCheckXPCConnection.reset([[NSXPCConnection alloc]
-        initWithMachServiceName:updater::GetGoogleUpdateServiceMachName().get()
+        initWithMachServiceName:updater::GetServiceMachName().get()
                         options:options]);
 
     _updateCheckXPCConnection.get().remoteObjectInterface =
@@ -71,19 +71,6 @@ using base::SysUTF8ToNSString;
 - (void)dealloc {
   [_updateCheckXPCConnection invalidate];
   [super dealloc];
-}
-
-- (void)getUpdaterVersionWithReply:
-    (void (^_Nonnull)(NSString* _Nullable version))reply {
-  auto errorHandler = ^(NSError* xpcError) {
-    LOG(ERROR) << "XPC connection failed: "
-               << base::SysNSStringToUTF8([xpcError description]);
-    reply(nil);
-  };
-
-  [[_updateCheckXPCConnection.get()
-      remoteObjectProxyWithErrorHandler:errorHandler]
-      getUpdaterVersionWithReply:reply];
 }
 
 - (void)registerForUpdatesWithAppId:(NSString* _Nullable)appId
@@ -140,100 +127,18 @@ using base::SysUTF8ToNSString;
                         reply:reply];
 }
 
-- (void)haltForUpdateToVersion:(NSString* _Nonnull)version
-                         reply:(void (^_Nonnull)(BOOL shouldUpdate))reply {
-  auto errorHandler = ^(NSError* xpcError) {
-    LOG(ERROR) << "XPC connection failed: "
-               << base::SysNSStringToUTF8([xpcError description]);
-    reply(NO);
-  };
-
-  [[_updateCheckXPCConnection remoteObjectProxyWithErrorHandler:errorHandler]
-      haltForUpdateToVersion:version
-                       reply:reply];
-}
-
-@end
-
-// Interface to communicate with the XPC Updater Service.
-@interface CRUAdministrationServiceOutOfProcessImpl
-    : NSObject <CRUAdministering>
-
-- (instancetype)initPrivileged;
-
-@end
-
-@implementation CRUAdministrationServiceOutOfProcessImpl {
-  base::scoped_nsobject<NSXPCConnection> _administrationXPCConnection;
-}
-
-- (instancetype)init {
-  return [self initWithConnectionOptions:0];
-}
-
-- (instancetype)initPrivileged {
-  return [self initWithConnectionOptions:NSXPCConnectionPrivileged];
-}
-
-- (instancetype)initWithConnectionOptions:(NSXPCConnectionOptions)options {
-  if ((self = [super init])) {
-    const std::unique_ptr<updater::InfoPlist> infoPlist =
-        updater::InfoPlist::Create(updater::InfoPlistPath());
-    CHECK(infoPlist);
-
-    _administrationXPCConnection.reset([[NSXPCConnection alloc]
-        initWithMachServiceName:
-            base::mac::CFToNSCast(
-                infoPlist->GoogleUpdateServiceLaunchdNameVersioned().get())
-                        options:options]);
-
-    _administrationXPCConnection.get().remoteObjectInterface =
-        updater::GetXPCAdministeringInterface();
-
-    _administrationXPCConnection.get().interruptionHandler = ^{
-      LOG(WARNING) << "CRUAdministering: XPC connection interrupted.";
-    };
-
-    _administrationXPCConnection.get().invalidationHandler = ^{
-      LOG(WARNING) << "CRUAdministering: XPC connection invalidated.";
-    };
-
-    [_administrationXPCConnection resume];
-  }
-
-  return self;
-}
-
-- (void)dealloc {
-  [_administrationXPCConnection invalidate];
-  [super dealloc];
-}
-
-- (void)performAdminTasks {
-  auto errorHandler = ^(NSError* xpcError) {
-    LOG(ERROR) << "XPC connection failed: "
-               << base::SysNSStringToUTF8([xpcError description]);
-  };
-
-  [[_administrationXPCConnection remoteObjectProxyWithErrorHandler:errorHandler]
-      performAdminTasks];
-}
-
 @end
 
 namespace updater {
 
-UpdateServiceOutOfProcess::UpdateServiceOutOfProcess(
-    UpdateService::Scope scope) {
+UpdateServiceOutOfProcess::UpdateServiceOutOfProcess(ServiceScope scope) {
   switch (scope) {
-    case UpdateService::Scope::kSystem:
+    case ServiceScope::kSystem:
       client_.reset([[CRUUpdateServiceOutOfProcessImpl alloc] initPrivileged]);
       break;
-    case UpdateService::Scope::kUser:
+    case ServiceScope::kUser:
       client_.reset([[CRUUpdateServiceOutOfProcessImpl alloc] init]);
       break;
-    default:
-      CHECK(false) << "Unexpected value for UpdateService::Scope";
   }
   callback_runner_ = base::SequencedTaskRunnerHandle::Get();
 }

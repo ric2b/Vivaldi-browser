@@ -81,11 +81,12 @@ void ServiceWorkerScriptLoaderFactory::CreateLoaderAndStart(
   int64_t resource_id =
       version->script_cache_map()->LookupResourceId(resource_request.url);
   if (resource_id != blink::mojom::kInvalidServiceWorkerResourceId) {
-    std::unique_ptr<ServiceWorkerResponseReader> response_reader =
-        context_->storage()->CreateResponseReader(resource_id);
+    mojo::Remote<storage::mojom::ServiceWorkerResourceReader> resource_reader;
+    context_->registry()->GetRemoteStorageControl()->CreateResourceReader(
+        resource_id, resource_reader.BindNewPipeAndPassReceiver());
     mojo::MakeSelfOwnedReceiver(
         std::make_unique<ServiceWorkerInstalledScriptLoader>(
-            options, std::move(client), std::move(response_reader), version,
+            options, std::move(client), std::move(resource_reader), version,
             resource_request.url),
         std::move(receiver));
     return;
@@ -108,7 +109,7 @@ void ServiceWorkerScriptLoaderFactory::CreateLoaderAndStart(
       switch (it->second.result) {
         case ServiceWorkerSingleScriptUpdateChecker::Result::kIdentical:
           // Case D.1:
-          context_->storage()->GetNewResourceId(base::BindOnce(
+          context_->GetStorageControl()->GetNewResourceId(base::BindOnce(
               &ServiceWorkerScriptLoaderFactory::CopyScript,
               weak_factory_.GetWeakPtr(), it->first, it->second.old_resource_id,
               base::BindOnce(
@@ -136,7 +137,7 @@ void ServiceWorkerScriptLoaderFactory::CreateLoaderAndStart(
 
   // Case D.3:
   // Assign a new resource ID for the script from network.
-  context_->storage()->GetNewResourceId(base::BindOnce(
+  context_->GetStorageControl()->GetNewResourceId(base::BindOnce(
       &ServiceWorkerScriptLoaderFactory::OnResourceIdAssignedForNewScriptLoader,
       weak_factory_.GetWeakPtr(), std::move(receiver), routing_id, request_id,
       options, resource_request, std::move(client), traffic_annotation));
@@ -196,11 +197,15 @@ void ServiceWorkerScriptLoaderFactory::CopyScript(
     int64_t resource_id,
     base::OnceCallback<void(int64_t, net::Error)> callback,
     int64_t new_resource_id) {
-  ServiceWorkerStorage* storage = context_->storage();
+  mojo::Remote<storage::mojom::ServiceWorkerResourceReader> reader;
+  context_->registry()->GetRemoteStorageControl()->CreateResourceReader(
+      resource_id, reader.BindNewPipeAndPassReceiver());
+  mojo::Remote<storage::mojom::ServiceWorkerResourceWriter> writer;
+  context_->registry()->GetRemoteStorageControl()->CreateResourceWriter(
+      new_resource_id, writer.BindNewPipeAndPassReceiver());
 
   cache_writer_ = ServiceWorkerCacheWriter::CreateForCopy(
-      storage->CreateResponseReader(resource_id),
-      storage->CreateResponseWriter(new_resource_id));
+      std::move(reader), std::move(writer), new_resource_id);
 
   scoped_refptr<ServiceWorkerVersion> version = worker_host_->version();
   version->script_cache_map()->NotifyStartedCaching(url, new_resource_id);
@@ -222,6 +227,12 @@ void ServiceWorkerScriptLoaderFactory::OnCopyScriptFinished(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     int64_t new_resource_id,
     net::Error error) {
+  if (!worker_host_) {
+    // Null |worker_host_| means the worker has been terminated unexpectedly.
+    // Nothing can do in this case.
+    return;
+  }
+
   int64_t resource_size = cache_writer_->bytes_written();
   cache_writer_.reset();
   scoped_refptr<ServiceWorkerVersion> version = worker_host_->version();
@@ -242,10 +253,12 @@ void ServiceWorkerScriptLoaderFactory::OnCopyScriptFinished(
       resource_request.url, resource_size, net::OK, std::string());
 
   // Use ServiceWorkerInstalledScriptLoader to load the new copy.
+  mojo::Remote<storage::mojom::ServiceWorkerResourceReader> resource_reader;
+  context_->registry()->GetRemoteStorageControl()->CreateResourceReader(
+      new_resource_id, resource_reader.BindNewPipeAndPassReceiver());
   mojo::MakeSelfOwnedReceiver(
       std::make_unique<ServiceWorkerInstalledScriptLoader>(
-          options, std::move(client),
-          context_->storage()->CreateResponseReader(new_resource_id), version,
+          options, std::move(client), std::move(resource_reader), version,
           resource_request.url),
       std::move(receiver));
 }
@@ -259,6 +272,12 @@ void ServiceWorkerScriptLoaderFactory::OnResourceIdAssignedForNewScriptLoader(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     int64_t resource_id) {
+  if (!worker_host_) {
+    // Null |worker_host_| means the worker has been terminated unexpectedly.
+    // Nothing can do in this case.
+    return;
+  }
+
   if (resource_id == blink::mojom::kInvalidServiceWorkerResourceId) {
     mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
         ->OnComplete(network::URLLoaderCompletionStatus(net::ERR_ABORTED));

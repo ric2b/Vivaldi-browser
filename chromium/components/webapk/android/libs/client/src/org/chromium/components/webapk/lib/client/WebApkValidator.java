@@ -49,7 +49,6 @@ public class WebApkValidator {
     private static byte[] sExpectedSignature;
     private static byte[] sCommentSignedPublicKeyBytes;
     private static PublicKey sCommentSignedPublicKey;
-    private static boolean sDisableValidation;
     private static boolean sOverrideValidationForTesting;
 
     /**
@@ -178,8 +177,7 @@ public class WebApkValidator {
      */
     @SuppressLint("PackageManagerGetSignatures")
     public static boolean isValidWebApk(Context context, String webappPackageName) {
-        if ((sExpectedSignature == null || sCommentSignedPublicKeyBytes == null)
-                && !sDisableValidation) {
+        if (sExpectedSignature == null || sCommentSignedPublicKeyBytes == null) {
             Log.wtf(TAG,
                     "WebApk validation failure - expected signature not set."
                             + "missing call to WebApkValidator.initWithBrowserHostSignature");
@@ -199,7 +197,7 @@ public class WebApkValidator {
         if (isNotWebApkQuick(packageInfo)) {
             return false;
         }
-        if (sDisableValidation || sOverrideValidationForTesting) {
+        if (sOverrideValidationForTesting) {
             if (DEBUG) {
                 Log.d(TAG, "Ok! Looks like a WebApk (has start url) and validation is disabled.");
             }
@@ -409,19 +407,11 @@ public class WebApkValidator {
     }
 
     /**
-     * Disables all validation performed by this class. This is meant only for development with
-     * unsigned WebApks and should never be enabled in a real build.
+     * Sets whether validation performed by this class should be disabled. This is meant only for
+     * development with unsigned WebApks and should never be enabled in a real build.
      */
-    public static void disableValidationForTesting() {
-        sOverrideValidationForTesting = true;
-    }
-
-    /**
-     * Disables all validation performed by this class. This should only be called when some other
-     * means of validating WebApks is already present and otherwise should never be called.
-     */
-    public static void disableValidationUnsafe() {
-        sDisableValidation = true;
+    public static void setDisableValidationForTesting(boolean disable) {
+        sOverrideValidationForTesting = disable;
     }
 
     /**

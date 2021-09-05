@@ -17,7 +17,6 @@
 #include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/message_loop/message_pump_default.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/optional.h"
@@ -27,6 +26,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/current_thread.h"
 #include "base/task/sequence_manager/real_time_domain.h"
 #include "base/task/sequence_manager/sequence_manager.h"
 #include "base/task/sequence_manager/task_queue.h"
@@ -3479,6 +3479,8 @@ void SetOnTaskHandlers(scoped_refptr<TestTaskQueue> task_queue,
       [](int* counter, const Task& task, TaskQueue::TaskTiming* task_timing,
          LazyNow* lazy_now) { ++(*counter); },
       complete_counter));
+  task_queue->GetTaskQueueImpl()->SetOnTaskPostedHandler(
+      internal::TaskQueueImpl::OnTaskPostedHandler());
 }
 
 void UnsetOnTaskHandlers(scoped_refptr<TestTaskQueue> task_queue) {
@@ -3486,6 +3488,8 @@ void UnsetOnTaskHandlers(scoped_refptr<TestTaskQueue> task_queue) {
       internal::TaskQueueImpl::OnTaskStartedHandler());
   task_queue->GetTaskQueueImpl()->SetOnTaskCompletedHandler(
       internal::TaskQueueImpl::OnTaskCompletedHandler());
+  task_queue->GetTaskQueueImpl()->SetOnTaskPostedHandler(
+      internal::TaskQueueImpl::OnTaskPostedHandler());
 }
 }  // namespace
 
@@ -4264,7 +4268,7 @@ class DestructionObserverProbe : public RefCounted<DestructionObserverProbe> {
   bool* destruction_observer_called_;
 };
 
-class SMDestructionObserver : public MessageLoopCurrent::DestructionObserver {
+class SMDestructionObserver : public CurrentThread::DestructionObserver {
  public:
   SMDestructionObserver(bool* task_destroyed, bool* destruction_observer_called)
       : task_destroyed_(task_destroyed),
@@ -4757,181 +4761,6 @@ TEST_P(SequenceManagerTest, OnNativeWorkPending) {
   CheckPostedTaskRan(false);
   native_work_high.reset();
   CheckPostedTaskRan(true);
-}
-
-namespace {
-
-EnqueueOrder RunTaskAndCaptureEnqueueOrder(scoped_refptr<TestTaskQueue> queue) {
-  EnqueueOrder enqueue_order;
-  base::RunLoop run_loop;
-  queue->GetTaskQueueImpl()->SetOnTaskStartedHandler(base::BindLambdaForTesting(
-      [&](const Task& task, const TaskQueue::TaskTiming&) {
-        EXPECT_FALSE(enqueue_order);
-        enqueue_order = task.enqueue_order();
-        run_loop.Quit();
-      }));
-  run_loop.Run();
-  queue->GetTaskQueueImpl()->SetOnTaskStartedHandler({});
-  EXPECT_TRUE(enqueue_order);
-  return enqueue_order;
-}
-
-}  // namespace
-
-// Post a task. Install a fence at the beginning of time and remove it. The
-// task's EnqueueOrder should be less than
-// GetEnqueueOrderAtWhichWeBecameUnblocked().
-TEST_P(SequenceManagerTest,
-       GetEnqueueOrderAtWhichWeBecameUnblocked_PostInsertFenceBeginningOfTime) {
-  auto queue = CreateTaskQueue();
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->InsertFence(TaskQueue::InsertFencePosition::kBeginningOfTime);
-  queue->RemoveFence();
-  auto enqueue_order = RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_LT(enqueue_order, queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-}
-
-// Post a 1st task. Install a now fence. Post a 2nd task. Run the first task.
-// Remove the fence. The 2nd task's EnqueueOrder should be less than
-// GetEnqueueOrderAtWhichWeBecameUnblocked().
-TEST_P(SequenceManagerTest,
-       GetEnqueueOrderAtWhichWeBecameUnblocked_PostInsertNowFencePost) {
-  auto queue = CreateTaskQueue();
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->InsertFence(TaskQueue::InsertFencePosition::kNow);
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  queue->RemoveFence();
-  auto enqueue_order = RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_LT(enqueue_order, queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-}
-
-// Post a 1st task. Install a now fence. Post a 2nd task. Remove the fence.
-// GetEnqueueOrderAtWhichWeBecameUnblocked() should indicate that the queue was
-// never blocked (front task could always run).
-TEST_P(SequenceManagerTest,
-       GetEnqueueOrderAtWhichWeBecameUnblocked_PostInsertNowFencePost2) {
-  auto queue = CreateTaskQueue();
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->InsertFence(TaskQueue::InsertFencePosition::kNow);
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->RemoveFence();
-  RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-}
-
-// Post a 1st task. Install a now fence. Post a 2nd task. Install a now fence
-// (moves the previous fence). GetEnqueueOrderAtWhichWeBecameUnblocked() should
-// indicate that the queue was never blocked (front task could always run).
-TEST_P(
-    SequenceManagerTest,
-    GetEnqueueOrderAtWhichWeBecameUnblocked_PostInsertNowFencePostInsertNowFence) {
-  auto queue = CreateTaskQueue();
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->InsertFence(TaskQueue::InsertFencePosition::kNow);
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->InsertFence(TaskQueue::InsertFencePosition::kNow);
-  RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-}
-
-// Post a 1st task. Install a delayed fence. Post a 2nd task that will run
-// after the fence. Run the first task. Remove the fence. The 2nd task's
-// EnqueueOrder should be less than GetEnqueueOrderAtWhichWeBecameUnblocked().
-TEST_P(
-    SequenceManagerTest,
-    GetEnqueueOrderAtWhichWeBecameUnblocked_PostInsertDelayedFencePostAfterFence) {
-  constexpr TimeDelta kDelay = TimeDelta::FromSeconds(42);
-  const TimeTicks start_time = mock_tick_clock()->NowTicks();
-  auto queue =
-      CreateTaskQueue(TaskQueue::Spec("test").SetDelayedFencesAllowed(true));
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->InsertFenceAt(start_time + kDelay);
-  queue->task_runner()->PostDelayedTask(FROM_HERE, DoNothing(), 2 * kDelay);
-  RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  FastForwardBy(2 * kDelay);
-  queue->RemoveFence();
-  auto enqueue_order = RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_LT(enqueue_order, queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-}
-
-// Post a 1st task. Install a delayed fence. Post a 2nd task that will run
-// before the fence. GetEnqueueOrderAtWhichWeBecameUnblocked() should indicate
-// that the queue was never blocked (front task could always run).
-TEST_P(
-    SequenceManagerTest,
-    GetEnqueueOrderAtWhichWeBecameUnblocked_PostInsertDelayedFencePostBeforeFence) {
-  constexpr TimeDelta kDelay = TimeDelta::FromSeconds(42);
-  const TimeTicks start_time = mock_tick_clock()->NowTicks();
-  auto queue =
-      CreateTaskQueue(TaskQueue::Spec("test").SetDelayedFencesAllowed(true));
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->InsertFenceAt(start_time + 2 * kDelay);
-  queue->task_runner()->PostDelayedTask(FROM_HERE, DoNothing(), kDelay);
-  RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  FastForwardBy(3 * kDelay);
-  EXPECT_FALSE(queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  queue->RemoveFence();
-}
-
-// Post a 1st task. Disable the queue and re-enable it. Post a 2nd task. The 1st
-// task's EnqueueOrder should be less than
-// GetEnqueueOrderAtWhichWeBecameUnblocked().
-TEST_P(SequenceManagerTest,
-       GetEnqueueOrderAtWhichWeBecameUnblocked_PostDisablePostEnable) {
-  auto queue = CreateTaskQueue();
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->GetTaskQueueImpl()->SetQueueEnabled(false);
-  queue->GetTaskQueueImpl()->SetQueueEnabled(true);
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  auto first_enqueue_order = RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_LT(first_enqueue_order,
-            queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  auto second_enqueue_order = RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_GT(second_enqueue_order,
-            queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-}
-
-// Disable the queue. Post a 1st task. Re-enable the queue. Post a 2nd task.
-// The 1st task's EnqueueOrder should be less than
-// GetEnqueueOrderAtWhichWeBecameUnblocked().
-TEST_P(SequenceManagerTest,
-       GetEnqueueOrderAtWhichWeBecameUnblocked_DisablePostEnablePost) {
-  auto queue = CreateTaskQueue();
-  queue->GetTaskQueueImpl()->SetQueueEnabled(false);
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  queue->GetTaskQueueImpl()->SetQueueEnabled(true);
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  auto first_enqueue_order = RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_LT(first_enqueue_order,
-            queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-  auto second_enqueue_order = RunTaskAndCaptureEnqueueOrder(queue);
-  EXPECT_GT(second_enqueue_order,
-            queue->GetEnqueueOrderAtWhichWeBecameUnblocked());
-}
-
-TEST_P(SequenceManagerTest, OnTaskReady) {
-  auto queue = CreateTaskQueue();
-  int task_ready_count = 0;
-
-  queue->GetTaskQueueImpl()->SetOnTaskReadyHandler(
-      BindLambdaForTesting([&](const Task&, LazyNow*) { ++task_ready_count; }));
-
-  EXPECT_EQ(0, task_ready_count);
-  queue->task_runner()->PostTask(FROM_HERE, DoNothing());
-  EXPECT_EQ(1, task_ready_count);
-  queue->task_runner()->PostDelayedTask(FROM_HERE, DoNothing(),
-                                        base::TimeDelta::FromHours(1));
-  EXPECT_EQ(1, task_ready_count);
-  FastForwardBy(base::TimeDelta::FromHours(1));
-  EXPECT_EQ(2, task_ready_count);
 }
 
 namespace {

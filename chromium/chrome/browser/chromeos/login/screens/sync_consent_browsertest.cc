@@ -190,8 +190,8 @@ class SyncConsentTest : public OobeBaseTest {
   }
 
   void LoginToSyncConsentScreen() {
-    login_manager_mixin_.LoginAsNewReguarUser();
-    OobeScreenExitWaiter(GaiaView::kScreenId).Wait();
+    login_manager_mixin_.LoginAsNewRegularUser();
+    OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
     // No need to explicitly show the screen as it is the first one after login.
   }
 
@@ -356,7 +356,7 @@ IN_PROC_BROWSER_TEST_P(SyncConsentTestWithParams, SyncConsentTestWithLocale) {
 }
 
 // "es" tests language switching, "en-GB" checks switching to language varants.
-INSTANTIATE_TEST_SUITE_P(SyncConsentTestWithParamsImpl,
+INSTANTIATE_TEST_SUITE_P(All,
                          SyncConsentTestWithParams,
                          testing::Values("es", "en-GB"));
 
@@ -656,7 +656,6 @@ IN_PROC_BROWSER_TEST_F(SyncConsentActiveDirectoryTest, LoginDoesNotStartSync) {
   ad_login_.TestLoginVisible();
   ad_login_.SubmitActiveDirectoryCredentials(
       "test-user@locally-managed.localhost", "password");
-  test::WaitForLastScreenAndTapGetStarted();
   test::WaitForPrimaryUserSessionStart();
 
   // OS sync is off.

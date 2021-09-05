@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, getSelectDropdownBackground, NativeLayer, NativeLayerImpl, PrinterState, PrinterStatus, PrinterStatusReason, PrinterStatusSeverity} from 'chrome://print/print_preview.js';
+import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationType, getSelectDropdownBackground, NativeLayer, NativeLayerImpl, PrinterState, PrinterStatus, PrinterStatusReason, PrinterStatusSeverity, SAVE_TO_DRIVE_CROS_DESTINATION_KEY} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {Base, flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
 import {waitBeforeNextRender} from '../test_util.m.js';
 
 import {NativeLayerStub} from './native_layer_stub.js';
-import {getGoogleDriveDestination, selectOption} from './print_preview_test_utils.js';
+import {getGoogleDriveDestination, getSaveAsPdfDestination, selectOption} from './print_preview_test_utils.js';
 
 window.printer_status_test_cros = {};
 const printer_status_test_cros = window.printer_status_test_cros;
@@ -20,6 +21,7 @@ printer_status_test_cros.TestNames = {
   PrinterStatusUpdatesColor: 'printer status updates color',
   SendStatusRequestOnce: 'send status request once',
   HiddenStatusText: 'hidden status text',
+  ChangeIcon: 'change icon',
 };
 
 suite(printer_status_test_cros.suiteName, function() {
@@ -37,7 +39,7 @@ suite(printer_status_test_cros.suiteName, function() {
        printerId: 'ID1',
        statusReasons: [{
          reason: PrinterStatusReason.NO_ERROR,
-         severity: PrinterStatusSeverity.UNKOWN_SEVERITY
+         severity: PrinterStatusSeverity.UNKNOWN_SEVERITY
        }],
      },
      {
@@ -45,11 +47,11 @@ suite(printer_status_test_cros.suiteName, function() {
        statusReasons: [
          {
            reason: PrinterStatusReason.NO_ERROR,
-           severity: PrinterStatusSeverity.UNKOWN_SEVERITY
+           severity: PrinterStatusSeverity.UNKNOWN_SEVERITY
          },
          {
            reason: PrinterStatusReason.LOW_ON_PAPER,
-           severity: PrinterStatusSeverity.UNKOWN_SEVERITY
+           severity: PrinterStatusSeverity.UNKNOWN_SEVERITY
          }
        ],
      },
@@ -58,7 +60,7 @@ suite(printer_status_test_cros.suiteName, function() {
        statusReasons: [
          {
            reason: PrinterStatusReason.NO_ERROR,
-           severity: PrinterStatusSeverity.UNKOWN_SEVERITY
+           severity: PrinterStatusSeverity.UNKNOWN_SEVERITY
          },
          {
            reason: PrinterStatusReason.LOW_ON_PAPER,
@@ -71,7 +73,7 @@ suite(printer_status_test_cros.suiteName, function() {
        statusReasons: [
          {
            reason: PrinterStatusReason.NO_ERROR,
-           severity: PrinterStatusSeverity.UNKOWN_SEVERITY
+           severity: PrinterStatusSeverity.UNKNOWN_SEVERITY
          },
          {
            reason: PrinterStatusReason.LOW_ON_PAPER,
@@ -84,7 +86,7 @@ suite(printer_status_test_cros.suiteName, function() {
        statusReasons: [
          {
            reason: PrinterStatusReason.NO_ERROR,
-           severity: PrinterStatusSeverity.UNKOWN_SEVERITY
+           severity: PrinterStatusSeverity.UNKNOWN_SEVERITY
          },
          {
            reason: PrinterStatusReason.LOW_ON_PAPER,
@@ -97,7 +99,7 @@ suite(printer_status_test_cros.suiteName, function() {
        statusReasons: [
          {
            reason: PrinterStatusReason.DEVICE_ERROR,
-           severity: PrinterStatusSeverity.UNKOWN_SEVERITY
+           severity: PrinterStatusSeverity.UNKNOWN_SEVERITY
          },
          {
            reason: PrinterStatusReason.PRINTER_QUEUE_FULL,
@@ -192,31 +194,31 @@ suite(printer_status_test_cros.suiteName, function() {
             assertEquals(
                 PrinterState.GOOD,
                 dropdown.$$(`#${escapeForwardSlahes(destination1.key)}`)
-                    .firstChild.state);
+                    .firstChild.printerState);
             assertEquals(
                 PrinterState.GOOD,
                 dropdown.$$(`#${escapeForwardSlahes(destination2.key)}`)
-                    .firstChild.state);
+                    .firstChild.printerState);
             assertEquals(
                 PrinterState.GOOD,
                 dropdown.$$(`#${escapeForwardSlahes(destination3.key)}`)
-                    .firstChild.state);
+                    .firstChild.printerState);
             assertEquals(
                 PrinterState.ERROR,
                 dropdown.$$(`#${escapeForwardSlahes(destination4.key)}`)
-                    .firstChild.state);
+                    .firstChild.printerState);
             assertEquals(
                 PrinterState.ERROR,
                 dropdown.$$(`#${escapeForwardSlahes(destination5.key)}`)
-                    .firstChild.state);
+                    .firstChild.printerState);
             assertEquals(
                 PrinterState.ERROR,
                 dropdown.$$(`#${escapeForwardSlahes(destination6.key)}`)
-                    .firstChild.state);
+                    .firstChild.printerState);
             assertEquals(
                 PrinterState.UNKNOWN,
                 dropdown.$$(`#${escapeForwardSlahes(destination7.key)}`)
-                    .firstChild.state);
+                    .firstChild.printerState);
           });
         });
       });
@@ -255,20 +257,64 @@ suite(printer_status_test_cros.suiteName, function() {
       // trigger the error text being populated.
       const destinationWithErrorStatus =
           createDestination('ID4', 'Four', DestinationOrigin.CROS);
+      const cloudPrintDestination = new Destination(
+          'ID2', DestinationType.GOOGLE, DestinationOrigin.COOKIES, 'Two',
+          DestinationConnectionStatus.OFFLINE, {account: account});
 
       destinationSelect.recentDestinationList = [
         destinationWithoutErrorStatus,
         destinationWithErrorStatus,
+        cloudPrintDestination,
       ];
 
+      const destinationStatus =
+          destinationSelect.$$('.destination-additional-info');
+      const destinationEulaWrapper =
+          destinationSelect.$$('#destinationEulaWrapper');
+
+      destinationSelect.destination = cloudPrintDestination;
+      assertFalse(destinationStatus.hidden);
+      assertTrue(destinationEulaWrapper.hidden);
+
       destinationSelect.destination = destinationWithoutErrorStatus;
-      assertTrue(destinationSelect.$$('.destination-additional-info').hidden);
+      assertTrue(destinationStatus.hidden);
+      assertTrue(destinationEulaWrapper.hidden);
+
+      destinationSelect.set('destination.eulaUrl', 'chrome://os-credits/eula');
+      assertFalse(destinationEulaWrapper.hidden);
 
       destinationSelect.destination = destinationWithErrorStatus;
       return nativeLayer.whenCalled('requestPrinterStatusUpdate').then(() => {
-        assertFalse(
-            destinationSelect.$$('.destination-additional-info').hidden);
+        assertFalse(destinationStatus.hidden);
       });
+    });
+  });
+
+  test(assert(printer_status_test_cros.TestNames.ChangeIcon), function() {
+    return waitBeforeNextRender(destinationSelect).then(() => {
+      const localCrosPrinter =
+          createDestination('ID1', 'One', DestinationOrigin.CROS);
+      const saveToDrive = getGoogleDriveDestination('account');
+      const saveAsPdf = getSaveAsPdfDestination();
+
+      destinationSelect.recentDestinationList = [
+        localCrosPrinter,
+        saveToDrive,
+        saveAsPdf,
+      ];
+      const dropdown = destinationSelect.$$('#dropdown');
+
+      destinationSelect.destination = localCrosPrinter;
+      destinationSelect.updateDestination();
+      assertEquals('print-preview:print', dropdown.destinationIcon);
+
+      destinationSelect.destination = saveToDrive;
+      destinationSelect.updateDestination();
+      assertEquals('print-preview:save-to-drive', dropdown.destinationIcon);
+
+      destinationSelect.destination = saveAsPdf;
+      destinationSelect.updateDestination();
+      assertEquals('cr:insert-drive-file', dropdown.destinationIcon);
     });
   });
 });
@@ -279,16 +325,28 @@ destination_select_test_cros.suiteName = 'DestinationSelectTestCros';
 /** @enum {string} */
 destination_select_test_cros.TestNames = {
   UpdateStatus: 'update status',
+  UpdateStatusDeprecationWarnings: 'update status deprecation warnings',
   ChangeIcon: 'change icon',
-  EulaIsDisplayed: 'eula is displayed'
+  ChangeIconDeprecationWarnings: 'change icon deprecation warnings',
+  EulaIsDisplayed: 'eula is displayed',
+  SelectDriveDestination: 'select drive destination',
 };
 
 suite(destination_select_test_cros.suiteName, function() {
   /** @type {!PrintPreviewDestinationSelectCrosElement} */
   let destinationSelect;
 
+  /** @type {string} */
   const account = 'foo@chromium.org';
 
+  /** @type {!DestinationOrigin} */
+  const cookieOrigin = DestinationOrigin.COOKIES;
+
+  /** @type {string} */
+  const driveKey =
+      `${Destination.GooglePromotedId.DOCS}/${cookieOrigin}/${account}`;
+
+  /** @type {!Array<!Destination>} */
   let recentDestinationList = [];
 
   const meta = /** @type {!IronMetaElement} */ (
@@ -306,22 +364,28 @@ suite(destination_select_test_cros.suiteName, function() {
     destinationSelect.disabled = false;
     destinationSelect.loaded = false;
     destinationSelect.noDestinations = false;
+    populateRecentDestinationList();
+    destinationSelect.recentDestinationList = recentDestinationList;
+
+    document.body.appendChild(destinationSelect);
+  });
+
+  // Create three different destinations and use them to populate
+  // |recentDestinationList|.
+  function populateRecentDestinationList() {
     recentDestinationList = [
       new Destination(
           'ID1', DestinationType.LOCAL, DestinationOrigin.LOCAL, 'One',
           DestinationConnectionStatus.ONLINE),
       new Destination(
-          'ID2', DestinationType.GOOGLE, DestinationOrigin.COOKIES, 'Two',
+          'ID2', DestinationType.GOOGLE, cookieOrigin, 'Two',
           DestinationConnectionStatus.OFFLINE, {account: account}),
       new Destination(
-          'ID3', DestinationType.GOOGLE, DestinationOrigin.COOKIES, 'Three',
+          'ID3', DestinationType.GOOGLE, cookieOrigin, 'Three',
           DestinationConnectionStatus.ONLINE,
           {account: account, isOwned: true}),
     ];
-    destinationSelect.recentDestinationList = recentDestinationList;
-
-    document.body.appendChild(destinationSelect);
-  });
+  }
 
   function compareIcon(selectEl, expectedIcon) {
     const icon = selectEl.style['background-image'].replace(/ /gi, '');
@@ -331,27 +395,14 @@ suite(destination_select_test_cros.suiteName, function() {
     assertEquals(expected, icon);
   }
 
-  test(assert(destination_select_test_cros.TestNames.UpdateStatus), function() {
-    return waitBeforeNextRender(destinationSelect).then(() => {
-      assertFalse(destinationSelect.$$('.throbber-container').hidden);
-      assertTrue(destinationSelect.$$('.md-select').hidden);
-
-      destinationSelect.loaded = true;
-      assertTrue(destinationSelect.$$('.throbber-container').hidden);
-      assertFalse(destinationSelect.$$('.md-select').hidden);
-
-      destinationSelect.destination = recentDestinationList[0];
-      destinationSelect.updateDestination();
-      assertTrue(destinationSelect.$$('.destination-additional-info').hidden);
-
-      destinationSelect.destination = recentDestinationList[1];
-      destinationSelect.updateDestination();
-      assertFalse(destinationSelect.$$('.destination-additional-info').hidden);
-    });
-  });
-
-  test(assert(destination_select_test_cros.TestNames.ChangeIcon), function() {
-    const cookieOrigin = DestinationOrigin.COOKIES;
+  /**
+   * Test that changing different destinations results in the correct icon being
+   * shown.
+   * @param {boolean} cloudPrintDeprecationWarningsSuppressed Whether cloud
+   *     print deprecation warnings should be suppressed.
+   * @return {!Promise} Promise that resolves when the test finishes.
+   */
+  function testChangeIcon(cloudPrintDeprecationWarningsSuppressed) {
     let selectEl;
 
     return waitBeforeNextRender(destinationSelect)
@@ -362,8 +413,6 @@ suite(destination_select_test_cros.suiteName, function() {
           destinationSelect.loaded = true;
           selectEl = destinationSelect.$$('.md-select');
           compareIcon(selectEl, 'print');
-          const driveKey =
-              `${Destination.GooglePromotedId.DOCS}/${cookieOrigin}/${account}`;
           destinationSelect.driveDestinationKey = driveKey;
 
           return selectOption(destinationSelect, driveKey);
@@ -383,21 +432,126 @@ suite(destination_select_test_cros.suiteName, function() {
               destinationSelect, `ID2/${cookieOrigin}/${account}`);
         })
         .then(() => {
+          const dest2Icon = cloudPrintDeprecationWarningsSuppressed ?
+              'printer-shared' :
+              'printer-not-supported';
+
           // Should already be updated.
-          compareIcon(selectEl, 'printer-shared');
+          compareIcon(selectEl, dest2Icon);
 
           // Update destination.
           destinationSelect.destination = recentDestinationList[1];
-          compareIcon(selectEl, 'printer-shared');
+          compareIcon(selectEl, dest2Icon);
 
           // Select a destination with a standard printer icon.
           return selectOption(
               destinationSelect, `ID3/${cookieOrigin}/${account}`);
         })
         .then(() => {
-          compareIcon(selectEl, 'print');
+          const dest3Icon = cloudPrintDeprecationWarningsSuppressed ?
+              'print' :
+              'printer-not-supported';
+
+          compareIcon(selectEl, dest3Icon);
+
+          // Update destination.
+          destinationSelect.destination = recentDestinationList[2];
+          compareIcon(selectEl, dest3Icon);
         });
+  }
+
+  /**
+   * Test that changing different destinations results in the correct status
+   * being shown.
+   * @param {boolean} cloudPrintDeprecationWarningsSuppressed Whether cloud
+   *     print deprecation warnings should be suppressed.
+   */
+  function testUpdateStatus(cloudPrintDeprecationWarningsSuppressed) {
+    loadTimeData.overrideValues({
+      offline: 'offline',
+      printerNotSupportedWarning: 'printerNotSupportedWarning',
+    });
+
+    assertFalse(destinationSelect.$$('.throbber-container').hidden);
+    assertTrue(destinationSelect.$$('.md-select').hidden);
+
+    destinationSelect.loaded = true;
+    assertTrue(destinationSelect.$$('.throbber-container').hidden);
+    assertFalse(destinationSelect.$$('.md-select').hidden);
+
+    const additionalInfoEl =
+        destinationSelect.$$('.destination-additional-info');
+    const statusEl = destinationSelect.$$('#statusText');
+
+    destinationSelect.driveDestinationKey = driveKey;
+    destinationSelect.destination = getGoogleDriveDestination(account);
+    destinationSelect.updateDestination();
+    assertTrue(additionalInfoEl.hidden);
+    assertEquals('', statusEl.innerHTML);
+
+    destinationSelect.destination = recentDestinationList[0];
+    destinationSelect.updateDestination();
+    assertTrue(additionalInfoEl.hidden);
+    assertEquals('', statusEl.innerHTML);
+
+    destinationSelect.destination = recentDestinationList[1];
+    destinationSelect.updateDestination();
+    assertFalse(additionalInfoEl.hidden);
+    assertEquals('offline', statusEl.innerHTML);
+
+    destinationSelect.destination = recentDestinationList[2];
+    destinationSelect.updateDestination();
+    assertEquals(
+        cloudPrintDeprecationWarningsSuppressed, additionalInfoEl.hidden);
+    const dest3Status = cloudPrintDeprecationWarningsSuppressed ?
+        '' :
+        'printerNotSupportedWarning';
+    assertEquals(dest3Status, statusEl.innerHTML);
+  }
+
+  test(assert(destination_select_test_cros.TestNames.UpdateStatus), function() {
+    loadTimeData.overrideValues(
+        {cloudPrintDeprecationWarningsSuppressed: true});
+
+    // Repopulate |recentDestinationList| to have
+    // |cloudPrintDeprecationWarningsSuppressed| take effect during creation of
+    // new Destinations.
+    populateRecentDestinationList();
+    destinationSelect.recentDestinationList = recentDestinationList;
+
+    return waitBeforeNextRender(destinationSelect).then(() => {
+      testUpdateStatus(true);
+    });
   });
+
+  test(
+      assert(destination_select_test_cros.TestNames
+                 .UpdateStatusDeprecationWarnings),
+      function() {
+        return waitBeforeNextRender(destinationSelect).then(() => {
+          testUpdateStatus(false);
+        });
+      });
+
+  test(assert(destination_select_test_cros.TestNames.ChangeIcon), function() {
+    loadTimeData.overrideValues(
+        {cloudPrintDeprecationWarningsSuppressed: true});
+
+    // Repopulate |recentDestinationList| to have
+    // |cloudPrintDeprecationWarningsSuppressed| take effect during creation of
+    // new Destinations.
+    populateRecentDestinationList();
+    destinationSelect.recentDestinationList = recentDestinationList;
+
+    return testChangeIcon(true);
+  });
+
+  test(
+      assert(
+          destination_select_test_cros.TestNames.ChangeIconDeprecationWarnings),
+      function() {
+        return testChangeIcon(false);
+      });
 
   /**
    * Tests that destinations with a EULA will display the EULA URL.
@@ -414,5 +568,40 @@ suite(destination_select_test_cros.suiteName, function() {
         destinationSelect.set(
             'destination.eulaUrl', 'chrome://os-credits/eula');
         assertFalse(destinationEulaWrapper.hidden);
+      });
+
+  // Tests that the correct drive destination is in the select based on value of
+  // printSaveToDrive flag.
+  test(
+      assert(destination_select_test_cros.TestNames.SelectDriveDestination),
+      function() {
+        const driveDestinationKey = `${Destination.GooglePromotedId.DOCS}/${
+            DestinationOrigin.COOKIES}/${account}`;
+        const printSaveToDriveEnabled =
+            loadTimeData.getBoolean('printSaveToDrive');
+        const expectedKey = printSaveToDriveEnabled ?
+            SAVE_TO_DRIVE_CROS_DESTINATION_KEY :
+            driveDestinationKey;
+        const wrongKey = !printSaveToDriveEnabled ?
+            SAVE_TO_DRIVE_CROS_DESTINATION_KEY :
+            driveDestinationKey;
+
+        return waitBeforeNextRender(destinationSelect)
+            .then(() => {
+              destinationSelect.driveDestinationKey = driveDestinationKey;
+              destinationSelect.destination = recentDestinationList[0];
+              destinationSelect.updateDestination();
+
+              assertTrue(
+                  !!Array.from(destinationSelect.$$('.md-select').options)
+                        .find(option => option.value === expectedKey));
+              assertTrue(!Array.from(destinationSelect.$$('.md-select').options)
+                              .find(option => option.value === wrongKey));
+              return selectOption(destinationSelect, expectedKey);
+            })
+            .then(() => {
+              assertEquals(
+                  expectedKey, destinationSelect.$$('.md-select').value);
+            });
       });
 });

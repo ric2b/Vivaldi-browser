@@ -2,7 +2,7 @@
 
 source_set("notes") {
   sources = [
-    "notes_contenthelper.cpp",
+    "notes_contenthelper.cc",
     "notes_contenthelper.h",
   ]
   deps = [

@@ -16,8 +16,7 @@
 namespace blink {
 
 class LocalFrame;
-class SecurityOrigin;
-class WorkerGlobalScope;
+class WorkerOrWorkletGlobalScope;
 
 // https://html.spec.whatwg.org/C/#concept-script
 class CORE_EXPORT Script : public GarbageCollected<Script> {
@@ -35,11 +34,19 @@ class CORE_EXPORT Script : public GarbageCollected<Script> {
   // https://html.spec.whatwg.org/C/#run-a-module-script,
   // depending on the script type,
   // on Window or on WorkerGlobalScope, respectively.
-  virtual void RunScript(LocalFrame*, const SecurityOrigin*) = 0;
-  virtual void RunScriptOnWorker(WorkerGlobalScope&) = 0;
+  // RunScriptOnWorkerOrWorklet returns true if evaluated successfully.
+  virtual void RunScript(LocalFrame*) = 0;
+  virtual bool RunScriptOnWorkerOrWorklet(WorkerOrWorkletGlobalScope&) = 0;
 
   const ScriptFetchOptions& FetchOptions() const { return fetch_options_; }
   const KURL& BaseURL() const { return base_url_; }
+
+  // Returns a pair of (script's size, cached metadata's size) only for classic
+  // scripts. This is used only for metrics via
+  // ServiceWorkerGlobalScopeProxy::WillEvaluateClassicScript().
+  // TODO(asamidoi, hiroshige): Remove this once the metrics are no longer
+  // referenced.
+  virtual std::pair<size_t, size_t> GetClassicScriptSizes() const = 0;
 
  protected:
   explicit Script(const ScriptFetchOptions& fetch_options, const KURL& base_url)

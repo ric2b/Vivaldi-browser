@@ -42,6 +42,7 @@
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/frame/navigation_initiator.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
@@ -57,12 +58,9 @@
 #include "third_party/blink/public/web/web_manifest_manager.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/icon_url.h"
 #include "third_party/blink/renderer/core/frame/frame_client.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
-#include "third_party/blink/renderer/core/frame/local_frame.h"
-#include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/html/link_resource.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
@@ -84,7 +82,6 @@ enum class WebFeature : int32_t;
 
 class AssociatedInterfaceProvider;
 class ContentSecurityPolicy;
-class Document;
 class DocumentLoader;
 class HTMLFormElement;
 class HTMLFrameOwnerElement;
@@ -93,11 +90,13 @@ class HTMLPortalElement;
 class HTMLPlugInElement;
 class HistoryItem;
 class KURL;
+class LocalDOMWindow;
+class LocalFrame;
 class WebPluginContainerImpl;
+class RemoteFrame;
 class ResourceError;
 class ResourceRequest;
 class ResourceResponse;
-class SecurityOrigin;
 class WebContentCaptureClient;
 class WebDedicatedWorkerHostFactoryClient;
 class WebLocalFrame;
@@ -132,9 +131,10 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
                                                WebHistoryCommitType,
                                                bool content_initiated) {}
   virtual void DispatchDidReceiveTitle(const String&) = 0;
-  virtual void DispatchDidCommitLoad(HistoryItem*,
-                                     WebHistoryCommitType,
-                                     GlobalObjectReusePolicy) = 0;
+  virtual void DispatchDidCommitLoad(
+      HistoryItem*,
+      WebHistoryCommitType,
+      bool should_reset_browser_interface_broker) = 0;
   virtual void DispatchDidFailLoad(const ResourceError&,
                                    WebHistoryCommitType) = 0;
   virtual void DispatchDidFinishDocumentLoad() = 0;
@@ -143,7 +143,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void BeginNavigation(
       const ResourceRequest&,
       mojom::RequestContextFrameType,
-      Document* origin_document,
+      LocalDOMWindow* origin_window,
       DocumentLoader*,
       WebNavigationType,
       NavigationPolicy,
@@ -170,16 +170,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual bool NavigateBackForward(int offset) const = 0;
 
-  // The indicated security origin has run active content (such as a script)
-  // from an insecure source.  Note that the insecure content can spread to
-  // other frames in the same origin.
-  virtual void DidRunInsecureContent(const SecurityOrigin*, const KURL&) = 0;
   virtual void DidDispatchPingLoader(const KURL&) = 0;
-
-  // The frame displayed content with certificate errors with given URL.
-  virtual void DidDisplayContentWithCertificateErrors() = 0;
-  // The frame ran content with certificate errors with the given URL.
-  virtual void DidRunContentWithCertificateErrors() = 0;
 
   // Will be called when |PerformanceTiming| events are updated
   virtual void DidChangePerformanceTiming() {}
@@ -254,8 +245,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   // Creates a portal for the |HTMLPortalElement| and binds the other end of the
   // |mojo::PendingAssociatedReceiver<mojom::blink::Portal>|. Returns a pair of
-  // a RemoteFrame and a token that identifies the portal.
-  virtual std::pair<RemoteFrame*, base::UnguessableToken> CreatePortal(
+  // a RemoteFrame and a token that identifies the portal. If the returned
+  // RemoteFrame is nullptr, then the PortalToken is meaningless.
+  virtual std::pair<RemoteFrame*, PortalToken> CreatePortal(
       HTMLPortalElement*,
       mojo::PendingAssociatedReceiver<mojom::blink::Portal>,
       mojo::PendingAssociatedRemote<mojom::blink::PortalClient>) = 0;
@@ -315,7 +307,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void DidSetFramePolicyHeaders(
       network::mojom::blink::WebSandboxFlags,
       const ParsedFeaturePolicy& feature_policy_header,
-      const DocumentPolicy::FeatureState& document_policy_header) {}
+      const DocumentPolicyFeatureState& document_policy_header) {}
 
   virtual std::unique_ptr<WebServiceWorkerProvider>
   CreateServiceWorkerProvider() = 0;

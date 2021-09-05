@@ -22,6 +22,8 @@ source_set("common") {
     "manifest_update_manager.h",
     "manifest_update_task.cc",
     "manifest_update_task.h",
+    "os_integration_manager.cc",
+    "os_integration_manager.h",
     "system_web_app_manager.cc",
     "system_web_app_manager.h",
     "web_app_tab_helper.cc",
@@ -46,6 +48,7 @@ source_set("common") {
       "//chromeos/components/help_app_ui",
       "//chromeos/components/media_app_ui",
       "//chromeos/components/print_management",
+      "//chromeos/components/scanning",
       "//chromeos/constants",
       "//chromeos/strings",
     ]
@@ -56,10 +59,10 @@ source_set("web_applications") {
   sources = [
     "external_web_app_manager.cc",
     "external_web_app_manager.h",
+    "external_web_app_utils.cc",
+    "external_web_app_utils.h",
     "file_utils_wrapper.cc",
     "file_utils_wrapper.h",
-    "os_integration_manager.cc",
-    "os_integration_manager.h",
     "pending_app_install_task.cc",
     "pending_app_install_task.h",
     "pending_app_manager_impl.cc",
@@ -101,6 +104,7 @@ source_set("web_applications") {
     "//chrome/browser/web_applications/components",
     "//chrome/common",
     "//components/performance_manager",
+    "//components/services/app_service/public/cpp:protocol_handling",
     "//components/sync",
     "//content/public/browser",
     "//skia",
@@ -131,8 +135,6 @@ source_set("web_applications_test_support") {
     "test/test_app_registrar.h",
     "test/test_app_registry_controller.cc",
     "test/test_app_registry_controller.h",
-    "test/test_app_shortcut_manager.cc",
-    "test/test_app_shortcut_manager.h",
     "test/test_data_retriever.cc",
     "test/test_data_retriever.h",
     "test/test_file_handler_manager.cc",
@@ -141,6 +143,8 @@ source_set("web_applications_test_support") {
     "test/test_file_utils.h",
     "test/test_install_finalizer.cc",
     "test/test_install_finalizer.h",
+    "test/test_os_integration_manager.cc",
+    "test/test_os_integration_manager.h",
     "test/test_pending_app_manager.cc",
     "test/test_pending_app_manager.h",
     "test/test_pending_app_manager_impl.cc",
@@ -192,11 +196,14 @@ source_set("web_applications_unit_tests") {
   sources = [
     "daily_metrics_helper_unittest.cc",
     "external_web_app_manager_unittest.cc",
+    "external_web_app_utils_unittest.cc",
     "pending_app_manager_impl_unittest.cc",
+    "system_web_app_manager_unittest.cc",
     "web_app_database_unittest.cc",
     "web_app_icon_manager_unittest.cc",
     "web_app_install_manager_unittest.cc",
     "web_app_install_task_unittest.cc",
+    "web_app_proto_utils_unittest.cc",
     "web_app_registrar_unittest.cc",
     "web_app_sync_bridge_unittest.cc",
     "web_app_unittest.cc",
@@ -213,6 +220,7 @@ source_set("web_applications_unit_tests") {
     "//chrome/browser/web_applications/components",
     "//chrome/common",
     "//chrome/test:test_support",
+    "//components/services/app_service/public/cpp:protocol_handling",
     "//content/public/browser",
     "//content/test:test_support",
     "//services/metrics/public/cpp:ukm_builders",
@@ -240,6 +248,8 @@ source_set("web_applications_browser_tests") {
   testonly = true
 
   sources = [
+    "external_web_app_manager_browsertest.cc",
+    "external_web_app_migration_browsertest.cc",
     "manifest_update_manager_browsertest.cc",
     "pending_app_manager_impl_browsertest.cc",
     "system_web_app_manager_browsertest.cc",
@@ -247,6 +257,7 @@ source_set("web_applications_browser_tests") {
     "web_app_audio_focus_browsertest.cc",
     "web_app_icon_manager_browsertest.cc",
     "web_app_migration_manager_browsertest.cc",
+    "web_app_migration_user_display_mode_clean_up_browsertest.cc",
   ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
@@ -258,12 +269,16 @@ source_set("web_applications_browser_tests") {
     ":web_applications_on_extensions_test_support",
     ":web_applications_test_support",
     "//chrome/app:command_ids",
+    "//chrome/browser/apps/app_service:test_support",
+    "//chrome/browser/extensions:test_support",
     "//chrome/browser/web_applications/components",
     "//chrome/browser/web_applications/extensions",
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
     "//components/permissions:permissions",
     "//components/services/app_service/public/cpp:app_update",
+    "//components/services/app_service/public/cpp:intents",
+    "//extensions/browser:test_support",
   ]
 
   if (is_chromeos) {
@@ -280,6 +295,8 @@ source_set("web_applications_on_extensions") {
   sources = [
     "web_app_migration_manager.cc",
     "web_app_migration_manager.h",
+    "web_app_migration_user_display_mode_clean_up.cc",
+    "web_app_migration_user_display_mode_clean_up.h",
     "web_app_provider.cc",
     "web_app_provider.h",
     "web_app_provider_factory.cc",

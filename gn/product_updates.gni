@@ -1,6 +1,3 @@
-import("//build/config/chrome_build.gni")
-import("//build/config/sanitizers/sanitizers.gni")
-import("//build/toolchain/gcc_toolchain.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/version.gni")
 
@@ -130,47 +127,20 @@ if (is_win) {
 if (is_android) {
   update_template_instance("//chrome/android:chrome_public_apk") {
     apk_name = "Vivaldi.${vivaldi_version_full}"
+    enable_lint = true
+    lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
     lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"
     lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"
+    not_needed(["lint_suppressions_dep"])
   }
 }
 
-#if (!is_android) {
-  update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
-    icons -= ["${branding_path_component}/product.icon"]
-    icons += ["//vivaldi/app/resources/vector_icons/product.icon"]
-  }
+update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
+  icons -= ["${branding_path_component}/product.icon"]
+  icons += ["//vivaldi/app/resources/vector_icons/product.icon"]
+}
 
-  update_template_instance("//ui/message_center:message_center_vector_icons") {
-    icons -= ["product.icon"]
-    icons += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
-  }
-#}
-
-#if (is_linux) {
-#  if (is_official_build) {
-#    Need to fix scope handling for variant toolchains in the GN tools
-#    update_template_instance("//chrome:chrome_symbols") {
-#      binary = "$root_out_dir/vivaldi"
-#    }
-#  }
-#  Need to fix scope handling for variant toolchains in the GN tools
-#  update_target("//chrome:xdg_mime") {
-#    sources -= [
-#      "//chrome/app/theme/$branding_path_component/product_logo_48.png"
-#    ]
-#    sources += [
-#      "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/product_logo_48.png"
-#    ]
-#  }
-#}
-
-if (enable_resource_whitelist_generation && is_win) {
-  update_template_instance("//chrome:resource_whitelist") {
-    inputs -= [ "$root_out_dir/chrome.dll.pdb" ]
-    inputs += [ "$root_out_dir/vivaldi.dll.pdb" ]
-    # Update notifier resources
-    inputs += [ "$root_out_dir/update_notifier.exe.pdb" ]
-    deps += [ "//vivaldi/update_notifier"]
-  }
+update_template_instance("//ui/message_center:message_center_vector_icons") {
+  icons -= ["product.icon"]
+  icons += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
 }

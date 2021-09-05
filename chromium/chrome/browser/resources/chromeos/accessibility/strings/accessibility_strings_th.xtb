@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">รายการ</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">เลื่อน 2 นิ้วไปทางขวา</translation>
+<translation id="1016393160682012902">กดแป้น QWERTY กดแป้นอักษรเบรลล์แบบรีเฟรชได้ หรือใช้ท่าทางสัมผัสด้วยการแตะเพื่อดูข้อมูลเกี่ยวกับฟังก์ชันของแป้นหรือท่าทางสัมผัสนั้น กดปุ่ม Control พร้อมกับแป้น W หรือปุ่ม Escape เพื่อออก</translation>
 <translation id="1022586497894531524">หากคุณใช้การอธิบายและอ่านออกเสียงของ ChromeVox เป็นครั้งแรก บทแนะนำฉบับย่อนี้ที่จะอธิบายสิ่งที่ควรทราบในการเริ่มต้นใช้งาน ChromeVox</translation>
 <translation id="1025074108959230262">ปิดโหมดติดหนึบแล้ว</translation>
 <translation id="1031961866430398710">จากนั้น</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">ลิงก์ภายใน</translation>
 <translation id="4909019435900810068">เลื่อนไปข้างหลัง 1 คำ</translation>
 <translation id="4911349081560453449">ไม่มีช่องทำเครื่องหมายก่อนหน้า</translation>
-<translation id="4915087353619183190">กำลังเริ่มโหมดการเรียนรู้ กดแป้น QWERTY กดแป้นอักษรเบรลล์แบบรีเฟรชได้ หรือใช้ท่าทางสัมผัสด้วยการแตะเพื่อดูข้อมูลเกี่ยวกับฟังก์ชันของแป้นหรือท่าทางสัมผัสนั้น กดปุ่ม Control พร้อมกับแป้น W หรือปุ่ม Escape เพื่อออก</translation>
 <translation id="492295894462528572">คำนำ</translation>
 <translation id="495046168593986294">เลื่อนขึ้น</translation>
 <translation id="495170559598752135">การทำงาน</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">สีเขียว</translation>
 <translation id="602001110135236999">เลื่อนไปทางซ้าย</translation>
 <translation id="6034000775414344507">เทาอ่อน</translation>
+<translation id="6036135911048686884">แตะสำรวจ</translation>
 <translation id="6037602951055904232">เลื่อนไปข้างหน้า</translation>
 <translation id="6044160928851315051">ปิดแสงหน้าจอ</translation>
 <translation id="6082768461603900813">การนำทางเบื้องต้น</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{เครื่องหมายปอนด์}other{# เครื่องหมายปอนด์}}</translation>
 <translation id="8378855320830505539">ภูมิภาค</translation>
 <translation id="8382679411218029383">การเติมข้อความอัตโนมัติแบบในบรรทัดและเป็นรายการ</translation>
+<translation id="8394908167088220973">เล่น/หยุดสื่อชั่วคราว</translation>
 <translation id="8428213095426709021">การตั้งค่า</translation>
 <translation id="8428603554127842284">ระดับ <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">ออกจากเนื้อหาที่มีโครงสร้าง เช่น ตาราง</translation>
 <translation id="8779057862865475116">ไม่มีลิงก์ก่อนหน้า</translation>
 <translation id="8796411681063377102">ส่วนหัวระดับ 3 ถัดไป</translation>
+<translation id="8823311177246872527">หน้า <ph name="CURRENTPAGE" /> จาก <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">แบนเนอร์</translation>
 <translation id="8851136666856101339">หลัก</translation>
 <translation id="8882002077197914455">ส่วนหัวของแถว</translation>

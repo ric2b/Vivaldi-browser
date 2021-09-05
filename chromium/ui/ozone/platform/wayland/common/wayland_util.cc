@@ -10,6 +10,8 @@
 #include "ui/base/hit_test.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_shm_buffer.h"
+#include "ui/ozone/platform/wayland/host/wayland_surface.h"
+#include "ui/ozone/platform/wayland/host/wayland_window.h"
 
 namespace wl {
 
@@ -158,6 +160,28 @@ gfx::Rect TranslateBoundsToTopLevelCoordinates(const gfx::Rect& child_bounds,
 bool IsMenuType(ui::PlatformWindowType type) {
   return type == ui::PlatformWindowType::kMenu ||
          type == ui::PlatformWindowType::kPopup;
+}
+
+ui::WaylandWindow* RootWindowFromWlSurface(wl_surface* surface) {
+  if (!surface)
+    return nullptr;
+  auto* wayland_surface = static_cast<ui::WaylandSurface*>(
+      wl_proxy_get_user_data(reinterpret_cast<wl_proxy*>(surface)));
+  if (!wayland_surface)
+    return nullptr;
+  return wayland_surface->root_window();
+}
+
+gfx::Rect TranslateWindowBoundsToParentDIP(ui::WaylandWindow* window,
+                                           ui::WaylandWindow* parent_window) {
+  DCHECK(window);
+  DCHECK(parent_window);
+  DCHECK_EQ(window->buffer_scale(), parent_window->buffer_scale());
+  DCHECK_EQ(window->ui_scale(), parent_window->ui_scale());
+  return gfx::ScaleToRoundedRect(
+      wl::TranslateBoundsToParentCoordinates(window->GetBounds(),
+                                             parent_window->GetBounds()),
+      1.0 / window->buffer_scale());
 }
 
 }  // namespace wl

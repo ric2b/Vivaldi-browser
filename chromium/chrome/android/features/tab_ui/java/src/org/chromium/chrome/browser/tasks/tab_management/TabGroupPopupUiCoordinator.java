@@ -8,9 +8,10 @@ import android.view.View;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ThemeColorProvider;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -50,8 +51,9 @@ public class TabGroupPopupUiCoordinator
         mModelChangeProcessor = PropertyModelChangeProcessor.create(
                 model, mTabGroupPopupUiParent, TabGroupPopupUiViewBinder::bind);
         mMediator = new TabGroupPopupUiMediator(model, activity.getTabModelSelector(),
-                activity.getOverviewModeBehavior(), activity.getFullscreenManager(), this,
-                mTabGroupUiCoordinator, activity.getBottomSheetController());
+                activity.getOverviewModeBehaviorSupplier(), activity.getBrowserControlsManager(),
+                this, mTabGroupUiCoordinator,
+                BottomSheetControllerProvider.from(activity.getWindowAndroid()));
         mMediator.onAnchorViewChanged(mAnchorView, mAnchorView.getId());
     }
 

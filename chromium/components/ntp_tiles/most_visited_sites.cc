@@ -379,8 +379,7 @@ void MostVisitedSites::UndoCustomLinkAction() {
     BuildCurrentTiles();
 }
 
-void MostVisitedSites::AddOrRemoveBlacklistedUrl(const GURL& url,
-                                                 bool add_url) {
+void MostVisitedSites::AddOrRemoveBlockedUrl(const GURL& url, bool add_url) {
   if (add_url) {
     base::RecordAction(base::UserMetricsAction("Suggestions.Site.Removed"));
   } else {
@@ -389,32 +388,28 @@ void MostVisitedSites::AddOrRemoveBlacklistedUrl(const GURL& url,
   }
 
   if (top_sites_) {
-    // Always blacklist in the local TopSites.
     if (add_url)
-      top_sites_->AddBlacklistedURL(url);
+      top_sites_->AddBlockedUrl(url);
     else
-      top_sites_->RemoveBlacklistedURL(url);
+      top_sites_->RemoveBlockedUrl(url);
   }
 
-  // Only blacklist in the server-side suggestions service if it's active.
+  // Only blocklist in the server-side suggestions service if it's active.
   if (mv_source_ == TileSource::SUGGESTIONS_SERVICE) {
     if (add_url)
-      suggestions_service_->BlacklistURL(url);
+      suggestions_service_->BlocklistURL(url);
     else
-      suggestions_service_->UndoBlacklistURL(url);
+      suggestions_service_->UndoBlocklistURL(url);
   }
 }
 
-void MostVisitedSites::ClearBlacklistedUrls() {
-  if (top_sites_) {
-    // Always update the blacklist in the local TopSites.
-    top_sites_->ClearBlacklistedURLs();
-  }
+void MostVisitedSites::ClearBlockedUrls() {
+  if (top_sites_)
+    top_sites_->ClearBlockedUrls();
 
-  // Only update the server-side blacklist if it's active.
-  if (mv_source_ == TileSource::SUGGESTIONS_SERVICE) {
-    suggestions_service_->ClearBlacklist();
-  }
+  // Only update the server-side blocklist if it's active.
+  if (mv_source_ == TileSource::SUGGESTIONS_SERVICE)
+    suggestions_service_->ClearBlocklist();
 }
 
 void MostVisitedSites::OnBlockedSitesChanged() {
@@ -567,8 +562,8 @@ NTPTilesVector MostVisitedSites::CreateWhitelistEntryPointTiles(
     if (whitelist_tiles.size() + num_actual_tiles >= max_num_sites_)
       break;
 
-    // Skip blacklisted sites.
-    if (top_sites_ && top_sites_->IsBlacklisted(whitelist.entry_point))
+    // Skip blocked sites.
+    if (top_sites_ && top_sites_->IsBlocked(whitelist.entry_point))
       continue;
 
     // Skip tiles already present.
@@ -639,8 +634,8 @@ NTPTilesVector MostVisitedSites::CreatePopularSitesTiles(
       break;
     }
 
-    // Skip blacklisted sites.
-    if (top_sites_ && top_sites_->IsBlacklisted(popular_site.url))
+    // Skip blocked sites.
+    if (top_sites_ && top_sites_->IsBlocked(popular_site.url))
       continue;
 
     const std::string& host = popular_site.url.host();
@@ -893,7 +888,7 @@ bool MostVisitedSites::ShouldAddHomeTile() const {
          homepage_client_->IsHomepageTileEnabled() &&
          !homepage_client_->GetHomepageUrl().is_empty() &&
          !(top_sites_ &&
-           top_sites_->IsBlacklisted(homepage_client_->GetHomepageUrl()));
+           top_sites_->IsBlocked(homepage_client_->GetHomepageUrl()));
 }
 
 void MostVisitedSites::AddToHostsAndTotalCount(const NTPTilesVector& new_tiles,

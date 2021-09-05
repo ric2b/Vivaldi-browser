@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">Nom inconnu</translation>
 <translation id="1089439967362294234">Modifier le mot de passe</translation>
 <translation id="1110994991967754504">Sélectionner une autorisation pour <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Accéder à une <ph name="BEGIN_LINK" />copie mise en cache<ph name="END_LINK" /> de <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a mis fin à la connexion de manière inattendue.</translation>
 <translation id="1161325031994447685">Se reconnecter au réseau Wi-Fi</translation>
 <translation id="1175364870820465910">Im&amp;primer...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Ce site contient des programmes dangereux</translation>
 <translation id="1916770123977586577">Pour appliquer vos paramètres mis à jour sur ce site, actualisez la page</translation>
 <translation id="1919345977826869612">Publicités</translation>
-<translation id="194030505837763158">Accéder à <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Paramètres avancés</translation>
-<translation id="2030481566774242610">Souhaitez-vous plutôt accéder à ce lien : <ph name="LINK" /> ?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Vérifier le proxy et le pare-feu<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Son</translation>
 <translation id="2119505898009119320">Émis pour : <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -101,6 +98,7 @@
 <translation id="4235360514405112390">Valide</translation>
 <translation id="4250431568374086873">Votre connexion à ce site n’est pas totalement sécurisée</translation>
 <translation id="4265872034478892965">Autorisé par votre administrateur</translation>
+<translation id="4305666528087210886">Impossible d’accéder à votre fichier</translation>
 <translation id="4312866146174492540">Bloquer (par défaut)</translation>
 <translation id="4356973930735388585">Des individus malveillants à l’œuvre sur ce site pourraient tenter d’installer des applications dangereuses sur votre ordinateur afin de récupérer ou de supprimer certaines informations : photos, mots de passe, messages, numéros de carte de paiement, etc.</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -128,13 +126,12 @@
 <translation id="5287240709317226393">Afficher les cookies</translation>
 <translation id="5355557959165512791">Le site <ph name="SITE" /> est actuellement inaccessible, car son certificat a été révoqué. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
 <translation id="5386426401304769735">La chaîne de certificats de ce site contient un certificat signé avec SHA-1.</translation>
-<translation id="5431657950005405462">Votre fichier est introuvable</translation>
 <translation id="5452270690849572955">Cette page du site <ph name="HOST_NAME" /> est introuvable</translation>
 <translation id="5457113250005438886">Non valide</translation>
 <translation id="5492298309214877701">Ce site situé sur l’intranet de l’entreprise, de l’organisation ou de l’établissement scolaire possède la même URL qu’un site Web externe.
     <ph name="LINE_BREAK" />
     Essayez de contacter votre administrateur système.</translation>
-<translation id="5510766032865166053">Il a peut-être été déplacé ou supprimé.</translation>
+<translation id="5510766032865166053">La page a peut-être été déplacée ou supprimée.</translation>
 <translation id="5556459405103347317">Recharger</translation>
 <translation id="5610142619324316209">Vérifier la connexion</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> vous a redirigé à de trop nombreuses reprises.</translation>
@@ -174,7 +171,6 @@
 <translation id="6897140037006041989">Agent utilisateur</translation>
 <translation id="7053983685419859001">Bloquer</translation>
 <translation id="7079718277001814089">Ce site contient des logiciels malveillants</translation>
-<translation id="7090678807593890770">Effectuer une recherche Google sur <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Autorisé par une extension</translation>
 <translation id="7111012039238467737">(Valide)</translation>
 <translation id="7113310725918019676">Autoriser <ph name="BLOCKED_TYPE" /> depuis <ph name="DOMAIN" /></translation>
@@ -198,7 +194,6 @@
 <translation id="7716424297397655342">Impossible de charger ce site à partir du cache</translation>
 <translation id="7758069387465995638">Il est possible qu’un pare-feu ou un logiciel antivirus ait bloqué la connexion.</translation>
 <translation id="7800304661137206267">La connexion est chiffrée au moyen de <ph name="CIPHER" />, avec <ph name="MAC" /> pour l’authentification des messages et <ph name="KX" /> pour la méthode d’échange de clés.</translation>
-<translation id="7802523362929240268">Ce site est légitime</translation>
 <translation id="7834399512844817676">Un chiffrement est normalement utilisé sur le site <ph name="SITE" /> pour protéger vos informations. Lors de la dernière tentative de connexion de Vivaldi au site <ph name="SITE" />, des identifiants inhabituels et incorrects ont été retournés. Il est possible qu’un individu malveillant tente de se faire passer pour <ph name="SITE" /> ou qu’un écran de connexion Wi-Fi ait interrompu la connexion. Vos informations restent sécurisées, car nous avons arrêté la connexion avant l’échange des données.</translation>
 <translation id="7878562273885520351">Votre mot de passe a peut-être été compromis</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
@@ -230,6 +225,7 @@
 <translation id="9011424611726486705">Ouvrir les paramètres du site</translation>
 <translation id="9025348182339809926">(Non valide)</translation>
 <translation id="9039213469156557790">De plus, cette page inclut d’autres ressources qui ne sont pas sécurisées. Ces ressources peuvent être consultées par des tiers pendant leur transfert, et modifiées par un pirate informatique dans le but de changer le comportement de cette page.</translation>
+<translation id="9062620674789239642">Il a peut-être été déplacé, modifié ou supprimé.</translation>
 <translation id="9069693763241529744">Bloqué par une extension</translation>
 <translation id="9169664750068251925">Toujours bloquer sur ce site</translation>
 <translation id="9180553614777056266">Bloqueur de publicités</translation>

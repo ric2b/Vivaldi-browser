@@ -27,7 +27,7 @@
 #include "components/browsing_data/content/local_shared_objects_container.h"
 #include "components/browsing_data/content/local_storage_helper.h"
 #include "components/constrained_window/constrained_window_views.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
@@ -280,20 +280,6 @@ base::string16 CollectedCookiesViews::GetWindowTitle() const {
   return l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_DIALOG_TITLE);
 }
 
-bool CollectedCookiesViews::Accept() {
-  // If the user closes our parent tab while we're still open, this method will
-  // (eventually) be called in response to a WebContentsDestroyed() call from
-  // the WebContentsImpl to its observers.  But since the InfoBarService is also
-  // torn down in response to WebContentsDestroyed(), it may already be null.
-  // Since the tab is going away anyway, we can just omit showing an infobar,
-  // which prevents any attempt to access a null InfoBarService.
-  if (status_changed_ && !web_contents_->IsBeingDestroyed()) {
-    CollectedCookiesInfoBarDelegate::Create(
-        InfoBarService::FromWebContents(web_contents_));
-  }
-  return true;
-}
-
 ui::ModalType CollectedCookiesViews::GetModalType() const {
   return ui::MODAL_TYPE_CHILD;
 }
@@ -367,6 +353,11 @@ CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
       SetLayoutManager(std::make_unique<views::GridLayout>());
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
+  SetAcceptCallback(base::BindOnce(&CollectedCookiesViews::OnDialogClosed,
+                                   base::Unretained(this)));
+  SetCloseCallback(base::BindOnce(&CollectedCookiesViews::OnDialogClosed,
+                                  base::Unretained(this)));
+
   // Add margin above the content. The left, right, and bottom margins are added
   // by the content itself.
   SetBorder(views::CreateEmptyBorder(
@@ -414,10 +405,25 @@ CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
   ShowCookieInfo();
 }
 
+void CollectedCookiesViews::OnDialogClosed() {
+  // If the user closes our parent tab while we're still open, this method will
+  // (eventually) be called in response to a WebContentsDestroyed() call from
+  // the WebContentsImpl to its observers.  But since the InfoBarService is also
+  // torn down in response to WebContentsDestroyed(), it may already be null.
+  // Since the tab is going away anyway, we can just omit showing an infobar,
+  // which prevents any attempt to access a null InfoBarService.
+  if (status_changed_ && !web_contents_->IsBeingDestroyed()) {
+    CollectedCookiesInfoBarDelegate::Create(
+        InfoBarService::FromWebContents(web_contents_));
+  }
+}
+
 std::unique_ptr<views::View> CollectedCookiesViews::CreateAllowedPane() {
-  content_settings::TabSpecificContentSettings* content_settings =
-      content_settings::TabSpecificContentSettings::FromWebContents(
-          web_contents_);
+  // This captures a snapshot of the allowed cookies of the current page so we
+  // are fine using WebContents::GetMainFrame() here
+  content_settings::PageSpecificContentSettings* content_settings =
+      content_settings::PageSpecificContentSettings::GetForFrame(
+          web_contents_->GetMainFrame());
 
   // Create the controls that go into the pane.
   auto allowed_label = std::make_unique<views::Label>(
@@ -472,9 +478,9 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateAllowedPane() {
 }
 
 std::unique_ptr<views::View> CollectedCookiesViews::CreateBlockedPane() {
-  content_settings::TabSpecificContentSettings* content_settings =
-      content_settings::TabSpecificContentSettings::FromWebContents(
-          web_contents_);
+  content_settings::PageSpecificContentSettings* content_settings =
+      content_settings::PageSpecificContentSettings::GetForFrame(
+          web_contents_->GetMainFrame());
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
@@ -547,10 +553,13 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateButtonsPane() {
         allowed->SetLayoutManager(std::make_unique<views::GridLayout>());
 
     StartNewButtonColumnSet(layout, 0);
-    block_allowed_button_ = layout->AddView(views::MdTextButton::Create(
-        this, l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_BLOCK_BUTTON)));
-    delete_allowed_button_ = layout->AddView(views::MdTextButton::Create(
-        this, l10n_util::GetStringUTF16(IDS_COOKIES_REMOVE_LABEL)));
+    block_allowed_button_ =
+        layout->AddView(std::make_unique<views::MdTextButton>(
+            this,
+            l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_BLOCK_BUTTON)));
+    delete_allowed_button_ =
+        layout->AddView(std::make_unique<views::MdTextButton>(
+            this, l10n_util::GetStringUTF16(IDS_COOKIES_REMOVE_LABEL)));
 
     allowed_buttons_pane_ = view->AddChildView(std::move(allowed));
   }
@@ -562,11 +571,14 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateButtonsPane() {
     blocked->SetVisible(false);
 
     StartNewButtonColumnSet(layout, 0);
-    allow_blocked_button_ = layout->AddView(views::MdTextButton::Create(
-        this, l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_ALLOW_BUTTON)));
-    for_session_blocked_button_ = layout->AddView(views::MdTextButton::Create(
-        this,
-        l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_SESSION_ONLY_BUTTON)));
+    allow_blocked_button_ =
+        layout->AddView(std::make_unique<views::MdTextButton>(
+            this,
+            l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_ALLOW_BUTTON)));
+    for_session_blocked_button_ =
+        layout->AddView(std::make_unique<views::MdTextButton>(
+            this, l10n_util::GetStringUTF16(
+                      IDS_COLLECTED_COOKIES_SESSION_ONLY_BUTTON)));
 
     blocked_buttons_pane_ = view->AddChildView(std::move(blocked));
   }

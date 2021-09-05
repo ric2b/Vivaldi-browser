@@ -34,6 +34,7 @@ class WebAppUiManagerImpl : public BrowserListObserver, public WebAppUiManager {
   explicit WebAppUiManagerImpl(Profile* profile);
   ~WebAppUiManagerImpl() override;
 
+  void SetSubsystems(AppRegistryController* app_registry_controller) override;
   void Start() override;
   void Shutdown() override;
 
@@ -48,7 +49,8 @@ class WebAppUiManagerImpl : public BrowserListObserver, public WebAppUiManager {
                            const AppId& to_app) override;
   bool CanAddAppToQuickLaunchBar() const override;
   void AddAppToQuickLaunchBar(const AppId& app_id) override;
-  bool IsInAppWindow(content::WebContents* web_contents) const override;
+  bool IsInAppWindow(content::WebContents* web_contents,
+                     const AppId* app_id) const override;
   void NotifyOnAssociatedAppChanged(content::WebContents* web_contents,
                                     const AppId& previous_app_id,
                                     const AppId& new_app_id) const override;
@@ -73,6 +75,8 @@ class WebAppUiManagerImpl : public BrowserListObserver, public WebAppUiManager {
   std::unique_ptr<WebAppDialogManager> dialog_manager_;
 
   Profile* const profile_;
+
+  AppRegistryController* app_registry_controller_ = nullptr;
 
   std::map<AppId, std::vector<base::OnceClosure>> windows_closed_requests_map_;
   std::map<AppId, size_t> num_windows_for_apps_map_;

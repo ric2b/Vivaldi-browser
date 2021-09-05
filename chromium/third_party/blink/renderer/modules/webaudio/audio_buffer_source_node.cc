@@ -566,6 +566,34 @@ void AudioBufferSourceHandler::StartSource(double when,
   SetPlaybackState(SCHEDULED_STATE);
 }
 
+void AudioBufferSourceHandler::SetLoop(bool looping) {
+  DCHECK(IsMainThread());
+
+  // This synchronizes with |Process()|.
+  MutexLocker process_locker(process_lock_);
+
+  is_looping_ = looping;
+  SetDidSetLooping(looping);
+}
+
+void AudioBufferSourceHandler::SetLoopStart(double loop_start) {
+  DCHECK(IsMainThread());
+
+  // This synchronizes with |Process()|.
+  MutexLocker process_locker(process_lock_);
+
+  loop_start_ = loop_start;
+}
+
+void AudioBufferSourceHandler::SetLoopEnd(double loop_end) {
+  DCHECK(IsMainThread());
+
+  // This synchronizes with |Process()|.
+  MutexLocker process_locker(process_lock_);
+
+  loop_end_ = loop_end;
+}
+
 double AudioBufferSourceHandler::ComputePlaybackRate() {
   // Incorporate buffer's sample-rate versus BaseAudioContext's sample-rate.
   // Normally it's not an issue because buffers are loaded at the
@@ -612,6 +640,14 @@ bool AudioBufferSourceHandler::PropagatesSilence() const {
 
 void AudioBufferSourceHandler::HandleStoppableSourceNode() {
   DCHECK(Context()->IsAudioThread());
+
+  MutexTryLocker try_locker(process_lock_);
+  if (!try_locker.Locked()) {
+    // Can't get the lock, so just return.  It's ok to handle these at a later
+    // time; this was just a hint anyway so stopping them a bit later is ok.
+    return;
+  }
+
   // If the source node has been scheduled to stop, we can stop the node once
   // the current time reaches that value.  Usually,
   // AudioScheduledSourceHandler::UpdateSchedulingInfo handles stopped nodes,

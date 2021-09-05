@@ -401,16 +401,20 @@ void SearchBoxView::ProcessAutocomplete() {
   if (!ShouldProcessAutocomplete())
     return;
 
-  SearchResult* const first_visible_result =
-      search_model_->GetFirstVisibleResult();
+  SearchResultBaseView* const first_result_view =
+      contents_view_->search_results_page_view()->first_result_view();
+  if (!first_result_view || !first_result_view->selected())
+    return;
 
-  if (!search_box_has_query_) {
+  SearchResult* const first_visible_result = first_result_view->result();
+
+  if (first_result_view->is_default_result() &&
+      current_query_ != search_box()->GetText()) {
     // Search box text has been set to the previous selected result. Reset
     // it back to the current query. This could happen due to the racing
     // between results update and user press key to select a result.
     // See crbug.com/1065454.
     search_box()->SetText(current_query_);
-    search_box_has_query_ = true;
   }
 
   // Current non-autocompleted text.
@@ -496,8 +500,8 @@ void SearchBoxView::ContentsChanged(views::Textfield* sender,
     // User enters a new search query. Record the action.
     base::RecordAction(base::UserMetricsAction("AppList_SearchQueryStarted"));
   }
+
   current_query_ = new_contents;
-  search_box_has_query_ = true;
 
   // Update autocomplete text highlight range to track user typed text.
   if (ShouldProcessAutocomplete())
@@ -560,6 +564,9 @@ void SearchBoxView::ClearSearchAndDeactivateSearchBox() {
 
   view_delegate_->LogSearchAbandonHistogram();
 
+  contents_view_->search_results_page_view()
+      ->result_selection_controller()
+      ->ClearSelection();
   ClearSearch();
   SetSearchBoxActive(false, ui::ET_UNKNOWN);
 }
@@ -733,6 +740,12 @@ void SearchBoxView::ButtonPressed(views::Button* sender,
 
 void SearchBoxView::UpdateSearchBoxTextForSelectedResult(
     SearchResult* selected_result) {
+  // TODO(wrong): Filter by result type instead of id.
+  if (selected_result->id() == "PrivacyInfoResult") {
+    // Privacy view should not change the search box text.
+    return;
+  }
+
   if (selected_result->result_type() == AppListSearchResultType::kOmnibox &&
       !selected_result->is_omnibox_search() &&
       !selected_result->details().empty()) {
@@ -741,7 +754,6 @@ void SearchBoxView::UpdateSearchBoxTextForSelectedResult(
   } else {
     search_box()->SetText(selected_result->title());
   }
-  search_box_has_query_ = false;
 }
 
 void SearchBoxView::Update() {

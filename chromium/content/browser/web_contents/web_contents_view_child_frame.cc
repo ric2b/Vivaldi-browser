@@ -93,7 +93,13 @@ void WebContentsViewChildFrame::CreateView(gfx::NativeView context) {
 
 RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForWidget(
     RenderWidgetHost* render_widget_host) {
-  return RenderWidgetHostViewChildFrame::Create(render_widget_host);
+  blink::ScreenInfo screen_info;
+  if (auto* view = web_contents_->GetRenderWidgetHostView())
+    view->GetScreenInfo(&screen_info);
+  else
+    DisplayUtil::GetDefaultScreenInfo(&screen_info);
+  return RenderWidgetHostViewChildFrame::Create(render_widget_host,
+                                                screen_info);
 }
 
 RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForChildWidget(
@@ -115,7 +121,7 @@ void WebContentsViewChildFrame::SetOverscrollControllerEnabled(bool enabled) {
   // This is managed by the outer view.
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 bool WebContentsViewChildFrame::CloseTabAfterEventTrackingIfNeeded() {
   return false;
 }

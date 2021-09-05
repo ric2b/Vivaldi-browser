@@ -21,20 +21,19 @@
 <translation id="1620510694547887537">Kaamera</translation>
 <translation id="1647391597548383849">Juurdepääs kaamerale</translation>
 <translation id="1660204651932907780">Saitidel lubatakse esitada heli (soovitatav)</translation>
+<translation id="1677097821151855053">Küpsisefaile ja muid saidi andmeid kasutatakse teie meeldejätmiseks, näiteks selleks, et teid sisse logida või reklaame isikupärastada. Kõigi saitide küpsisefailide haldamiseks vaadake jaotist <ph name="BEGIN_LINK" />Seaded<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Kas soovite saidi andmed kustutada?</translation>
 <translation id="169515064810179024">Blokeeri saitide juurdepääs liikumisanduritele</translation>
 <translation id="1717218214683051432">Liikumisandurid</translation>
 <translation id="1743802530341753419">Küsi luba, kui saidid üritavad seadmega ühendust luua (soovitatav)</translation>
+<translation id="1818308510395330587">Selleks et rakendus <ph name="APP_NAME" /> saaks AR-i kasutada, lülitage sisse kaamera ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="1887786770086287077">Juurdepääs asukohale on selle seadme puhul välja lülitatud. Lülitage see sisse <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="1919345977826869612">Reklaamid</translation>
-<translation id="1922076542920281912">Selleks et anda Chrome'ile juurdepääs teie asukohale, lülitage funktsioon Asukoht sisse ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="1923695749281512248"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> / <ph name="FILE_SIZE_WITH_UNITS" /></translation>
-<translation id="194341124344773587">Lülita <ph name="BEGIN_LINK" />Android-seadetes<ph name="END_LINK" /> sisse luba Chrome'ile.</translation>
 <translation id="1984937141057606926">Lubatud, välja arvatud kolmanda osapoole küpsised</translation>
 <translation id="1994173015038366702">Saidi URL</translation>
 <translation id="2025115093177348061">Liitreaalsus</translation>
 <translation id="2030769033451695672">Puudutage vahelehele <ph name="URL_OF_THE_CURRENT_TAB" /> naasmiseks</translation>
-<translation id="2041019821020695769">Selleks et lubada Chrome'il teile märguandeid saata, lülitage märguanded <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" /> ka sisse.</translation>
 <translation id="2079545284768500474">Võta tagasi</translation>
 <translation id="2091887806945687916">Heli</translation>
 <translation id="2107397443965016585">Küsi enne saidile kaitstud sisu esitamiseks loa andmist (soovitatav)</translation>
@@ -42,6 +41,7 @@
 <translation id="2148716181193084225">Täna</translation>
 <translation id="2182457891543959921">Küsi enne saitidele loa andmist mind ümbritsevast 3D-kaardi loomiseks või kaamera asendi jälgimiseks (soovitatav)</translation>
 <translation id="2212565012507486665">Luba küpsisefailid</translation>
+<translation id="2228071138934252756">Selleks et anda rakendusele <ph name="APP_NAME" /> juurdepääs teie kaamerale, lülitage kaamera sisse ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="2289270750774289114">Küsi, kui sait soovib läheduses asuvaid Bluetoothi seadmeid tuvastada (soovitatav)</translation>
 <translation id="2315043854645842844">Operatsioonisüsteem ei toeta kliendipoolset sertifikaadi valimist.</translation>
 <translation id="2359808026110333948">Jätka</translation>
@@ -52,13 +52,13 @@
 <translation id="2490684707762498678">Haldab <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Abi ja tagasiside</translation>
 <translation id="2501278716633472235">Mine tagasi</translation>
-<translation id="2537296579376733324">Kõik küpsisefailid, ainult sellel saidil</translation>
 <translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 küpsisefail on blokeeritud}other{# küpsisefaili on blokeeritud}}</translation>
 <translation id="2570922361219980984">Ka juurdepääs asukohale on selle seadme puhul välja lülitatud. Lülitage see sisse <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Laiendatud – ahendamiseks klõpsake.</translation>
 <translation id="2586657967955657006">Lõikelaud</translation>
 <translation id="2621115761605608342">Lubage JavaScript konkreetse saidi jaoks.</translation>
 <translation id="2653659639078652383">Esita</translation>
+<translation id="2677748264148917807">Lahku</translation>
 <translation id="2687403674020088961">Blokeeri kõik küpsised (ei ole soovitatav)</translation>
 <translation id="2704606927547763573">Kopeeritud</translation>
 <translation id="2822354292072154809">Kas soovite objekti <ph name="CHOSEN_OBJECT_NAME" /> jaoks kindlasti lähtestada kõik saidi load?</translation>
@@ -71,8 +71,8 @@
 <translation id="301521992641321250">Automaatselt blokeeritud</translation>
 <translation id="3115898365077584848">Kuva teave</translation>
 <translation id="3123473560110926937">Blokeeritud teatud saitidel</translation>
-<translation id="3190152372525844641">Lülita <ph name="BEGIN_LINK" />Android-seadetes<ph name="END_LINK" /> sisse load Chrome'ile.</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> salvestatud andmeid</translation>
+<translation id="321187648315454507">Selleks et lubada rakendusel <ph name="APP_NAME" /> teile märguandeid saata, lülitage märguanded sisse ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3277252321222022663">Luba saitide jaoks juurdepääs anduritele (soovitatav)</translation>
 <translation id="3295602654194328831">Peida teave</translation>
@@ -83,9 +83,7 @@
 <translation id="358794129225322306">Lubab saidil automaatselt mitut faili alla laadida.</translation>
 <translation id="3596414637720633074">Blokeerige kolmanda osapoole küpsisefailid inkognito režiimis</translation>
 <translation id="3600792891314830896">Heli esitavad saidid vaigistatakse</translation>
-<translation id="3730075448226062617">Selleks et anda Chrome'ile juurdepääs teie mikrofonile, lülitage mikrofon sisse ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="3744111561329211289">Taustal sünkroonimine</translation>
-<translation id="3822502789641063741">Kas tühj. saidi salvestusruum?</translation>
 <translation id="385051799172605136">Tagasi</translation>
 <translation id="3859306556332390985">Keri edasi</translation>
 <translation id="3955193568934677022">Luba saitidel esitada kaitstud sisu (soovitatav)</translation>
@@ -95,16 +93,20 @@
 <translation id="4008040567710660924">Lubage konkreetse saidi küpsisefailid.</translation>
 <translation id="4046123991198612571">Järgmine lugu</translation>
 <translation id="4165986682804962316">Saidi seaded</translation>
+<translation id="4200726100658658164">Ava asukohaseaded</translation>
 <translation id="4226663524361240545">Seade võib märguannete korral vibreerida</translation>
 <translation id="4242533952199664413">Ava seaded</translation>
 <translation id="4259722352634471385">Navigeerimine on blokeeritud: <ph name="URL" /></translation>
 <translation id="4278390842282768270">Lubatud</translation>
 <translation id="429312253194641664">Sait esitab meediasisu</translation>
+<translation id="42981349822642051">Laienda</translation>
+<translation id="4336434711095810371">Kustuta kõik andmed</translation>
 <translation id="4433925000917964731">Lihtsustatud lehte pakub Google</translation>
 <translation id="4434045419905280838">Hüpikaknad ja ümbersuunamised</translation>
 <translation id="445467742685312942">Saitidel on lubatud esitada kaitstud sisu</translation>
 <translation id="4468959413250150279">Konkreetse saidi heli vaigistamine.</translation>
 <translation id="4479647676395637221">Küsi enne saitidele minu kaamera kasutamiseks juurdepääsu lubamist (soovitatav)</translation>
+<translation id="4534723447064627427">Selleks et anda rakendusele <ph name="APP_NAME" /> juurdepääs teie mikrofonile, lülitage mikrofon sisse ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Üksikasjad</translation>
 <translation id="4645575059429386691">Vanema hallatud</translation>
 <translation id="4670064810192446073">Virtuaalreaalsus</translation>
@@ -112,7 +114,6 @@
 <translation id="4883854917563148705">Hallatud seadeid ei saa lähtestada</translation>
 <translation id="4887024562049524730">Küsi enne saitidele loa andmist virtuaalreaalsuse seadme ja andmete kasutamiseks (soovitatav)</translation>
 <translation id="4962975101802056554">Seadme puhul kõigi lubade tühistamine</translation>
-<translation id="4964199952259983386">Selleks et Chrome saaks AR-i kasutada, lülitage <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" /> sisse ka kaamera.</translation>
 <translation id="497421865427891073">Edasiminek</translation>
 <translation id="4996978546172906250">Jagamine:</translation>
 <translation id="5039804452771397117">Luba</translation>
@@ -120,14 +121,15 @@
 <translation id="5063480226653192405">Kasutus</translation>
 <translation id="5100237604440890931">Ahendatud – laiendamiseks klõpsake.</translation>
 <translation id="5123685120097942451">Inkognito vaheleht</translation>
+<translation id="528192093759286357">Täisekraanilt väljumiseks lohistage ülaservast alla ja puudutage tagasinuppu.</translation>
 <translation id="5300589172476337783">Kuva</translation>
 <translation id="5301954838959518834">Selge, sain aru</translation>
-<translation id="5307446750509046227">Tühjenda salvestusruum</translation>
 <translation id="5313967007315987356">Lisa sait</translation>
 <translation id="5317780077021120954">Salvesta</translation>
 <translation id="5335288049665977812">Luba saitidel käitada JavaScripti (soovitatav)</translation>
 <translation id="534295439873310000">NFC-seadmed</translation>
 <translation id="5354152178998424783">See kustutab <ph name="DATASIZE" /> andmed ja küpsisefailid, mille saidid on salvestanud.</translation>
+<translation id="5384883051496921101">See sait jagab teavet väljaspool inkognito režiimi oleva rakendusega.</translation>
 <translation id="5391532827096253100">Teie ühendus selle saidiga ei ole turvaline. Saidi teave</translation>
 <translation id="5494752089476963479">Blokeeri reklaamid saitidel, mis kuvavad sekkuvaid või eksitavaid reklaame</translation>
 <translation id="5505264765875738116">Saidid ei saa küsida luba märguannete saatmiseks</translation>
@@ -146,6 +148,7 @@
 <translation id="5916664084637901428">Sees</translation>
 <translation id="5922853908706496913">Ekraanikuva jagamine</translation>
 <translation id="5939518447894949180">Lähtesta</translation>
+<translation id="6015775454662021376">Selle saidi juurdepääsu muutmine teie seadmele</translation>
 <translation id="6040143037577758943">Sulge</translation>
 <translation id="6042308850641462728">Rohkem</translation>
 <translation id="6064125863973209585">Lõpetatud allalaadimised</translation>
@@ -153,7 +156,6 @@
 <translation id="6177111841848151710">Praeguse otsingumootori puhul blokeeritud</translation>
 <translation id="6181444274883918285">Lisa saidi erand</translation>
 <translation id="6192792657125177640">Erandid</translation>
-<translation id="6194112207524046168">Selleks et anda Chrome'ile juurdepääs teie kaamerale, lülitage kaamera sisse ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="6196640612572343990">Blokeeri kolmanda osapoole küpsisefailid</translation>
 <translation id="6206551242102657620">Ühendus on turvaline. Saidi teave</translation>
 <translation id="6216432067784365534">Üksuse <ph name="NAME_OF_LIST_ITEM" /> valikud</translation>
@@ -161,6 +163,7 @@
 <translation id="6295158916970320988">Kõik saidid</translation>
 <translation id="6320088164292336938">Vibreerimine</translation>
 <translation id="6388207532828177975">Kustuta ja lähtesta</translation>
+<translation id="6423924377271166037">Kustuta küpsisefailid</translation>
 <translation id="6439114592976064011">Blokeeri saitidel virtuaalreaalsuse seadme ja andmete kasutamine</translation>
 <translation id="6447842834002726250">Küpsised</translation>
 <translation id="6527303717912515753">Jaga</translation>
@@ -168,6 +171,7 @@
 <translation id="6561560012278703671">Kasuta vaiksemat sõnumsidet (märguandeviibad blokeeritakse)</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> GB</translation>
 <translation id="6612358246767739896">Kaitstud sisu</translation>
+<translation id="662080504995468778">Jää siia</translation>
 <translation id="6643016212128521049">Tühjenda</translation>
 <translation id="6697925417670533197">Aktiivsed allalaadimised</translation>
 <translation id="6746124502594467657">Liiguta alla</translation>
@@ -190,6 +194,7 @@
 <translation id="7128222689758636196">Lubab praeguse otsingumootori puhul</translation>
 <translation id="7141896414559753902">Blokeeri saitidel hüpikakende ja ümbersuunamiste kuvamine (soovitatav)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> kB</translation>
+<translation id="7243308994586599757">Valikud on saadaval ekraani allosas</translation>
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> on valitud</translation>
 <translation id="7302486331832100261">Tavaliselt blokeerite märguanded. Lubamiseks puudutage valikut Üksikasjad.</translation>
 <translation id="7423098979219808738">Esmalt küsib</translation>
@@ -225,32 +230,38 @@
 <translation id="8261506727792406068">Kustuta</translation>
 <translation id="8300705686683892304">Neid haldab rakendus</translation>
 <translation id="8372893542064058268">Konkreetse saidi jaoks taustal sünkroonimise lubamine.</translation>
+<translation id="8376384591331888629">Sh sellel saidil olevad kolmanda osapoole küpsisefailid</translation>
 <translation id="83792324527827022">Sait kasutab teie kaamerat ja mikrofoni</translation>
 <translation id="8380167699614421159">Sait kuvab sekkuvaid või eksitavaid reklaame.</translation>
 <translation id="8394832520002899662">Puudutage saidile naasmiseks</translation>
 <translation id="8425213833346101688">Muuda</translation>
 <translation id="8441146129660941386">Keri tagasi</translation>
+<translation id="8444433999583714703">Selleks et anda rakendusele <ph name="APP_NAME" /> juurdepääs teie asukohale, lülitage funktsioon Asukoht sisse ka <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Seadme loa tühistamine</translation>
+<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{1 küpsisefail on kasutuses}other{# küpsisefaili on kasutuses}}</translation>
 <translation id="8463851957836045671">Sait on kiire</translation>
 <translation id="851751545965956758">Blokeeri saitidel seadmetega ühenduse loomine</translation>
 <translation id="857943718398505171">Lubatud (soovitatav)</translation>
 <translation id="8609465669617005112">Liiguta üles</translation>
 <translation id="8676374126336081632">Tühjenda sisestus</translation>
 <translation id="8702612070107455751">Kõik võrguühenduseta andmed kustutatakse.</translation>
+<translation id="8719283222052720129">Lülitage <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" /> sisse luba rakendusele <ph name="APP_NAME" />.</translation>
 <translation id="8725066075913043281">Proovi uuesti</translation>
 <translation id="8730621377337864115">Valmis</translation>
 <translation id="8737217482364735741">See kustutab kõik saidi <ph name="ORIGIN" /> salvestatud andmed ja küpsisefailid.</translation>
 <translation id="8801436777607969138">JavaScripti blokeerimine konkreetsel saidil.</translation>
 <translation id="8816026460808729765">Blokeeri saitide jaoks juurdepääs anduritele</translation>
 <translation id="8847988622838149491">USB</translation>
-<translation id="885701979325669005">Salvestamine</translation>
 <translation id="8926666909099850184">NFC on selle seadme puhul välja lülitatud. Lülitage see <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" /> sisse.</translation>
 <translation id="8929372349074745002">See sait avaneb ja vastab enamikule inimestele kiirelt</translation>
 <translation id="8941729603749328384">www.example.com</translation>
+<translation id="894871326938397531">Kas lahkuda inkognito režiimist?</translation>
 <translation id="8958424370300090006">Blokeerige konkreetse saidi küpsisefailid.</translation>
 <translation id="8959122750345127698">Navigeerimine ei ole saadaval: <ph name="URL" /></translation>
 <translation id="9019902583201351841">Vanemate hallatud</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
+<translation id="913657688200966289">Lülitage <ph name="BEGIN_LINK" />Androidi seadetes<ph name="END_LINK" /> sisse load rakendusele <ph name="APP_NAME" />.</translation>
 <translation id="945632385593298557">Juurdepääs mikrofonile</translation>
 <translation id="965817943346481315">Blokeeri, kui sait kuvab sekkuvaid või eksitavaid reklaame (soovitatav)</translation>
+<translation id="967624055006145463">Salvestatud andmete maht</translation>
 </translationbundle>

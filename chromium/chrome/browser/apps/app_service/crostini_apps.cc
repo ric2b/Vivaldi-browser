@@ -39,7 +39,7 @@ bool ShouldShowDisplayDensityMenuItem(const std::string& app_id,
   // The default terminal app is crosh in a Chrome window and it doesn't run in
   // the Crostini container so it doesn't support display density the same way.
   if (menu_type != apps::mojom::MenuType::kShelf ||
-      app_id == crostini::GetTerminalId()) {
+      app_id == crostini::kCrostiniTerminalSystemAppId) {
     return false;
   }
 
@@ -128,7 +128,7 @@ void CrostiniApps::Connect(
 
 void CrostiniApps::LoadIcon(const std::string& app_id,
                             apps::mojom::IconKeyPtr icon_key,
-                            apps::mojom::IconCompression icon_compression,
+                            apps::mojom::IconType icon_type,
                             int32_t size_hint_in_dip,
                             bool allow_placeholder_icon,
                             LoadIconCallback callback) {
@@ -136,8 +136,8 @@ void CrostiniApps::LoadIcon(const std::string& app_id,
     if (icon_key->resource_id != apps::mojom::IconKey::kInvalidResourceId) {
       // The icon is a resource built into the Chrome OS binary.
       constexpr bool is_placeholder_icon = false;
-      LoadIconFromResource(icon_compression, size_hint_in_dip,
-                           icon_key->resource_id, is_placeholder_icon,
+      LoadIconFromResource(icon_type, size_hint_in_dip, icon_key->resource_id,
+                           is_placeholder_icon,
                            static_cast<IconEffects>(icon_key->icon_effects),
                            std::move(callback));
       return;
@@ -147,12 +147,12 @@ void CrostiniApps::LoadIcon(const std::string& app_id,
       // Try loading the icon from an on-disk cache. If that fails, fall back
       // to LoadIconFromVM.
       LoadIconFromFileWithFallback(
-          icon_compression, size_hint_in_dip,
+          icon_type, size_hint_in_dip,
           registry_->GetIconPath(app_id, scale_factor),
           static_cast<IconEffects>(icon_key->icon_effects), std::move(callback),
           base::BindOnce(&CrostiniApps::LoadIconFromVM,
-                         weak_ptr_factory_.GetWeakPtr(), app_id,
-                         icon_compression, size_hint_in_dip, scale_factor,
+                         weak_ptr_factory_.GetWeakPtr(), app_id, icon_type,
+                         size_hint_in_dip, scale_factor,
                          static_cast<IconEffects>(icon_key->icon_effects)));
       return;
     }
@@ -170,6 +170,7 @@ void CrostiniApps::Launch(const std::string& app_id,
 }
 
 void CrostiniApps::Uninstall(const std::string& app_id,
+                             apps::mojom::UninstallSource uninstall_source,
                              bool clear_site_data,
                              bool report_abuse) {
   crostini::CrostiniPackageService::GetForProfile(profile_)
@@ -190,10 +191,8 @@ void CrostiniApps::GetMenuModel(const std::string& app_id,
     AddCommandItem(ash::UNINSTALL, IDS_APP_LIST_UNINSTALL_ITEM, &menu_items);
   }
 
-  if (app_id == crostini::GetTerminalId()) {
-    if (base::FeatureList::IsEnabled(features::kTerminalSystemApp)) {
-      AddCommandItem(ash::SETTINGS, IDS_INTERNAL_APP_SETTINGS, &menu_items);
-    }
+  if (app_id == crostini::kCrostiniTerminalSystemAppId) {
+    AddCommandItem(ash::SETTINGS, IDS_INTERNAL_APP_SETTINGS, &menu_items);
     if (crostini::IsCrostiniRunning(profile_)) {
       AddCommandItem(ash::SHUTDOWN_GUEST_OS,
                      IDS_CROSTINI_SHUT_DOWN_LINUX_MENU_ITEM, &menu_items);
@@ -256,7 +255,7 @@ void CrostiniApps::OnCrostiniEnabledChanged() {
   // point to installing other Crostini apps.
   apps::mojom::AppPtr app = apps::mojom::App::New();
   app->app_type = apps::mojom::AppType::kCrostini;
-  app->app_id = crostini::GetTerminalId();
+  app->app_id = crostini::kCrostiniTerminalSystemAppId;
   app->show_in_launcher = show;
   app->show_in_shelf = show;
   app->show_in_search = show;
@@ -264,7 +263,7 @@ void CrostiniApps::OnCrostiniEnabledChanged() {
 }
 
 void CrostiniApps::LoadIconFromVM(const std::string app_id,
-                                  apps::mojom::IconCompression icon_compression,
+                                  apps::mojom::IconType icon_type,
                                   int32_t size_hint_in_dip,
                                   ui::ScaleFactor scale_factor,
                                   IconEffects icon_effects,
@@ -272,17 +271,16 @@ void CrostiniApps::LoadIconFromVM(const std::string app_id,
   registry_->RequestIcon(
       app_id, scale_factor,
       base::BindOnce(&CrostiniApps::OnLoadIconFromVM,
-                     weak_ptr_factory_.GetWeakPtr(), app_id, icon_compression,
+                     weak_ptr_factory_.GetWeakPtr(), app_id, icon_type,
                      size_hint_in_dip, icon_effects, std::move(callback)));
 }
 
-void CrostiniApps::OnLoadIconFromVM(
-    const std::string app_id,
-    apps::mojom::IconCompression icon_compression,
-    int32_t size_hint_in_dip,
-    IconEffects icon_effects,
-    LoadIconCallback callback,
-    std::string compressed_icon_data) {
+void CrostiniApps::OnLoadIconFromVM(const std::string app_id,
+                                    apps::mojom::IconType icon_type,
+                                    int32_t size_hint_in_dip,
+                                    IconEffects icon_effects,
+                                    LoadIconCallback callback,
+                                    std::string compressed_icon_data) {
   if (compressed_icon_data.empty()) {
     auto registration = registry_->GetRegistration(app_id);
     if (crostini::IsUnmatchedCrostiniShelfAppId(app_id) ||
@@ -292,14 +290,14 @@ void CrostiniApps::OnLoadIconFromVM(
       // Load default penguin for crostini. We must set is_placeholder_icon to
       // false to stop endless recursive calls.
       LoadIconFromResource(
-          icon_compression, size_hint_in_dip, IDR_LOGO_CROSTINI_DEFAULT_192,
+          icon_type, size_hint_in_dip, IDR_LOGO_CROSTINI_DEFAULT_192,
           /*is_placeholder_icon=*/false, icon_effects, std::move(callback));
     } else {
       // Leave it for app service to get a default for Plugin VM.
       std::move(callback).Run(apps::mojom::IconValue::New());
     }
   } else {
-    LoadIconFromCompressedData(icon_compression, size_hint_in_dip, icon_effects,
+    LoadIconFromCompressedData(icon_type, size_hint_in_dip, icon_effects,
                                compressed_icon_data, std::move(callback));
   }
 }
@@ -335,7 +333,7 @@ apps::mojom::AppPtr CrostiniApps::Convert(
     show = apps::mojom::OptionalBool::kFalse;
   }
   auto show_in_search = show;
-  if (registration.is_terminal_app()) {
+  if (registration.app_id() == crostini::kCrostiniTerminalSystemAppId) {
     show = crostini_enabled_ ? apps::mojom::OptionalBool::kTrue
                              : apps::mojom::OptionalBool::kFalse;
     // The Crostini Terminal should appear in the app search, even when
@@ -361,13 +359,17 @@ apps::mojom::IconKeyPtr CrostiniApps::NewIconKey(const std::string& app_id) {
   // Crostini Terminal icon (the UI for enabling and installing Crostini apps)
   // should be showable even before the user has installed their first Crostini
   // app and before bringing up an Crostini VM for the first time.
-  if (app_id == crostini::GetTerminalId()) {
+  if (app_id == crostini::kCrostiniTerminalSystemAppId) {
     return apps::mojom::IconKey::New(
         apps::mojom::IconKey::kDoesNotChangeOverTime,
         IDR_LOGO_CROSTINI_TERMINAL, apps::IconEffects::kNone);
   }
 
-  return icon_key_factory_.MakeIconKey(apps::IconEffects::kNone);
+  auto icon_effects =
+      base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)
+          ? IconEffects::kCrOsStandardIcon
+          : IconEffects::kNone;
+  return icon_key_factory_.MakeIconKey(icon_effects);
 }
 
 void CrostiniApps::PublishAppID(const std::string& app_id,

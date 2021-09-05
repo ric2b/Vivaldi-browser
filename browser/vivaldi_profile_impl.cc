@@ -15,9 +15,10 @@
 #include "contact/contact_service_factory.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
+#include "menus/context_menu_service_factory.h"
+#include "menus/main_menu_service_factory.h"
 #include "menus/menu_model.h"
 #include "menus/menu_model_loaded_observer.h"
-#include "menus/menu_service_factory.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_loaded_observer.h"
@@ -42,8 +43,10 @@ void VivaldiInitProfile(Profile* profile) {
 
 #if !defined(OS_ANDROID)
   menus::Menu_Model* menu_model =
-      menus::MenuServiceFactory::GetForBrowserContext(profile);
+      menus::MainMenuServiceFactory::GetForBrowserContext(profile);
   menu_model->AddObserver(new menus::MenuModelLoadedObserver());
+  // The context menu model content is loaded on demand so no observer here.
+  menus::ContextMenuServiceFactory::GetForBrowserContext(profile);
 
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
       ->Get(profile)

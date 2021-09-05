@@ -18,12 +18,13 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
-#include "chrome/browser/prerender/prerender_contents.h"
+#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/common/chrome_features.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
+#include "components/prerender/browser/prerender_contents.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -528,7 +529,8 @@ void LoginHandler::ShowLoginPrompt(const GURL& request_url) {
     return;
   }
   prerender::PrerenderContents* prerender_contents =
-      prerender::PrerenderContents::FromWebContents(web_contents());
+      prerender::ChromePrerenderContentsDelegate::FromWebContents(
+          web_contents());
   if (prerender_contents) {
     prerender_contents->Destroy(prerender::FINAL_STATUS_AUTH_NEEDED);
     CancelAuth();

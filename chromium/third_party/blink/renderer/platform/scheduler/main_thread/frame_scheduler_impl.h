@@ -23,6 +23,7 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/agent_group_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_origin_type.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_task_queue_controller.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_task_queue.h"
@@ -109,6 +110,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
   CreateResourceLoadingTaskRunnerHandle() override;
 
+  AgentGroupSchedulerImpl* GetAgentGroupScheduler();
   PageScheduler* GetPageScheduler() const override;
   void DidStartProvisionalLoad(bool is_main_frame) override;
   void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
@@ -140,6 +142,9 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   base::WeakPtr<FrameScheduler> GetWeakPtr() override;
   base::WeakPtr<const FrameSchedulerImpl> GetWeakPtr() const;
+  base::WeakPtr<FrameSchedulerImpl> GetInvalidingOnBFCacheRestoreWeakPtr();
+
+  void ReportActiveSchedulerTrackedFeatures() override;
 
   scoped_refptr<base::SingleThreadTaskRunner> ControlTaskRunner();
 
@@ -175,6 +180,11 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   void OnTaskQueueCreated(
       MainThreadTaskQueue*,
       base::sequence_manager::TaskQueue::QueueEnabledVoter*) override;
+
+  void SetOnIPCTaskPostedWhileInBackForwardCacheHandler();
+  void DetachOnIPCTaskPostedWhileInBackForwardCacheHandler();
+  void OnIPCTaskPostedWhileInBackForwardCache(uint32_t ipc_hash,
+                                              const base::Location& task_from);
 
   // Returns the list of active features which currently tracked by the
   // scheduler for back-forward cache metrics.
@@ -377,6 +387,12 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   // TODO(altimin): Remove after we have have 1:1 relationship between frames
   // and documents.
   base::WeakPtrFactory<FrameSchedulerImpl> document_bound_weak_factory_{this};
+
+  // WeakPtrFactory for tracking IPCs posted to frames cached in the
+  // back-forward cache. These weak pointers are invalidated when the page is
+  // restored from the cache.
+  base::WeakPtrFactory<FrameSchedulerImpl>
+      invalidating_on_bfcache_restore_weak_factory_{this};
 
   mutable base::WeakPtrFactory<FrameSchedulerImpl> weak_factory_{this};
 

@@ -28,7 +28,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/pdf/pdf_extension_util.h"
 #include "chrome/browser/printing/background_printing_manager.h"
 #include "chrome/browser/printing/print_job_manager.h"
@@ -51,6 +50,7 @@
 #include "chrome/grit/print_preview_resources.h"
 #include "chrome/grit/print_preview_resources_map.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "components/cloud_devices/common/cloud_devices_urls.h"
 #include "components/prefs/pref_service.h"
 #include "components/printing/common/print_messages.h"
 #include "components/strings/grit/components_strings.h"
@@ -70,12 +70,6 @@
 #include "ui/web_dialogs/web_dialog_delegate.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#elif defined(OS_WIN)
-#include "base/enterprise_util.h"
-#endif
-
 #if !BUILDFLAG(OPTIMIZE_WEBUI)
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
 #endif
@@ -86,7 +80,7 @@ namespace printing {
 
 namespace {
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // U+0028 U+21E7 U+2318 U+0050 U+0029 in UTF8
 const char kBasicPrintShortcut[] = "\x28\xE2\x8c\xA5\xE2\x8C\x98\x50\x29";
 #elif !defined(OS_CHROMEOS)
@@ -220,13 +214,14 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
      IDS_PRINT_PREVIEW_ADVANCED_SETTINGS_SEARCH_BOX_PLACEHOLDER},
     {"bottom", IDS_PRINT_PREVIEW_BOTTOM_MARGIN_LABEL},
     {"cancel", IDS_CANCEL},
-    {"cloudPrintPromotion", IDS_PRINT_PREVIEW_CLOUD_PRINT_PROMOTION},
+    {"clearSearch", IDS_CLEAR_SEARCH},
     {"copiesInstruction", IDS_PRINT_PREVIEW_COPIES_INSTRUCTION},
     {"copiesLabel", IDS_PRINT_PREVIEW_COPIES_LABEL},
     {"couldNotPrint", IDS_PRINT_PREVIEW_COULD_NOT_PRINT},
     {"customMargins", IDS_PRINT_PREVIEW_CUSTOM_MARGINS},
     {"defaultMargins", IDS_PRINT_PREVIEW_DEFAULT_MARGINS},
     {"destinationLabel", IDS_PRINT_PREVIEW_DESTINATION_LABEL},
+    {"destinationNotSupportedWarning", IDS_DESTINATION_NOT_SUPPORTED_WARNING},
     {"destinationSearchTitle", IDS_PRINT_PREVIEW_DESTINATION_SEARCH_TITLE},
     {"dpiItemLabel", IDS_PRINT_PREVIEW_DPI_ITEM_LABEL},
     {"dpiLabel", IDS_PRINT_PREVIEW_DPI_LABEL},
@@ -320,6 +315,7 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"title", IDS_PRINT_PREVIEW_TITLE},
     {"top", IDS_PRINT_PREVIEW_TOP_MARGIN_LABEL},
     {"unsupportedCloudPrinter", IDS_PRINT_PREVIEW_UNSUPPORTED_CLOUD_PRINTER},
+    {"warningIconAriaLabel", IDS_WARNING_ICON_ARIA_LABEL},
 #if defined(OS_CHROMEOS)
     {"configuringFailedText", IDS_PRINT_CONFIGURING_FAILED_TEXT},
     {"configuringInProgressText", IDS_PRINT_CONFIGURING_IN_PROGRESS_TEXT},
@@ -327,8 +323,6 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"pinErrorMessage", IDS_PRINT_PREVIEW_PIN_ERROR_MESSAGE},
     {"pinPlaceholder", IDS_PRINT_PREVIEW_PIN_PLACEHOLDER},
     {"printerEulaURL", IDS_PRINT_PREVIEW_EULA_URL},
-    {"printerStatusConnectingToDevice",
-     IDS_PRINT_PREVIEW_PRINTER_STATUS_CONNECTING_TO_DEVICE},
     {"printerStatusDeviceError", IDS_PRINT_PREVIEW_PRINTER_STATUS_DEVICE_ERROR},
     {"printerStatusDoorOpen", IDS_PRINT_PREVIEW_PRINTER_STATUS_DOOR_OPEN},
     {"printerStatusLowOnInk", IDS_PRINT_PREVIEW_PRINTER_STATUS_LOW_ON_INK},
@@ -347,7 +341,7 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"printerStatusStopped", IDS_PRINT_PREVIEW_PRINTER_STATUS_STOPPED},
     {"printerStatusTrayMissing", IDS_PRINT_PREVIEW_PRINTER_STATUS_TRAY_MISSING},
 #endif
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     {"openPdfInPreviewOption", IDS_PRINT_PREVIEW_OPEN_PDF_IN_PREVIEW_APP},
     {"openingPDFInPreview", IDS_PRINT_PREVIEW_OPENING_PDF_IN_PREVIEW_APP},
 #endif
@@ -357,7 +351,39 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
   source->AddString("gcpCertificateErrorLearnMoreURL",
                     chrome::kCloudPrintCertificateErrorLearnMoreURL);
 
+  const bool is_enterprise_managed = webui::IsEnterpriseManaged();
+  if (is_enterprise_managed) {
+    source->AddLocalizedString(
+        "cloudPrintingNotSupportedWarning",
+        IDS_CLOUD_PRINTING_NOT_SUPPORTED_WARNING_ENTERPRISE);
+    source->AddLocalizedString("printerNotSupportedWarning",
+                               IDS_PRINTER_NOT_SUPPORTED_WARNING_ENTERPRISE);
+  } else {
+    source->AddString(
+        "cloudPrintingNotSupportedWarning",
+        l10n_util::GetStringFUTF16(
+            IDS_CLOUD_PRINTING_NOT_SUPPORTED_WARNING,
+            base::ASCIIToUTF16(cloud_devices::kCloudPrintDeprecationHelpURL)));
+    source->AddString(
+        "printerNotSupportedWarning",
+        l10n_util::GetStringFUTF16(
+            IDS_PRINTER_NOT_SUPPORTED_WARNING,
+            base::ASCIIToUTF16(cloud_devices::kCloudPrintDeprecationHelpURL)));
+  }
+
 #if !defined(OS_CHROMEOS)
+  if (is_enterprise_managed) {
+    source->AddLocalizedString(
+        "saveToDriveNotSupportedWarning",
+        IDS_GOOGLE_DRIVE_OPTION_NOT_SUPPORTED_WARNING_ENTERPRISE);
+  } else {
+    source->AddString(
+        "saveToDriveNotSupportedWarning",
+        l10n_util::GetStringFUTF16(
+            IDS_GOOGLE_DRIVE_OPTION_NOT_SUPPORTED_WARNING,
+            base::ASCIIToUTF16(cloud_devices::kCloudPrintDeprecationHelpURL)));
+  }
+
   const base::string16 shortcut_text(base::UTF8ToUTF16(kBasicPrintShortcut));
   source->AddString("systemDialogOption",
                     l10n_util::GetStringFUTF16(
@@ -381,20 +407,21 @@ void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
   source->AddBoolean("useSystemDefaultPrinter", system_default_printer);
 #endif
 
-  bool enterprise_managed = false;
-#if defined(OS_CHROMEOS)
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  enterprise_managed = connector->IsEnterpriseManaged();
-#elif defined(OS_WIN)
-  enterprise_managed = base::IsMachineExternallyManaged();
-#endif
-  source->AddBoolean("isEnterpriseManaged", enterprise_managed);
+  source->AddBoolean("isEnterpriseManaged", webui::IsEnterpriseManaged());
+
+  bool cloud_print_deprecation_warnings_suppressed =
+      profile->GetPrefs()->GetBoolean(
+          prefs::kCloudPrintDeprecationWarningsSuppressed);
+  source->AddBoolean("cloudPrintDeprecationWarningsSuppressed",
+                     cloud_print_deprecation_warnings_suppressed);
 
 #if defined(OS_CHROMEOS)
   source->AddBoolean(
       "showPrinterStatus",
       base::FeatureList::IsEnabled(chromeos::features::kPrinterStatus));
+  source->AddBoolean(
+      "printSaveToDrive",
+      base::FeatureList::IsEnabled(chromeos::features::kPrintSaveToDrive));
 #endif
 }
 

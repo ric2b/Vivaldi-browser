@@ -20,13 +20,6 @@ const SAConstants = {
   BACK_ID: 'back',
 
   /**
-   * The maximum length of a row in the Virtual Keyboard.
-   * @type {number}
-   * @const
-   */
-  KEYBOARD_MAX_ROW_LENGTH: 14,
-
-  /**
    * The ID of the menu panel.
    * This must be kept in sync with the div ID in menu_panel.html.
    * @type {string}
@@ -78,6 +71,9 @@ const SAConstants = {
     MISSING_KEYBOARD: 10,
     ROW_TOO_SHORT: 11,
     MISSING_BASE_NODE: 12,
+    NEXT_INVALID: 13,
+    PREVIOUS_INVALID: 14,
+    INVALID_SELECTION_BOUNDS: 15,
   },
 
   /**

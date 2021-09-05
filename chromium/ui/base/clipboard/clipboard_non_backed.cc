@@ -9,6 +9,7 @@
 #include <limits>
 #include <list>
 #include <memory>
+#include <set>
 #include <utility>
 
 #include "base/check_op.h"
@@ -18,9 +19,13 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/synchronization/lock.h"
 #include "skia/ext/skia_utils_base.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
+#include "ui/base/clipboard/clipboard_data.h"
+#include "ui/base/clipboard/clipboard_data_endpoint.h"
+#include "ui/base/clipboard/clipboard_dlp_controller.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/clipboard_metrics.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
@@ -32,174 +37,87 @@ namespace ui {
 
 namespace {
 
-const size_t kMaxClipboardSize = 1;
+// Returns the registry which tracks all instances of ClipboardNonBacked in
+// existence. This allows us to determine if any arbitrary Clipboard pointer in
+// fact points to a ClipboardNonBacked instance. Only if a pointer exists in
+// this registry is it safe to cast to ClipboardNonBacked*.
+std::set<const ClipboardNonBacked*>* GetInstanceRegistry() {
+  static base::NoDestructor<std::set<const ClipboardNonBacked*>> registry;
+  return registry.get();
+}
 
-// Clipboard data format used by ClipboardInternal.
-enum class ClipboardInternalFormat {
-  kText = 1 << 0,
-  kHtml = 1 << 1,
-  kRtf = 1 << 2,
-  kBookmark = 1 << 3,
-  kBitmap = 1 << 4,
-  kCustom = 1 << 5,
-  kWeb = 1 << 6,
-};
+// The ClipboardNonBacked instance registry can be accessed by multiple threads.
+// Any inspection/modification of the instance registry must only be performed
+// while this lock is held.
+base::Lock& GetInstanceRegistryLock() {
+  static base::NoDestructor<base::Lock> registry_lock;
+  return *registry_lock;
+}
 
-// ClipboardData contains data copied to the Clipboard for a variety of formats.
-// It mostly just provides APIs to cleanly access and manipulate this data.
-class ClipboardData {
- public:
-  ClipboardData() : web_smart_paste_(false), format_(0) {}
+// Registers the specified |clipboard| as an instance of ClipboardNonBacked.
+// Registration should occur during |clipboard| construction and registration
+// should be maintained until |clipboard| is destroyed. This allows us to check
+// if any arbitrary Clipboard* is safe to cast.
+void RegisterInstance(const ClipboardNonBacked* clipboard) {
+  base::AutoLock lock(GetInstanceRegistryLock());
+  GetInstanceRegistry()->insert(clipboard);
+}
 
-  virtual ~ClipboardData() = default;
+// Unregisters the specified |clipboard| as a instance of ClipboardNonBacked.
+// This should only be done when destroying |clipboard|.
+void UnregisterInstance(const ClipboardNonBacked* clipboard) {
+  base::AutoLock lock(GetInstanceRegistryLock());
+  GetInstanceRegistry()->erase(clipboard);
+}
 
-  // Bitmask of ClipboardInternalFormat types.
-  int format() const { return format_; }
-
-  const std::string& text() const { return text_; }
-  void set_text(const std::string& text) {
-    text_ = text;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kText);
-  }
-
-  const std::string& markup_data() const { return markup_data_; }
-  void set_markup_data(const std::string& markup_data) {
-    markup_data_ = markup_data;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kHtml);
-  }
-
-  const std::string& rtf_data() const { return rtf_data_; }
-  void SetRTFData(const std::string& rtf_data) {
-    rtf_data_ = rtf_data;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kRtf);
-  }
-
-  const std::string& url() const { return url_; }
-  void set_url(const std::string& url) {
-    url_ = url;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kHtml);
-  }
-
-  const std::string& bookmark_title() const { return bookmark_title_; }
-  void set_bookmark_title(const std::string& bookmark_title) {
-    bookmark_title_ = bookmark_title;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kBookmark);
-  }
-
-  const std::string& bookmark_url() const { return bookmark_url_; }
-  void set_bookmark_url(const std::string& bookmark_url) {
-    bookmark_url_ = bookmark_url;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kBookmark);
-  }
-
-  const SkBitmap& bitmap() const { return bitmap_; }
-  void SetBitmapData(const SkBitmap& bitmap) {
-    if (!skia::SkBitmapToN32OpaqueOrPremul(bitmap, &bitmap_)) {
-      NOTREACHED() << "Unable to convert bitmap for clipboard";
-      return;
-    }
-    format_ |= static_cast<int>(ClipboardInternalFormat::kBitmap);
-  }
-
-  const std::string& custom_data_format() const { return custom_data_format_; }
-  const std::string& custom_data_data() const { return custom_data_data_; }
-  void SetCustomData(const std::string& data_format,
-                     const std::string& data_data) {
-    if (data_data.size() == 0) {
-      custom_data_data_.clear();
-      custom_data_format_.clear();
-      return;
-    }
-    custom_data_data_ = data_data;
-    custom_data_format_ = data_format;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kCustom);
-  }
-
-  bool web_smart_paste() const { return web_smart_paste_; }
-  void set_web_smart_paste(bool web_smart_paste) {
-    web_smart_paste_ = web_smart_paste;
-    format_ |= static_cast<int>(ClipboardInternalFormat::kWeb);
-  }
-
- private:
-  // Plain text in UTF8 format.
-  std::string text_;
-
-  // HTML markup data in UTF8 format.
-  std::string markup_data_;
-  std::string url_;
-
-  // RTF data.
-  std::string rtf_data_;
-
-  // Bookmark title in UTF8 format.
-  std::string bookmark_title_;
-  std::string bookmark_url_;
-
-  // Filenames.
-  std::vector<std::string> files_;
-
-  // Bitmap images.
-  SkBitmap bitmap_;
-
-  // Data with custom format.
-  std::string custom_data_format_;
-  std::string custom_data_data_;
-
-  // WebKit smart paste data.
-  bool web_smart_paste_;
-
-  int format_;
-
-  DISALLOW_COPY_AND_ASSIGN(ClipboardData);
-};
+// Checks if |clipboard| is registered as an instance of ClipboardNonBacked.
+// Only if this method returns true is it safe to cast |clipboard| to
+// ClipboardNonBacked*.
+bool IsRegisteredInstance(const Clipboard* clipboard) {
+  base::AutoLock lock(GetInstanceRegistryLock());
+  return base::Contains(*GetInstanceRegistry(), clipboard);
+}
 
 }  // namespace
 
 // Simple, internal implementation of a clipboard, handling things like format
-// conversion, versioning, etc.
+// conversion, sequence numbers, etc.
 class ClipboardInternal {
  public:
-  ClipboardInternal() : sequence_number_(0) {}
+  ClipboardInternal() = default;
 
   ~ClipboardInternal() = default;
 
   void Clear() {
-    sequence_number_++;
-    data_list_.clear();
+    ++sequence_number_;
+    data_.reset();
     ClipboardMonitor::GetInstance()->NotifyClipboardDataChanged();
   }
 
   uint64_t sequence_number() const { return sequence_number_; }
 
-  // Returns the data currently on the top of the clipboard stack, nullptr if
-  // the clipboard stack is empty.
-  const ClipboardData* GetData() const {
-    if (data_list_.empty())
-      return nullptr;
-    return data_list_.front().get();
-  }
+  // Returns the current clipboard data, which may be nullptr if nothing has
+  // been written since the last Clear().
+  const ClipboardData* GetData() const { return data_.get(); }
 
   // Returns true if the data on top of the clipboard stack has format |format|
   // or another format that can be converted to |format|.
   bool IsFormatAvailable(ClipboardInternalFormat format) const {
-    switch (format) {
-      case ClipboardInternalFormat::kText:
-        return HasFormat(ClipboardInternalFormat::kText) ||
-               HasFormat(ClipboardInternalFormat::kBookmark);
-      default:
-        return HasFormat(format);
+    if (format == ClipboardInternalFormat::kText) {
+      return HasFormat(ClipboardInternalFormat::kText) ||
+             HasFormat(ClipboardInternalFormat::kBookmark);
     }
+    return HasFormat(format);
   }
 
-  // Reads text from the data at the top of clipboard stack.
+  // Reads text from the ClipboardData.
   void ReadText(base::string16* result) const {
     std::string utf8_result;
     ReadAsciiText(&utf8_result);
     *result = base::UTF8ToUTF16(utf8_result);
   }
 
-  // Reads ASCII text from the data at the top of clipboard stack.
+  // Reads ASCII text from the ClipboardData.
   void ReadAsciiText(std::string* result) const {
     result->clear();
     const ClipboardData* data = GetData();
@@ -213,7 +131,7 @@ class ClipboardInternal {
       *result = data->bookmark_url();
   }
 
-  // Reads HTML from the data at the top of clipboard stack.
+  // Reads HTML from the ClipboardData.
   void ReadHTML(base::string16* markup,
                 std::string* src_url,
                 uint32_t* fragment_start,
@@ -236,7 +154,7 @@ class ClipboardInternal {
     *fragment_end = static_cast<uint32_t>(markup->length());
   }
 
-  // Reads RTF from the data at the top of clipboard stack.
+  // Reads RTF from the ClipboardData.
   void ReadRTF(std::string* result) const {
     result->clear();
     const ClipboardData* data = GetData();
@@ -246,7 +164,7 @@ class ClipboardInternal {
     *result = data->rtf_data();
   }
 
-  // Reads image from the data at the top of clipboard stack.
+  // Reads image from the ClipboardData.
   SkBitmap ReadImage() const {
     SkBitmap img;
     if (!HasFormat(ClipboardInternalFormat::kBitmap))
@@ -261,7 +179,7 @@ class ClipboardInternal {
     return img;
   }
 
-  // Reads data of type |type| from the data at the top of clipboard stack.
+  // Reads data of type |type| from the ClipboardData.
   void ReadCustomData(const base::string16& type,
                       base::string16* result) const {
     result->clear();
@@ -273,7 +191,7 @@ class ClipboardInternal {
                           data->custom_data_data().size(), type, result);
   }
 
-  // Reads bookmark from the data at the top of clipboard stack.
+  // Reads bookmark from the ClipboardData.
   void ReadBookmark(base::string16* title, std::string* url) const {
     if (title)
       title->clear();
@@ -299,37 +217,43 @@ class ClipboardInternal {
     *result = data->custom_data_data();
   }
 
-  // Writes |data| to the top of the clipboard stack.
-  void WriteData(std::unique_ptr<ClipboardData> data) {
+  // Writes |data| to the ClipboardData and returns the previous data.
+  std::unique_ptr<ClipboardData> WriteData(
+      std::unique_ptr<ClipboardData> data) {
     DCHECK(data);
-    AddToListEnsuringSize(std::move(data));
+    std::unique_ptr<ClipboardData> previous_data = std::move(data_);
+    data_ = std::move(data);
+    ++sequence_number_;
     ClipboardMonitor::GetInstance()->NotifyClipboardDataChanged();
+    return previous_data;
+  }
+
+  void SetDlpController(
+      std::unique_ptr<ClipboardDlpController> dlp_controller) {
+    dlp_controller_ = std::move(dlp_controller);
+  }
+
+  bool IsReadAllowed(const ClipboardDataEndpoint* data_dst) const {
+    if (!dlp_controller_)
+      return true;
+    return dlp_controller_->IsDataReadAllowed(GetData()->source(), data_dst);
   }
 
  private:
-  // True if the data on top of the clipboard stack has format |format|.
+  // True if the ClipboardData has format |format|.
   bool HasFormat(ClipboardInternalFormat format) const {
     const ClipboardData* data = GetData();
     return data ? data->format() & static_cast<int>(format) : false;
   }
 
-  void AddToListEnsuringSize(std::unique_ptr<ClipboardData> data) {
-    DCHECK(data);
-    sequence_number_++;
-    data_list_.push_front(std::move(data));
-
-    // If the size of list becomes more than the maximum allowed, we delete the
-    // last element.
-    if (data_list_.size() > kMaxClipboardSize) {
-      data_list_.pop_back();
-    }
-  }
-
-  // Stack containing various versions of ClipboardData.
-  std::list<std::unique_ptr<ClipboardData>> data_list_;
+  // Current ClipboardData.
+  std::unique_ptr<ClipboardData> data_;
 
   // Sequence number uniquely identifying clipboard state.
-  uint64_t sequence_number_;
+  uint64_t sequence_number_ = 0;
+
+  // Data-leak prevention controller controlling clipboard read operations.
+  std::unique_ptr<ClipboardDlpController> dlp_controller_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ClipboardInternal);
 };
@@ -337,7 +261,13 @@ class ClipboardInternal {
 // Helper class to build a ClipboardData object and write it to clipboard.
 class ClipboardDataBuilder {
  public:
-  static void CommitToClipboard(ClipboardInternal* clipboard) {
+  // If |data_src| is nullptr, this means that the data source isn't
+  // confidential and the data can be pasted in any document.
+  static void CommitToClipboard(
+      ClipboardInternal* clipboard,
+      std::unique_ptr<ClipboardDataEndpoint> data_src) {
+    ClipboardData* data = GetCurrentData();
+    data->set_source(std::move(data_src));
     clipboard->WriteData(TakeCurrentData());
   }
 
@@ -414,41 +344,72 @@ Clipboard* Clipboard::Create() {
 }
 #endif
 
+// static
+ClipboardNonBacked* ClipboardNonBacked::GetForCurrentThread() {
+  auto* clipboard = Clipboard::GetForCurrentThread();
+  CHECK(IsRegisteredInstance(clipboard));  // Ensure type safety.
+  return static_cast<ClipboardNonBacked*>(clipboard);
+}
+
 // ClipboardNonBacked implementation.
 ClipboardNonBacked::ClipboardNonBacked()
     : clipboard_internal_(std::make_unique<ClipboardInternal>()) {
   DCHECK(CalledOnValidThread());
+  RegisterInstance(this);
 }
 
 ClipboardNonBacked::~ClipboardNonBacked() {
   DCHECK(CalledOnValidThread());
+  UnregisterInstance(this);
+}
+
+const ClipboardData* ClipboardNonBacked::GetClipboardData() const {
+  DCHECK(CalledOnValidThread());
+  return clipboard_internal_->GetData();
+}
+
+std::unique_ptr<ClipboardData> ClipboardNonBacked::WriteClipboardData(
+    std::unique_ptr<ClipboardData> data) {
+  DCHECK(CalledOnValidThread());
+  return clipboard_internal_->WriteData(std::move(data));
 }
 
 void ClipboardNonBacked::OnPreShutdown() {}
+
+void ClipboardNonBacked::SetClipboardDlpController(
+    std::unique_ptr<ClipboardDlpController> dlp_controller) {
+  clipboard_internal_->SetDlpController(std::move(dlp_controller));
+}
 
 uint64_t ClipboardNonBacked::GetSequenceNumber(ClipboardBuffer buffer) const {
   DCHECK(CalledOnValidThread());
   return clipboard_internal_->sequence_number();
 }
 
-bool ClipboardNonBacked::IsFormatAvailable(const ClipboardFormatType& format,
-                                           ClipboardBuffer buffer) const {
+bool ClipboardNonBacked::IsFormatAvailable(
+    const ClipboardFormatType& format,
+    ClipboardBuffer buffer,
+    const ClipboardDataEndpoint* data_dst) const {
   DCHECK(CalledOnValidThread());
   DCHECK(IsSupportedClipboardBuffer(buffer));
-  if (ClipboardFormatType::GetPlainTextType().Equals(format) ||
-      ClipboardFormatType::GetUrlType().Equals(format))
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return false;
+
+  if (format == ClipboardFormatType::GetPlainTextType() ||
+      format == ClipboardFormatType::GetUrlType())
     return clipboard_internal_->IsFormatAvailable(
         ClipboardInternalFormat::kText);
-  if (ClipboardFormatType::GetHtmlType().Equals(format))
+  if (format == ClipboardFormatType::GetHtmlType())
     return clipboard_internal_->IsFormatAvailable(
         ClipboardInternalFormat::kHtml);
-  if (ClipboardFormatType::GetRtfType().Equals(format))
+  if (format == ClipboardFormatType::GetRtfType())
     return clipboard_internal_->IsFormatAvailable(
         ClipboardInternalFormat::kRtf);
-  if (ClipboardFormatType::GetBitmapType().Equals(format))
+  if (format == ClipboardFormatType::GetBitmapType())
     return clipboard_internal_->IsFormatAvailable(
         ClipboardInternalFormat::kBitmap);
-  if (ClipboardFormatType::GetWebKitSmartPasteType().Equals(format))
+  if (format == ClipboardFormatType::GetWebKitSmartPasteType())
     return clipboard_internal_->IsFormatAvailable(
         ClipboardInternalFormat::kWeb);
   const ClipboardData* data = clipboard_internal_->GetData();
@@ -463,21 +424,26 @@ void ClipboardNonBacked::Clear(ClipboardBuffer buffer) {
 
 void ClipboardNonBacked::ReadAvailableTypes(
     ClipboardBuffer buffer,
+    const ClipboardDataEndpoint* data_dst,
     std::vector<base::string16>* types) const {
   DCHECK(CalledOnValidThread());
   DCHECK(types);
 
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   types->clear();
-  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer,
+                        data_dst))
     types->push_back(
         base::UTF8ToUTF16(ClipboardFormatType::GetPlainTextType().GetName()));
-  if (IsFormatAvailable(ClipboardFormatType::GetHtmlType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetHtmlType(), buffer, data_dst))
     types->push_back(
         base::UTF8ToUTF16(ClipboardFormatType::GetHtmlType().GetName()));
-  if (IsFormatAvailable(ClipboardFormatType::GetRtfType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetRtfType(), buffer, data_dst))
     types->push_back(
         base::UTF8ToUTF16(ClipboardFormatType::GetRtfType().GetName()));
-  if (IsFormatAvailable(ClipboardFormatType::GetBitmapType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetBitmapType(), buffer, data_dst))
     types->push_back(base::UTF8ToUTF16(kMimeTypePNG));
 
   if (clipboard_internal_->IsFormatAvailable(
@@ -491,25 +457,31 @@ void ClipboardNonBacked::ReadAvailableTypes(
 
 std::vector<base::string16>
 ClipboardNonBacked::ReadAvailablePlatformSpecificFormatNames(
-    ClipboardBuffer buffer) const {
+    ClipboardBuffer buffer,
+    const ClipboardDataEndpoint* data_dst) const {
   DCHECK(CalledOnValidThread());
 
   std::vector<base::string16> types;
 
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return types;
+
   // Includes all non-pickled AvailableTypes.
-  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer)) {
+  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer,
+                        data_dst)) {
     types.push_back(
         base::UTF8ToUTF16(ClipboardFormatType::GetPlainTextType().GetName()));
   }
-  if (IsFormatAvailable(ClipboardFormatType::GetHtmlType(), buffer)) {
+  if (IsFormatAvailable(ClipboardFormatType::GetHtmlType(), buffer, data_dst)) {
     types.push_back(
         base::UTF8ToUTF16(ClipboardFormatType::GetHtmlType().GetName()));
   }
-  if (IsFormatAvailable(ClipboardFormatType::GetRtfType(), buffer)) {
+  if (IsFormatAvailable(ClipboardFormatType::GetRtfType(), buffer, data_dst)) {
     types.push_back(
         base::UTF8ToUTF16(ClipboardFormatType::GetRtfType().GetName()));
   }
-  if (IsFormatAvailable(ClipboardFormatType::GetBitmapType(), buffer)) {
+  if (IsFormatAvailable(ClipboardFormatType::GetBitmapType(), buffer,
+                        data_dst)) {
     types.push_back(base::UTF8ToUTF16(kMimeTypePNG));
   }
 
@@ -517,84 +489,132 @@ ClipboardNonBacked::ReadAvailablePlatformSpecificFormatNames(
 }
 
 void ClipboardNonBacked::ReadText(ClipboardBuffer buffer,
+                                  const ClipboardDataEndpoint* data_dst,
                                   base::string16* result) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kText);
   clipboard_internal_->ReadText(result);
 }
 
 void ClipboardNonBacked::ReadAsciiText(ClipboardBuffer buffer,
+                                       const ClipboardDataEndpoint* data_dst,
                                        std::string* result) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kText);
   clipboard_internal_->ReadAsciiText(result);
 }
 
 void ClipboardNonBacked::ReadHTML(ClipboardBuffer buffer,
+                                  const ClipboardDataEndpoint* data_dst,
                                   base::string16* markup,
                                   std::string* src_url,
                                   uint32_t* fragment_start,
                                   uint32_t* fragment_end) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kHtml);
   clipboard_internal_->ReadHTML(markup, src_url, fragment_start, fragment_end);
 }
 
 void ClipboardNonBacked::ReadRTF(ClipboardBuffer buffer,
+                                 const ClipboardDataEndpoint* data_dst,
                                  std::string* result) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kRtf);
   clipboard_internal_->ReadRTF(result);
 }
 
 void ClipboardNonBacked::ReadImage(ClipboardBuffer buffer,
+                                   const ClipboardDataEndpoint* data_dst,
                                    ReadImageCallback callback) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kImage);
   std::move(callback).Run(clipboard_internal_->ReadImage());
 }
 
 void ClipboardNonBacked::ReadCustomData(ClipboardBuffer buffer,
                                         const base::string16& type,
+                                        const ClipboardDataEndpoint* data_dst,
                                         base::string16* result) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kCustomData);
   clipboard_internal_->ReadCustomData(type, result);
 }
 
-void ClipboardNonBacked::ReadBookmark(base::string16* title,
+void ClipboardNonBacked::ReadBookmark(const ClipboardDataEndpoint* data_dst,
+                                      base::string16* title,
                                       std::string* url) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kBookmark);
   clipboard_internal_->ReadBookmark(title, url);
 }
 
 void ClipboardNonBacked::ReadData(const ClipboardFormatType& format,
+                                  const ClipboardDataEndpoint* data_dst,
                                   std::string* result) const {
   DCHECK(CalledOnValidThread());
+
+  if (!clipboard_internal_->IsReadAllowed(data_dst))
+    return;
+
   RecordRead(ClipboardFormatMetric::kData);
   clipboard_internal_->ReadData(format.GetName(), result);
 }
 
+bool ClipboardNonBacked::IsSelectionBufferAvailable() const {
+  return false;
+}
+
 void ClipboardNonBacked::WritePortableRepresentations(
     ClipboardBuffer buffer,
-    const ObjectMap& objects) {
+    const ObjectMap& objects,
+    std::unique_ptr<ClipboardDataEndpoint> data_src) {
   DCHECK(CalledOnValidThread());
   DCHECK(IsSupportedClipboardBuffer(buffer));
   for (const auto& object : objects)
     DispatchPortableRepresentation(object.first, object.second);
-  ClipboardDataBuilder::CommitToClipboard(clipboard_internal_.get());
+  ClipboardDataBuilder::CommitToClipboard(clipboard_internal_.get(),
+                                          std::move(data_src));
 }
 
 void ClipboardNonBacked::WritePlatformRepresentations(
     ClipboardBuffer buffer,
-    std::vector<Clipboard::PlatformRepresentation> platform_representations) {
+    std::vector<Clipboard::PlatformRepresentation> platform_representations,
+    std::unique_ptr<ClipboardDataEndpoint> data_src) {
   DCHECK(CalledOnValidThread());
   DCHECK(IsSupportedClipboardBuffer(buffer));
 
   DispatchPlatformRepresentations(std::move(platform_representations));
 
-  ClipboardDataBuilder::CommitToClipboard(clipboard_internal_.get());
+  ClipboardDataBuilder::CommitToClipboard(clipboard_internal_.get(),
+                                          std::move(data_src));
 }
 
 void ClipboardNonBacked::WriteText(const char* text_data, size_t text_len) {

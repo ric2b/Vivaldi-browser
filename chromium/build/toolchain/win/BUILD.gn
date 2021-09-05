@@ -52,7 +52,7 @@ if (current_toolchain == default_toolchain) {
     configuration_name = "Release"
   }
   exec_script("../../vs_toolchain.py",
-              [
+              vs_toolchain_args + [
                 "copy_dlls",
                 rebase_path(root_build_dir),
                 configuration_name,
@@ -422,7 +422,7 @@ template("win_toolchains") {
   toolchain_arch = invoker.toolchain_arch
 
   win_toolchain_data = exec_script("setup_toolchain.py",
-                                   [
+                                   vs_toolchain_args + [
                                      visual_studio_path,
                                      windows_sdk_path,
                                      visual_studio_runtime_dirs,
@@ -518,7 +518,7 @@ if (target_os == "winuwp") {
   assert(target_cpu == "x64" || target_cpu == "x86" || target_cpu == "arm" ||
          target_cpu == "arm64")
   store_cpu_toolchain_data = exec_script("setup_toolchain.py",
-                                         [
+                                         vs_toolchain_args + [
                                            visual_studio_path,
                                            windows_sdk_path,
                                            visual_studio_runtime_dirs,

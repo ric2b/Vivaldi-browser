@@ -3,10 +3,9 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//ppapi/buildflags/buildflags.gni")
 
-jumbo_static_library("browser") {
+static_library("browser") {
   sources = [
     "content_settings_constraints.h",
     "content_settings_default_provider.cc",
@@ -42,6 +41,8 @@ jumbo_static_library("browser") {
     "cookie_settings.h",
     "host_content_settings_map.cc",
     "host_content_settings_map.h",
+    "private_network_settings.cc",
+    "private_network_settings.h",
     "uma_util.cc",
     "uma_util.h",
     "user_modifiable_provider.h",
@@ -60,6 +61,8 @@ jumbo_static_library("browser") {
     "//components/url_formatter",
     "//extensions/buildflags",
     "//net",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
     "//services/preferences/public/cpp",
     "//url",
   ]
@@ -72,6 +75,8 @@ jumbo_static_library("browser") {
     sources += [
       "cookie_settings_policy_handler.cc",
       "cookie_settings_policy_handler.h",
+      "insecure_private_network_policy_handler.cc",
+      "insecure_private_network_policy_handler.h",
     ]
     deps += [
       "//components/policy:generated",
@@ -86,7 +91,7 @@ jumbo_static_library("browser") {
   ]
 }
 
-jumbo_source_set("unit_tests") {
+source_set("unit_tests") {
   testonly = true
   sources = [
     "content_settings_ephemeral_provider_unittest.cc",

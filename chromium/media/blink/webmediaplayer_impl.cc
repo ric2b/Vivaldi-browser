@@ -71,6 +71,7 @@
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
+#include "third_party/blink/public/platform/web_texttrack_metadata.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/webaudiosourceprovider_impl.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
@@ -81,7 +82,7 @@
 #include "third_party/blink/public/web/web_view.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "platform_media/renderer/decoders/mac/core_audio_demuxer.h"
 #endif
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
@@ -303,6 +304,11 @@ bool MediaPositionNeedsUpdate(
   if (old_position.duration() != new_position.duration())
     return true;
 
+  // Special handling for "infinite" position required to avoid calculations
+  // involving infinities.
+  if (new_position.GetPosition().is_max())
+    return !old_position.GetPosition().is_max();
+
   // MediaPosition is potentially changed upon each OnTimeUpdate() call. In
   // practice most of these calls happen periodically during normal playback,
   // with unchanged rate and duration. If we want to avoid updating
@@ -360,6 +366,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       client_(client),
       encrypted_client_(encrypted_client),
       delegate_(delegate),
+      delegate_has_audio_(HasUnmutedAudio()),
       defer_load_cb_(params->defer_load_cb()),
       adjust_allocated_memory_cb_(params->adjust_allocated_memory_cb()),
       tick_clock_(base::DefaultTickClock::GetInstance()),
@@ -622,7 +629,7 @@ void WebMediaPlayerImpl::EnableOverlay() {
       overlay_mode_ == OverlayMode::kUseAndroidOverlay) {
     overlay_routing_token_is_pending_ = true;
     token_available_cb_.Reset(
-        base::Bind(&WebMediaPlayerImpl::OnOverlayRoutingToken, weak_this_));
+        base::BindOnce(&WebMediaPlayerImpl::OnOverlayRoutingToken, weak_this_));
     request_routing_token_cb_.Run(token_available_cb_.callback());
   }
 
@@ -784,8 +791,19 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
 
   SetNetworkState(WebMediaPlayer::kNetworkStateLoading);
   SetReadyState(WebMediaPlayer::kReadyStateHaveNothing);
-  media_log_->AddEvent<MediaLogEvent::kLoad>(url.GetString().Utf8());
+
+  // Do a truncation to kMaxUrlLength+1 at most; we can add ellipsis later.
+  media_log_->AddEvent<MediaLogEvent::kLoad>(
+      url.GetString().Substring(0, kMaxUrlLength + 1).Utf8());
   load_start_time_ = base::TimeTicks::Now();
+
+  std::vector<TextTrackConfig> text_configs;
+  for (const auto& metadata : client_->GetTextTrackMetadata()) {
+    text_configs.emplace_back(TextTrackConfig::ConvertKind(metadata.kind()),
+                              metadata.label(), metadata.language(),
+                              metadata.id());
+  }
+  media_log_->SetProperty<MediaLogProperty::kTextTracks>(text_configs);
 
   // If we're adapting, then restart the smoothness experiment.
   if (smoothness_helper_)
@@ -1030,6 +1048,13 @@ void WebMediaPlayerImpl::SetVolume(double volume) {
     watch_time_reporter_->OnVolumeChange(volume);
   delegate_->DidPlayerMutedStatusChange(delegate_id_, volume == 0.0);
 
+  if (delegate_has_audio_ != HasUnmutedAudio()) {
+    delegate_has_audio_ = HasUnmutedAudio();
+    delegate_->DidMediaMetadataChange(
+        delegate_id_, delegate_has_audio_, HasVideo(),
+        DurationToMediaContentType(GetPipelineMediaDuration()));
+  }
+
   // The play state is updated because the player might have left the autoplay
   // muted state.
   UpdatePlayState();
@@ -1067,9 +1092,11 @@ void WebMediaPlayerImpl::SetSinkId(
 
   OutputDeviceStatusCB callback =
       ConvertToOutputDeviceStatusCB(std::move(completion_callback));
+  auto sink_id_utf8 = sink_id.Utf8();
   media_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&SetSinkIdOnMediaThread, audio_source_provider_,
-                                sink_id.Utf8(), std::move(callback)));
+                                sink_id_utf8, std::move(callback)));
+  delegate_->DidAudioOutputSinkChange(delegate_id_, sink_id_utf8);
 }
 
 STATIC_ASSERT_ENUM(WebMediaPlayer::kPreloadNone, MultibufferDataSource::NONE);
@@ -2017,6 +2044,11 @@ void WebMediaPlayerImpl::OnMetadata(const PipelineMetadata& metadata) {
   if (observer_)
     observer_->OnMetadataChanged(pipeline_metadata_);
 
+  delegate_has_audio_ = HasUnmutedAudio();
+  delegate_->DidMediaMetadataChange(
+      delegate_id_, delegate_has_audio_, HasVideo(),
+      DurationToMediaContentType(GetPipelineMediaDuration()));
+
   // TODO(dalecurtis): Don't create these until kReadyStateHaveFutureData; when
   // we create them early we just increase the chances of needing to throw them
   // away unnecessarily.
@@ -2283,12 +2315,15 @@ void WebMediaPlayerImpl::OnDurationChange() {
                                50 /* bucket_count */);
   }
 
-  // TODO(sandersd): We should call delegate_->DidPlay() with the new duration,
-  // especially if it changed from  <5s to >5s.
   if (ready_state_ == WebMediaPlayer::kReadyStateHaveNothing)
     return;
 
   client_->DurationChanged();
+
+  delegate_->DidMediaMetadataChange(
+      delegate_id_, delegate_has_audio_, HasVideo(),
+      DurationToMediaContentType(GetPipelineMediaDuration()));
+
   if (watch_time_reporter_)
     watch_time_reporter_->OnDurationChanged(GetPipelineMediaDuration());
 }
@@ -2582,6 +2617,11 @@ void WebMediaPlayerImpl::OnEnterPictureInPicture() {
 
 void WebMediaPlayerImpl::OnExitPictureInPicture() {
   client_->RequestExitPictureInPicture();
+}
+
+void WebMediaPlayerImpl::OnSetAudioSink(const std::string& sink_id) {
+  SetSinkId(WebString::FromASCII(sink_id),
+            base::DoNothing::Once<base::Optional<blink::WebSetSinkIdError>>());
 }
 
 void WebMediaPlayerImpl::OnVolumeMultiplierUpdate(double multiplier) {
@@ -2901,9 +2941,9 @@ void WebMediaPlayerImpl::StartPipeline() {
     DCHECK(!data_source_);
 
     chunk_demuxer_ =
-        new ChunkDemuxer(BindToCurrentLoop(base::Bind(
+        new ChunkDemuxer(BindToCurrentLoop(base::BindOnce(
                              &WebMediaPlayerImpl::OnDemuxerOpened, weak_this_)),
-                         BindToCurrentLoop(base::Bind(
+                         BindToCurrentLoop(base::BindRepeating(
                              &WebMediaPlayerImpl::OnProgress, weak_this_)),
                          encrypted_media_init_data_cb, media_log_.get());
     SetDemuxer(std::unique_ptr<Demuxer>(chunk_demuxer_));
@@ -3053,22 +3093,9 @@ void WebMediaPlayerImpl::SetDelegateState(DelegateState new_state,
 
   // Prevent duplicate delegate calls.
   // TODO(sandersd): Move this deduplication into the delegate itself.
-  // TODO(sandersd): WebContentsObserverSanityChecker does not allow sending the
-  // 'playing' IPC more than once in a row, even if the metadata has changed.
-  // Figure out whether it should.
-  // Pretend that the media has no audio if it never played unmuted. This is to
-  // avoid any action related to audible media such as taking audio focus or
-  // showing a media notification. To preserve a consistent experience, it does
-  // not apply if a media was audible so the system states do not flicker
-  // depending on whether the user muted the player.
-  bool has_audio = HasAudio() && !client_->WasAlwaysMuted();
-  if (delegate_state_ == new_state &&
-      (delegate_state_ != DelegateState::PLAYING ||
-       delegate_has_audio_ == has_audio)) {
+  if (delegate_state_ == new_state)
     return;
-  }
   delegate_state_ = new_state;
-  delegate_has_audio_ = has_audio;
 
   switch (new_state) {
     case DelegateState::GONE:
@@ -3077,13 +3104,11 @@ void WebMediaPlayerImpl::SetDelegateState(DelegateState new_state,
     case DelegateState::PLAYING: {
       if (HasVideo())
         delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
-      delegate_->DidPlay(
-          delegate_id_, HasVideo(), has_audio,
-          DurationToMediaContentType(GetPipelineMediaDuration()));
+      delegate_->DidPlay(delegate_id_);
       break;
     }
     case DelegateState::PAUSED:
-      delegate_->DidPause(delegate_id_);
+      delegate_->DidPause(delegate_id_, ended_);
       break;
   }
 
@@ -3242,8 +3267,7 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_flinging,
   } else if (paused_) {
     // TODO(sandersd): Is it possible to have a suspended session, be ended,
     // and not be paused? If so we should be in a PLAYING state.
-    result.delegate_state =
-        ended_ ? DelegateState::GONE : DelegateState::PAUSED;
+    result.delegate_state = DelegateState::PAUSED;
     result.is_idle = !seeking_;
   } else {
     result.delegate_state = DelegateState::PLAYING;
@@ -3867,7 +3891,7 @@ void WebMediaPlayerImpl::MaybeSetContainerNameForMetrics() {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   // Neither IPC nor audio demuxer and  provide container information.
   if (ipc_demuxer_
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     || audio_demuxer_
 #endif
     )
@@ -3962,6 +3986,15 @@ WebMediaPlayerImpl::GetLearningTaskController(const char* task_name) {
       task, std::move(remote_ltc));
 }
 
+bool WebMediaPlayerImpl::HasUnmutedAudio() const {
+  // Pretend that the media has no audio if it never played unmuted. This is to
+  // avoid any action related to audible media such as taking audio focus or
+  // showing a media notification. To preserve a consistent experience, it does
+  // not apply if a media was audible so the system states do not flicker
+  // depending on whether the user muted the player.
+  return HasAudio() && !client_->WasAlwaysMuted();
+}
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 void WebMediaPlayerImpl::SniffProtocol() {
   ProtocolSniffer::SniffProtocol(
@@ -3999,13 +4032,13 @@ void WebMediaPlayerImpl::StartIPCPipeline(std::string mime_type) {
       return;
     }
   }
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (media::CoreAudioDemuxer::IsSupported(mime_type, url)) {
     auto demuxer = std::make_unique<CoreAudioDemuxer>(data_source_.get());
     audio_demuxer_ = demuxer.get();
     demuxer_ = std::move(demuxer);
   }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
   StartPipeline();
 }
 

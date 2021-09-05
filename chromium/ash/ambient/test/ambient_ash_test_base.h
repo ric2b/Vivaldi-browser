@@ -8,22 +8,23 @@
 #include <memory>
 #include <string>
 
+#include "ash/ambient/ambient_access_token_controller.h"
 #include "ash/ambient/ambient_controller.h"
+#include "ash/ambient/ui/ambient_background_image_view.h"
 #include "ash/public/cpp/test/test_ambient_client.h"
 #include "ash/public/cpp/test/test_image_downloader.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/scoped_feature_list.h"
 #include "services/device/public/cpp/test/test_wake_lock_provider.h"
+#include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/views/widget/widget.h"
-
-namespace gfx {
-class ImageSkia;
-}  // namespace gfx
 
 namespace ash {
 
+class AmbientAccessTokenController;
 class AmbientContainerView;
 class AmbientPhotoController;
+class MediaStringView;
 
 // The base class to test the Ambient Mode in Ash.
 class AmbientAshTestBase : public AshTestBase {
@@ -35,6 +36,9 @@ class AmbientAshTestBase : public AshTestBase {
   void SetUp() override;
   void TearDown() override;
 
+  // Enables/disables ambient mode.
+  void SetAmbientModeEnabled(bool enabled);
+
   // Creates ambient screen in its own widget.
   void ShowAmbientScreen();
 
@@ -42,10 +46,16 @@ class AmbientAshTestBase : public AshTestBase {
   // called.
   void HideAmbientScreen();
 
+  // Closes ambient screen. Can only be called after |ShowAmbientScreen| has
+  // been called.
+  void CloseAmbientScreen();
+
   // Simulates user locks/unlocks screen which will result in ambient widget
   // shown/closed.
   void LockScreen();
   void UnlockScreen();
+  // Whether lockscreen is shown.
+  bool IsLocked();
 
   // Simulates the system starting to suspend with Reason |reason|.
   // Wait until the event has been processed.
@@ -56,11 +66,26 @@ class AmbientAshTestBase : public AshTestBase {
   // Wait until the event has been processed.
   void SimulateSystemResumeAndWait();
 
-  // Simulates a screen dimmed event.
+  // Simulates a screen idle state event.
   // Wait until the event has been processed.
-  void SetScreenDimmedAndWait(bool is_screen_dimmed);
+  void SetScreenIdleStateAndWait(bool is_screen_dimmed, bool is_off);
 
-  const gfx::ImageSkia& GetImageInPhotoView();
+  // Simulates a screen brightness changed event.
+  void SetScreenBrightnessAndWait(double percent);
+
+  void SimulateMediaMetadataChanged(media_session::MediaMetadata metadata);
+
+  void SimulateMediaPlaybackStateChanged(
+      media_session::mojom::MediaPlaybackState state);
+
+  // Set the size of the next image that will be loaded.
+  void SetPhotoViewImageSize(int width, int height);
+
+  // Advance the task environment timer to expire the inactivity monitor.
+  void FastForwardToInactivity();
+
+  // Advance the task environment timer to load the next photo.
+  void FastForwardToNextImage();
 
   // Returns the number of active wake locks of type |type|.
   int GetNumOfActiveWakeLocks(device::mojom::WakeLockType type);
@@ -71,12 +96,27 @@ class AmbientAshTestBase : public AshTestBase {
 
   bool IsAccessTokenRequestPending() const;
 
+  AmbientBackgroundImageView* GetAmbientBackgroundImageView();
+
+  // Returns the media string view for displaying ongoing media info.
+  MediaStringView* GetMediaStringView();
+
   AmbientController* ambient_controller();
 
   AmbientPhotoController* photo_controller();
 
   // Returns the top-level view which contains all the ambient components.
   AmbientContainerView* container_view();
+
+  AmbientAccessTokenController* token_controller();
+
+  void FetchTopics();
+
+  void FetchImage();
+
+  void SetUrlLoaderData(std::unique_ptr<std::string> data);
+
+  void SeteImageDecoderImage(const gfx::ImageSkia& image);
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;

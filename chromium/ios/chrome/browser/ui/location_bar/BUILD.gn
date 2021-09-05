@@ -26,7 +26,6 @@ source_set("location_bar") {
     "resources:location_bar_share",
     "resources:location_bar_voice",
     "//base",
-    "//components/google/core/common",
     "//components/omnibox/browser",
     "//components/open_from_clipboard:",
     "//components/search_engines",
@@ -90,7 +89,7 @@ source_set("location_bar") {
     "//ui/gfx/geometry",
     "//url",
   ]
-  libs = [
+  frameworks = [
     "CoreText.framework",
     "MobileCoreServices.framework",
     "QuartzCore.framework",
@@ -121,7 +120,7 @@ source_set("location_bar_model_delegate") {
     "//ios/web/public",
     "//ios/web/public/security",
   ]
-  libs = [ "UIKit.framework" ]
+  frameworks = [ "UIKit.framework" ]
 }
 
 source_set("constants") {
@@ -130,7 +129,7 @@ source_set("constants") {
     "location_bar_constants.h",
     "location_bar_constants.mm",
   ]
-  libs = [
+  frameworks = [
     "Foundation.framework",
     "CoreGraphics.framework",
   ]

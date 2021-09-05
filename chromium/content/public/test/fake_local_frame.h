@@ -80,9 +80,11 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
       blink::TransferableMessage message) override;
   void GetSavableResourceLinks(
       GetSavableResourceLinksCallback callback) override;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   void GetCharacterIndexAtPoint(const gfx::Point& point) override;
   void GetFirstRectForRange(const gfx::Range& range) override;
+  void GetStringForRange(const gfx::Range& range,
+                         GetStringForRangeCallback callback) override;
 #endif
   void BindReportingObserver(
       mojo::PendingReceiver<blink::mojom::ReportingObserver> receiver) override;

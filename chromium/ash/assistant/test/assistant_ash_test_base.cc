@@ -11,6 +11,7 @@
 #include "ash/assistant/test/test_assistant_client.h"
 #include "ash/assistant/test/test_assistant_setup.h"
 #include "ash/assistant/test/test_assistant_web_view_factory.h"
+#include "ash/assistant/ui/main_stage/assistant_onboarding_suggestion_view.h"
 #include "ash/assistant/ui/main_stage/suggestion_chip_view.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/ui/test/keyboard_test_util.h"
@@ -177,8 +178,22 @@ void AssistantAshTestBase::SetConsentStatus(ConsentStatus consent_status) {
   test_api_->SetConsentStatus(consent_status);
 }
 
+void AssistantAshTestBase::SetNumberOfSessionsWhereOnboardingShown(
+    int number_of_sessions) {
+  test_api_->SetNumberOfSessionsWhereOnboardingShown(number_of_sessions);
+}
+
+void AssistantAshTestBase::SetOnboardingMode(
+    AssistantOnboardingMode onboarding_mode) {
+  test_api_->SetOnboardingMode(onboarding_mode);
+}
+
 void AssistantAshTestBase::SetPreferVoice(bool prefer_voice) {
   test_api_->SetPreferVoice(prefer_voice);
+}
+
+void AssistantAshTestBase::SetTimeOfLastInteraction(const base::Time& time) {
+  test_api_->SetTimeOfLastInteraction(time);
 }
 
 void AssistantAshTestBase::StartOverview() {
@@ -297,10 +312,15 @@ views::View* AssistantAshTestBase::suggestion_chip_container() {
   return test_api_->suggestion_chip_container();
 }
 
-std::vector<ash::SuggestionChipView*>
-AssistantAshTestBase::GetSuggestionChips() {
+std::vector<AssistantOnboardingSuggestionView*>
+AssistantAshTestBase::GetOnboardingSuggestionViews() {
+  const views::View* container = onboarding_view();
+  return ChildViewCollector<AssistantOnboardingSuggestionView>{container}.Get();
+}
+
+std::vector<SuggestionChipView*> AssistantAshTestBase::GetSuggestionChips() {
   const views::View* container = suggestion_chip_container();
-  return ChildViewCollector<ash::SuggestionChipView>{container}.Get();
+  return ChildViewCollector<SuggestionChipView>{container}.Get();
 }
 
 void AssistantAshTestBase::ShowKeyboard() {

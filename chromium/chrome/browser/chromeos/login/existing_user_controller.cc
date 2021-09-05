@@ -38,7 +38,6 @@
 #include "chrome/browser/chromeos/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
-#include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
 #include "chrome/browser/chromeos/login/auth/chrome_login_performer.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/login/enterprise_user_session_metrics.h"
@@ -78,7 +77,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/tpm_error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/wrong_hwid_screen_handler.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -121,11 +119,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
-#include "net/http/http_auth_cache.h"
-#include "net/http/http_network_session.h"
-#include "net/http/http_transaction_factory.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -233,15 +226,6 @@ void RecordPasswordLoginEvent(const UserContext& user_context) {
       easy_unlock_service) {
     easy_unlock_service->RecordPasswordLoginEvent(user_context.GetAccountId());
   }
-}
-
-bool CanShowDebuggingFeatures() {
-  // We need to be on the login screen and in dev mode to show this menu item.
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-             chromeos::switches::kSystemDevMode) &&
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             chromeos::switches::kLoginManager) &&
-         !session_manager::SessionManager::Get()->IsSessionStarted();
 }
 
 bool IsUpdateRequiredDeadlineReached() {
@@ -542,18 +526,18 @@ void ExistingUserController::UpdateLoginDisplay(
     // KioskAppManager, ArcKioskAppManager and WebKioskAppManager.
     if (user->IsKioskType())
       continue;
-    // TODO(xiyuan): Clean user profile whose email is not in whitelist.
+    // TODO(xiyuan): Clean user profile whose email is not in allowlist.
     const bool meets_supervised_requirements =
         user->GetType() != user_manager::USER_TYPE_SUPERVISED ||
         user_manager->AreSupervisedUsersAllowed();
-    const bool meets_whitelist_requirements =
+    const bool meets_allowlist_requirements =
         !user->HasGaiaAccount() || user_manager->IsGaiaUserAllowed(*user);
 
     // Public session accounts are always shown on login screen.
     const bool meets_show_users_requirements =
         show_users_on_signin ||
         user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
-    if (meets_supervised_requirements && meets_whitelist_requirements &&
+    if (meets_supervised_requirements && meets_allowlist_requirements &&
         meets_show_users_requirements) {
       filtered_users.push_back(user);
     }
@@ -566,7 +550,6 @@ void ExistingUserController::UpdateLoginDisplay(
   show_users_on_signin |= !filtered_users.empty();
   bool allow_new_user = true;
   cros_settings_->GetBoolean(kAccountsPrefAllowNewUser, &allow_new_user);
-  GetLoginDisplay()->set_parent_window(GetNativeWindow());
   GetLoginDisplay()->Init(filtered_users, show_guest, show_users_on_signin,
                           allow_new_user);
   GetLoginDisplayHost()->OnPreferencesChanged();
@@ -844,11 +827,6 @@ void ExistingUserController::OnStartEnterpriseEnrollment() {
                  weak_factory_.GetWeakPtr()));
 }
 
-void ExistingUserController::OnStartEnableDebuggingScreen() {
-  if (CanShowDebuggingFeatures())
-    ShowEnableDebuggingScreen();
-}
-
 void ExistingUserController::OnStartKioskEnableScreen() {
   KioskAppManager::Get()->GetConsumerKioskAutoLaunchStatus(base::BindOnce(
       &ExistingUserController::OnConsumerKioskAutoLaunchCheckCompleted,
@@ -870,24 +848,12 @@ void ExistingUserController::SetDisplayAndGivenName(
   given_name_ = base::UTF8ToUTF16(given_name);
 }
 
-void ExistingUserController::ShowWrongHWIDScreen() {
-  GetLoginDisplayHost()->StartWizard(WrongHWIDScreenView::kScreenId);
-}
-
-void ExistingUserController::ShowUpdateRequiredScreen() {
-  GetLoginDisplayHost()->StartWizard(UpdateRequiredView::kScreenId);
-}
-
-void ExistingUserController::Signout() {
-  NOTREACHED();
-}
-
-bool ExistingUserController::IsUserWhitelisted(const AccountId& account_id) {
+bool ExistingUserController::IsUserAllowlisted(const AccountId& account_id) {
   bool wildcard_match = false;
   if (login_performer_.get())
-    return login_performer_->IsUserWhitelisted(account_id, &wildcard_match);
+    return login_performer_->IsUserAllowlisted(account_id, &wildcard_match);
 
-  return cros_settings_->IsUserWhitelisted(account_id.GetUserEmail(),
+  return cros_settings_->IsUserAllowlisted(account_id.GetUserEmail(),
                                            &wildcard_match);
 }
 
@@ -927,10 +893,6 @@ void ExistingUserController::OnEnrollmentOwnershipCheckCompleted(
 
 void ExistingUserController::ShowEnrollmentScreen() {
   GetLoginDisplayHost()->StartWizard(EnrollmentScreenView::kScreenId);
-}
-
-void ExistingUserController::ShowEnableDebuggingScreen() {
-  GetLoginDisplayHost()->StartWizard(EnableDebuggingScreenView::kScreenId);
 }
 
 void ExistingUserController::ShowKioskEnableScreen() {
@@ -1054,8 +1016,8 @@ void ExistingUserController::OnAuthFailure(const AuthFailure& failure) {
   // attempt.
   ChromeUserManager::Get()->ResetUserFlow(last_login_attempt_account_id_);
 
-  if (auth_status_consumer_)
-    auth_status_consumer_->OnAuthFailure(failure);
+  for (auto& auth_status_consumer : auth_status_consumers_)
+    auth_status_consumer.OnAuthFailure(failure);
 
   ClearActiveDirectoryState();
   ClearRecordedNames();
@@ -1204,11 +1166,10 @@ void ExistingUserController::OnProfilePrepared(Profile* profile,
   user_manager::known_user::SetIsEnterpriseManaged(user_context.GetAccountId(),
                                                    is_enterprise_managed);
 
-  // Inform |auth_status_consumer_| about successful login.
+  // Inform |auth_status_consumers_| about successful login.
   // TODO(nkostylev): Pass UserContext back crbug.com/424550
-  if (auth_status_consumer_) {
-    auth_status_consumer_->OnAuthSuccess(user_context);
-  }
+  for (auto& auth_status_consumer : auth_status_consumers_)
+    auth_status_consumer.OnAuthSuccess(user_context);
 }
 
 void ExistingUserController::OnOffTheRecordAuthSuccess() {
@@ -1220,8 +1181,8 @@ void ExistingUserController::OnOffTheRecordAuthSuccess() {
 
   UserSessionManager::GetInstance()->CompleteGuestSessionLogin(guest_mode_url_);
 
-  if (auth_status_consumer_)
-    auth_status_consumer_->OnOffTheRecordAuthSuccess();
+  for (auto& auth_status_consumer : auth_status_consumers_)
+    auth_status_consumer.OnOffTheRecordAuthSuccess();
 }
 
 void ExistingUserController::OnPasswordChangeDetected(
@@ -1238,8 +1199,8 @@ void ExistingUserController::OnPasswordChangeDetected(
     return;
   }
 
-  if (auth_status_consumer_)
-    auth_status_consumer_->OnPasswordChangeDetected(user_context);
+  for (auto& auth_status_consumer : auth_status_consumers_)
+    auth_status_consumer.OnPasswordChangeDetected(user_context);
 
   ShowPasswordChangedDialog(user_context);
 }
@@ -1388,13 +1349,13 @@ void ExistingUserController::ForceOnlineLoginForAccountId(
   GetLoginDisplay()->ShowSigninUI(account_id.GetUserEmail());
 }
 
-void ExistingUserController::WhiteListCheckFailed(const std::string& email) {
+void ExistingUserController::AllowlistCheckFailed(const std::string& email) {
   PerformLoginFinishedActions(true /* start auto login timer */);
 
   GetLoginDisplay()->ShowWhitelistCheckFailedError();
 
-  if (auth_status_consumer_) {
-    auth_status_consumer_->OnAuthFailure(
+  for (auto& auth_status_consumer : auth_status_consumers_) {
+    auth_status_consumer.OnAuthFailure(
         AuthFailure(AuthFailure::WHITELIST_CHECK_FAILED));
   }
 
@@ -1431,6 +1392,16 @@ void ExistingUserController::DeviceSettingsChanged() {
     UpdateLoginDisplay(users);
     ConfigureAutoLogin();
   }
+}
+
+void ExistingUserController::AddLoginStatusConsumer(
+    AuthStatusConsumer* consumer) {
+  auth_status_consumers_.AddObserver(consumer);
+}
+
+void ExistingUserController::RemoveLoginStatusConsumer(
+    const AuthStatusConsumer* consumer) {
+  auth_status_consumers_.RemoveObserver(consumer);
 }
 
 LoginPerformer::AuthorizationMode ExistingUserController::auth_mode() const {
@@ -1607,10 +1578,11 @@ void ExistingUserController::ConfigureAutoLogin() {
     auto_login_delay_ = 0;
   }
 
+  // TODO(crbug.com/1105387): Part of initial screen logic.
   if (show_update_required_screen) {
     // Update required screen overrides public session auto login.
     StopAutoLoginTimer();
-    ShowUpdateRequiredScreen();
+    GetLoginDisplayHost()->StartWizard(UpdateRequiredView::kScreenId);
   } else if (public_session_auto_login_account_id_.is_valid()) {
     StartAutoLoginTimer();
   } else {

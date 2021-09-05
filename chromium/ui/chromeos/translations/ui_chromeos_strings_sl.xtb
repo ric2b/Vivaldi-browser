@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Sončna očala</translation>
 <translation id="115443833402798225">Hangulski način Ahnmatae</translation>
 <translation id="1155759005174418845">katalonščina</translation>
+<translation id="1172970565351728681">Preostali čas: približno <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Preimenuj</translation>
 <translation id="117624967391683467">Kopiranje datoteke <ph name="FILE_NAME" /> ...</translation>
 <translation id="1178581264944972037">Prekini</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Datoteka z imenom »<ph name="FILENAME" />« že obstaja. Kaj želite storiti?</translation>
 <translation id="2121825465123208577">Spreminjanje velikosti</translation>
 <translation id="2136953289241069843">Prečrkovanje (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Ni mogoče odpreti poti »<ph name="PATH" />«: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Neveljavni znak: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Tipkovnica za vietnamščino (TCVN)</translation>
 <translation id="2168214441502403371">Tipkovnica za perzijščino</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Lastništvo bo preneseno v domeno <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">irščina</translation>
 <translation id="3245321423178950146">Neznan izvajalec</translation>
+<translation id="3248185426436836442">Poteka</translation>
 <translation id="3252266817569339921">francoščina</translation>
 <translation id="3254434849914415189">Izberite privzeto aplikacijo za datoteke <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Kontekst</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Leto snemanja</translation>
 <translation id="3338239663705455570">Slovenska tipkovnica</translation>
 <translation id="3353984535370177728">Izberite mapo za prenos</translation>
+<translation id="3356580349448036450">Dokončano</translation>
 <translation id="3399597614303179694">Makedonska tipkovnica</translation>
 <translation id="3414856743105198592">S formatiranjem izmenljivega medija boste izbrisali vse podatke. Ali želite nadaljevati?</translation>
 <translation id="3437801641691368414">Čas ustvarjanja</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Nimate dovoljenja za premikanje datotek v mapo »<ph name="FOLDER_NAME" />«.</translation>
 <translation id="3786301125658655746">Povezava ni vzpostavljena</translation>
 <translation id="3789841737615482174">Namesti</translation>
+<translation id="3793469551756281394">Preostali čas: Približno <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Različica</translation>
 <translation id="3801082500826908679">ferščina</translation>
 <translation id="3809272675881623365">Zajec</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Ta mapa je deljena s sistemom Windows</translation>
 <translation id="4487088045714738411">Belgijska tipkovnica</translation>
 <translation id="4522570452068850558">Podrobnosti</translation>
+<translation id="4542387084127299777">Ni mogoče odpreti poti »<ph name="PATH" />«</translation>
 <translation id="4552678318981539154">Nakup dodatnega prostora za shranjevanje ...</translation>
 <translation id="4559767610552730302">Boke</translation>
 <translation id="4572815280350369984">Datoteka <ph name="FILE_TYPE" /></translation>
@@ -511,7 +515,8 @@
 <translation id="6629841649550503054">Vse varnostno kopirano v <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Izbriši</translation>
 <translation id="6650726141019353908">Rožnat metulj</translation>
-<translation id="6710213216561001401">Nazaj</translation>
+<translation id="6657585470893396449">Geslo</translation>
+<translation id="6710213216561001401">Prejšnji</translation>
 <translation id="6718273304615422081">Stiskanje ...</translation>
 <translation id="6751256176799620176">Izbrana je 1 mapa</translation>
 <translation id="6760765581316020278">Tipkovnica za vietnamščino (VNI)</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Namestitev ni uspela.</translation>
 <translation id="7040138676081995583">Odpri z aplikacijo ...</translation>
-<translation id="7059566040011178088">Manj kot <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Št. izbranih elementov: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Nakup dodatnega prostora za shranjevanje ...</translation>
 <translation id="7126604456862387217">»&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;« – &lt;em&gt;iskanje v storitvi Google Drive&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Model naprave</translation>
 <translation id="8208580316430297579">Slikovni material</translation>
 <translation id="8223479393428528563">Če želite te datoteke shraniti za uporabo brez povezave, vzpostavite povezavo, z desnim gumbom miške kliknite datoteke in izberite možnost <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Približno <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Prekini</translation>
 <translation id="8261506727792406068">Izbriši</translation>
 <translation id="8269755669432358899">Strnitev datotek podoken povratnih informacij</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Uredi</translation>
 <translation id="9099674669267916096">Število strani</translation>
 <translation id="9110990317705400362">Stalno si prizadevamo zagotoviti, da bi bilo brskanje varnejše. Prej vas je lahko vsako spletno mesto pozvalo, da dodate razširitev v brskalnik. V zadnjih različicah Google Chroma pa morate Chromu izrecno povedati, da želite te razširitve namestiti, tako da jih dodate na strani »Razširitve«. <ph name="BEGIN_LINK" />Več o tem<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Odkleni</translation>
 <translation id="912419004897138677">Kodek</translation>
 <translation id="9129931661813833980">Pripni mapo</translation>
 <translation id="9130775360844693113">Člani skupine »<ph name="DESTINATION_NAME" />« bodo imeli dostop do teh elementov.</translation>

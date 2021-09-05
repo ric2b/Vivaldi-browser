@@ -139,7 +139,6 @@ class UrlHidingInterstitialPage
   bool ShouldDisplayURL() const override { return false; }
 
  protected:
-  bool ShouldCreateNewNavigation() const override { return false; }
   void PopulateInterstitialStrings(
       base::DictionaryValue* load_time_data) override {}
 };
@@ -424,7 +423,7 @@ IN_PROC_BROWSER_TEST_P(CustomTabBarViewBrowserTest,
 
 // Right-click menu on CustomTabBar should have Copy URL option.
 // TODO(crbug.com/988323): Times out on Mac.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_RightClickMenuShowsCopyUrl DISABLED_RightClickMenuShowsCopyUrl
 #else
 #define MAYBE_RightClickMenuShowsCopyUrl RightClickMenuShowsCopyUrl
@@ -455,7 +454,8 @@ IN_PROC_BROWSER_TEST_P(CustomTabBarViewBrowserTest,
 
   ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
   base::string16 result;
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &result);
+  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+                      &result);
   EXPECT_EQ(result, base::UTF8ToUTF16("http://example.test/"));
 }
 

@@ -25,7 +25,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
@@ -39,14 +38,14 @@ class CustomLayoutChild;
 class LayoutBlockFlow;
 class LayoutMultiColumnSpannerPlaceholder;
 class NGBoxFragmentBuilder;
-class NGConstraintSpace;
-class ShapeOutsideInfo;
-struct BoxLayoutExtraInput;
-class NGEarlyBreak;
 class NGBreakToken;
-struct NGFragmentGeometry;
-enum class NGLayoutCacheStatus;
+class NGConstraintSpace;
+class NGEarlyBreak;
 class NGLayoutResult;
+class ShapeOutsideInfo;
+enum class NGLayoutCacheStatus;
+struct BoxLayoutExtraInput;
+struct NGFragmentGeometry;
 struct NGPhysicalBoxStrut;
 struct PaintInfo;
 
@@ -68,6 +67,8 @@ using SnapAreaSet = HashSet<LayoutBox*>;
 struct LayoutBoxRareData final : public GarbageCollected<LayoutBoxRareData> {
  public:
   LayoutBoxRareData();
+  LayoutBoxRareData(const LayoutBoxRareData&) = delete;
+  LayoutBoxRareData& operator=(const LayoutBoxRareData&) = delete;
 
   void Trace(Visitor* visitor) const;
 
@@ -81,7 +82,7 @@ struct LayoutBoxRareData final : public GarbageCollected<LayoutBoxRareData> {
   bool has_override_containing_block_content_logical_width_ : 1;
   bool has_override_containing_block_content_logical_height_ : 1;
   bool has_override_percentage_resolution_block_size_ : 1;
-  bool has_previous_content_box_rect_and_layout_overflow_rect_ : 1;
+  bool has_previous_content_box_rect_ : 1;
 
   LayoutUnit override_containing_block_content_logical_width_;
   LayoutUnit override_containing_block_content_logical_height_;
@@ -105,18 +106,17 @@ struct LayoutBoxRareData final : public GarbageCollected<LayoutBoxRareData> {
     return *snap_areas_;
   }
 
-  // Used by BoxPaintInvalidator. Stores the previous content box size and
-  // layout overflow rect after the last paint invalidation. They are valid if
-  // has_previous_content_box_rect_and_layout_overflow_rect_ is true.
+  // Used by BoxPaintInvalidator. Stores the previous content rect after the
+  // last paint invalidation. It's valid if has_previous_content_box_rect_ is
+  // true.
   PhysicalRect previous_physical_content_box_rect_;
-  PhysicalRect previous_physical_layout_overflow_rect_;
+
+  PhysicalRect partial_invalidation_rect_;
 
   // Used by CSSLayoutDefinition::Instance::Layout. Represents the script
   // object for this box that web developers can query style, and perform
   // layout upon. Only created if IsCustomItem() is true.
   Member<CustomLayoutChild> layout_child_;
-
-  DISALLOW_COPY_AND_ASSIGN(LayoutBoxRareData);
 };
 
 // LayoutBox implements the full CSS box model.
@@ -796,6 +796,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return extra_input_;
   }
 
+  void LayoutSubtreeRoot();
+
   void UpdateLayout() override;
   void Paint(const PaintInfo&) const override;
 
@@ -1004,6 +1006,48 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       base::Optional<NGFragmentGeometry>* initial_fragment_geometry,
       NGLayoutCacheStatus* out_cache_status);
 
+  using NGLayoutResultList = Vector<scoped_refptr<const NGLayoutResult>, 1>;
+  class NGPhysicalFragmentList {
+    STACK_ALLOCATED();
+
+   public:
+    explicit NGPhysicalFragmentList(const NGLayoutResultList& layout_results)
+        : layout_results_(layout_results) {}
+
+    wtf_size_t Size() const { return layout_results_.size(); }
+    bool IsEmpty() const { return layout_results_.IsEmpty(); }
+
+    class CORE_EXPORT Iterator : public std::iterator<std::forward_iterator_tag,
+                                                      NGPhysicalBoxFragment> {
+     public:
+      explicit Iterator(const NGLayoutResultList::const_iterator& iterator)
+          : iterator_(iterator) {}
+
+      const NGPhysicalBoxFragment& operator*() const;
+
+      void operator++() { ++iterator_; }
+
+      bool operator==(const Iterator& other) const {
+        return iterator_ == other.iterator_;
+      }
+      bool operator!=(const Iterator& other) const {
+        return !operator==(other);
+      }
+
+     private:
+      NGLayoutResultList::const_iterator iterator_;
+    };
+
+    Iterator begin() const { return Iterator(layout_results_.begin()); }
+    Iterator end() const { return Iterator(layout_results_.end()); }
+
+   private:
+    const NGLayoutResultList& layout_results_;
+  };
+
+  NGPhysicalFragmentList PhysicalFragments() const {
+    return NGPhysicalFragmentList(layout_results_);
+  }
   const NGPhysicalBoxFragment* GetPhysicalFragment(wtf_size_t i) const;
   const FragmentData* FragmentDataFromPhysicalFragment(
       const NGPhysicalBoxFragment&) const;
@@ -1356,7 +1400,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return IsFlexItemCommon() && Parent()->IsFlexibleBoxIncludingNG();
   }
   bool IsFlexItemCommon() const {
-    return !IsInline() && !IsFloatingOrOutOfFlowPositioned() && Parent();
+    return !IsInline() && !IsOutOfFlowPositioned() && Parent();
   }
 
   bool IsGridItem() const { return Parent() && Parent()->IsLayoutGrid(); }
@@ -1521,8 +1565,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                           TransformState&,
                           MapCoordinatesFlags) const override;
 
-  void ClearPreviousVisualRects() override;
-
   LayoutBlock* PercentHeightContainer() const {
     return rare_data_ ? rare_data_->percent_height_container_ : nullptr;
   }
@@ -1568,14 +1610,31 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     void SavePreviousSize() {
       GetLayoutBox().previous_size_ = GetLayoutBox().Size();
     }
-    void SavePreviousContentBoxRectAndLayoutOverflowRect();
-    void ClearPreviousContentBoxRectAndLayoutOverflowRect() {
-      if (!GetLayoutBox().rare_data_)
-        return;
-      GetLayoutBox()
-          .rare_data_->has_previous_content_box_rect_and_layout_overflow_rect_ =
-          false;
+    void SavePreviousOverflowData();
+    void ClearPreviousOverflowData() {
+      DCHECK(!GetLayoutBox().HasVisualOverflow());
+      DCHECK(!GetLayoutBox().HasLayoutOverflow());
+      GetLayoutBox().overflow_.reset();
     }
+    void SavePreviousContentBoxRect() {
+      auto& rare_data = GetLayoutBox().EnsureRareData();
+      rare_data.has_previous_content_box_rect_ = true;
+      rare_data.previous_physical_content_box_rect_ =
+          GetLayoutBox().PhysicalContentBoxRect();
+    }
+    void ClearPreviousContentBoxRect() {
+      if (auto* rare_data = GetLayoutBox().rare_data_.Get())
+        rare_data->has_previous_content_box_rect_ = false;
+    }
+
+    // Called from LayoutShiftTracker when we attach this LayoutBox to a node
+    // for which we saved these values when the node was detached from its
+    // original LayoutBox.
+    void SetPreviousGeometryForLayoutShiftTracking(
+        const PhysicalOffset& paint_offset,
+        const LayoutSize& size,
+        bool has_overflow_clip,
+        const PhysicalRect& layout_overflow_rect);
 
    protected:
     friend class LayoutBox;
@@ -1592,17 +1651,24 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutSize PreviousSize() const { return previous_size_; }
   PhysicalRect PreviousPhysicalContentBoxRect() const {
-    return rare_data_ &&
-                   rare_data_
-                       ->has_previous_content_box_rect_and_layout_overflow_rect_
+    return rare_data_ && rare_data_->has_previous_content_box_rect_
                ? rare_data_->previous_physical_content_box_rect_
                : PhysicalRect(PhysicalOffset(), PreviousSize());
   }
+  bool PreviouslyHadOverflowClip() const {
+    return overflow_ && overflow_->previous_overflow_data &&
+           overflow_->previous_overflow_data->previously_had_overflow_clip;
+  }
   PhysicalRect PreviousPhysicalLayoutOverflowRect() const {
-    return rare_data_ &&
-                   rare_data_
-                       ->has_previous_content_box_rect_and_layout_overflow_rect_
-               ? rare_data_->previous_physical_layout_overflow_rect_
+    return overflow_ && overflow_->previous_overflow_data
+               ? overflow_->previous_overflow_data
+                     ->previous_physical_layout_overflow_rect
+               : PhysicalRect(PhysicalOffset(), PreviousSize());
+  }
+  PhysicalRect PreviousPhysicalSelfVisualOverflowRect() const {
+    return overflow_ && overflow_->previous_overflow_data
+               ? overflow_->previous_overflow_data
+                     ->previous_physical_self_visual_overflow_rect
                : PhysicalRect(PhysicalOffset(), PreviousSize());
   }
 
@@ -1662,6 +1728,14 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   // Make it public.
   using LayoutObject::BackgroundIsKnownToBeObscured;
+
+  // Invalidate the raster of a specific sub-rectangle within the object. The
+  // rect is in the object's local coordinate space. This is useful e.g. when
+  // a small region of a canvas changes.
+  void InvalidatePaintRectangle(const PhysicalRect&);
+  bool HasPartialInvalidationRect() const {
+    return rare_data_ && !rare_data_->partial_invalidation_rect_.IsEmpty();
+  }
 
  protected:
   ~LayoutBox() override;
@@ -1854,7 +1928,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   PhysicalRect DebugRect() const override;
 
-  float VisualRectOutsetForRasterEffects() const override;
+  RasterEffectOutset VisualRectOutsetForRasterEffects() const override;
 
   // Return the width of the vertical scrollbar, unless it's larger than the
   // logical width of the content box, in which case we'll return that instead.
@@ -1881,6 +1955,10 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
         container_box->Size().Width() - Size().Width() - Location().X(),
         Location().Y());
   }
+
+  // DisplayItemClient methods.
+  void ClearPartialInvalidationVisualRect() const final;
+  IntRect PartialInvalidationVisualRect() const final;
 
   // The CSS border box rect for this box.
   //
@@ -1942,7 +2020,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   Persistent<LayoutBoxRareData> rare_data_;
   scoped_refptr<const NGLayoutResult> measure_result_;
-  Vector<scoped_refptr<const NGLayoutResult>, 1> layout_results_;
+  NGLayoutResultList layout_results_;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutBox, IsBox());

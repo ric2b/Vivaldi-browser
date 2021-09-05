@@ -18,9 +18,9 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/referrer_policy.h"
 #include "services/media_session/public/cpp/util.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 
@@ -200,6 +200,10 @@ void CastMediaNotificationItem::Dismiss() {
   notification_controller_->HideNotification(media_route_id_);
 }
 
+bool CastMediaNotificationItem::SourceIsCast() {
+  return true;
+}
+
 void CastMediaNotificationItem::OnMediaStatusUpdated(
     media_router::mojom::MediaStatusPtr status) {
   metadata_.title = base::UTF8ToUTF16(status->title);
@@ -270,7 +274,7 @@ void CastMediaNotificationItem::ImageDownloader::Download(const GURL& url) {
                         : std::make_unique<BitmapFetcher>(
                               url_, this, GetTrafficAnnotationTag());
   bitmap_fetcher_->Init(
-      /* referrer */ "", net::URLRequest::NEVER_CLEAR_REFERRER,
+      /* referrer */ "", net::ReferrerPolicy::NEVER_CLEAR,
       network::mojom::CredentialsMode::kOmit);
   bitmap_fetcher_->Start(url_loader_factory_.get());
 }

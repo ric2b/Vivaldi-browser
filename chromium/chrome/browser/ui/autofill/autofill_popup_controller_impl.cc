@@ -44,7 +44,7 @@ using base::WeakPtr;
 
 namespace autofill {
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 // static
 WeakPtr<AutofillPopupControllerImpl> AutofillPopupControllerImpl::GetOrCreate(
     WeakPtr<AutofillPopupControllerImpl> previous,
@@ -131,9 +131,12 @@ void AutofillPopupControllerImpl::Show(
   }
 
   static_cast<ContentAutofillDriver*>(delegate_->GetAutofillDriver())
-      ->RegisterKeyPressHandler(
-          base::Bind(&AutofillPopupControllerImpl::HandleKeyPressEvent,
-                     base::Unretained(this)));
+      ->RegisterKeyPressHandler(base::BindRepeating(
+          [](base::WeakPtr<AutofillPopupControllerImpl> weak_this,
+             const content::NativeWebKeyboardEvent& event) {
+            return weak_this && weak_this->HandleKeyPressEvent(event);
+          },
+          GetWeakPtr()));
 
   delegate_->OnPopupShown();
 }
@@ -432,7 +435,7 @@ bool AutofillPopupControllerImpl::RemoveSelectedLine() {
 bool AutofillPopupControllerImpl::CanAccept(int id) {
   return id != POPUP_ITEM_ID_SEPARATOR &&
          id != POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE &&
-         id != POPUP_ITEM_ID_TITLE;
+         id != POPUP_ITEM_ID_MIXED_FORM_MESSAGE && id != POPUP_ITEM_ID_TITLE;
 }
 
 bool AutofillPopupControllerImpl::HasSuggestions() {

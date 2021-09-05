@@ -154,14 +154,15 @@ TEST_F(MetricsReporterTest, NewVisitAfterInactivity) {
       {FeedEngagementType::kFeedEngaged, 2},
       {FeedEngagementType::kFeedInteracted, 2},
       {FeedEngagementType::kFeedEngagedSimple, 2},
-      {FeedEngagementType::kFeedScrolled, 1},
+      {FeedEngagementType::kFeedScrolled, 2},
   });
   EXPECT_EQ(want, ReportedEngagementType());
 }
 
 TEST_F(MetricsReporterTest, ReportsLoadStreamStatus) {
   reporter_->OnLoadStream(LoadStreamStatus::kDataInStoreIsStale,
-                          LoadStreamStatus::kLoadedFromNetwork);
+                          LoadStreamStatus::kLoadedFromNetwork,
+                          std::make_unique<LoadLatencyTimes>());
 
   histogram_.ExpectUniqueSample(
       "ContentSuggestions.Feed.LoadStreamStatus.Initial",
@@ -173,13 +174,40 @@ TEST_F(MetricsReporterTest, ReportsLoadStreamStatus) {
 
 TEST_F(MetricsReporterTest, ReportsLoadStreamStatusIgnoresNoStatusFromStore) {
   reporter_->OnLoadStream(LoadStreamStatus::kNoStatus,
-                          LoadStreamStatus::kLoadedFromNetwork);
+                          LoadStreamStatus::kLoadedFromNetwork,
+                          std::make_unique<LoadLatencyTimes>());
 
   histogram_.ExpectUniqueSample(
       "ContentSuggestions.Feed.LoadStreamStatus.Initial",
       LoadStreamStatus::kLoadedFromNetwork, 1);
   histogram_.ExpectTotalCount(
       "ContentSuggestions.Feed.LoadStreamStatus.InitialFromStore", 0);
+}
+
+TEST_F(MetricsReporterTest, ReportsLoadStepLatenciesOnFirstView) {
+  {
+    auto latencies = std::make_unique<LoadLatencyTimes>();
+    task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(150));
+    latencies->StepComplete(LoadLatencyTimes::kLoadFromStore);
+    task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(50));
+    latencies->StepComplete(LoadLatencyTimes::kUploadActions);
+    reporter_->OnLoadStream(LoadStreamStatus::kNoStatus,
+                            LoadStreamStatus::kLoadedFromNetwork,
+                            std::move(latencies));
+  }
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(300));
+  reporter_->FeedViewed(kSurfaceId);
+  reporter_->FeedViewed(kSurfaceId);
+
+  histogram_.ExpectUniqueTimeSample(
+      "ContentSuggestions.Feed.LoadStepLatency.LoadFromStore",
+      base::TimeDelta::FromMilliseconds(150), 1);
+  histogram_.ExpectUniqueTimeSample(
+      "ContentSuggestions.Feed.LoadStepLatency.ActionUpload",
+      base::TimeDelta::FromMilliseconds(50), 1);
+  histogram_.ExpectUniqueTimeSample(
+      "ContentSuggestions.Feed.LoadStepLatency.StreamView",
+      base::TimeDelta::FromMilliseconds(300), 1);
 }
 
 TEST_F(MetricsReporterTest, ReportsLoadMoreStatus) {
@@ -209,7 +237,7 @@ TEST_F(MetricsReporterTest, OpenAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.Open"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedOnCard, 1);
   histogram_.ExpectUniqueSample("NewTabPage.ContentSuggestions.Opened", 5, 1);
 }
@@ -225,7 +253,7 @@ TEST_F(MetricsReporterTest, OpenInNewTabAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.OpenInNewTab"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedOpenInNewTab, 1);
   histogram_.ExpectUniqueSample("NewTabPage.ContentSuggestions.Opened", 5, 1);
 }
@@ -242,7 +270,7 @@ TEST_F(MetricsReporterTest, OpenInNewIncognitoTabAction) {
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.OpenInNewIncognitoTab"));
   histogram_.ExpectUniqueSample(
-      "ContentSuggestions.Feed.UserAction",
+      "ContentSuggestions.Feed.UserActions",
       FeedUserActionType::kTappedOpenInNewIncognitoTab, 1);
   histogram_.ExpectTotalCount("NewTabPage.ContentSuggestions.Opened", 0);
 }
@@ -258,7 +286,7 @@ TEST_F(MetricsReporterTest, SendFeedbackAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.SendFeedback"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedSendFeedback, 1);
 }
 
@@ -273,7 +301,7 @@ TEST_F(MetricsReporterTest, DownloadAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.Download"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedDownload, 1);
 }
 
@@ -288,7 +316,7 @@ TEST_F(MetricsReporterTest, LearnMoreAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.LearnMore"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedLearnMore, 1);
 }
 
@@ -303,7 +331,7 @@ TEST_F(MetricsReporterTest, RemoveAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.HideStory"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedHideStory, 1);
 }
 
@@ -318,7 +346,7 @@ TEST_F(MetricsReporterTest, NotInterestedInAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.NotInterestedIn"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedNotInterestedIn, 1);
 }
 
@@ -333,7 +361,7 @@ TEST_F(MetricsReporterTest, ManageInterestsAction) {
   EXPECT_EQ(want, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.ManageInterests"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kTappedManageInterests, 1);
 }
 
@@ -344,7 +372,7 @@ TEST_F(MetricsReporterTest, ContextMenuOpened) {
   EXPECT_EQ(want_empty, ReportedEngagementType());
   EXPECT_EQ(1, user_actions_.GetActionCount(
                    "ContentSuggestions.Feed.CardAction.ContextMenu"));
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kOpenedContextMenu, 1);
 }
 
@@ -353,14 +381,14 @@ TEST_F(MetricsReporterTest, SurfaceOpened) {
 
   std::map<FeedEngagementType, int> want_empty;
   EXPECT_EQ(want_empty, ReportedEngagementType());
-  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserAction",
+  histogram_.ExpectUniqueSample("ContentSuggestions.Feed.UserActions",
                                 FeedUserActionType::kOpenedFeedSurface, 1);
 }
 
 TEST_F(MetricsReporterTest, OpenFeedSuccessDuration) {
   reporter_->SurfaceOpened(kSurfaceId);
   task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(9));
-  reporter_->ContentSliceViewed(kSurfaceId, 0);
+  reporter_->FeedViewed(kSurfaceId);
 
   histogram_.ExpectUniqueTimeSample(
       "ContentSuggestions.Feed.UserJourney.OpenFeed.SuccessDuration",

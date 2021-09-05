@@ -5,6 +5,7 @@
 #include "services/network/trust_tokens/test/trust_token_request_handler.h"
 
 #include "base/base64.h"
+#include "base/callback.h"
 #include "base/check.h"
 #include "base/containers/span.h"
 #include "base/json/json_string_value_serializer.h"
@@ -77,6 +78,11 @@ struct TrustTokenRequestHandler::Rep {
   std::vector<uint8_t> srr_signing;
   std::vector<uint8_t> srr_verification;
   std::vector<IssuanceKeyPair> issuance_keys;
+
+  // Whether to peremptorily reject issuance and redemption or whether to
+  // actually process the provided input.
+  ServerOperationOutcome issuance_outcome;
+  ServerOperationOutcome redemption_outcome;
 
   // Creates a BoringSSL token issuer context suitable for issuance or
   // redemption, using only the unexpired key pairs from |issuance_keys|.
@@ -239,6 +245,10 @@ base::Optional<std::string> TrustTokenRequestHandler::Issue(
     base::StringPiece issuance_request) {
   base::AutoLock lock(mutex_);
 
+  if (rep_->issuance_outcome == ServerOperationOutcome::kUnconditionalFailure) {
+    return base::nullopt;
+  }
+
   bssl::UniquePtr<TRUST_TOKEN_ISSUER> issuer_ctx =
       rep_->CreateIssuerContextFromUnexpiredKeys();
 
@@ -280,6 +290,11 @@ constexpr base::TimeDelta TrustTokenRequestHandler::kSrrLifetime =
 base::Optional<std::string> TrustTokenRequestHandler::Redeem(
     base::StringPiece redemption_request) {
   base::AutoLock lock(mutex_);
+
+  if (rep_->redemption_outcome ==
+      ServerOperationOutcome::kUnconditionalFailure) {
+    return base::nullopt;
+  }
 
   bssl::UniquePtr<TRUST_TOKEN_ISSUER> issuer_ctx =
       rep_->CreateIssuerContextFromUnexpiredKeys();
@@ -365,46 +380,60 @@ bool TrustTokenRequestHandler::VerifySignedRequest(
   }
   DCHECK_EQ(rep_->client_signing_outcome, SigningOutcome::kSuccess);
 
-  std::string srr_body;
-  switch (VerifyTrustTokenSignedRedemptionRecord(
-      sec_signed_redemption_record_header,
-      base::StringPiece(
-          reinterpret_cast<const char*>(rep_->srr_verification.data()),
-          rep_->srr_verification.size()),
-      &srr_body)) {
-    case SrrVerificationStatus::kSignatureVerificationError:
-      if (error_out) {
-        *error_out = "Request SRR signature failed to verify";
-      }
-      return false;
-    case SrrVerificationStatus::kParseError:
-      if (error_out) {
-        *error_out = "Request SRR header failed to parse";
-      }
-      return false;
-    case SrrVerificationStatus::kSuccess:
-      break;
-  }
-
-  if (!ConfirmSrrBodyIntegrity(srr_body, error_out))
-    return false;  // On failure, |ConfirmSrrBodyIntegrity| has set the error.
-
-  std::string verification_key;
-
-  if (!ReconstructSigningDataAndVerifySignature(destination, headers,
-                                                /*verifier=*/{}, error_out,
-                                                &verification_key)) {
+  std::map<SuitableTrustTokenOrigin, std::string> redemption_records_per_issuer;
+  // On failure, |ExtractRedemptionRecordsFromHeader| has set the error.
+  if (!ExtractRedemptionRecordsFromHeader(sec_signed_redemption_record_header,
+                                          &redemption_records_per_issuer,
+                                          error_out)) {
     return false;
   }
 
-  if (!base::Contains(rep_->hashes_of_redemption_bound_key_pairs,
-                      crypto::SHA256HashString(verification_key))) {
-    if (error_out) {
-      *error_out =
-          "Got a request signed with a verification key whose hash was not "
-          "previously bound to a redemption request.";
+  for (const auto& issuer_and_record : redemption_records_per_issuer) {
+    // TODO(davidvc): Check that the issuer corresponds to "this server's
+    // domain" once this handler is scoped to a single domain.
+    std::string srr_body;
+    switch (VerifyTrustTokenSignedRedemptionRecord(
+        issuer_and_record.second,
+        base::StringPiece(
+            reinterpret_cast<const char*>(rep_->srr_verification.data()),
+            rep_->srr_verification.size()),
+        &srr_body)) {
+      case SrrVerificationStatus::kSignatureVerificationError:
+        if (error_out) {
+          *error_out = "Request SRR signature failed to verify";
+        }
+        return false;
+      case SrrVerificationStatus::kParseError:
+        if (error_out) {
+          *error_out = "Request SRR header failed to parse";
+        }
+        return false;
+      case SrrVerificationStatus::kSuccess:
+        break;
     }
+
+    if (!ConfirmSrrBodyIntegrity(srr_body, error_out))
+      return false;  // On failure, |ConfirmSrrBodyIntegrity| has set the error.
+  }
+
+  std::map<std::string, std::string> verification_keys;
+
+  if (!ReconstructSigningDataAndVerifySignatures(destination, headers,
+                                                 /*verifier=*/{}, error_out,
+                                                 &verification_keys)) {
     return false;
+  }
+
+  for (const auto& issuer_and_key : verification_keys) {
+    if (!base::Contains(rep_->hashes_of_redemption_bound_key_pairs,
+                        crypto::SHA256HashString(issuer_and_key.second))) {
+      if (error_out) {
+        *error_out =
+            "Got a request signed with a verification key whose hash was not "
+            "previously bound to a redemption request.";
+      }
+      return false;
+    }
   }
 
   return true;
@@ -422,6 +451,8 @@ void TrustTokenRequestHandler::UpdateOptions(Options options) {
 
   rep_->batch_size = options.batch_size;
   rep_->client_signing_outcome = options.client_signing_outcome;
+  rep_->issuance_outcome = options.issuance_outcome;
+  rep_->redemption_outcome = options.redemption_outcome;
 
   rep_->srr_signing.resize(ED25519_PRIVATE_KEY_LEN);
   rep_->srr_verification.resize(ED25519_PUBLIC_KEY_LEN);

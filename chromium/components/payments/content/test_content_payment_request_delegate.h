@@ -22,6 +22,8 @@ class TestContentPaymentRequestDelegate : public ContentPaymentRequestDelegate {
   ~TestContentPaymentRequestDelegate() override;
 
   // ContentPaymentRequestDelegate:
+  std::unique_ptr<autofill::InternalAuthenticator> CreateInternalAuthenticator()
+      const override;
   scoped_refptr<PaymentManifestWebDataService>
   GetPaymentManifestWebDataService() const override;
   PaymentRequestDisplayManager* GetDisplayManager() override;
@@ -33,6 +35,7 @@ class TestContentPaymentRequestDelegate : public ContentPaymentRequestDelegate {
   bool IsBrowserWindowActive() const override;
   bool SkipUiForBasicCard() const override;
   std::string GetTwaPackageName() const override;
+  PaymentRequestDialog* GetDialogForTesting() override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
   const std::string& GetApplicationLocale() const override;
   bool IsOffTheRecord() const override;

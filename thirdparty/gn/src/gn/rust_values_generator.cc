@@ -18,7 +18,7 @@ static const char* kRustSupportedCrateTypesError =
     "\"crate_type\" must be one of \"bin\", \"cdylib\", \"dylib\", or "
     "\"proc-macro\", \"rlib\", \"staticlib\".";
 
-RustTargetGenerator::RustTargetGenerator(Target* target,
+RustValuesGenerator::RustValuesGenerator(Target* target,
                                          Scope* scope,
                                          const FunctionCallNode* function_call,
                                          Err* err)
@@ -27,9 +27,9 @@ RustTargetGenerator::RustTargetGenerator(Target* target,
       function_call_(function_call),
       err_(err) {}
 
-RustTargetGenerator::~RustTargetGenerator() = default;
+RustValuesGenerator::~RustValuesGenerator() = default;
 
-void RustTargetGenerator::Run() {
+void RustValuesGenerator::Run() {
   // source_set targets don't need any special Rust handling.
   if (target_->output_type() == Target::SOURCE_SET)
     return;
@@ -65,7 +65,7 @@ void RustTargetGenerator::Run() {
     return;
 }
 
-bool RustTargetGenerator::FillCrateName() {
+bool RustValuesGenerator::FillCrateName() {
   const Value* value = scope_->GetValue(variables::kRustCrateName, true);
   if (!value) {
     // The target name will be used.
@@ -79,7 +79,7 @@ bool RustTargetGenerator::FillCrateName() {
   return true;
 }
 
-bool RustTargetGenerator::FillCrateType() {
+bool RustValuesGenerator::FillCrateType() {
   const Value* value = scope_->GetValue(variables::kRustCrateType, true);
   if (!value) {
     // Require shared_library and loadable_module targets to tell us what
@@ -129,7 +129,7 @@ bool RustTargetGenerator::FillCrateType() {
   return false;
 }
 
-bool RustTargetGenerator::FillCrateRoot() {
+bool RustValuesGenerator::FillCrateRoot() {
   const Value* value = scope_->GetValue(variables::kRustCrateRoot, true);
   if (!value) {
     // If there's only one source, use that.
@@ -163,7 +163,7 @@ bool RustTargetGenerator::FillCrateRoot() {
   return true;
 }
 
-bool RustTargetGenerator::FillAliasedDeps() {
+bool RustValuesGenerator::FillAliasedDeps() {
   const Value* value = scope_->GetValue(variables::kRustAliasedDeps, true);
   if (!value)
     return true;

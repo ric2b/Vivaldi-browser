@@ -13,12 +13,12 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -37,9 +37,18 @@ public class TabListSceneLayer extends SceneLayer {
     private TabModelSelector mTabModelSelector;
     private int[] mAdditionalIds = new int[4];
     private boolean mUseAdditionalIds;
+    private boolean mIsInitialized;
 
     public void setTabModelSelector(TabModelSelector tabModelSelector) {
         mTabModelSelector = tabModelSelector;
+    }
+
+    public void init(LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
+            ResourceManager resourceManager) {
+        if (mNativePtr == 0 || mIsInitialized) return;
+        TabListSceneLayerJni.get().setDependencies(mNativePtr, TabListSceneLayer.this,
+                tabContentManager, layerTitleCache, resourceManager);
+        mIsInitialized = true;
     }
 
     /**
@@ -54,7 +63,7 @@ public class TabListSceneLayer extends SceneLayer {
      * @param layerTitleCache An object for accessing tab layer titles.
      * @param tabContentManager An object for accessing tab content.
      * @param resourceManager An object for accessing static and dynamic resources.
-     * @param fullscreenManager The fullscreen manager for browser controls information.
+     * @param browserControls The provider for browser controls state.
      * @param backgroundResourceId The resource ID for background. {@link #INVALID_RESOURCE_ID} if
      *                             none. Only used in GridTabSwitcher.
      * @param backgroundAlpha The alpha of the background. Only used in GridTabSwitcher.
@@ -63,7 +72,7 @@ public class TabListSceneLayer extends SceneLayer {
      */
     public void pushLayers(Context context, RectF viewport, RectF contentViewport, Layout layout,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
-            ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager,
+            ResourceManager resourceManager, BrowserControlsStateProvider browserControls,
             int backgroundResourceId, float backgroundAlpha, int backgroundTopOffset) {
         if (mNativePtr == 0) return;
 
@@ -74,11 +83,16 @@ public class TabListSceneLayer extends SceneLayer {
         LayoutTab[] tabs = layout.getLayoutTabsToRender();
         int tabsCount = tabs != null ? tabs.length : 0;
 
+        if (!mIsInitialized) {
+            init(layerTitleCache, tabContentManager, resourceManager);
+        }
+
         TabListSceneLayerJni.get().beginBuildingFrame(mNativePtr, TabListSceneLayer.this);
 
+        // TODO(crbug.com/1070281): Use Supplier to get viewport and forward it to native, then
+        // updateLayer can become obsolete.
         TabListSceneLayerJni.get().updateLayer(mNativePtr, TabListSceneLayer.this, tabListBgColor,
-                viewport.left, viewport.top, viewport.width(), viewport.height(), layerTitleCache,
-                tabContentManager, resourceManager);
+                viewport.left, viewport.top, viewport.width(), viewport.height());
 
         if (backgroundResourceId != INVALID_RESOURCE_ID) {
             TabListSceneLayerJni.get().putBackgroundLayer(mNativePtr, TabListSceneLayer.this,
@@ -104,9 +118,6 @@ public class TabListSceneLayer extends SceneLayer {
 
             int defaultThemeColor = ChromeColors.getDefaultThemeColor(res, useIncognitoColors);
 
-            // In the modern design, the text box is always drawn opaque in the compositor.
-            float textBoxAlpha = 1.f;
-
             int closeButtonColor = useIncognitoColors
                     ? Color.WHITE
                     : ApiCompatibilityUtils.getColor(res, R.color.default_icon_color_secondary);
@@ -130,7 +141,7 @@ public class TabListSceneLayer extends SceneLayer {
                     t.isCloseButtonOnRight(), t.getRenderX() * dpToPx, t.getRenderY() * dpToPx,
                     t.getScaledContentWidth() * dpToPx, t.getScaledContentHeight() * dpToPx,
                     t.getOriginalContentWidth() * dpToPx, t.getOriginalContentHeight() * dpToPx,
-                    contentViewport.height(), t.getClippedX() * dpToPx, t.getClippedY() * dpToPx,
+                    t.getClippedX() * dpToPx, t.getClippedY() * dpToPx,
                     Math.min(t.getClippedWidth(), t.getScaledContentWidth()) * dpToPx,
                     Math.min(t.getClippedHeight(), t.getScaledContentHeight()) * dpToPx,
                     t.getTiltXPivotOffset() * dpToPx, t.getTiltYPivotOffset() * dpToPx,
@@ -142,8 +153,8 @@ public class TabListSceneLayer extends SceneLayer {
                     t.getBrightness(), t.showToolbar(), defaultThemeColor,
                     t.getToolbarBackgroundColor(), closeButtonColor, t.anonymizeToolbar(),
                     t.isTitleNeeded(), urlBarBackgroundId, t.getTextBoxBackgroundColor(),
-                    textBoxAlpha, t.getToolbarAlpha(), fullscreenManager.getContentOffset(),
-                    t.getSideBorderScale(), t.insetBorderVertical());
+                    t.getToolbarAlpha(), browserControls.getContentOffset(), t.getSideBorderScale(),
+                    t.insetBorderVertical());
         }
         TabListSceneLayerJni.get().finishBuildingFrame(mNativePtr, TabListSceneLayer.this);
     }
@@ -196,10 +207,12 @@ public class TabListSceneLayer extends SceneLayer {
         long init(TabListSceneLayer caller);
         void beginBuildingFrame(long nativeTabListSceneLayer, TabListSceneLayer caller);
         void finishBuildingFrame(long nativeTabListSceneLayer, TabListSceneLayer caller);
+        void setDependencies(long nativeTabListSceneLayer, TabListSceneLayer caller,
+                TabContentManager tabContentManager, LayerTitleCache layerTitleCache,
+                ResourceManager resourceManager);
         void updateLayer(long nativeTabListSceneLayer, TabListSceneLayer caller,
                 int backgroundColor, float viewportX, float viewportY, float viewportWidth,
-                float viewportHeight, LayerTitleCache layerTitleCache,
-                TabContentManager tabContentManager, ResourceManager resourceManager);
+                float viewportHeight);
         // TODO(meiliang): Need to provide a resource that indicates the selected tab on the layer.
         void putTabLayer(long nativeTabListSceneLayer, TabListSceneLayer caller, int selectedId,
                 int[] ids, boolean useAdditionalIds, int toolbarResourceId,
@@ -207,17 +220,16 @@ public class TabListSceneLayer extends SceneLayer {
                 int backLogoResourceId, int borderResourceId, int borderInnerShadowResourceId,
                 boolean canUseLiveLayer, int tabBackgroundColor, int backLogoColor,
                 boolean incognito, boolean isPortrait, float x, float y, float width, float height,
-                float contentWidth, float contentHeight, float visibleContentHeight, float shadowX,
-                float shadowY, float shadowWidth, float shadowHeight, float pivotX, float pivotY,
-                float rotationX, float rotationY, float alpha, float borderAlpha,
-                float borderInnerShadowAlpha, float contourAlpha, float shadowAlpha,
-                float closeAlpha, float closeBtnWidth, float closeBtnAssetSize,
-                float staticToViewBlend, float borderScale, float saturation, float brightness,
-                boolean showToolbar, int defaultThemeColor, int toolbarBackgroundColor,
-                int closeButtonColor, boolean anonymizeToolbar, boolean showTabTitle,
-                int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
-                float toolbarTextBoxAlpha, float toolbarAlpha, float contentOffset,
-                float sideBorderScale, boolean insetVerticalBorder);
+                float contentWidth, float contentHeight, float shadowX, float shadowY,
+                float shadowWidth, float shadowHeight, float pivotX, float pivotY, float rotationX,
+                float rotationY, float alpha, float borderAlpha, float borderInnerShadowAlpha,
+                float contourAlpha, float shadowAlpha, float closeAlpha, float closeBtnWidth,
+                float closeBtnAssetSize, float staticToViewBlend, float borderScale,
+                float saturation, float brightness, boolean showToolbar, int defaultThemeColor,
+                int toolbarBackgroundColor, int closeButtonColor, boolean anonymizeToolbar,
+                boolean showTabTitle, int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
+                float toolbarTextBoxAlpha, float contentOffset, float sideBorderScale,
+                boolean insetVerticalBorder);
 
         void putBackgroundLayer(long nativeTabListSceneLayer, TabListSceneLayer caller,
                 int resourceId, float alpha, int topOffset);

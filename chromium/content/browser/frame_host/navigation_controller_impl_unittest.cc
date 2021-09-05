@@ -31,6 +31,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
+#include "content/common/content_navigation_policy.h"
 #include "content/common/frame_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_view_host.h"
@@ -39,7 +40,6 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/page_type.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
@@ -53,6 +53,7 @@
 #include "skia/ext/platform_canvas.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 
@@ -199,7 +200,7 @@ class NavigationControllerTest : public RenderViewHostImplTestHarness,
     return navigation_request->common_params().url;
   }
 
-  content::PreviewsState GetLastNavigationPreviewsState() {
+  blink::PreviewsState GetLastNavigationPreviewsState() {
     NavigationRequest* navigation_request =
         contents()->GetFrameTree()->root()->navigation_request();
     CHECK(navigation_request);
@@ -435,7 +436,8 @@ TEST_F(NavigationControllerTest, LoadURL) {
   // Simulate a user gesture so that the above entry is not marked to be skipped
   // on back.
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
 
   // Load another...
   controller.LoadURL(url2, Referrer(), ui::PAGE_TRANSITION_TYPED,
@@ -864,7 +866,8 @@ TEST_F(NavigationControllerTest, LoadURL_ExistingPending) {
   // Simulate a user gesture so that the above entry is not marked to be skipped
   // on back.
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
 
   const GURL kExistingURL2("http://foo/bee");
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), kExistingURL2);
@@ -909,7 +912,8 @@ TEST_F(NavigationControllerTest, LoadURL_PrivilegedPending) {
   // Simulate a user gesture so that the above entry is not marked to be skipped
   // on back.
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
 
   // Navigate cross-process to a second URL.
   const GURL kExistingURL2("http://foo/eh");
@@ -1092,7 +1096,7 @@ TEST_F(NavigationControllerTest, LoadURL_RedirectAbortDoesntShowPendingURL) {
   // First make an existing committed entry.
   const GURL kExistingURL("http://foo/eh");
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), kExistingURL);
-  main_test_rfh()->OnMessageReceived(FrameHostMsg_DidStopLoading(0));
+  main_test_rfh()->DidStopLoading();
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
   navigation_entry_committed_counter_ = 0;
 
@@ -1233,17 +1237,23 @@ TEST_F(NavigationControllerTest, Reload_GeneratesNewPage) {
 // without ending up in the "we have a wrong process for the URL" branch in
 // NavigationControllerImpl::ReloadInternal.
 TEST_F(NavigationControllerTest, ReloadWithGuest) {
-  NavigationControllerImpl& controller = controller_impl();
+  const GURL kGuestSiteUrl("my-guest-scheme://someapp/somepath");
+  scoped_refptr<SiteInstance> guest_instance =
+      SiteInstance::CreateForGuest(browser_context(), kGuestSiteUrl);
+  std::unique_ptr<TestWebContents> guest_web_contents(
+      TestWebContents::Create(browser_context(), guest_instance));
+  NavigationControllerImpl& controller = guest_web_contents->GetController();
 
   const GURL url1("http://foo1");
-  NavigationSimulator::NavigateAndCommitFromBrowser(contents(), url1);
+  NavigationSimulator::NavigateAndCommitFromBrowser(guest_web_contents.get(),
+                                                    url1);
   ASSERT_TRUE(controller.GetVisibleEntry());
 
   // Make the entry believe its RenderProcessHost is a guest.
   NavigationEntryImpl* entry1 = controller.GetVisibleEntry();
-  reinterpret_cast<MockRenderProcessHost*>(
-      entry1->site_instance()->GetProcess())
-      ->set_is_for_guests_only(true);
+  ASSERT_EQ(entry1->site_instance(), guest_instance);
+  ASSERT_TRUE(entry1->site_instance()->IsGuest());
+  ASSERT_TRUE(entry1->site_instance()->GetProcess()->IsForGuestsOnly());
 
   // And reload.
   controller.Reload(ReloadType::NORMAL, true);
@@ -1416,7 +1426,7 @@ TEST_F(NavigationControllerTest, GoBackWithUserAgentOverrideChange) {
   // Test that OnWebkitPreferencesChanged is called when going back to propagate
   // change in viewport_meta WebSetting.
   int change_counter = 0;
-  test_rvh()->set_webkit_preferences_changed_counter(&change_counter);
+  contents()->set_web_preferences_changed_counter(&change_counter);
 
   auto back_navigation =
       NavigationSimulator::CreateHistoryNavigation(-1, contents());
@@ -1548,7 +1558,8 @@ TEST_F(NavigationControllerTest, Back_NewPending) {
   // Simulate a user gesture so that the above entry is not marked to be skipped
   // on back.
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
 
   // controller.LoadURL(kUrl2, ui::PAGE_TRANSITION_TYPED);
   NavigationSimulator::NavigateAndCommitFromDocument(kUrl2, main_test_rfh());
@@ -2147,7 +2158,8 @@ TEST_F(NavigationControllerTest, LinkClick) {
 
   // Simulate a user gesture.
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
 
   NavigationSimulator::NavigateAndCommitFromDocument(url2, main_test_rfh());
   EXPECT_EQ(1U, navigation_entry_committed_counter_);
@@ -2950,10 +2962,11 @@ TEST_F(NavigationControllerTest,
   // Test allow_universal_access_from_file_urls flag.
   const GURL different_origin_url("http://www.example.com");
   MockRenderProcessHost* rph = main_test_rfh()->GetProcess();
-  WebPreferences prefs = test_rvh()->GetWebkitPreferences();
+  WebPreferences prefs =
+      controller.GetWebContents()->GetOrCreateWebPreferences();
   prefs.allow_universal_access_from_file_urls = true;
-  test_rvh()->UpdateWebkitPreferences(prefs);
-  prefs = test_rvh()->GetWebkitPreferences();
+  controller.GetWebContents()->SetWebPreferences(prefs);
+  prefs = controller.GetWebContents()->GetOrCreateWebPreferences();
   EXPECT_TRUE(prefs.allow_universal_access_from_file_urls);
 
   // Allow same-document navigation to be cross-origin if existing URL is file
@@ -3265,10 +3278,17 @@ TEST_F(NavigationControllerTest, CopyStateFromAndPrune) {
   NavigateAndCommit(url1);
   NavigateAndCommit(url2);
 
-  // First two entries should have the same SiteInstance.
   SiteInstance* instance1 = controller.GetEntryAtIndex(0)->site_instance();
   SiteInstance* instance2 = controller.GetEntryAtIndex(1)->site_instance();
-  EXPECT_EQ(instance1, instance2);
+  if (CanSameSiteMainFrameNavigationsChangeSiteInstances()) {
+    // If ProactivelySwapBrowsingInstance is enabled for same-site navigations,
+    // the same-site navigation from |url1| to |url2| should use different
+    // SiteInstances.
+    EXPECT_NE(instance1, instance2);
+  } else {
+    // Otherwise, the first two entries should have the same SiteInstance.
+    EXPECT_EQ(instance1, instance2);
+  }
 
   std::unique_ptr<TestWebContents> other_contents(
       static_cast<TestWebContents*>(CreateTestWebContents().release()));
@@ -3597,10 +3617,17 @@ TEST_F(NavigationControllerTest, CopyStateFromAndPruneReplaceEntry) {
   NavigateAndCommit(url1);
   NavigateAndCommit(url2);
 
-  // First two entries should have the same SiteInstance.
   SiteInstance* instance1 = controller.GetEntryAtIndex(0)->site_instance();
   SiteInstance* instance2 = controller.GetEntryAtIndex(1)->site_instance();
-  EXPECT_EQ(instance1, instance2);
+  if (CanSameSiteMainFrameNavigationsChangeSiteInstances()) {
+    // If ProactivelySwapBrowsingInstance is enabled for same-site navigations,
+    // the same-site navigation from |url1| to |url2| should use different
+    // SiteInstances.
+    EXPECT_NE(instance1, instance2);
+  } else {
+    // Otherwise, the first two entries should have the same SiteInstance.
+    EXPECT_EQ(instance1, instance2);
+  }
 
   std::unique_ptr<TestWebContents> other_contents(
       static_cast<TestWebContents*>(CreateTestWebContents().release()));

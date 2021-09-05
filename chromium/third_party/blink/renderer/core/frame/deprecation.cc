@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -63,6 +64,9 @@ enum Milestone {
   kM83 = 83,
   kM84 = 84,
   kM85 = 85,
+  kM86 = 86,
+  kM87 = 87,
+  kM88 = 88,
 };
 
 // Returns estimated milestone dates as milliseconds since January 1, 1970.
@@ -115,6 +119,18 @@ base::Time::Exploded MilestoneDate(Milestone milestone) {
       // This release is not yet scheduled, so this date is a guess.
       // https://groups.google.com/a/chromium.org/d/msg/chromium-dev/N1NxbSVOZas/ySlEKDKkBgAJ
       return {2020, 8, 0, 25, 4};
+    case kM86:
+      // This release is not yet scheduled, so this date is a guess.
+      // https://groups.google.com/a/chromium.org/d/msg/chromium-dev/N1NxbSVOZas/ySlEKDKkBgAJ
+      return {2020, 10, 0, 6, 4};
+    case kM87:
+      // This release is not yet scheduled, so this date is a guess.
+      // https://groups.google.com/a/chromium.org/d/msg/chromium-dev/N1NxbSVOZas/ySlEKDKkBgAJ
+      return {2020, 11, 0, 17, 4};
+    case kM88:
+      // This release is not yet scheduled, so this date is a guess.
+      // https://groups.google.com/a/chromium.org/d/msg/chromium-dev/N1NxbSVOZas/ySlEKDKkBgAJ
+      return {2021, 1, 0, 19, 4};
   }
 
   NOTREACHED();
@@ -501,11 +517,6 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               "native UI",
               kM75, "5825971391299584")};
 
-    case WebFeature::kV8AtomicsWake:
-      return {"V8AtomicsWake", kM76,
-              ReplacedWillBeRemoved("Atomics.wake", "Atomics.notify", kM76,
-                                    "6228189936353280")};
-
     case WebFeature::kXRSupportsSession:
       return {"XRSupportsSession", kM80,
               ReplacedBy(
@@ -532,41 +543,41 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               MilestoneString(kM84).Ascii().c_str())};
 
     case WebFeature::kV8RTCRtpSender_CreateEncodedAudioStreams_Method:
-      return {"V8RTCRtpSender_CreateEncodedAudioStreams_Method", kM85,
+      return {"V8RTCRtpSender_CreateEncodedAudioStreams_Method", kM88,
               ReplacedWillBeRemoved("RTCRtpSender.createEncodedAudioStreams",
-                                    "RTCRtpSender.createEncodedStreams", kM85,
+                                    "RTCRtpSender.createEncodedStreams", kM88,
                                     "6321945865879552")};
 
     case WebFeature::kV8RTCRtpSender_CreateEncodedVideoStreams_Method:
-      return {"V8RTCRtpSender_CreateEncodedVideoStreams_Method", kM85,
+      return {"V8RTCRtpSender_CreateEncodedVideoStreams_Method", kM88,
               ReplacedWillBeRemoved("RTCRtpSender.createEncodedVideoStreams",
-                                    "RTCRtpSender.createEncodedStreams", kM85,
+                                    "RTCRtpSender.createEncodedStreams", kM88,
                                     "6321945865879552")};
 
     case WebFeature::kV8RTCRtpReceiver_CreateEncodedAudioStreams_Method:
-      return {"V8RTCRtpReceiver_CreateEncodedAudioStreams_Method", kM85,
+      return {"V8RTCRtpReceiver_CreateEncodedAudioStreams_Method", kM88,
               ReplacedWillBeRemoved("RTCRtpReceiver.createEncodedAudioStreams",
-                                    "RTCRtpReceiver.createEncodedStreams", kM85,
+                                    "RTCRtpReceiver.createEncodedStreams", kM88,
                                     "6321945865879552")};
 
     case WebFeature::kV8RTCRtpReceiver_CreateEncodedVideoStreams_Method:
-      return {"V8RTCRtpReceiver_CreateEncodedVideoStreams_Method", kM85,
+      return {"V8RTCRtpReceiver_CreateEncodedVideoStreams_Method", kM88,
               ReplacedWillBeRemoved("RTCRtpReceiver.createEncodedVideoStreams",
-                                    "RTCRtpReceiver.createEncodedStreams", kM85,
+                                    "RTCRtpReceiver.createEncodedStreams", kM88,
                                     "6321945865879552")};
 
     case WebFeature::kForceEncodedAudioInsertableStreams:
-      return {"ForceEncodedAudioInsertableStreams", kM85,
+      return {"ForceEncodedAudioInsertableStreams", kM88,
               ReplacedWillBeRemoved(
                   "RTCConfiguration.forceEncodedAudioInsertableStreams",
-                  "RTCConfiguration.encodedInsertableStreams", kM85,
+                  "RTCConfiguration.encodedInsertableStreams", kM88,
                   "6321945865879552")};
 
     case WebFeature::kForceEncodedVideoInsertableStreams:
-      return {"ForceEncodedVideoInsertableStreams", kM85,
+      return {"ForceEncodedVideoInsertableStreams", kM88,
               ReplacedWillBeRemoved(
                   "RTCConfiguration.forceEncodedVideoInsertableStreams",
-                  "RTCConfiguration.encodedInsertableStreams", kM85,
+                  "RTCConfiguration.encodedInsertableStreams", kM88,
                   "6321945865879552")};
 
     // Features that aren't deprecated don't have a deprecation message.
@@ -652,49 +663,13 @@ String Deprecation::DeprecationMessage(CSSPropertyID unresolved_property) {
   return g_empty_string;
 }
 
-void Deprecation::CountDeprecation(ExecutionContext* context,
-                                   WebFeature feature) {
-  if (!context)
-    return;
-
-  context->CountDeprecation(feature);
-}
-
-void Deprecation::CountDeprecation(DocumentLoader* loader, WebFeature feature) {
-  Deprecation::CountDeprecation(loader, feature, /*count_usage=*/true);
-}
-
-void Deprecation::DeprecationWarningOnly(DocumentLoader* loader,
-                                         WebFeature feature) {
-  Deprecation::CountDeprecation(loader, feature, /*count_usage=*/false);
-}
-
-void Deprecation::CountDeprecation(DocumentLoader* loader,
-                                   WebFeature feature,
-                                   bool count_usage) {
-  if (!loader)
-    return;
-  LocalFrame* frame = loader->GetFrame();
-  if (!frame)
-    return;
-  Page* page = frame->GetPage();
-  if (!loader || !page || page->GetDeprecation().mute_count_ ||
-      page->GetDeprecation().GetReported(feature))
-    return;
-
-  page->GetDeprecation().SetReported(feature);
-  if (count_usage)
-    UseCounter::Count(loader, feature);
-  GenerateReport(frame, feature);
-}
-
 void Deprecation::CountDeprecationCrossOriginIframe(LocalDOMWindow* window,
                                                     WebFeature feature) {
   DCHECK(window);
   if (!window->GetFrame())
     return;
 
-  // Check to see if the frame can script into the top level window.
+  // Check to see if the frame can script into the top level context.
   Frame& top = window->GetFrame()->Tree().Top();
   if (!window->GetSecurityOrigin()->CanAccess(
           top.GetSecurityContext()->GetSecurityOrigin())) {
@@ -702,9 +677,54 @@ void Deprecation::CountDeprecationCrossOriginIframe(LocalDOMWindow* window,
   }
 }
 
-void Deprecation::GenerateReport(const LocalFrame* frame, WebFeature feature) {
-  if (!frame || !frame->Client())
+void Deprecation::CountDeprecation(ExecutionContext* context,
+                                   WebFeature feature) {
+  if (!context)
     return;
+
+  Deprecation* deprecation = nullptr;
+  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
+    if (window->GetFrame())
+      deprecation = &window->GetFrame()->GetPage()->GetDeprecation();
+  } else if (auto* scope = DynamicTo<WorkerOrWorkletGlobalScope>(context)) {
+    deprecation = &scope->GetDeprecation();
+  }
+
+  if (!deprecation || deprecation->mute_count_ ||
+      deprecation->GetReported(feature)) {
+    return;
+  }
+  deprecation->SetReported(feature);
+
+  // TODO(yoichio): We should remove these counters when v0 APIs are removed.
+  // crbug.com/946875.
+  if (feature == WebFeature::kHTMLImports &&
+      context->GetOriginTrialContext()->IsFeatureEnabled(
+          OriginTrialFeature::kHTMLImports)) {
+    context->CountUse(WebFeature::kHTMLImportsOnReverseOriginTrials);
+  } else if (feature == WebFeature::kElementCreateShadowRoot &&
+             context->GetOriginTrialContext()->IsFeatureEnabled(
+                 OriginTrialFeature::kShadowDOMV0)) {
+    context->CountUse(
+        WebFeature::kElementCreateShadowRootOnReverseOriginTrials);
+  } else if (feature == WebFeature::kDocumentRegisterElement &&
+             context->GetOriginTrialContext()->IsFeatureEnabled(
+                 OriginTrialFeature::kCustomElementsV0)) {
+    context->CountUse(
+        WebFeature::kDocumentRegisterElementOnReverseOriginTrials);
+  }
+
+  // Don't count usage of WebComponentsV0 for chrome:// URLs, but still report
+  // the deprecation messages.
+  bool count_usage = true;
+  if (context->Url().ProtocolIs("chrome") &&
+      (feature == WebFeature::kHTMLImports ||
+       feature == WebFeature::kElementCreateShadowRoot ||
+       feature == WebFeature::kDocumentRegisterElement)) {
+    count_usage = false;
+  }
+  if (count_usage)
+    context->CountUse(feature);
 
   const DeprecationInfo info = GetDeprecationInfo(feature);
 
@@ -713,19 +733,13 @@ void Deprecation::GenerateReport(const LocalFrame* frame, WebFeature feature) {
   auto* console_message = MakeGarbageCollected<ConsoleMessage>(
       mojom::ConsoleMessageSource::kDeprecation,
       mojom::ConsoleMessageLevel::kWarning, info.message);
-  frame->Console().AddMessage(console_message);
+  context->AddConsoleMessage(console_message);
 
-  auto* window = frame->DomWindow();
-  Report* report = CreateReportInternal(window->Url(), info);
+  Report* report = CreateReportInternal(context->Url(), info);
 
   // Send the deprecation report to the Reporting API and any
   // ReportingObservers.
-  ReportingContext::From(window)->QueueReport(report);
-}
-
-// static
-Report* Deprecation::CreateReport(const KURL& context_url, WebFeature feature) {
-  return CreateReportInternal(context_url, GetDeprecationInfo(feature));
+  ReportingContext::From(context)->QueueReport(report);
 }
 
 // static

@@ -157,6 +157,17 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             'crbug.com/626703 [ Mac10.10 ] external/wpt/test/path.html [ Timeout ]\n'
         )
 
+    def test_cmd_arg_include_unexpected_pass_raieses_exception(self):
+        host = self.mock_host()
+        expectations_path = \
+            host.port_factory.get().path_to_generic_test_expectations_file()
+        host.filesystem.write_text_file(expectations_path,
+                                        WPTExpectationsUpdater.MARKER_COMMENT + '\n')
+        updater = WPTExpectationsUpdater(host, args=['--include-unexpected-pass'])
+        with self.assertRaises(AssertionError) as ctx:
+            updater.run()
+        self.assertIn('--include-unexpected-pass', str(ctx.exception))
+
     def test_get_failing_results_dict_only_passing_results(self):
         host = self.mock_host()
         host.results_fetcher.set_results(
@@ -768,7 +779,7 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             'external/wpt/fake/file/non_existent_file.html [ Pass ]\n' +
             'external/wpt/fake/file/deleted_path.html [ Pass ]\n')
         updater = WPTExpectationsUpdater(
-            host, ['--cleanup-test-expectations-only'])
+            host, ['--clean-up-test-expectations-only'])
         updater.port.tests = lambda: {
             'external/wpt/fake/new.html?HelloWorld'}
 
@@ -802,7 +813,8 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             '[ linux ] external/wpt/fake/some_test.html?HelloWorld [ Failure ]\n' +
             'external/wpt/fake/file/deleted_path.html [ Pass ]\n')
         updater = WPTExpectationsUpdater(
-            host, ['--clean-up-affected-tests-only'])
+            host, ['--clean-up-affected-tests-only',
+                   '--clean-up-test-expectations-only'])
 
         def _git_command_return_val(cmd):
             if '--diff-filter=D' in cmd:
@@ -831,6 +843,21 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
                     '[ linux ] external/wpt/fake/new.html?HelloWorld [ Failure ]\n'))
         skip_value = host.filesystem.read_text_file(skip_path)
         self.assertMultiLineEqual(skip_value, skip_value_origin)
+
+    def test_clean_up_affected_tests_arg_raises_exception(self):
+        host = self.mock_host()
+        with self.assertRaises(AssertionError) as ctx:
+            updater = WPTExpectationsUpdater(
+                host, ['--clean-up-affected-tests-only'])
+            updater.run()
+        self.assertIn('Cannot use --clean-up-affected-tests-only',
+                      str(ctx.exception))
+
+    def test_clean_up_affected_tests_arg_does_not_raise_exception(self):
+        host = self.mock_host()
+        updater = WPTExpectationsUpdater(
+            host, ['--clean-up-affected-tests-only',
+                   '--clean-up-test-expectations'])
 
     def test_write_to_test_expectations_with_marker_comment(self):
         host = self.mock_host()
@@ -1023,8 +1050,6 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             }
         }
         tests_to_rebaseline, _ = updater.get_tests_to_rebaseline(two)
-        # external/wpt/test/zzzz.html is another possible candidate, but it
-        # is not listed in the results dict, so it shall not be rebaselined.
         self.assertEqual(tests_to_rebaseline, ['external/wpt/test/path.html'])
 
     def test_get_test_to_rebaseline_does_not_return_ref_tests(self):
@@ -1261,7 +1286,8 @@ class WPTExpectationsUpdaterTest(LoggingTestCase):
             host.filesystem.write_text_file(path, '')
 
         updater = WPTExpectationsUpdater(
-            host, ['--clean-up-affected-tests-only'])
+            host, ['--clean-up-test-expectations-only',
+                   '--clean-up-affected-tests-only'])
         deleted_files = [
             'some/test/b.html', 'external/wpt/webdriver/some/test/b.html'
         ]

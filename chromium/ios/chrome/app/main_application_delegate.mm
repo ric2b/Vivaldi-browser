@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/ui/main/scene_controller.h"
 #import "ios/chrome/browser/ui/main/scene_delegate.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
+#include "ios/chrome/browser/ui/util/multi_window_buildflags.h"
 #include "ios/chrome/browser/ui/util/multi_window_support.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
@@ -56,6 +57,11 @@
 // The controller for |sceneState|.
 @property(nonatomic, strong) SceneController* sceneController;
 
+// YES if application:didFinishLaunchingWithOptions: was called. Used to
+// determine whether or not shutdown should be invoked from
+// applicationWillTerminate:.
+@property(nonatomic, assign) BOOL didFinishLaunching;
+
 @end
 
 @implementation MainApplicationDelegate
@@ -87,7 +93,6 @@
       // TODO(crbug.com/1040501): remove this.
       // This is temporary plumbing that's not supposed to be here.
       _sceneController.mainController = (id<MainControllerGuts>)_mainController;
-      _mainController.sceneController = _sceneController;
       _tabSwitcherProtocol = _sceneController;
       _tabOpener = _sceneController;
     }
@@ -113,6 +118,8 @@
 // startup is fast, and the UI appears as soon as possible.
 - (BOOL)application:(UIApplication*)application
     didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+  self.didFinishLaunching = YES;
+
   startup_loggers::RegisterAppDidFinishLaunchingTime();
 
   _mainController.window = self.window;
@@ -133,15 +140,19 @@
              selector:@selector(sceneWillConnect:)
                  name:UISceneWillConnectNotification
                object:nil];
+      // UIApplicationDidEnterBackgroundNotification is delivered after the last
+      // scene has entered the background.
       [[NSNotificationCenter defaultCenter]
           addObserver:self
-             selector:@selector(sceneDidEnterBackground:)
-                 name:UISceneDidEnterBackgroundNotification
+             selector:@selector(lastSceneDidEnterBackground:)
+                 name:UIApplicationDidEnterBackgroundNotification
                object:nil];
+      // UIApplicationWillEnterForegroundNotification will be delivered right
+      // after the first scene sends UISceneWillEnterForegroundNotification.
       [[NSNotificationCenter defaultCenter]
           addObserver:self
-             selector:@selector(sceneWillEnterForeground:)
-                 name:UISceneWillEnterForegroundNotification
+             selector:@selector(firstSceneWillEnterForeground:)
+                 name:UIApplicationWillEnterForegroundNotification
                object:nil];
     }
   }
@@ -200,6 +211,12 @@
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {
+  // If |self.didFinishLaunching| is NO, that indicates that the app was
+  // terminated before startup could be run. In this situation, skip running
+  // shutdown, since the app was never fully started.
+  if (!self.didFinishLaunching)
+    return;
+
   if ([_appState isInSafeMode])
     return;
 
@@ -214,6 +231,17 @@
 
   [_memoryHelper handleMemoryPressure];
 }
+
+#if BUILDFLAG(IOS_MULTIWINDOW_ENABLED)
+- (void)application:(UIApplication*)application
+    didDiscardSceneSessions:(NSSet<UISceneSession*>*)sceneSessions
+    API_AVAILABLE(ios(13)) {
+  ios::GetChromeBrowserProvider()
+      ->GetChromeIdentityService()
+      ->ApplicationDidDiscardSceneSessions(sceneSessions);
+  [_appState application:application didDiscardSceneSessions:sceneSessions];
+}
+#endif  // BUILDFLAG(IOS_MULTIWINDOW_ENABLED)
 
 #pragma mark - Scenes lifecycle
 
@@ -253,29 +281,23 @@
   }
 }
 
-- (void)sceneDidEnterBackground:(NSNotification*)notification {
+- (void)lastSceneDidEnterBackground:(NSNotification*)notification {
   DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
-    // When the last scene enters background, update the app state.
-    if (self.foregroundSceneCount == 0) {
-      [_appState applicationDidEnterBackground:UIApplication.sharedApplication
-                                  memoryHelper:_memoryHelper
-                       incognitoContentVisible:self.sceneController
-                                                   .incognitoContentVisible];
-    }
+    [_appState applicationDidEnterBackground:UIApplication.sharedApplication
+                                memoryHelper:_memoryHelper
+                     incognitoContentVisible:self.sceneController
+                                                 .incognitoContentVisible];
   }
 }
 
-- (void)sceneWillEnterForeground:(NSNotification*)notification {
+- (void)firstSceneWillEnterForeground:(NSNotification*)notification {
   DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
-    // When the first scene will enter foreground, update the app state.
-    if (self.foregroundSceneCount == 0) {
-      [_appState applicationWillEnterForeground:UIApplication.sharedApplication
-                                metricsMediator:_metricsMediator
-                                   memoryHelper:_memoryHelper
-                                      tabOpener:_tabOpener];
-    }
+    [_appState applicationWillEnterForeground:UIApplication.sharedApplication
+                              metricsMediator:_metricsMediator
+                                 memoryHelper:_memoryHelper
+                                    tabOpener:_tabOpener];
   }
 }
 
@@ -321,11 +343,14 @@
   BOOL applicationIsActive =
       [application applicationState] == UIApplicationStateActive;
 
-  return [UserActivityHandler continueUserActivity:userActivity
-                               applicationIsActive:applicationIsActive
-                                         tabOpener:_tabOpener
-                             connectionInformation:self.sceneController
-                                startupInformation:_startupInformation];
+  return [UserActivityHandler
+       continueUserActivity:userActivity
+        applicationIsActive:applicationIsActive
+                  tabOpener:_tabOpener
+      connectionInformation:self.sceneController
+         startupInformation:_startupInformation
+               browserState:_mainController.interfaceProvider.currentInterface
+                                .browserState];
 }
 
 - (void)application:(UIApplication*)application

@@ -9,8 +9,6 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/stl_util.h"
-#include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
 
 using blink::mojom::PresentationConnectionState;
@@ -62,7 +60,7 @@ MediaRouterBase::AddPresentationConnectionStateChangedCallback(
   auto& callbacks = presentation_connection_state_callbacks_[route_id];
   if (!callbacks) {
     callbacks = std::make_unique<PresentationConnectionStateChangedCallbacks>();
-    callbacks->set_removal_callback(base::Bind(
+    callbacks->set_removal_callback(base::BindRepeating(
         &MediaRouterBase::OnPresentationConnectionStateCallbackRemoved,
         base::Unretained(this), route_id));
   }
@@ -94,6 +92,10 @@ void MediaRouterBase::GetMediaController(
     const MediaRoute::Id& route_id,
     mojo::PendingReceiver<mojom::MediaController> controller,
     mojo::PendingRemote<mojom::MediaStatusObserver> observer) {}
+
+base::Value MediaRouterBase::GetLogs() const {
+  return base::Value();
+}
 #endif  // !defined(OS_ANDROID)
 
 MediaRouterBase::MediaRouterBase() : initialized_(false) {}
@@ -166,23 +168,6 @@ void MediaRouterBase::Shutdown() {
   // The observer calls virtual methods on MediaRouter; it must be destroyed
   // outside of the dtor
   internal_routes_observer_.reset();
-}
-
-void MediaRouterBase::RegisterRemotingSource(
-    SessionID tab_id,
-    CastRemotingConnector* remoting_source) {
-  auto it = remoting_sources_.find(tab_id);
-  if (it != remoting_sources_.end()) {
-    DCHECK(remoting_source == it->second);
-    return;
-  }
-  remoting_sources_.emplace(tab_id, remoting_source);
-}
-
-void MediaRouterBase::UnregisterRemotingSource(SessionID tab_id) {
-  auto it = remoting_sources_.find(tab_id);
-  DCHECK(it != remoting_sources_.end());
-  remoting_sources_.erase(it);
 }
 
 base::Value MediaRouterBase::GetState() const {

@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">velg</translation>
 <translation id="1859234291848436338">Skriveretning</translation>
 <translation id="1860796786778352021">Lukk varsel</translation>
+<translation id="186476001994626254">Web Smart Paste-innhold</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">Marker &amp;alt</translation>
+<translation id="19085484004813472">Dette er en ny funksjon</translation>
 <translation id="2006524834898217237">Kontrollér at enheten er koblet til internett.</translation>
 <translation id="208586643495776849">Prøv igjen</translation>
 <translation id="2090963878406559571">For å sende numre fra <ph name="ORIGIN" /> til Android-telefonen din, <ph name="TROUBLESHOOT_LINK" /> for begge enhetene i innstillingene.</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">Administrer innstillinger</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{om 1 t}other{om # t}}</translation>
 <translation id="2583543531130364912">Kalibrer berøringsskjermen din</translation>
+<translation id="2586657967955657006">Utklippstavle</translation>
 <translation id="2666092431469916601">Topp</translation>
 <translation id="2701330563083355633">Delt fra <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Ny</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" /> – <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">Åpne mappen</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{for 1 år siden}other{for # år siden}}</translation>
+<translation id="2878511608894704031">Slett alle</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{om 1 d}other{om # d}}</translation>
 <translation id="2931838996092594335">klikk</translation>
 <translation id="2981684127883932071">Viser forslag</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">Begynn å snakke</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> er flyttet til mappen <ph name="FOLDER_NAME" />.</translation>
 <translation id="4316910396681052118">ALLE APPER</translation>
+<translation id="4491109536499578614">Bilde</translation>
 <translation id="4588090240171750605">Rull mot høyre</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" /> – stjernerangering <ph name="RATING_SCORE" /></translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" /> – appanbefaling</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{1 dag og }other{# dager og }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{om 1 år}other{om # år}}</translation>
+<translation id="588258955323874662">Fullskjerm</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 sekund igjen}other{# sekunder igjen}}</translation>
 <translation id="5941711191222866238">Minimer</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 time}other{# timer}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google Assistent</translation>
 <translation id="6430678249303439055">Blokkér alle varsler fra denne appen</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{for 1 sekund siden}other{for # sekunder siden}}</translation>
+<translation id="6503257047630241175">RTF-innhold</translation>
 <translation id="6539092367496845964">Noe gikk galt. Prøv på nytt senere.</translation>
 <translation id="654149438358937226">Blokkér alle varsler</translation>
 <translation id="6567071839949112727">klikk på et overordnet element</translation>

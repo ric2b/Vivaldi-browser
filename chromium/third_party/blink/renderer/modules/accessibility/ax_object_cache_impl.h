@@ -90,15 +90,15 @@ class MODULES_EXPORT AXObjectCacheImpl
   void UpdateReverseRelations(const AXObject* relation_source,
                               const Vector<String>& target_ids);
   void ChildrenChanged(Node*) override;
-  void ChildrenChanged(LayoutObject*) override;
+  void ChildrenChanged(const LayoutObject*) override;
   void ChildrenChanged(AccessibleNode*) override;
   void CheckedStateChanged(Node*) override;
   void ListboxOptionStateChanged(HTMLOptionElement*) override;
   void ListboxSelectedChildrenChanged(HTMLSelectElement*) override;
   void ListboxActiveIndexChanged(HTMLSelectElement*) override;
-  void LocationChanged(LayoutObject*) override;
+  void LocationChanged(const LayoutObject*) override;
   void RadiobuttonRemovedFromGroup(HTMLInputElement*) override;
-  void ImageLoaded(LayoutObject*) override;
+  void ImageLoaded(const LayoutObject*) override;
 
   void Remove(AccessibleNode*) override;
   void Remove(LayoutObject*) override;
@@ -107,9 +107,12 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   const Element* RootAXEditableElement(const Node*) override;
 
+  // Called when aspects of the style (e.g. color, alignment) change.
+  void StyleChanged(const LayoutObject*) override;
+
   // Called by a node when text or a text equivalent (e.g. alt) attribute is
   // changed.
-  void TextChanged(LayoutObject*) override;
+  void TextChanged(const LayoutObject*) override;
   void TextChangedWithCleanLayout(Node* optional_node, AXObject*);
   void FocusableChangedWithCleanLayout(Element* element);
   void DocumentTitleChanged() override;
@@ -146,17 +149,23 @@ class MODULES_EXPORT AXObjectCacheImpl
   void InlineTextBoxesUpdated(LineLayoutItem) override;
   void ProcessDeferredAccessibilityEvents(Document&) override;
 
+  // Called when a HTMLFrameOwnerElement (such as an iframe element) changes the
+  // embedding token of its child frame.
+  void EmbeddingTokenChanged(HTMLFrameOwnerElement*) override;
+
   // Called when the scroll offset changes.
   void HandleScrollPositionChanged(LocalFrameView*) override;
   void HandleScrollPositionChanged(LayoutObject*) override;
 
-  // Called when scroll bars are added / removed (as the view resizes).
-  void HandleLayoutComplete(LayoutObject*) override;
   void HandleScrolledToAnchor(const Node* anchor_node) override;
 
   // Called when the frame rect changes, which can sometimes happen
   // without producing any layout or other notifications.
   void HandleFrameRectsChanged(Document&) override;
+
+  // Invalidates the bounding box, which can be later retrieved by
+  // GetAllObjectsWithChangedBounds.
+  void InvalidateBoundingBox(const LayoutObject*) override;
 
   const AtomicString& ComputedRoleForNode(Node*) override;
   String ComputedNameForNode(Node*) override;
@@ -166,8 +175,9 @@ class MODULES_EXPORT AXObjectCacheImpl
   AXObject* ObjectFromAXID(AXID id) const { return objects_.at(id); }
   AXObject* Root();
 
-  // used for objects without backing elements
-  AXObject* GetOrCreate(ax::mojom::blink::Role);
+  // Used for objects without backing DOM nodes, layout objects, etc.
+  AXObject* Create(ax::mojom::blink::Role, AXObject* parent);
+
   AXObject* GetOrCreate(AccessibleNode*);
   AXObject* GetOrCreate(LayoutObject*) override;
   AXObject* GetOrCreate(const Node*);
@@ -180,7 +190,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // will only return the AXObject if it already exists
   AXObject* Get(AccessibleNode*);
   AXObject* Get(const Node*) override;
-  AXObject* Get(LayoutObject*);
+  AXObject* Get(const LayoutObject*);
   AXObject* Get(AbstractInlineTextBox*);
 
   AXObject* FirstAccessibleObjectFromNode(const Node*);
@@ -210,7 +220,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // values are cached as long as the modification count hasn't changed.
   int ModificationCount() const { return modification_count_; }
 
-  void PostNotification(LayoutObject*, ax::mojom::blink::Event);
+  void PostNotification(const LayoutObject*, ax::mojom::blink::Event);
   void PostNotification(Node*, ax::mojom::Event);
   void PostNotification(AXObject*, ax::mojom::blink::Event);
   void MarkAXObjectDirty(AXObject*, bool subtree);
@@ -276,6 +286,13 @@ class MODULES_EXPORT AXObjectCacheImpl
   }
 
   AXObject* GetActiveAriaModalDialog() const;
+
+  bool UseAXMenuList() { return use_ax_menu_list_; }
+
+  // Retrieves a vector of all AXObjects whose bounding boxes may have changed
+  // since the last query. Clears the vector so that the next time it's
+  // called, it will only retrieve objects that have changed since now.
+  HeapVector<Member<AXObject>> GetAllObjectsWithChangedBounds();
 
  protected:
   void PostPlatformNotification(
@@ -344,7 +361,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // LayoutObject and AbstractInlineTextBox are not on the Oilpan heap so we
   // do not use HeapHashMap for those mappings.
   HeapHashMap<Member<AccessibleNode>, AXID> accessible_node_mapping_;
-  HashMap<LayoutObject*, AXID> layout_object_mapping_;
+  HashMap<const LayoutObject*, AXID> layout_object_mapping_;
   HeapHashMap<Member<const Node>, AXID> node_object_mapping_;
   HashMap<AbstractInlineTextBox*, AXID> inline_text_box_object_mapping_;
   int modification_count_;
@@ -488,12 +505,20 @@ class MODULES_EXPORT AXObjectCacheImpl
   // Maps ids to their object's autofill state.
   HashMap<AXID, WebAXAutofillState> autofill_state_map_;
 
+  // The set of node IDs whose bounds has changed since the last time
+  // GetAllObjectsWithChangedBounds was called.
+  HashSet<AXID> changed_bounds_ids_;
+
   // The source of the event that is currently being handled.
   ax::mojom::blink::EventFrom active_event_from_ =
       ax::mojom::blink::EventFrom::kNone;
 
   // A set of currently active event intents.
   BlinkAXEventIntentsSet active_event_intents_;
+
+  // If false, exposes the internal accessibility tree of a select pop-up
+  // instead.
+  bool use_ax_menu_list_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(AXObjectCacheImpl);
 

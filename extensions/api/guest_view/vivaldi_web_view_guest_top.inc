@@ -12,3 +12,9 @@ namespace client {
 class CursorClient;
 }
 }
+
+namespace blink {
+namespace mojom {
+class WindowFeatures;
+}  // namespace mojom
+}  // namespace blink

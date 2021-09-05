@@ -243,21 +243,22 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
 
   const KURL& url = request.GetResourceRequest().Url();
   if (url.ProtocolIsJavaScript() &&
-      opener_frame.DomWindow()->GetContentSecurityPolicy() &&
-      !ContentSecurityPolicy::ShouldBypassMainWorld(opener_frame.DomWindow())) {
+      opener_frame.DomWindow()->GetContentSecurityPolicyForCurrentWorld()) {
     String script_source = DecodeURLEscapeSequences(
         url.GetString(), DecodeURLMode::kUTF8OrIsomorphic);
 
-    if (!opener_frame.DomWindow()->GetContentSecurityPolicy()->AllowInline(
-            ContentSecurityPolicy::InlineType::kNavigation,
-            nullptr /* element */, script_source, String() /* nonce */,
-            opener_frame.GetDocument()->Url(), OrdinalNumber())) {
+    if (!opener_frame.DomWindow()
+             ->GetContentSecurityPolicyForCurrentWorld()
+             ->AllowInline(ContentSecurityPolicy::InlineType::kNavigation,
+                           nullptr /* element */, script_source,
+                           String() /* nonce */,
+                           opener_frame.DomWindow()->Url(), OrdinalNumber())) {
       return nullptr;
     }
   }
 
-  if (!opener_frame.GetDocument()->GetSecurityOrigin()->CanDisplay(url)) {
-    opener_frame.GetDocument()->AddConsoleMessage(
+  if (!opener_frame.DomWindow()->GetSecurityOrigin()->CanDisplay(url)) {
+    opener_frame.DomWindow()->AddConsoleMessage(
         MakeGarbageCollected<ConsoleMessage>(
             mojom::ConsoleMessageSource::kSecurity,
             mojom::ConsoleMessageLevel::kError,
@@ -271,11 +272,11 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
                     LocalFrame::HasTransientUserActivation(&opener_frame));
 
   // Sandboxed frames cannot open new auxiliary browsing contexts.
-  if (opener_frame.GetDocument()->IsSandboxed(
+  if (opener_frame.DomWindow()->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kPopups)) {
     // FIXME: This message should be moved off the console once a solution to
     // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-    opener_frame.GetDocument()->AddConsoleMessage(
+    opener_frame.DomWindow()->AddConsoleMessage(
         MakeGarbageCollected<ConsoleMessage>(
             mojom::ConsoleMessageSource::kSecurity,
             mojom::ConsoleMessageLevel::kError,
@@ -285,19 +286,19 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
     return nullptr;
   }
 
-  bool propagate_sandbox = opener_frame.GetDocument()->IsSandboxed(
+  bool propagate_sandbox = opener_frame.DomWindow()->IsSandboxed(
       network::mojom::blink::WebSandboxFlags::
           kPropagatesToAuxiliaryBrowsingContexts);
   network::mojom::blink::WebSandboxFlags sandbox_flags =
-      propagate_sandbox ? opener_frame.GetDocument()->GetSandboxFlags()
+      propagate_sandbox ? opener_frame.DomWindow()->GetSandboxFlags()
                         : network::mojom::blink::WebSandboxFlags::kNone;
-  bool not_sandboxed = opener_frame.GetDocument()->GetSandboxFlags() ==
+  bool not_sandboxed = opener_frame.DomWindow()->GetSandboxFlags() ==
                        network::mojom::blink::WebSandboxFlags::kNone;
-  FeaturePolicy::FeatureState opener_feature_state =
+  FeaturePolicyFeatureState opener_feature_state =
       (not_sandboxed || propagate_sandbox) ? opener_frame.GetSecurityContext()
                                                  ->GetFeaturePolicy()
                                                  ->GetFeatureState()
-                                           : FeaturePolicy::FeatureState();
+                                           : FeaturePolicyFeatureState();
 
   SessionStorageNamespaceId new_namespace_id =
       AllocateSessionStorageNamespaceId();
@@ -351,7 +352,8 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
   if (features.height_set)
     window_rect.SetHeight(features.height);
 
-  page->GetChromeClient().SetWindowRectWithAdjustment(window_rect, frame);
+  page->GetChromeClient().SetWindowRectWithAdjustment(window_rect, frame,
+                                                      opener_frame);
   page->GetChromeClient().Show(request.GetNavigationPolicy());
 
   MaybeLogWindowOpen(opener_frame);

@@ -19,7 +19,7 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
-#include "chrome/browser/password_manager/account_storage/account_password_store_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,6 +36,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
+#include "chrome/browser/sync/sync_invalidations_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -70,16 +71,16 @@
 #include "components/sync/base/pref_names.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/base/sync_base_switches.h"
-#include "components/sync/driver/file_based_trusted_vault_client.h"
+#include "components/sync/base/sync_util.h"
 #include "components/sync/driver/model_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/driver/sync_util.h"
 #include "components/sync/driver/syncable_service_based_model_type_controller.h"
 #include "components/sync/engine/passive_model_worker.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/model_type_store_service.h"
 #include "components/sync/model_impl/forwarding_model_type_controller_delegate.h"
+#include "components/sync/trusted_vault/standalone_trusted_vault_client.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/session_sync_service.h"
@@ -98,12 +99,12 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/profiles/profile_key.h"
+#include "chrome/browser/supervised_user/supervised_user_allowlist_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_sync_model_type_controller.h"
-#include "chrome/browser/supervised_user/supervised_user_whitelist_service.h"
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
@@ -223,12 +224,13 @@ ChromeSyncClient::ChromeSyncClient(Profile* profile) : profile_(profile) {
 #if defined(OS_ANDROID)
   trusted_vault_client_ = std::make_unique<TrustedVaultClientAndroid>();
 #else
-  trusted_vault_client_ = std::make_unique<syncer::FileBasedTrustedVaultClient>(
-      profile_->GetPath().Append(kTrustedVaultFilename));
+  trusted_vault_client_ =
+      std::make_unique<syncer::StandaloneTrustedVaultClient>(
+          profile_->GetPath().Append(kTrustedVaultFilename));
 #endif  // defined(OS_ANDROID)
 }
 
-ChromeSyncClient::~ChromeSyncClient() {}
+ChromeSyncClient::~ChromeSyncClient() = default;
 
 PrefService* ChromeSyncClient::GetPrefService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -364,9 +366,9 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
       model_type_store_factory,
       GetSyncableServiceForType(syncer::SUPERVISED_USER_SETTINGS)));
   controllers.push_back(std::make_unique<SupervisedUserSyncModelTypeController>(
-      syncer::SUPERVISED_USER_WHITELISTS, profile_, dump_stack,
+      syncer::SUPERVISED_USER_ALLOWLISTS, profile_, dump_stack,
       model_type_store_factory,
-      GetSyncableServiceForType(syncer::SUPERVISED_USER_WHITELISTS)));
+      GetSyncableServiceForType(syncer::SUPERVISED_USER_ALLOWLISTS)));
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -452,7 +454,7 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
 
 // Chrome prefers OS provided spell checkers where they exist. So only sync the
 // custom dictionary on platforms that typically don't provide one.
-#if defined(OS_LINUX) || defined(OS_WIN)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
   // Dictionary sync is enabled by default.
   if (!disabled_types.Has(syncer::DICTIONARY) &&
       GetPrefService()->GetBoolean(spellcheck::prefs::kSpellCheckEnable)) {
@@ -461,7 +463,7 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
             syncer::DICTIONARY, model_type_store_factory,
             GetSyncableServiceForType(syncer::DICTIONARY), dump_stack));
   }
-#endif  // defined(OS_LINUX) || defined(OS_WIN)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_WIN)
 
 #if defined(OS_CHROMEOS)
   if (arc::IsArcAllowedForProfile(profile_) &&
@@ -546,6 +548,11 @@ invalidation::InvalidationService* ChromeSyncClient::GetInvalidationService() {
   return nullptr;
 }
 
+syncer::SyncInvalidationsService*
+ChromeSyncClient::GetSyncInvalidationsService() {
+  return SyncInvalidationsServiceFactory::GetForProfile(profile_);
+}
+
 scoped_refptr<syncer::ExtensionsActivity>
 ChromeSyncClient::GetExtensionsActivity() {
   return extensions_activity_monitor_.GetExtensionsActivity();
@@ -598,9 +605,9 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return SupervisedUserSettingsServiceFactory::GetForKey(
                  profile_->GetProfileKey())
           ->AsWeakPtr();
-    case syncer::SUPERVISED_USER_WHITELISTS:
+    case syncer::SUPERVISED_USER_ALLOWLISTS:
       return SupervisedUserServiceFactory::GetForProfile(profile_)
-          ->GetWhitelistService()
+          ->GetAllowlistService()
           ->AsWeakPtr();
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #if defined(OS_CHROMEOS)

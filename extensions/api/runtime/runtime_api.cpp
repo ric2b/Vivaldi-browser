@@ -35,10 +35,10 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_paths.h"
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 #include "chrome/common/pref_names.h"
 #include "components/download/public/background_service/download_service.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
@@ -46,12 +46,15 @@
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/window/window_private_api.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/runtime_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/devtools/devtools_connector.h"
@@ -99,11 +102,11 @@ void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
   base::ThreadRestrictions::ScopedAllowIO allow_io;
   base::FilePath path;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if(PathService::Get(chrome::DIR_RESOURCES, &path)) {
 #else
   if (PathService::Get(base::DIR_MODULE, &path)) {
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
     path = path.AppendASCII(kRuntimeFeaturesFilename);
 
     store_ = new JsonPrefStore(
@@ -477,6 +480,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
 
   ProfileManager* manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage = manager->GetProfileAttributesStorage();
+  bool active_only = params->active_only ? *params->active_only : false;
 
   // Find the active entry.
   Profile *profile = Profile::FromBrowserContext(browser_context());
@@ -484,6 +488,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
   storage.GetProfileAttributesWithPath(profile->GetPath(), &active_entry);
 
   std::vector<vivaldi::runtime_private::UserProfile> profiles;
+  bool has_custom_avatars = false;
 
   for (ProfileAttributesEntry* entry : storage.GetAllProfilesAttributes()) {
     vivaldi::runtime_private::UserProfile profile;
@@ -492,19 +497,30 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
       // Skip supervised accounts.
       continue;
     }
-    const size_t icon_index = entry->GetAvatarIconIndex();
+    if (!active_only || (active_only && active_entry == entry)) {
+      const size_t icon_index = entry->GetAvatarIconIndex();
 
-    profile.active = (active_entry == entry);
-    profile.guest = false;
-    profile.name = base::UTF16ToUTF8(entry->GetUserName());
-    if (profile.name.empty()) {
-      profile.name = base::UTF16ToUTF8(entry->GetName());
+      profile.active = (active_entry == entry);
+      profile.guest = false;
+      profile.name = base::UTF16ToUTF8(entry->GetUserName());
+      if (profile.name.empty()) {
+        profile.name = base::UTF16ToUTF8(entry->GetName());
+      }
+      profile.image = profiles::GetDefaultAvatarIconUrl(icon_index);
+      profile.image_index = icon_index;
+      profile.path = entry->GetPath().AsUTF8Unsafe();
+
+      // Check for custom profile image.
+      std::string custom_avatar = ::vivaldi::GetImagePathFromProfilePath(
+          vivaldiprefs::kVivaldiProfileImagePath, profile.path);
+      if (!custom_avatar.empty()) {
+        // We set the path here, then convert it to base64 in a separate operation
+        // below.
+        profile.custom_avatar = custom_avatar;
+        has_custom_avatars = true;
+      }
+      profiles.push_back(std::move(profile));
     }
-    profile.image = profiles::GetDefaultAvatarIconUrl(icon_index);
-    profile.image_index = icon_index;
-    profile.path = entry->GetPath().AsUTF8Unsafe();
-
-    profiles.push_back(std::move(profile));
   }
   if (!active_entry) {
     // We might be a guest profile.
@@ -519,8 +535,74 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
       profiles.push_back(std::move(profile));
     }
   }
+  if (has_custom_avatars) {
+    base::PostTask(
+        FROM_HERE,
+        {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+        base::BindOnce(
+            &RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread,
+            this, std::move(profiles)));
 
-  return RespondNow(ArgumentList(Results::Create(profiles)));
+    return RespondLater();
+  } else {
+    return RespondNow(ArgumentList(Results::Create(profiles)));
+  }
+}
+
+void RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread(
+    std::vector<vivaldi::runtime_private::UserProfile> profiles) {
+  for (auto& profile : profiles) {
+    if (profile.custom_avatar.empty()) {
+      continue;
+    }
+    base::FilePath path = base::FilePath::FromUTF8Unsafe(profile.custom_avatar);
+    base::File file(path, base::File::FLAG_READ | base::File::FLAG_OPEN);
+    if (!file.IsValid()) {
+      profile.custom_avatar = "";
+      continue;
+    }
+    int64_t len64 = file.GetLength();
+    if (len64 < 0 || len64 >= (static_cast<int64_t>(1) << 31) ||
+        static_cast<int>(len64) == 0) {
+      LOG(ERROR) << "Unexpected file length for " << path.value() << " - "
+                 << len64;
+      profile.custom_avatar = "";
+      continue;
+    }
+    int len = static_cast<int>(len64);
+
+    std::vector<unsigned char> buffer;
+
+    buffer.resize(static_cast<size_t>(len));
+    int read_len = file.Read(0, reinterpret_cast<char*>(buffer.data()), len);
+    if (read_len != len) {
+      LOG(ERROR) << "Failed to read " << len << "bytes from " << path.value();
+      profile.custom_avatar = "";
+      continue;
+    }
+    std::string image_data;
+    base::StringPiece base64_input(
+        reinterpret_cast<const char*>(&buffer.data()[0]), buffer.size());
+    Base64Encode(base64_input, &image_data);
+
+    // Mime type does not matter
+    image_data.insert(0, base::StringPrintf("data:image/png;base64,"));
+
+    profile.custom_avatar.swap(image_data);
+  }
+  base::PostTask(
+    FROM_HERE, { content::BrowserThread::UI },
+    base::BindOnce(
+      &RuntimePrivateGetUserProfilesFunction::FinishProcessImagesOnUIThread, this,
+      std::move(profiles)));
+}
+
+void RuntimePrivateGetUserProfilesFunction::FinishProcessImagesOnUIThread(
+    std::vector<vivaldi::runtime_private::UserProfile> profiles) {
+  namespace Results = vivaldi::runtime_private::GetUserProfiles::Results;
+
+  return Respond(ArgumentList(Results::Create(profiles)));
 }
 
 ExtensionFunction::ResponseAction
@@ -597,9 +679,17 @@ RuntimePrivateUpdateActiveProfileFunction::Run() {
   if (index <= profiles::GetDefaultAvatarIconCount()) {
     Profile* profile = Profile::FromBrowserContext(browser_context());
     PrefService* pref_service = profile->GetPrefs();
+    size_t old_index = pref_service->GetInteger(prefs::kProfileAvatarIndex);
     pref_service->SetInteger(prefs::kProfileAvatarIndex, index);
     pref_service->SetBoolean(prefs::kProfileUsingDefaultAvatar, false);
     pref_service->SetBoolean(prefs::kProfileUsingGAIAAvatar, false);
+
+    if (old_index != index) {
+      // User selected a new image, clear the custom avatar.
+      ::vivaldi::SetImagePathForProfilePath(
+          vivaldiprefs::kVivaldiProfileImagePath, "",
+          profile->GetPath().AsUTF8Unsafe());
+    }
 
     base::TrimWhitespace(name, base::TRIM_ALL, &name);
     if (!name.empty()) {

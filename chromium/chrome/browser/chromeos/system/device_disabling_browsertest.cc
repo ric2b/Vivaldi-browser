@@ -159,7 +159,7 @@ IN_PROC_BROWSER_TEST_F(DeviceDisablingTest, DisableWithEphemeralUsers) {
   connect_run_loop.Run();
 
   // Skip to the login screen.
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
 
   // Mark the device as disabled and wait until cros settings update.
   MarkDisabledAndWaitForPolicyFetch();
@@ -212,6 +212,28 @@ IN_PROC_BROWSER_TEST_F(DeviceDisablingTest, DisableWithEphemeralUsers) {
   OobeScreenWaiter(DeviceDisabledScreenView::kScreenId).Wait();
   // Check for WebUI
   test::CreateOobeScreenWaiter("device-disabled")->Wait();
+}
+
+class DeviceDisablingWithUsersTest : public DeviceDisablingTest {
+ public:
+  DeviceDisablingWithUsersTest() { login_manager_.AppendRegularUsers(2); }
+
+ private:
+  LoginManagerMixin login_manager_{&mixin_host_};
+};
+
+// Checks that OOBE dialog is not hidden when the device disabled screen is
+// shown and "StartSignInScreen" is called.
+IN_PROC_BROWSER_TEST_F(DeviceDisablingWithUsersTest, DialogNotHidden) {
+  EXPECT_TRUE(ash::LoginScreenTestApi::ClickAddUserButton());
+  EXPECT_TRUE(ash::LoginScreenTestApi::IsOobeDialogVisible());
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+  MarkDisabledAndWaitForPolicyFetch();
+  OobeScreenWaiter(DeviceDisabledScreenView::kScreenId).Wait();
+  LoginDisplayHost::default_host()->StartSignInScreen();
+
+  // Dialog should not be hidden.
+  EXPECT_TRUE(ash::LoginScreenTestApi::IsOobeDialogVisible());
 }
 
 // Sets the device disabled policy before the browser is started.

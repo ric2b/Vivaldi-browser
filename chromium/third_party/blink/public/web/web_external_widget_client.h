@@ -12,6 +12,7 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace blink {
+struct VisualProperties;
 class WebCoalescedInputEvent;
 class WebGestureEvent;
 
@@ -69,32 +70,17 @@ class WebExternalWidgetClient {
       const cc::OverscrollBehavior& overscroll_behavior,
       bool event_processed) {}
 
-  // Connect the Widget Input Handler to the channels provided.
-  virtual void GetWidgetInputHandler(
-      CrossVariantMojoReceiver<mojom::WidgetInputHandlerInterfaceBase>
-          widget_input_receiver,
-      CrossVariantMojoRemote<mojom::WidgetInputHandlerHostInterfaceBase>
-          widget_input_host_remote) {}
-
-  // Since the widget input IPC channel is still on the content side send this
-  // message back to the embedder to then send it on that channel. All bounds
-  // are in window coordinates.
-  virtual void SendCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) {}
-
-  // The IME guard prevents sending IPC messages while messages are being
-  // processed. Returns true if there is a current guard.
-  // |request_to_show_virtual_keyboard| is whether the message that would have
-  // been sent would have requested the keyboard. This method will eventually be
-  // removed when all input handling is moved into blink.
-  virtual bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) {
-    return false;
-  }
-
   // The state of the focus has changed for the WebWidget. |enabled|
   // is the new state.
   virtual void FocusChanged(bool enabled) {}
+
+  // Apply the visual properties to the widget.
+  virtual void UpdateVisualProperties(
+      const VisualProperties& visual_properties) {}
+
+  // Apply the updated screen rects.
+  virtual void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
+                                 const gfx::Rect& window_screen_rect) {}
 };
 
 }  // namespace blink

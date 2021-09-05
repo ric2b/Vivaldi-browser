@@ -5,12 +5,14 @@
 #include "content/renderer/media/media_factory.h"
 
 #include <string>
+#include <tuple>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -51,12 +53,10 @@
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
-#include "third_party/blink/public/platform/modules/mediastream/web_media_element_source_utils.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_surface_layer_bridge.h"
 #include "third_party/blink/public/platform/web_video_frame_submitter.h"
 #include "third_party/blink/public/web/blink.h"
-#include "third_party/blink/public/web/modules/mediastream/web_media_stream_renderer_factory.h"
 #include "third_party/blink/public/web/modules/mediastream/webmediaplayer_ms.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "url/origin.h"
@@ -94,8 +94,8 @@
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
 // Enable remoting sender
-#include "media/remoting/courier_renderer_factory.h"    // nogncheck
-#include "media/remoting/renderer_controller.h"         // nogncheck
+#include "media/remoting/courier_renderer_factory.h"  // nogncheck
+#include "media/remoting/renderer_controller.h"       // nogncheck
 #endif
 
 #if BUILDFLAG(IS_CHROMECAST)
@@ -160,13 +160,38 @@ void PostContextProviderToCallback(
 void LogRoughness(media::MediaLog* media_log,
                   int size,
                   base::TimeDelta duration,
-                  double roughness) {
+                  double roughness,
+                  int refresh_rate_hz,
+                  gfx::Size frame_size) {
   // This function can be called from any thread. Don't do anything that assumes
   // a certain task runner.
-  double fps = size / duration.InSecondsF();
+  double fps = std::round(size / duration.InSecondsF());
   media_log->SetProperty<media::MediaLogProperty::kVideoPlaybackRoughness>(
       roughness);
   media_log->SetProperty<media::MediaLogProperty::kFramerate>(fps);
+
+  // TODO(eugene@chromium.org) All of this needs to be moved away from
+  // media_factory.cc once a proper channel to report roughness is found.
+  static constexpr char kRoughnessHistogramName[] = "Media.Video.Roughness";
+  const char* suffix = nullptr;
+  static std::tuple<double, const char*> fps_buckets[] = {
+      {24, "24fps"}, {25, "25fps"}, {30, "30fps"}, {50, "50fps"}, {60, "60fps"},
+  };
+  for (auto& bucket : fps_buckets) {
+    if (fps == std::get<0>(bucket)) {
+      suffix = std::get<1>(bucket);
+      break;
+    }
+  }
+
+  // Only report known FPS buckets, on 60Hz displays and at least HD quality.
+  if (suffix != nullptr && refresh_rate_hz == 60 && frame_size.height() > 700) {
+    base::UmaHistogramCustomTimes(
+        base::JoinString({kRoughnessHistogramName, suffix}, "."),
+        base::TimeDelta::FromMillisecondsD(roughness),
+        base::TimeDelta::FromMilliseconds(1),
+        base::TimeDelta::FromMilliseconds(99), 100);
+  }
 }
 
 std::unique_ptr<media::DefaultRendererFactory> CreateDefaultRendererFactory(
@@ -333,12 +358,11 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   blink::WebLocalFrame* web_frame = render_frame_->GetWebFrame();
   blink::WebSecurityOrigin security_origin =
       render_frame_->GetWebFrame()->GetSecurityOrigin();
-  blink::WebMediaStream web_stream =
-      blink::GetWebMediaStreamFromWebMediaPlayerSource(source);
-  if (!web_stream.IsNull())
+  if (source.IsMediaStream()) {
     return CreateWebMediaPlayerForMediaStream(
         client, inspector_context, sink_id, security_origin, web_frame,
         parent_frame_sink_id, settings);
+  }
 
   // If |source| was not a MediaStream, it must be a URL.
   // TODO(guidou): Fix this when support for other srcObject types is added.
@@ -353,7 +377,7 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   scoped_refptr<media::SwitchableAudioRendererSink> audio_renderer_sink =
       AudioDeviceFactory::NewSwitchableAudioRendererSink(
           blink::WebAudioDeviceSourceType::kMediaElement,
-          render_frame_->GetRoutingID(),
+          render_frame_->GetWebFrame()->GetFrameToken(),
           media::AudioSinkParameters(/*session_id=*/base::UnguessableToken(),
                                      sink_id.Utf8()));
 
@@ -640,8 +664,13 @@ MediaFactory::CreateRendererFactorySelector(
 
 #if BUILDFLAG(IS_CHROMECAST)
   if (renderer_media_playback_options.is_remoting_renderer_enabled()) {
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+    auto default_factory = std::make_unique<CastRendererClientFactory>(
+        media_log, CreateMojoRendererFactory());
+#else
     auto default_factory = CreateDefaultRendererFactory(
         media_log, decoder_factory, render_thread, render_frame_);
+#endif
     mojo::PendingRemote<media::mojom::Remotee> remotee;
     interface_broker_->GetInterface(remotee.InitWithNewPipeAndPassReceiver());
     auto remoting_renderer_factory =
@@ -695,7 +724,6 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
 
   return new blink::WebMediaPlayerMS(
       frame, client, GetWebMediaPlayerDelegate(), std::move(media_log),
-      blink::CreateWebMediaStreamRendererFactory(),
       render_frame_->GetTaskRunner(blink::TaskType::kInternalMedia),
       render_thread->GetIOTaskRunner(), video_frame_compositor_task_runner,
       render_thread->GetMediaThreadTaskRunner(),

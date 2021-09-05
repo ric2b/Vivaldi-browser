@@ -36,6 +36,7 @@
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/helper/vivaldi_app_helper.h"
+#include "ui/content/vivaldi_tab_check.h"
 
 using base::UserMetricsAction;
 using content::BrowserPluginGuestDelegate;
@@ -334,7 +335,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
   }
 
   base::DictionaryValue request_info;
-  request_info.SetString(guest_view::kUrl, web_contents()->GetURL().spec());
+  request_info.SetString(guest_view::kUrl, request.security_origin.spec());
   RequestPermission(
       request_type, request_info,
       base::BindOnce(&WebViewPermissionHelper::OnMediaPermissionResponse,
@@ -350,10 +351,21 @@ bool WebViewPermissionHelper::CheckMediaAccessPermission(
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
     return false;
   }
+  // NOTE(andre@vivaldi.com) : We cannot use the embedding frame to decide
+  // permission as a webview in Vivaldi is used in the tabstrip.
+  if (VivaldiTabCheck::IsVivaldiTab(web_contents())) {
+    return web_view_guest()
+        ->embedder_web_contents()
+        ->GetDelegate()
+        ->CheckMediaAccessPermission(render_frame_host, security_origin, type);
+  }
+
   return web_view_guest()
       ->embedder_web_contents()
       ->GetDelegate()
-      ->CheckMediaAccessPermission(render_frame_host, security_origin, type);
+      ->CheckMediaAccessPermission(
+          web_view_guest()->web_contents()->GetOuterWebContentsFrame(),
+          security_origin, type);
 }
 
 void WebViewPermissionHelper::OnMediaPermissionResponse(

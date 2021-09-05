@@ -9,12 +9,11 @@ import android.view.View;
 
 import androidx.annotation.IntDef;
 
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.payments.ServiceWorkerPaymentAppBridge;
-import org.chromium.chrome.browser.payments.SslValidityChecker;
 import org.chromium.chrome.browser.payments.handler.PaymentHandlerCoordinator.PaymentHandlerUiObserver;
 import org.chromium.chrome.browser.payments.handler.toolbar.PaymentHandlerToolbarCoordinator.PaymentHandlerToolbarObserver;
 import org.chromium.chrome.browser.ui.TabObscuringHandler;
@@ -23,6 +22,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.payments.SslValidityChecker;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
@@ -58,6 +58,7 @@ import java.lang.annotation.RetentionPolicy;
     private final Destroyable mActivityDestroyListener;
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final View mTabView;
+    private final BottomSheetController mBottomSheetController;
     private final int mToolbarViewHeightPx;
     private final int mContainerTopPaddingPx;
     private @CloseReason int mCloseReason = CloseReason.OTHERS;
@@ -89,14 +90,17 @@ import java.lang.annotation.RetentionPolicy;
      * @param containerTopPaddingPx The padding top of bottom_sheet_toolbar_container in px
      * @param activityLifeCycleDispatcher The lifecycle dispatcher of the activity where this UI
      *         lives.
+     * @param sheetController A {@link BottomSheetController} to show UI in.
      */
     /* package */ PaymentHandlerMediator(PropertyModel model, Runnable hider,
             WebContents webContents, PaymentHandlerUiObserver observer, View tabView,
             int toolbarViewHeightPx, int containerTopPaddingPx,
-            ActivityLifecycleDispatcher activityLifeCycleDispatcher) {
+            ActivityLifecycleDispatcher activityLifeCycleDispatcher,
+            BottomSheetController sheetController) {
         super(webContents);
         assert webContents != null;
         mTabView = tabView;
+        mBottomSheetController = sheetController;
         mWebContentsRef = webContents;
         mToolbarViewHeightPx = toolbarViewHeightPx;
         mModel = model;
@@ -170,9 +174,8 @@ import java.lang.annotation.RetentionPolicy;
         ChromeActivity activity = ChromeActivity.fromWebContents(mWebContentsRef);
         assert activity != null;
 
-        BottomSheetController controller = activity.getBottomSheetController();
-        PropertyModel params = controller.createScrimParams();
-        ScrimCoordinator coordinator = controller.getScrimCoordinator();
+        PropertyModel params = mBottomSheetController.createScrimParams();
+        ScrimCoordinator coordinator = mBottomSheetController.getScrimCoordinator();
         coordinator.showScrim(params);
 
         setIsObscuringAllTabs(activity, true);
@@ -238,7 +241,7 @@ import java.lang.annotation.RetentionPolicy;
 
         setIsObscuringAllTabs(activity, false);
 
-        ScrimCoordinator coordinator = activity.getBottomSheetController().getScrimCoordinator();
+        ScrimCoordinator coordinator = mBottomSheetController.getScrimCoordinator();
         if (coordinator == null) return;
         coordinator.hideScrim(/*animate=*/true);
     }

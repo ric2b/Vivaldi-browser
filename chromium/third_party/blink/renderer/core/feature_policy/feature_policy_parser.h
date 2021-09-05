@@ -19,7 +19,6 @@
 namespace blink {
 
 class ExecutionContext;
-class FeaturePolicyParserDelegate;
 
 // These values match the "FeaturePolicyAllowlistType" enum in
 // tools/metrics/histograms/enums.xml. Entries should not be renumbered and
@@ -57,11 +56,11 @@ class CORE_EXPORT FeaturePolicyParser {
   // ExecutionContext is used to determine if any origin trials affect the
   // parsing. Example of a feature policy string:
   //     "vibrate a.com b.com; fullscreen 'none'; payment 'self', payment *".
-  static ParsedFeaturePolicy ParseHeader(
-      const String& policy,
-      scoped_refptr<const SecurityOrigin>,
-      PolicyParserMessageBuffer& logger,
-      FeaturePolicyParserDelegate* delegate = nullptr);
+  static ParsedFeaturePolicy ParseHeader(const String& feature_policy_header,
+                                         const String& permission_policy_header,
+                                         scoped_refptr<const SecurityOrigin>,
+                                         PolicyParserMessageBuffer& logger,
+                                         ExecutionContext* = nullptr);
 
   // Converts a container policy string into a vector of allowlists, given self
   // and src origins provided, one for each feature specified. Unrecognized
@@ -73,22 +72,25 @@ class CORE_EXPORT FeaturePolicyParser {
       scoped_refptr<const SecurityOrigin> self_origin,
       scoped_refptr<const SecurityOrigin> src_origin,
       PolicyParserMessageBuffer& logger,
-      FeaturePolicyParserDelegate* delegate = nullptr);
+      ExecutionContext* = nullptr);
 
-  // Converts a feature policy string into a vector of allowlists (see comments
-  // above), with an explicit FeatureNameMap. This algorithm is called by both
-  // header policy parsing and container policy parsing. |self_origin|,
-  // |src_origin|, and |execution_context| are nullable. The optional
-  // ExecutionContext is used to determine if any origin trials affect the
-  // parsing.
-  static ParsedFeaturePolicy Parse(
+  static ParsedFeaturePolicy ParseFeaturePolicyForTest(
       const String& policy,
       scoped_refptr<const SecurityOrigin> self_origin,
       scoped_refptr<const SecurityOrigin> src_origin,
       PolicyParserMessageBuffer& logger,
       const FeatureNameMap& feature_names,
-      FeaturePolicyParserDelegate* delegate = nullptr);
+      ExecutionContext* = nullptr);
+
+  static ParsedFeaturePolicy ParsePermissionsPolicyForTest(
+      const String& policy,
+      scoped_refptr<const SecurityOrigin> self_origin,
+      scoped_refptr<const SecurityOrigin> src_origin,
+      PolicyParserMessageBuffer& logger,
+      const FeatureNameMap& feature_names,
+      ExecutionContext* = nullptr);
 };
+
 // Returns true iff any declaration in the policy is for the given feature.
 CORE_EXPORT bool IsFeatureDeclared(mojom::blink::FeaturePolicyFeature,
                                    const ParsedFeaturePolicy&);
@@ -115,6 +117,10 @@ CORE_EXPORT bool AllowFeatureEverywhereIfNotPresent(
 // a declaration which disallows the feature in all origins.
 CORE_EXPORT void DisallowFeature(mojom::blink::FeaturePolicyFeature,
                                  ParsedFeaturePolicy&);
+
+// Returns true iff the feature should not be exposed to script.
+CORE_EXPORT bool IsFeatureForMeasurementOnly(
+    mojom::blink::FeaturePolicyFeature);
 
 // Replaces any existing declarations in the policy for the given feature with
 // a declaration which allows the feature in all origins.

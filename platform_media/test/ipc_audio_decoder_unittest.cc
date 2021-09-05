@@ -21,7 +21,7 @@
 #include "platform_media/renderer/decoders/ipc_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -128,7 +128,7 @@ class IPCAudioDecoderTest : public testing::Test {
 
 TEST_F(IPCAudioDecoderTest, AAC) {
   RunTest("sfx.m4a",
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
           "-5.29,-5.47,-5.05,-4.33,-2.99,-3.79,", 1, 44100,
           base::TimeDelta::FromMicroseconds(312000), 13760, 11200);
 #elif defined(OS_WIN) || defined(OS_LINUX)

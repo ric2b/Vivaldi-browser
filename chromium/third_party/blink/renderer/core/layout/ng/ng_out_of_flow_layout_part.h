@@ -10,6 +10,7 @@
 #include "base/optional.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_absolute_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
@@ -19,9 +20,9 @@ namespace blink {
 class ComputedStyle;
 class LayoutBox;
 class LayoutObject;
+class NGBlockBreakToken;
 class NGBlockNode;
 class NGBoxFragmentBuilder;
-class NGConstraintSpace;
 class NGLayoutResult;
 class NGPhysicalContainerFragment;
 struct NGLogicalOutOfFlowPositionedNode;
@@ -36,21 +37,19 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
  public:
   NGOutOfFlowLayoutPart(const NGBlockNode& container_node,
                         const NGConstraintSpace& container_space,
-                        const NGBoxStrut& border_scrollbar,
                         NGBoxFragmentBuilder* container_builder);
 
-  // The |container_builder|, |border_scrollbar|, |container_space|, and
-  // |container_style| parameters are all with respect to the containing block
-  // of the relevant out-of-flow positioned descendants. If the CSS "containing
-  // block" of such an out-of-flow positioned descendant isn't a true block
-  // (e.g. a relatively positioned inline instead), the containing block here is
-  // the containing block of said non-block.
+  // The |container_builder|, |container_space|, and |container_style|
+  // parameters are all with respect to the containing block of the relevant
+  // out-of-flow positioned descendants. If the CSS "containing block" of such
+  // an out-of-flow positioned descendant isn't a true block (e.g. a relatively
+  // positioned inline instead), the containing block here is the containing
+  // block of said non-block.
   NGOutOfFlowLayoutPart(
       bool is_absolute_container,
       bool is_fixed_container,
       const ComputedStyle& container_style,
       const NGConstraintSpace& container_space,
-      const NGBoxStrut& border_scrollbar,
       NGBoxFragmentBuilder* container_builder,
       base::Optional<LogicalSize> initial_containing_block_fixed_size =
           base::nullopt);
@@ -114,30 +113,50 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
   void LayoutFragmentainerDescendants(
       Vector<NGLogicalOutOfFlowPositionedNode>* descendants);
 
-  scoped_refptr<const NGLayoutResult> LayoutFragmentainerDescendant(
-      const NGLogicalOutOfFlowPositionedNode&);
+  void LayoutFragmentainerDescendant(const NGLogicalOutOfFlowPositionedNode&);
 
-  scoped_refptr<const NGLayoutResult> Layout(NGBlockNode,
-                                             const NGConstraintSpace&,
-                                             const NGLogicalStaticPosition&,
-                                             LogicalSize container_content_size,
-                                             const ContainingBlockInfo&,
-                                             const TextDirection,
-                                             const LayoutBox* only_layout);
+  scoped_refptr<const NGLayoutResult> Layout(
+      NGBlockNode,
+      const NGConstraintSpace&,
+      const NGLogicalStaticPosition&,
+      LogicalSize container_content_size,
+      const ContainingBlockInfo&,
+      const WritingMode,
+      const TextDirection,
+      const LayoutBox* only_layout,
+      const NGBlockBreakToken* break_token = nullptr,
+      const NGConstraintSpace* fragmentainer_constraint_space = nullptr);
 
   bool IsContainingBlockForCandidate(const NGLogicalOutOfFlowPositionedNode&);
 
+  void AddOOFResultsToFragmentainer(
+      const Vector<scoped_refptr<const NGLayoutResult>>& results,
+      const wtf_size_t index);
+  const NGConstraintSpace& GetFragmentainerConstraintSpace(
+      const wtf_size_t index);
+  void AddOOFResultToFragmentainerResults(
+      const scoped_refptr<const NGLayoutResult> result,
+      const wtf_size_t index);
   scoped_refptr<const NGLayoutResult> GenerateFragment(
       NGBlockNode node,
       const LogicalSize& container_content_size_in_child_writing_mode,
       const base::Optional<LayoutUnit>& block_estimate,
-      const NGLogicalOutOfFlowDimensions& node_dimensions);
+      const NGLogicalOutOfFlowDimensions& node_dimensions,
+      const LayoutUnit block_offset,
+      const NGBlockBreakToken* break_token,
+      const NGConstraintSpace* fragmentainer_constraint_space);
 
   const NGConstraintSpace& container_space_;
   NGBoxFragmentBuilder* container_builder_;
   ContainingBlockInfo default_containing_block_;
   HashMap<const LayoutObject*, ContainingBlockInfo> containing_blocks_map_;
+  HashMap<wtf_size_t, NGConstraintSpace> fragmentainer_constraint_space_map_;
+  // Map of fragmentainer indexes to a list of descendant layout results to
+  // be added as children.
+  HashMap<wtf_size_t, Vector<scoped_refptr<const NGLayoutResult>>>
+      fragmentainer_descendant_results_;
   const WritingMode writing_mode_;
+  LayoutUnit column_inline_progression_ = kIndefiniteSize;
   bool is_absolute_container_;
   bool is_fixed_container_;
   bool allow_first_tier_oof_cache_;

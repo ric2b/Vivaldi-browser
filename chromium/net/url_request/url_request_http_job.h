@@ -36,6 +36,7 @@ class HttpResponseInfo;
 class HttpTransaction;
 class HttpUserAgentSettings;
 class SSLPrivateKey;
+struct TransportInfo;
 class UploadDataStream;
 
 // A URLRequestJob subclass that is built on top of HttpTransaction. It
@@ -119,6 +120,10 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void OnStartCompleted(int result);
   void OnReadCompleted(int result);
   void NotifyBeforeStartTransactionCallback(int result);
+  // This just forwards the call to URLRequestJob::NotifyConnected().
+  // We need it because that method is protected and cannot be bound in a
+  // callback in this class.
+  int NotifyConnectedCallback(const TransportInfo& info);
 
   void RestartTransactionWithAuth(const AuthCredentials& credentials);
 
@@ -175,9 +180,9 @@ class NET_EXPORT_PRIVATE URLRequestHttpJob : public URLRequestJob {
   void OnSetCookieResult(const CookieOptions& options,
                          base::Optional<CanonicalCookie> cookie,
                          std::string cookie_string,
-                         CookieInclusionStatus status);
+                         CookieAccessResult access_result);
   int num_cookie_lines_left_;
-  CookieAndLineStatusList set_cookie_status_list_;
+  CookieAndLineAccessResultList set_cookie_access_result_list_;
 
   // Some servers send the body compressed, but specify the content length as
   // the uncompressed size. If this is the case, we return true in order

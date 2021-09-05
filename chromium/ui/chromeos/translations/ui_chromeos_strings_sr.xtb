@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Наочари за сунце</translation>
 <translation id="115443833402798225">Хангул ахнмате</translation>
 <translation id="1155759005174418845">каталонски</translation>
+<translation id="1172970565351728681">Преостало је око <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Преименуј</translation>
 <translation id="117624967391683467">Копирање датотеке <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">Паузирај</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Датотека са називом „<ph name="FILENAME" />“ већ постоји. Шта желите да урадите?</translation>
 <translation id="2121825465123208577">Промени величину</translation>
 <translation id="2136953289241069843">Транслитерација (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Отварање „<ph name="PATH" />“ није успело: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Неважећи знак: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Вијетнамска тастатура (TCVN)</translation>
 <translation id="2168214441502403371">Персијска тастатура</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">Власништво ће бити пренесено на <ph name="DESTINATION_DOMAIN" />.</translation>
 <translation id="3241720467332021590">ирски</translation>
 <translation id="3245321423178950146">Непознати извођач</translation>
+<translation id="3248185426436836442">На чекању</translation>
 <translation id="3252266817569339921">француски</translation>
 <translation id="3254434849914415189">Изаберите подразумевану апликацију за датотеке <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">Контекст</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Година снимања</translation>
 <translation id="3338239663705455570">Језик тастатуре: словеначки</translation>
 <translation id="3353984535370177728">Избор директоријума за отпремање</translation>
+<translation id="3356580349448036450">Завршено</translation>
 <translation id="3399597614303179694">Македонска тастатура</translation>
 <translation id="3414856743105198592">Форматирањем уклоњивих медија бришете све податке. Да ли желите да наставите?</translation>
 <translation id="3437801641691368414">Време прављења</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Немате дозволу да премештате датотеке у „<ph name="FOLDER_NAME" />“.</translation>
 <translation id="3786301125658655746">Офлајн сте</translation>
 <translation id="3789841737615482174">Инсталирај</translation>
+<translation id="3793469551756281394">Преостало је око <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">Верзија</translation>
 <translation id="3801082500826908679">Фарска</translation>
 <translation id="3809272675881623365">Зец</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Овај директоријум се дели са Windows-ом</translation>
 <translation id="4487088045714738411">Језик тастатуре: белгијски</translation>
 <translation id="4522570452068850558">Детаљи</translation>
+<translation id="4542387084127299777">Отварање датотеке „<ph name="PATH" />“ није успело</translation>
 <translation id="4552678318981539154">Купи још меморијског простора</translation>
 <translation id="4559767610552730302">Бокех</translation>
 <translation id="4572815280350369984">Датотека <ph name="FILE_TYPE" /></translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Резервне копије свих датотека су направљене на <ph name="BEGIN_LINK" />Google диску!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Обриши</translation>
 <translation id="6650726141019353908">Ружичасти лептир</translation>
+<translation id="6657585470893396449">Лозинка</translation>
 <translation id="6710213216561001401">Претходно</translation>
 <translation id="6718273304615422081">Прављење zip датотеке...</translation>
 <translation id="6751256176799620176">Изабран је 1 директоријум</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Инсталација није успела.</translation>
 <translation id="7040138676081995583">Отвори помоћу апликације...</translation>
-<translation id="7059566040011178088">Мање од <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">Изабраних ставки: <ph name="COUNT" /></translation>
 <translation id="7106346894903675391">Купи још меморијског простора...</translation>
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;“ – &lt;em&gt;претражи Диск&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Модел уређаја</translation>
 <translation id="8208580316430297579">Илустрације</translation>
 <translation id="8223479393428528563">Да бисте сачували ове датотеке за офлајн коришћење, повежите се поново на интернет, кликните десним тастером на датотеке и изаберите опцију <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Око <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Откажи</translation>
 <translation id="8261506727792406068">Избриши</translation>
 <translation id="8269755669432358899">Скупи окна за повратне информације о датотекама</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Измени</translation>
 <translation id="9099674669267916096">Број страница</translation>
 <translation id="9110990317705400362">Стално тражимо нове начине да учинимо прегледање безбеднијим. Раније је сваки веб-сајт могао да вам затражи да додате додатак у прегледач. У најновијим верзијама Google Chrome-а морате експлицитно да кажете Chrome-у да желите да инсталирате те додатке тако што ћете их додати преко странице Додаци. <ph name="BEGIN_LINK" />Сазнајте више<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Откључај</translation>
 <translation id="912419004897138677">Кодек</translation>
 <translation id="9129931661813833980">Закачи директоријум</translation>
 <translation id="9130775360844693113">Чланови из „<ph name="DESTINATION_NAME" />“ ће добити приступ овим ставкама.</translation>

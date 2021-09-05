@@ -191,11 +191,12 @@ void PermissionContextBase::RequestPermission(
     return;
   }
 
-  // Make sure we do not show a UI for cached documents
-  if (content::BackForwardCache::EvictIfCached(
-          content::GlobalFrameRoutingId(id.render_process_id(),
-                                        id.render_frame_id()),
-          "PermissionContextBase::RequestPermission")) {
+  // Don't show request permission UI for an inactive RenderFrameHost. If this
+  // is called when RenderFrameHost is in BackForwardCache, evict the document
+  // as the page might not distinguish properly between user denying the
+  // permission and automatic rejection, leading to an inconsistent UX after
+  // restoring the page from the cache.
+  if (rfh->IsInactiveAndDisallowReactivation()) {
     std::move(callback).Run(result.content_setting);
     return;
   }
@@ -383,8 +384,7 @@ void PermissionContextBase::DecidePermission(
   // origin displayed in the prompt should never differ from the top-level
   // origin. Storage access API requests are excluded as they are expected to
   // request permissions from the frame origin needing access.
-  DCHECK(!base::FeatureList::IsEnabled(features::kPermissionDelegation) ||
-         PermissionsClient::Get()->CanBypassEmbeddingOriginCheck(
+  DCHECK(PermissionsClient::Get()->CanBypassEmbeddingOriginCheck(
              requesting_origin, embedding_origin) ||
          requesting_origin == embedding_origin ||
          content_settings_type_ == ContentSettingsType::STORAGE_ACCESS);
@@ -412,7 +412,17 @@ void PermissionContextBase::DecidePermission(
           .insert(std::make_pair(id.ToString(), std::move(request_ptr)))
           .second;
   DCHECK(inserted) << "Duplicate id " << id.ToString();
-  permission_request_manager->AddRequest(request);
+
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
+      id.render_process_id(), id.render_frame_id());
+
+  if (!rfh) {
+    request->Cancelled();
+    request->RequestFinished();
+    return;
+  }
+
+  permission_request_manager->AddRequest(rfh, request);
 }
 
 void PermissionContextBase::PermissionDecided(

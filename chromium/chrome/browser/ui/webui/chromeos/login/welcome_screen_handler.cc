@@ -70,15 +70,11 @@ void WelcomeScreenHandler::Show() {
     return;
   }
 
+  // TODO(crbug.com/1105387): Part of initial screen logic.
   PrefService* prefs = g_browser_process->local_state();
   if (prefs->GetBoolean(prefs::kFactoryResetRequested)) {
     if (core_oobe_view_)
       core_oobe_view_->ShowDeviceResetScreen();
-
-    return;
-  } else if (prefs->GetBoolean(prefs::kDebuggingFeaturesRequested)) {
-    if (core_oobe_view_)
-      core_oobe_view_->ShowEnableDebuggingScreen();
 
     return;
   }
@@ -88,7 +84,6 @@ void WelcomeScreenHandler::Show() {
       "isDeveloperMode", base::CommandLine::ForCurrentProcess()->HasSwitch(
                              chromeos::switches::kSystemDevMode));
   ShowScreenWithData(kScreenId, &welcome_screen_params);
-  core_oobe_view_->InitDemoModeDetection();
 }
 
 void WelcomeScreenHandler::Hide() {}
@@ -103,10 +98,6 @@ void WelcomeScreenHandler::Unbind() {
   BaseScreenHandler::SetBaseScreen(nullptr);
 }
 
-void WelcomeScreenHandler::StopDemoModeDetection() {
-  core_oobe_view_->StopDemoModeDetection();
-}
-
 void WelcomeScreenHandler::ReloadLocalizedContent() {
   base::DictionaryValue localized_strings;
   GetOobeUI()->GetLocalizedStrings(&localized_strings);
@@ -116,6 +107,10 @@ void WelcomeScreenHandler::ReloadLocalizedContent() {
 void WelcomeScreenHandler::SetInputMethodId(
     const std::string& input_method_id) {
   CallJS("login.WelcomeScreen.onInputMethodIdSetFromBackend", input_method_id);
+}
+
+void WelcomeScreenHandler::ShowDemoModeConfirmationDialog() {
+  CallJS("login.WelcomeScreen.showDemoModeConfirmationDialog");
 }
 
 // WelcomeScreenHandler, BaseScreenHandler implementation: --------------------
@@ -172,6 +167,14 @@ void WelcomeScreenHandler::DeclareLocalizedValues(
 
   builder->Add("timezoneDropdownTitle", IDS_TIMEZONE_DROPDOWN_TITLE);
   builder->Add("timezoneButtonText", IDS_TIMEZONE_BUTTON_TEXT);
+
+  // Strings for enable demo mode dialog.
+  builder->Add("enableDemoModeDialogTitle", IDS_ENABLE_DEMO_MODE_DIALOG_TITLE);
+  builder->Add("enableDemoModeDialogText", IDS_ENABLE_DEMO_MODE_DIALOG_TEXT);
+  builder->Add("enableDemoModeDialogConfirm",
+               IDS_ENABLE_DEMO_MODE_DIALOG_CONFIRM);
+  builder->Add("enableDemoModeDialogCancel",
+               IDS_ENABLE_DEMO_MODE_DIALOG_CANCEL);
 }
 
 void WelcomeScreenHandler::DeclareJSCallbacks() {
@@ -181,21 +184,6 @@ void WelcomeScreenHandler::DeclareJSCallbacks() {
               &WelcomeScreenHandler::HandleSetInputMethodId);
   AddCallback("WelcomeScreen.setTimezoneId",
               &WelcomeScreenHandler::HandleSetTimezoneId);
-
-  AddCallback("WelcomeScreen.enableHighContrast",
-              &WelcomeScreenHandler::HandleEnableHighContrast);
-  AddCallback("WelcomeScreen.enableLargeCursor",
-              &WelcomeScreenHandler::HandleEnableLargeCursor);
-  AddCallback("WelcomeScreen.enableVirtualKeyboard",
-              &WelcomeScreenHandler::HandleEnableVirtualKeyboard);
-  AddCallback("WelcomeScreen.enableScreenMagnifier",
-              &WelcomeScreenHandler::HandleEnableScreenMagnifier);
-  AddCallback("WelcomeScreen.enableSpokenFeedback",
-              &WelcomeScreenHandler::HandleEnableSpokenFeedback);
-  AddCallback("WelcomeScreen.enableSelectToSpeak",
-              &WelcomeScreenHandler::HandleEnableSelectToSpeak);
-  AddCallback("WelcomeScreen.enableDockedMagnifier",
-              &WelcomeScreenHandler::HandleEnableDockedMagnifier);
 }
 
 void WelcomeScreenHandler::GetAdditionalParameters(
@@ -280,44 +268,6 @@ void WelcomeScreenHandler::HandleSetInputMethodId(
 void WelcomeScreenHandler::HandleSetTimezoneId(const std::string& timezone_id) {
   if (screen_)
     screen_->SetTimezone(timezone_id);
-}
-
-void WelcomeScreenHandler::HandleEnableHighContrast(bool enabled) {
-  AccessibilityManager::Get()->EnableHighContrast(enabled);
-}
-
-void WelcomeScreenHandler::HandleEnableLargeCursor(bool enabled) {
-  AccessibilityManager::Get()->EnableLargeCursor(enabled);
-}
-
-void WelcomeScreenHandler::HandleEnableVirtualKeyboard(bool enabled) {
-  AccessibilityManager::Get()->EnableVirtualKeyboard(enabled);
-}
-
-void WelcomeScreenHandler::HandleEnableScreenMagnifier(bool enabled) {
-  DCHECK(MagnificationManager::Get());
-  MagnificationManager::Get()->SetMagnifierEnabled(enabled);
-}
-
-void WelcomeScreenHandler::HandleEnableSpokenFeedback(bool /* enabled */) {
-  // Checkbox is initialized on page init and updates when spoken feedback
-  // setting is changed so just toggle spoken feedback here.
-  AccessibilityManager::Get()->EnableSpokenFeedback(
-      !AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-}
-
-void WelcomeScreenHandler::HandleEnableSelectToSpeak(bool /* enabled */) {
-  // Checkbox is initialized on page init and updates when Select to Speak
-  // setting is changed so just toggle Select to Speak here.
-  AccessibilityManager::Get()->SetSelectToSpeakEnabled(
-      !AccessibilityManager::Get()->IsSelectToSpeakEnabled());
-}
-
-void WelcomeScreenHandler::HandleEnableDockedMagnifier(bool enabled) {
-  // Checkbox is initialized on page init and updates when the docked magnifier
-  // setting is changed so just toggle Select to Speak here.
-  DCHECK(MagnificationManager::Get());
-  MagnificationManager::Get()->SetDockedMagnifierEnabled(enabled);
 }
 
 void WelcomeScreenHandler::OnAccessibilityStatusChanged(

@@ -2,9 +2,9 @@ Name: libgav1
 Short Name: libgav1
 URL: https://chromium.googlesource.com/codecs/libgav1/
 Version: 0
-Date: Saturday May 23 2020
+Date: Tuesday July 14 2020
 Branch: master
-Commit: bf190c43e5c7cc81751867c917a81bc2920be079
+Commit: e46493b9148e0d1e63f55b5890bff503822616e5
 License: Apache 2.0
 License File: libgav1/LICENSE
 Security Critical: yes

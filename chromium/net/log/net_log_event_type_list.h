@@ -1567,6 +1567,16 @@ EVENT_TYPE(HTTP2_SESSION_INITIAL_WINDOW_SIZE_OUT_OF_RANGE)
 //   }
 EVENT_TYPE(HTTP2_SESSION_UPDATE_STREAMS_SEND_WINDOW_SIZE)
 
+// Sending a greased frame (a frame of reserved type)
+//   {
+//     "stream_id": <The stream ID for the window update>,
+//     "type"     : <Frame type>,
+//     "flags"    : <Frame flags>,
+//     "length"   : <Frame payload length>,
+//     "priority" : <RequestPriority of the stream>,
+//   }
+EVENT_TYPE(HTTP2_SESSION_SEND_GREASED_FRAME)
+
 // ------------------------------------------------------------------------
 // SpdySessionPool
 // ------------------------------------------------------------------------
@@ -1670,7 +1680,10 @@ EVENT_TYPE(HTTP2_PROXY_CLIENT_SESSION)
 // Measures the time taken to execute the QuicStreamFactory::Job.
 // The event parameters are:
 //   {
-//     "server_id": <The quic::QuicServerId that the Job serves>,
+//     "host": <The origin hostname that the Job serves>,
+//     "port": <The origin port>,
+//     "privacy_mode": <The privacy mode of the Job>,
+//     "network_isolation_key": <The NetworkIsolationKey of the Job>,
 //   }
 EVENT_TYPE(QUIC_STREAM_FACTORY_JOB)
 
@@ -1714,7 +1727,14 @@ EVENT_TYPE(QUIC_STREAM_FACTORY_JOB_STALE_HOST_RESOLUTION_MATCHED)
 
 // The start/end of a quic::QuicSession.
 //   {
-//     "host": <The host-port string>,
+//     "host": <The origin hostname string>,
+//     "port": <The origin port>,
+//     "privacy_mode": <The privacy mode of the session>,
+//     "network_isolation_key": <The NetworkIsolationKey of the session>,
+//     "require_confirmation": <True if the session will wait for a successful
+//                              QUIC handshake before vending streams>,
+//     "cert_verify_flags": <The certificate verification flags for the
+//                           session>,
 //   }
 EVENT_TYPE(QUIC_SESSION)
 
@@ -1823,37 +1843,29 @@ EVENT_TYPE(QUIC_SESSION_STREAM_FRAME_COALESCED)
 
 // Session received an ACK frame.
 //   {
-//     "sent_info": <Details of packet sent by the peer>
-//       {
-//         "least_unacked": <Lowest sequence number of a packet sent by the peer
-//                           for which it has not received an ACK>,
-//       }
-//     "received_info": <Details of packet received by the peer>
-//       {
-//         "largest_observed": <The largest sequence number of a packet received
-//                               by (or inferred by) the peer>,
-//         "missing": <List of sequence numbers of packets lower than
-//                     largest_observed which have not been received by the
-//                     peer>,
-//       }
+//     "largest_observed": <The largest packet number of a packet the peer has
+//       received, a.k.a. Largest Acknowledged>,
+//     "smallest_observed": <The smallest packet number covered by this ACK>,
+//     "delta_time_largest_observed_us": <Time between when the largest
+//       packet number was received and the ACK sent, a.k.a. Ack Delay>,
+//     "missing_packets": <List of packet numbers of packets between
+//       smallest_observed and largest_observed which were not received>,
+//     "received_packet_times": <List of dictionaries containing
+//       "packet_number" and "received" timestamps (if enabled)>,
 //   }
 EVENT_TYPE(QUIC_SESSION_ACK_FRAME_RECEIVED)
 
 // Session sent an ACK frame.
 //   {
-//     "sent_info": <Details of packet sent by the peer>
-//       {
-//         "least_unacked": <Lowest sequence number of a packet sent by the peer
-//                           for which it has not received an ACK>,
-//       }
-//     "received_info": <Details of packet received by the peer>
-//       {
-//         "largest_observed": <The largest sequence number of a packet received
-//                               by (or inferred by) the peer>,
-//         "missing": <List of sequence numbers of packets lower than
-//                     largest_observed which have not been received by the
-//                     peer>,
-//       }
+//     "largest_observed": <The largest packet number of a packet we have
+//       received, a.k.a. Largest Acknowledged>,
+//     "smallest_observed": <The smallest packet number covered by this ACK>,
+//     "delta_time_largest_observed_us": <Time between when the largest
+//       packet number was received and the ACK sent, a.k.a. Ack Delay>,
+//     "missing_packets": <List of packet numbers of packets between
+//       smallest_observed and largest_observed which were not received>,
+//     "received_packet_times": <List of dictionaries containing
+//       "packet_number" and "received" timestamps (if enabled)>,
 //   }
 EVENT_TYPE(QUIC_SESSION_ACK_FRAME_SENT)
 
@@ -2017,6 +2029,16 @@ EVENT_TYPE(QUIC_SESSION_TRANSPORT_PARAMETERS_RECEIVED)
 //                                   parameters>
 //   }
 EVENT_TYPE(QUIC_SESSION_TRANSPORT_PARAMETERS_SENT)
+
+// A QUIC connection resumed transport parameters for 0-RTT.
+//   {
+//     "quic_transport_parameters": <Human readable view of the transport
+//                                   parameters>
+//   }
+EVENT_TYPE(QUIC_SESSION_TRANSPORT_PARAMETERS_RESUMED)
+
+// QUIC with TLS gets 0-RTT rejected.
+EVENT_TYPE(QUIC_SESSION_ZERO_RTT_REJECTED)
 
 // A QUIC connection received a PUSH_PROMISE frame.  The following
 // parameters are attached:
@@ -3750,6 +3772,11 @@ EVENT_TYPE(HTTP3_UNKNOWN_FRAME_RECEIVED)
 // A list of settings will be logged by
 // <setting identifier>: <setting value>
 EVENT_TYPE(HTTP3_SETTINGS_SENT)
+
+// Event emitted when an HTTP/3 SETTINGS frame is resumed for 0-RTT.
+// A list of settings will be logged by
+// <setting identifier>: <setting value>
+EVENT_TYPE(HTTP3_SETTINGS_RESUMED)
 
 // Event emitted when an HTTP/3 GOAWAY frame is sent.
 //  {

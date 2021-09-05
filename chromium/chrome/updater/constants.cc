@@ -16,6 +16,7 @@ const char kServerSwitch[] = "server";
 const char kComServiceSwitch[] = "com-service";
 const char kCrashMeSwitch[] = "crash-me";
 const char kCrashHandlerSwitch[] = "crash-handler";
+const char kUpdateSwitch[] = "update";
 const char kInstallSwitch[] = "install";
 const char kUninstallSwitch[] = "uninstall";
 const char kSystemSwitch[] = "system";
@@ -28,21 +29,18 @@ const char kSingleProcessSwitch[] = "single-process";
 const char kAppIdSwitch[] = "appid";
 const char kWakeSwitch[] = "wake";
 
-#if defined(OS_MACOSX)
-const char kPromoteCandidateSwitch[] = "promote-candidate";
-const char kUninstallCandidateSwitch[] = "uninstall-candidate";
-#endif  // OS_MACOSX
-
 #if defined(OS_WIN)
 const char kInstallFromOutDir[] = "install-from-out-dir";
 #endif  // OS_WIN
 
-// URLs.
+// TODO(crbug/1108975): brand the URLs below.
 const char kUpdaterJSONDefaultUrl[] =
     "https://update.googleapis.com/service/update2/json";
 const char kCrashUploadURL[] = "https://clients2.google.com/cr/report";
 const char kCrashStagingUploadURL[] =
     "https://clients2.google.com/cr/staging_report";
+const char kDeviceManagementServerURL[] =
+    "https://m.google.com/devicemanagement/data/api";
 
 // Path names.
 const char kAppsDir[] = "apps";

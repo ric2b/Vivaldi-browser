@@ -65,10 +65,13 @@ class TabViewManagerImpl implements TabViewManager, Comparator<TabViewProvider> 
     }
 
     private void initMarginSupplier() {
-        if (mTab.getActivity() == null || mMarginSupplier != null) return;
+        if (mTab.getActivity() == null || mTab.getActivity().isActivityFinishingOrDestroyed()
+                || mMarginSupplier != null) {
+            return;
+        }
 
         mMarginSupplier =
-                new BrowserControlsMarginSupplier(mTab.getActivity().getFullscreenManager());
+                new BrowserControlsMarginSupplier(mTab.getActivity().getBrowserControlsManager());
         mMarginSupplier.addObserver(this::updateViewMargins);
         // Update margins immediately if available rather than waiting for a posted notification.
         // Waiting for a posted notification could allow a layout pass to occur before the margins

@@ -69,7 +69,7 @@ const WebsiteSettingsInfo* WebsiteSettingsRegistry::Register(
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
   if (!(platform & PLATFORM_LINUX))
     return nullptr;
-#elif defined(OS_MACOSX) && !defined(OS_IOS)
+#elif defined(OS_MAC)
   if (!(platform & PLATFORM_MAC))
     return nullptr;
 #elif defined(OS_CHROMEOS)
@@ -217,9 +217,9 @@ void WebsiteSettingsRegistry::Init() {
            WebsiteSettingsInfo::DONT_INHERIT_IN_INCOGNITO);
   Register(ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
            "safe-browsing-url-check-data", nullptr,
-           WebsiteSettingsInfo::UNSYNCABLE, WebsiteSettingsInfo::NOT_LOSSY,
+           WebsiteSettingsInfo::UNSYNCABLE, WebsiteSettingsInfo::LOSSY,
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE, ALL_PLATFORMS,
-           WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
+           WebsiteSettingsInfo::DONT_INHERIT_IN_INCOGNITO);
 }
 
 }  // namespace content_settings

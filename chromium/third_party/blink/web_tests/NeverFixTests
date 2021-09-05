@@ -1,4 +1,4 @@
-# tags: [ Android Fuchsia IOS IOS12.2 IOS13.0 Linux Mac Mac10.10 Mac10.11 Mac10.12 Retina
+# tags: [ Android Fuchsia IOS IOS12.2 IOS13.0 Linux Mac Mac10.10 Mac10.11 Mac10.12
 #         Mac10.13 Win Win7 Win10 ]
 # tags: [ Release Debug ]
 # results: [ Skip Pass ]
@@ -56,19 +56,17 @@ fast/harness/results.html [ Skip ]
 [ Linux ] fast/dom/partial-layout-overlay-scrollbars.html [ Skip ]
 
 # Tests trak table support / letter spacing specific to Mac system font
-# Only maintain this for the latest macOS (and Retina is currently 10.12).
+# Only maintain this for the latest macOS.
 [ Win ] virtual/text-antialias/mac-system-ui-trak.html [ Skip ]
 [ Linux ] virtual/text-antialias/mac-system-ui-trak.html [ Skip ]
 [ Mac10.10 ] virtual/text-antialias/mac-system-ui-trak.html [ Skip ]
 [ Mac10.11 ] virtual/text-antialias/mac-system-ui-trak.html [ Skip ]
 [ Mac10.12 ] virtual/text-antialias/mac-system-ui-trak.html [ Skip ]
-[ Retina ] virtual/text-antialias/mac-system-ui-trak.html [ Skip ]
 
  # Mac's popup behavior is different.
 [ Mac ] fast/forms/select/menulist-onchange-fired-with-key-up-down.html [ Skip ]
 [ Mac ] fast/forms/select/popup-with-display-none-optgroup.html [ Skip ]
 [ Mac ] fast/forms/select-popup/* [ Skip ]
-[ Mac ] virtual/cascade/fast/forms/select-popup/* [ Skip ]
 
 # These tests are specific to Windows and Linux.
 [ Mac ] fast/forms/calendar-picker/date-open-picker-with-f4-key.html [ Skip ]
@@ -150,6 +148,11 @@ virtual/stable/media/stable/* [ Pass ]
 # This test requires a compositor, so only the virtual/threaded/ version is run.
 external/wpt/feature-policy/experimental-features/vertical-scroll-touch-block-manual.tentative.html [ Skip ]
 [ Linux ] virtual/threaded/external/wpt/feature-policy/experimental-features/vertical-scroll-touch-block-manual.tentative.html [ Pass ]
+
+# This test requires a compositor to pass as root scrollbar scrolling is always
+# done on the compositor thread.
+fast/scrolling/scrollbars/mouse-scrolling-on-div-scrollbar-thumb-scaled.html [ Skip ]
+virtual/threaded-prefer-compositing/fast/scrolling/scrollbars/mouse-scrolling-on-div-scrollbar-thumb-scaled.html [ Pass ]
 
 # Only run fake-Android tests on Linux
 [ Mac ] virtual/android/* [ Skip ]
@@ -413,6 +416,17 @@ external/wpt/media-source/mediasource-invalid-codec.html [ Skip ]
 [ Mac10.10 ] external/wpt/css/css-text/hyphens/hyphens-manual-inline-011.html [ Skip ]
 [ Mac10.10 ] external/wpt/css/css-text/hyphens/hyphens-manual-inline-012.html [ Skip ]
 [ Mac10.10 ] external/wpt/css/css-text/hyphens/hyphens-none-013.html [ Skip ]
+
+# The spec is not web-compatbile, but no consensus at CSS WG yet.
+# crbug.com/267056
+# https://github.com/w3c/csswg-drafts/issues/1518
+external/wpt/css/css-text/letter-spacing/letter-spacing-100.html [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-101.html [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-102.html [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-103.html [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-104.html [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-105.html [ Skip ]
+external/wpt/css/css-text/letter-spacing/letter-spacing-106.html [ Skip ]
 
 # CSS Text features that are not planned to implement.
 external/wpt/css/css-text/parsing/word-boundary-detection-computed.html [ Skip ]
@@ -1347,6 +1361,13 @@ crbug.com/680331 external/wpt/css/css-writing-modes/wm-propagation-body-055.html
 crbug.com/680331 external/wpt/css/cssom-view/scrollIntoView-sideways-lr-writing-mode-and-rtl-direction.html [ Skip ]
 crbug.com/680331 external/wpt/css/cssom-view/scrollIntoView-sideways-rl-writing-mode-and-rtl-direction.html [ Skip ]
 
+# 'overflow: clip' not implemented.
+crbug.com/966283 external/wpt/css/css-overflow/clip-001.html [ Skip ]
+crbug.com/966283 external/wpt/css/css-overflow/dynamic-visible-to-clip-001.html [ Skip ]
+crbug.com/966283 external/wpt/css/css-overflow/overflow-body-propagation-007.html [ Skip ]
+crbug.com/966283 external/wpt/css/css-overflow/overflow-body-propagation-008.html [ Skip ]
+crbug.com/966283 external/wpt/css/css-overflow/overflow-body-propagation-009.html [ Skip ]
+
 # Requires --use-fake-ui-for-media-stream to run.
 external/wpt/mediacapture-streams/MediaStream-default-feature-policy.https.html [ Skip ]
 virtual/feature-policy-permissions/external/wpt/mediacapture-streams/MediaStream-default-feature-policy.https.html [ Pass ]
@@ -1876,6 +1897,18 @@ external/wpt/html/browsers/origin/cross-origin-objects/cross-origin-objects-on-n
 external/wpt/html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin-domain.sub.html [ Skip ]
 external/wpt/wasm/serialization/module/window-domain-success.sub.html [ Skip ]
 external/wpt/wasm/serialization/module/window-similar-but-cross-origin-success.sub.html [ Skip ]
+virtual/not-site-per-process/external/wpt/html/browsers/origin/relaxing-the-same-origin-restriction/* [ Pass ]
+virtual/not-site-per-process/external/wpt/FileAPI/url/multi-global-origin-serialization.sub.html [ Pass ]
+virtual/not-site-per-process/external/wpt/dom/events/EventListener-incumbent-global-1.sub.html [ Pass ]
+virtual/not-site-per-process/external/wpt/dom/events/EventListener-incumbent-global-2.sub.html [ Pass ]
+virtual/not-site-per-process/http/tests/dom/EventListener-incumbent-global-1.html [ Pass ]
+virtual/not-site-per-process/http/tests/dom/EventListener-incumbent-global-2.html [ Pass ]
+virtual/not-site-per-process/external/wpt/html/browsers/history/the-location-interface/allow_prototype_cycle_through_location.sub.html [ Pass ]
+virtual/not-site-per-process/external/wpt/html/browsers/history/the-location-interface/location-prototype-setting-same-origin-domain.sub.html [ Pass ]
+virtual/not-site-per-process/external/wpt/html/browsers/origin/cross-origin-objects/cross-origin-objects-on-new-window.html [ Pass ]
+virtual/not-site-per-process/external/wpt/html/browsers/the-windowproxy-exotic-object/windowproxy-prototype-setting-same-origin-domain.sub.html [ Pass ]
+virtual/not-site-per-process/external/wpt/wasm/serialization/module/window-domain-success.sub.html [ Pass ]
+virtual/not-site-per-process/external/wpt/wasm/serialization/module/window-similar-but-cross-origin-success.sub.html [ Pass ]
 # -------------------- origin-vs-url in console messages -----------------
 # Process hosting https://foo.example.com should not get any data from
 # https://bar.other-site-example.com.  This includes things like cookies
@@ -1957,13 +1990,12 @@ external/wpt/payment-request/billing-address-changed-manual.https.html [ Skip ]
 external/wpt/html/editing/focus/sequential-focus-navigation-and-the-tabindex-attribute/focus-tabindex-event-manual.html [ Skip ]
 external/wpt/payment-request/payment-response/retry-method-warnings-manual.https.html [ Skip ]
 external/wpt/payment-request/payment-response/payerdetailschange-updateWith-manual.https.html [ Skip ]
-[ Retina ] external/wpt/pointerevents/pointerevent_touch-action-span-test_touch-manual.html [ Skip ]
 external/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-x_touch-manual.html [ Skip ]
 external/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-y_touch-manual.html [ Skip ]
 external/wpt/pointerevents/pointerevent_touch-action-inherit_child-none_touch-manual.html [ Skip ]
 external/wpt/pointerevents/pointerevent_touch-action-inherit_parent-none_touch-manual.html [ Skip ]
 external/wpt/pointerevents/pointerevent_touch-action-inherit_child-auto-child-none_touch-manual.html [ Skip ]
-external/wpt/web-share/share-files-manual.tentative.https.html [ Skip ]
+external/wpt/web-share/share-files-manual.https.html [ Skip ]
 external/wpt/web-share/share-image-manual.tentative.https.html [ Skip ]
 external/wpt/uievents/order-of-events/mouse-events/wheel-basic-manual.html [ Skip ]
 external/wpt/uievents/order-of-events/mouse-events/wheel-scrolling-manual.html [ Skip ]
@@ -1997,8 +2029,10 @@ crbug.com/1047176 [ Mac ] fast/events/wheel/wheelevent-ctrl.html [ Skip ]
 
 # These tests will pass once the --enable-features=TrustTokens flag is on by
 # default. A virtual test suite runs the same tests with the flag enabled.
+crbug.com/1061765 http/tests/inspector-protocol/trust-tokens/* [ Skip ]
 crbug.com/1061765 http/tests/loading/trust-tokens/* [ Skip ]
 crbug.com/1061765 external/wpt/trust-tokens/end-to-end/* [ Skip ]
+virtual/trust-tokens/http/tests/inspector-protocol/trust-tokens/* [ Pass ]
 virtual/trust-tokens/http/tests/loading/trust-tokens/* [ Pass ]
 virtual/trust-tokens/external/wpt/trust-tokens/end-to-end/* [ Pass ]
 
@@ -2096,9 +2130,9 @@ virtual/not-split-http-cache-not-site-per-process/http/tests/devtools/isolated-c
 virtual/split-http-cache-not-site-per-process/http/tests/devtools/isolated-code-cache/cross-origin-test.js [ Pass ]
 
 # This test run under virtual suites only.
-crbug.com/981970 external/wpt/fetch/http-cache/split-cache.tentative.html [ Skip ]
-virtual/not-split-http-cache/external/wpt/fetch/http-cache/split-cache.tentative.html [ Pass ]
-virtual/split-http-cache/external/wpt/fetch/http-cache/split-cache.tentative.html [ Pass ]
+crbug.com/981970 external/wpt/fetch/http-cache/split-cache.html [ Skip ]
+virtual/not-split-http-cache/external/wpt/fetch/http-cache/split-cache.html [ Pass ]
+virtual/split-http-cache/external/wpt/fetch/http-cache/split-cache.html [ Pass ]
 
 # Run the tests with the default MSE buffer sizes in the main test suite and the tests for 1MB buffers set via command line in a virtual test suite
 # with the --mse-audio-buffer-size-limit=1048576 and --mse-video-buffer-size-limit=1048576 command-line parameters.
@@ -2115,7 +2149,33 @@ crbug.com/1018640 external/wpt/web-bundle/wbn-from-network/* [ Skip ]
 virtual/wbn-from-network/external/wpt/web-bundle/wbn-from-network/* [ Pass ]
 crbug.com/1082020 external/wpt/web-bundle/subresource-loading/* [ Skip ]
 virtual/subresource-web-bundles/external/wpt/web-bundle/subresource-loading/* [ Pass ]
-crbug.com/626703 [ Mac10.10 ] virtual/cache-storage-sequence/external/wpt/service-workers/service-worker/fetch-event-is-reload-iframe-navigation-manual.https.html [ Skip ]
+crbug.com/1082020 http/tests/loading/wbn/subresource-loading/* [ Skip ]
+virtual/subresource-web-bundles/http/tests/loading/wbn/subresource-loading/* [ Pass ]
 
 # No good way to automate this test yet
 external/wpt/native-file-system/showSaveFilePicker-manual.https.html [ Skip ]
+
+# These tests require a physical device connected.
+wpt_internal/serial/serialPort_loopback-manual.https.html [ Skip ]
+wpt_internal/serial/serialPort_disconnect-manual.https.html [ Skip ]
+
+# CPU test is enough for this one as there are gradient issues on the GPU
+virtual/gpu/fast/canvas/conic-gradient.html [ Skip ]
+crbug.com/626703 [ Linux ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-query-nosw-manual.https.html [ Skip ]
+crbug.com/626703 [ Mac ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-query-nosw-manual.https.html [ Skip ]
+crbug.com/626703 [ Win ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-query-nosw-manual.https.html [ Skip ]
+crbug.com/626703 [ Linux ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-fragment-manual.https.html [ Skip ]
+crbug.com/626703 [ Mac ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-fragment-manual.https.html [ Skip ]
+crbug.com/626703 [ Win ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-fragment-manual.https.html [ Skip ]
+crbug.com/626703 [ Linux ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-query-manual.https.html [ Skip ]
+crbug.com/626703 [ Mac ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-query-manual.https.html [ Skip ]
+crbug.com/626703 [ Win ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-query-manual.https.html [ Skip ]
+crbug.com/626703 [ Linux ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-path-manual.https.html [ Skip ]
+crbug.com/626703 [ Mac ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-path-manual.https.html [ Skip ]
+crbug.com/626703 [ Win ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-path-manual.https.html [ Skip ]
+crbug.com/626703 [ Linux ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-fragment-nosw-manual.https.html [ Skip ]
+crbug.com/626703 [ Mac ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-fragment-nosw-manual.https.html [ Skip ]
+crbug.com/626703 [ Win ] external/wpt/html/webappapis/system-state-and-capabilities/the-navigator-object/protocol-handler-fragment-nosw-manual.https.html [ Skip ]
+crbug.com/626703 [ Linux ] external/wpt/html/editing/dnd/events/historical-manual.html [ Skip ]
+crbug.com/626703 [ Mac ] external/wpt/html/editing/dnd/events/historical-manual.html [ Skip ]
+crbug.com/626703 [ Win ] external/wpt/html/editing/dnd/events/historical-manual.html [ Skip ]

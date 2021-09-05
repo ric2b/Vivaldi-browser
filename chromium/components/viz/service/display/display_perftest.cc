@@ -13,6 +13,7 @@
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
+#include "components/viz/common/surfaces/aggregated_frame.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
@@ -71,7 +72,7 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
 
     auto overlay_processor = std::make_unique<OverlayProcessorStub>();
     auto display = std::make_unique<Display>(
-        &bitmap_manager_, RendererSettings(), frame_sink_id,
+        &bitmap_manager_, RendererSettings(), &debug_settings_, frame_sink_id,
         std::move(output_surface), std::move(overlay_processor),
         std::move(scheduler), task_runner_.get());
     return display;
@@ -151,7 +152,7 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
     auto reporter = SetUpRemoveOverdrawQuadReporter(story);
     reporter.AddResult(kMetricOverlapThroughputRunsPerS,
                        timer_.LapsPerSecond());
-    frame_ = CompositorFrame();
+    frame_ = AggregatedFrame{};
   }
 
   void CreateOverlapShareQuadStates(int shared_quad_state_count,
@@ -191,7 +192,7 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
     auto reporter = SetUpRemoveOverdrawQuadReporter(story);
     reporter.AddResult(kMetricIsolatedThroughputRunsPerS,
                        timer_.LapsPerSecond());
-    frame_ = CompositorFrame();
+    frame_ = AggregatedFrame{};
   }
 
   void CreateIsolatedSharedQuadStates(int shared_quad_state_count,
@@ -240,7 +241,7 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
     auto reporter = SetUpRemoveOverdrawQuadReporter(story);
     reporter.AddResult(kMetricPartialOverlapThroughputRunsPerS,
                        timer_.LapsPerSecond());
-    frame_ = CompositorFrame();
+    frame_ = AggregatedFrame{};
   }
 
   void CreatePartiallyOverlapSharedQuadStates(int shared_quad_state_count,
@@ -287,7 +288,7 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
     auto reporter = SetUpRemoveOverdrawQuadReporter(story);
     reporter.AddResult(kMetricAdjacentThroughputRunsPerS,
                        timer_.LapsPerSecond());
-    frame_ = CompositorFrame();
+    frame_ = AggregatedFrame{};
   }
 
   void CreateAdjacentSharedQuadStates(int shared_quad_state_count,
@@ -312,7 +313,8 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
   }
 
  private:
-  CompositorFrame frame_;
+  DebugRendererSettings debug_settings_;
+  AggregatedFrame frame_;
   base::LapTimer timer_;
   StubBeginFrameSource begin_frame_source_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

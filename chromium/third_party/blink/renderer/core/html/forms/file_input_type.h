@@ -48,8 +48,6 @@ class FileList;
 class CORE_EXPORT FileInputType final : public InputType,
                                         public KeyboardClickableInputTypeView,
                                         private FileChooserClient {
-  USING_GARBAGE_COLLECTED_MIXIN(FileInputType);
-
  public:
   FileInputType(HTMLInputElement&);
 
@@ -73,7 +71,6 @@ class CORE_EXPORT FileInputType final : public InputType,
   String ValueMissingText() const override;
   void HandleDOMActivateEvent(Event&) override;
   void CustomStyleForLayoutObject(ComputedStyle& style) override;
-  bool TypeShouldForceLegacyLayout() const override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&,
                                    LegacyLayout) const override;
   bool CanSetStringValue() const override;

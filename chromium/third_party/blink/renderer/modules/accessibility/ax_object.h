@@ -87,7 +87,7 @@ class AXSparseAttributeClient {
   virtual void AddStringAttribute(AXStringAttribute, const String&) = 0;
   virtual void AddObjectAttribute(AXObjectAttribute, AXObject&) = 0;
   virtual void AddObjectVectorAttribute(AXObjectVectorAttribute,
-                                        HeapVector<Member<AXObject>>&) = 0;
+                                        HeapVector<Member<AXObject>>*) = 0;
 };
 
 class IgnoredReason {
@@ -344,7 +344,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   };
 
  protected:
-  AXObject(AXObjectCacheImpl&);
+  explicit AXObject(AXObjectCacheImpl&);
 
  public:
   virtual ~AXObject();
@@ -363,9 +363,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual void Detach();
   virtual bool IsDetached() const;
 
-  // If the parent of this object is known, this can be faster than using
-  // computeParent().
-  virtual void SetParent(AXObject* parent) { parent_ = parent; }
+  // Sets the parent AXObject directly. If the parent of this object is known,
+  // this can be faster than using computeParent().
+  virtual void SetParent(AXObject* parent);
 
   // The AXObjectCacheImpl that owns this object, and its unique ID within this
   // cache.
@@ -501,6 +501,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // Is the object selected because selection is following focus?
   virtual bool IsSelectedFromFocus() const { return false; }
   virtual bool IsSelectedOptionActive() const { return false; }
+  virtual bool IsNotUserSelectable() const { return false; }
   virtual bool IsVisible() const;
   virtual bool IsVisited() const { return false; }
 
@@ -540,14 +541,12 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   const AXObject* DatetimeAncestor(int max_levels_to_check = 3) const;
   const AXObject* DisabledAncestor() const;
   bool LastKnownIsIgnoredValue() const;
-  void SetLastKnownIsIgnoredValue(bool);
   bool LastKnownIsIgnoredButIncludedInTreeValue() const;
-  void SetLastKnownIsIgnoredButIncludedInTreeValue(bool);
   bool HasInheritedPresentationalRole() const;
   bool IsPresentationalChild() const;
   bool CanBeActiveDescendant() const;
-  // Some objects, such as table cells, could be the children of more than one
-  // object but have only one primary parent.
+  // Some objects, such as table header containers, could be the children of
+  // more than one object but have only one primary parent.
   bool HasIndirectChildren() const;
 
   //
@@ -654,8 +653,11 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
     return ax::mojom::blink::ListStyle::kNone;
   }
   virtual String GetText() const { return String(); }
-  virtual ax::mojom::blink::TextDirection GetTextDirection() const {
-    return ax::mojom::blink::TextDirection::kLtr;
+  virtual ax::mojom::blink::TextAlign GetTextAlign() const {
+    return ax::mojom::blink::TextAlign::kNone;
+  }
+  virtual ax::mojom::blink::WritingDirection GetTextDirection() const {
+    return ax::mojom::blink::WritingDirection::kLtr;
   }
   virtual ax::mojom::blink::TextPosition GetTextPosition() const {
     return ax::mojom::blink::TextPosition::kNone;
@@ -1004,8 +1006,25 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Low-level accessibility tree exploration, only for use within the
   // accessibility module.
+
+  // Returns the AXObject's first child, skipping over any children that
+  // represent continuations in the layout tree. If the AXObject has no
+  // children, returns the AXObject representing the next in pre-order
+  // continuation in the layout tree, if any.
+  //
+  // In the accessibility tree, this results in continuations becoming
+  // descendants of the nodes they "continue".
   virtual AXObject* RawFirstChild() const { return nullptr; }
+
+  // Returns the AXObject's next sibling, skipping over any siblings that
+  // represent continuations in the layout tree. If this is the last child,
+  // returns the AXObject representing the next in pre-order continuation in the
+  // layout tree, if any.
+  //
+  // In the accessibility tree, this results in continuations becoming
+  // descendants of the nodes they "continue".
   virtual AXObject* RawNextSibling() const { return nullptr; }
+
   virtual void AddChildren() {}
   virtual bool CanHaveChildren() const { return true; }
   bool HasChildren() const { return have_children_; }
@@ -1165,8 +1184,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   mutable bool have_children_;
   ax::mojom::blink::Role role_;
   ax::mojom::blink::Role aria_role_;
-  mutable AXObjectInclusion last_known_is_ignored_value_;
-  mutable AXObjectInclusion last_known_is_ignored_but_included_in_tree_value_;
   LayoutRect explicit_element_rect_;
   AXID explicit_container_id_;
 

@@ -35,14 +35,14 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <CoreVideo/CVPixelBuffer.h>
 #include "base/mac/scoped_cftyperef.h"
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "base/files/scoped_file.h"
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 namespace gfx {
 class GpuMemoryBuffer;
@@ -81,7 +81,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
     STORAGE_UNOWNED_MEMORY = 2,  // External, non owned data pointers.
     STORAGE_OWNED_MEMORY = 3,  // VideoFrame has allocated its own data buffer.
     STORAGE_SHMEM = 4,         // Backed by unsafe (writable) shared memory.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     // TODO(mcasas): Consider turning this type into STORAGE_NATIVE
     // based on the idea of using this same enum value for both DMA
     // buffers on Linux and CVPixelBuffers on Mac (which currently use
@@ -245,7 +245,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       ReleaseMailboxCB mailbox_holder_release_cb,
       base::TimeDelta timestamp);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Wraps provided dmabufs
   // (https://www.kernel.org/doc/html/latest/driver-api/dma-buf.html) with a
   // VideoFrame. The frame will take ownership of |dmabuf_fds|, and will
@@ -264,7 +264,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       base::TimeDelta timestamp);
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Wraps a provided CVPixelBuffer with a VideoFrame. The pixel buffer is
   // retained for the lifetime of the VideoFrame and released upon destruction.
   // The image data is only accessible via the pixel buffer, which could be
@@ -485,7 +485,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // mailbox, the caller must wait for the included sync point.
   const gpu::MailboxHolder& mailbox_holder(size_t texture_index) const;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Returns a vector containing the backing DmaBufs for this frame. The number
   // of returned DmaBufs will be equal or less than the number of planes of
   // the frame. If there are less, this means that the last FD contains the
@@ -504,7 +504,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   bool IsSameDmaBufsAs(const VideoFrame& frame) const;
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Returns the backing CVPixelBuffer, if present.
   CVPixelBufferRef CvPixelBuffer() const;
 #endif
@@ -671,7 +671,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // GPU memory buffer, if this frame is STORAGE_GPU_MEMORY_BUFFER.
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   class DmabufHolder;
 
   // Dmabufs for the frame, used when storage is STORAGE_DMABUFS. Size is either
@@ -685,7 +685,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   scoped_refptr<DmabufHolder> dmabuf_fds_;
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // CVPixelBuffer, if this frame is wrapping one.
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer_;
 #endif

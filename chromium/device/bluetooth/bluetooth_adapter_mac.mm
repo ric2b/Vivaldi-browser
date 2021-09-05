@@ -35,6 +35,7 @@
 #include "device/bluetooth/bluetooth_low_energy_device_watcher_mac.h"
 #include "device/bluetooth/bluetooth_low_energy_peripheral_manager_delegate.h"
 #include "device/bluetooth/bluetooth_socket_mac.h"
+#include "device/bluetooth/public/cpp/bluetooth_address.h"
 
 extern "C" {
 // Undocumented IOBluetooth Preference API [1]. Used by `blueutil` [2] and
@@ -181,8 +182,8 @@ std::string BluetoothAdapterMac::GetName() const {
 }
 
 void BluetoothAdapterMac::SetName(const std::string& name,
-                                  const base::Closure& callback,
-                                  const ErrorCallback& error_callback) {
+                                  base::OnceClosure callback,
+                                  ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -205,10 +206,9 @@ bool BluetoothAdapterMac::IsDiscoverable() const {
   return false;
 }
 
-void BluetoothAdapterMac::SetDiscoverable(
-    bool discoverable,
-    const base::Closure& callback,
-    const ErrorCallback& error_callback) {
+void BluetoothAdapterMac::SetDiscoverable(bool discoverable,
+                                          base::OnceClosure callback,
+                                          ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -248,29 +248,32 @@ BluetoothAdapter::UUIDList BluetoothAdapterMac::GetUUIDs() const {
 void BluetoothAdapterMac::CreateRfcommService(
     const BluetoothUUID& uuid,
     const ServiceOptions& options,
-    const CreateServiceCallback& callback,
-    const CreateServiceErrorCallback& error_callback) {
+    CreateServiceCallback callback,
+    CreateServiceErrorCallback error_callback) {
   scoped_refptr<BluetoothSocketMac> socket = BluetoothSocketMac::CreateSocket();
-  socket->ListenUsingRfcomm(
-      this, uuid, options, base::Bind(callback, socket), error_callback);
+  socket->ListenUsingRfcomm(this, uuid, options,
+                            base::BindOnce(std::move(callback), socket),
+                            std::move(error_callback));
 }
 
 void BluetoothAdapterMac::CreateL2capService(
     const BluetoothUUID& uuid,
     const ServiceOptions& options,
-    const CreateServiceCallback& callback,
-    const CreateServiceErrorCallback& error_callback) {
+    CreateServiceCallback callback,
+    CreateServiceErrorCallback error_callback) {
   scoped_refptr<BluetoothSocketMac> socket = BluetoothSocketMac::CreateSocket();
-  socket->ListenUsingL2cap(
-      this, uuid, options, base::Bind(callback, socket), error_callback);
+  socket->ListenUsingL2cap(this, uuid, options,
+                           base::BindOnce(std::move(callback), socket),
+                           std::move(error_callback));
 }
 
 void BluetoothAdapterMac::RegisterAdvertisement(
     std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
-    const CreateAdvertisementCallback& callback,
-    const AdvertisementErrorCallback& error_callback) {
+    CreateAdvertisementCallback callback,
+    AdvertisementErrorCallback error_callback) {
   low_energy_advertisement_manager_->RegisterAdvertisement(
-      std::move(advertisement_data), callback, error_callback);
+      std::move(advertisement_data), std::move(callback),
+      std::move(error_callback));
 }
 
 BluetoothLocalGattService* BluetoothAdapterMac::GetGattService(
@@ -319,7 +322,7 @@ BluetoothAdapterMac::GetHostControllerState() {
   if (controller != nil) {
     state.classic_powered =
         ([controller powerState] == kBluetoothHCIPowerStateON);
-    state.address = BluetoothDevice::CanonicalizeAddress(
+    state.address = CanonicalizeBluetoothAddress(
         base::SysNSStringToUTF8([controller addressAsString]));
     state.is_present = !state.address.empty();
   }

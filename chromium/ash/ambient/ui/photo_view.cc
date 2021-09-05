@@ -5,14 +5,20 @@
 #include "ash/ambient/ui/photo_view.h"
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 
 #include "ash/ambient/ambient_constants.h"
 #include "ash/ambient/model/ambient_backend_model.h"
+#include "ash/ambient/ui/ambient_background_image_view.h"
 #include "ash/ambient/ui/ambient_view_delegate.h"
-#include "base/metrics/histogram_macros.h"
+#include "ash/assistant/ui/assistant_view_ids.h"
+#include "ash/public/cpp/metrics_util.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/animation_metrics_reporter.h"
+#include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -25,6 +31,10 @@ namespace {
 
 constexpr char kPhotoTransitionSmoothness[] =
     "Ash.AmbientMode.AnimationSmoothness.PhotoTransition";
+
+void ReportSmoothness(int value) {
+  base::UmaHistogramPercentage(kPhotoTransitionSmoothness, value);
+}
 
 gfx::ImageSkia ResizeImage(const gfx::ImageSkia& image,
                            const gfx::Size& view_size) {
@@ -55,47 +65,10 @@ gfx::ImageSkia ResizeImage(const gfx::ImageSkia& image,
 
 }  // namespace
 
-// AmbientBackgroundImageView--------------------------------------------------
-// A custom ImageView for ambient mode to handle specific mouse/gesture events
-// when user interacting with the background photos.
-class AmbientBackgroundImageView : public views::ImageView {
- public:
-  explicit AmbientBackgroundImageView(AmbientViewDelegate* delegate)
-      : delegate_(delegate) {
-    DCHECK(delegate_);
-  }
-  AmbientBackgroundImageView(const AmbientBackgroundImageView&) = delete;
-  AmbientBackgroundImageView& operator=(AmbientBackgroundImageView&) = delete;
-  ~AmbientBackgroundImageView() override = default;
-
-  // views::View:
-  const char* GetClassName() const override {
-    return "AmbientBackgroundImageView";
-  }
-
-  bool OnMousePressed(const ui::MouseEvent& event) override {
-    delegate_->OnBackgroundPhotoEvents();
-    return true;
-  }
-
-  void OnGestureEvent(ui::GestureEvent* event) override {
-    if (event->type() == ui::ET_GESTURE_TAP) {
-      delegate_->OnBackgroundPhotoEvents();
-      event->SetHandled();
-    }
-  }
-
- private:
-  // Owned by |AmbientController| and should always outlive |this|.
-  AmbientViewDelegate* delegate_ = nullptr;
-};
-
 // PhotoView ------------------------------------------------------------------
-PhotoView::PhotoView(AmbientViewDelegate* delegate)
-    : delegate_(delegate),
-      metrics_reporter_(std::make_unique<ui::HistogramPercentageMetricsReporter<
-                            kPhotoTransitionSmoothness>>()) {
+PhotoView::PhotoView(AmbientViewDelegate* delegate) : delegate_(delegate) {
   DCHECK(delegate_);
+  SetID(AssistantViewID::kAmbientPhotoView);
   Init();
 }
 
@@ -111,7 +84,7 @@ void PhotoView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   for (const int index : {0, 1}) {
     auto image = images_unscaled_[index];
     auto image_resized = ResizeImage(image, size());
-    image_views_[index]->SetImage(image_resized);
+    image_views_[index]->UpdateImage(image_resized);
   }
 }
 
@@ -132,14 +105,16 @@ void PhotoView::Init() {
   layer()->SetFillsBoundsOpaquely(false);
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  image_views_[0] =
-      AddChildView(std::make_unique<AmbientBackgroundImageView>(delegate_));
-  image_views_[1] =
-      AddChildView(std::make_unique<AmbientBackgroundImageView>(delegate_));
-  image_views_[0]->SetPaintToLayer();
-  image_views_[0]->layer()->SetFillsBoundsOpaquely(false);
-  image_views_[1]->SetPaintToLayer();
-  image_views_[1]->layer()->SetFillsBoundsOpaquely(false);
+  for (auto*& image_view : image_views_) {
+    // Creates image views.
+    image_view =
+        AddChildView(std::make_unique<AmbientBackgroundImageView>(delegate_));
+    // Each image view will be animated on its own layer.
+    image_view->SetPaintToLayer();
+    image_view->layer()->SetFillsBoundsOpaquely(false);
+  }
+
+  // Hides one image view initially for fade in animation.
   image_views_[1]->layer()->SetOpacity(0.0f);
 
   delegate_->GetAmbientBackendModel()->AddObserver(this);
@@ -147,12 +122,15 @@ void PhotoView::Init() {
 
 void PhotoView::UpdateImages() {
   auto* model = delegate_->GetAmbientBackendModel();
-  images_unscaled_[image_index_] = model->GetNextImage();
+  auto& next_image = model->GetNextImage();
+  images_unscaled_[image_index_] = next_image.photo;
   if (images_unscaled_[image_index_].isNull())
     return;
 
   auto next_resized = ResizeImage(images_unscaled_[image_index_], size());
-  image_views_[image_index_]->SetImage(next_resized);
+  image_views_[image_index_]->UpdateImage(next_resized);
+  image_views_[image_index_]->UpdateImageDetails(
+      base::UTF8ToUTF16(next_image.details));
   image_index_ = 1 - image_index_;
 }
 
@@ -164,8 +142,12 @@ void PhotoView::StartTransitionAnimation() {
     animation.SetTweenType(gfx::Tween::LINEAR);
     animation.SetPreemptionStrategy(
         ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET);
-    animation.SetAnimationMetricsReporter(metrics_reporter_.get());
     animation.CacheRenderSurface();
+
+    ui::AnimationThroughputReporter reporter(
+        animation.GetAnimator(),
+        metrics_util::ForSmoothness(base::BindRepeating(ReportSmoothness)));
+
     visible_layer->SetOpacity(0.0f);
   }
 
@@ -176,10 +158,14 @@ void PhotoView::StartTransitionAnimation() {
     animation.SetTweenType(gfx::Tween::LINEAR);
     animation.SetPreemptionStrategy(
         ui::LayerAnimator::IMMEDIATELY_SET_NEW_TARGET);
-    animation.SetAnimationMetricsReporter(metrics_reporter_.get());
     animation.CacheRenderSurface();
     // For simplicity, only observe one animation.
     animation.AddObserver(this);
+
+    ui::AnimationThroughputReporter reporter(
+        animation.GetAnimator(),
+        metrics_util::ForSmoothness(base::BindRepeating(ReportSmoothness)));
+
     invisible_layer->SetOpacity(1.0f);
   }
 }
@@ -196,7 +182,7 @@ bool PhotoView::NeedToAnimateTransition() const {
 }
 
 const gfx::ImageSkia& PhotoView::GetCurrentImagesForTesting() {
-  return image_views_[image_index_]->GetImage();
+  return image_views_[image_index_]->GetCurrentImage();
 }
 
 }  // namespace ash

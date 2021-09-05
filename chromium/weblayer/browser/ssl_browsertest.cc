@@ -8,14 +8,22 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/security_interstitials/content/insecure_form_blocking_page.h"
+#include "components/security_interstitials/content/ssl_error_assistant.h"
 #include "components/security_interstitials/content/ssl_error_handler.h"
+#include "components/security_interstitials/core/features.h"
+#include "net/ssl/ssl_info.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/weblayer_security_blocking_page_factory.h"
 #include "weblayer/public/browser.h"
 #include "weblayer/public/browser_observer.h"
+#include "weblayer/public/error_page.h"
+#include "weblayer/public/error_page_delegate.h"
+#include "weblayer/public/tab.h"
 #include "weblayer/shell/browser/shell.h"
 #include "weblayer/test/interstitial_utils.h"
 #include "weblayer/test/load_completion_observer.h"
@@ -52,6 +60,24 @@ class NewTabWaiter : public BrowserObserver {
   ScopedObserver<Browser, BrowserObserver> observer_{this};
 };
 #endif
+
+class TestErrorPageDelegate : public ErrorPageDelegate {
+ public:
+  bool was_get_error_page_content_called() const {
+    return was_get_error_page_content_called_;
+  }
+
+  // ErrorPageDelegate:
+  bool OnBackToSafety() override { return false; }
+  std::unique_ptr<ErrorPage> GetErrorPageContent(
+      Navigation* navigation) override {
+    was_get_error_page_content_called_ = true;
+    return std::make_unique<ErrorPage>();
+  }
+
+ private:
+  bool was_get_error_page_content_called_ = false;
+};
 
 }  // namespace
 
@@ -353,6 +379,97 @@ IN_PROC_BROWSER_TEST_F(SSLBrowserTest, BadClockInterstitial) {
   // Now navigating to a page with an expired cert should cause the bad clock
   // interstitial to appear.
   NavigateToPageWithExpiredCertExpectBadClockInterstitial();
+}
+
+// This test verifies that a certificate in the list of known captive portal
+// certificates in ssl_error_assistant.asciipb is detected as such. This serves
+// to verify that the ssl_error_assistant proto was correctly loaded.
+IN_PROC_BROWSER_TEST_F(SSLBrowserTest,
+                       CertificateInKnownCaptivePortalsListDetected) {
+  net::SSLInfo ssl_info_with_known_captive_portal_cert;
+  net::HashValue captive_portal_public_key;
+
+  // Set up the SSSLInfo with the certificate of captive-portal.badssl.com
+  // (taken from ssl_error_assistant.asciipb).
+  ASSERT_TRUE(captive_portal_public_key.FromString(
+      "sha256/fjZPHewEHTrMDX3I1ecEIeoy3WFxHyGplOLv28kIbtI="));
+  net::HashValueVector public_keys;
+  public_keys.push_back(captive_portal_public_key);
+  ssl_info_with_known_captive_portal_cert.public_key_hashes = public_keys;
+
+  EXPECT_TRUE(SSLErrorAssistant().IsKnownCaptivePortalCertificate(
+      ssl_info_with_known_captive_portal_cert));
+}
+
+// Verifies an error page is not requested for an ssl error.
+IN_PROC_BROWSER_TEST_F(SSLBrowserTest, ErrorPageNotCalledForMismatch) {
+  TestErrorPageDelegate error_page_delegate;
+  shell()->tab()->SetErrorPageDelegate(&error_page_delegate);
+  NavigateToOkPage();
+  EXPECT_FALSE(error_page_delegate.was_get_error_page_content_called());
+  NavigateToPageWithMismatchedCertExpectSSLInterstitial();
+  EXPECT_FALSE(error_page_delegate.was_get_error_page_content_called());
+}
+
+class SSLBrowserTestWithInsecureFormsWarningEnabled : public SSLBrowserTest {
+ public:
+  SSLBrowserTestWithInsecureFormsWarningEnabled() {
+    feature_list_.InitAndEnableFeature(
+        security_interstitials::kInsecureFormSubmissionInterstitial);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Visits a page that displays an insecure form, submits the form, and checks an
+// interstitial is shown.
+IN_PROC_BROWSER_TEST_F(SSLBrowserTestWithInsecureFormsWarningEnabled,
+                       TestDisplaysInsecureFormSubmissionWarning) {
+  GURL insecure_form_url = https_server_->GetURL("/insecure_form.html");
+  GURL form_target_url = GURL("http://does-not-exist.test/form_target.html?");
+  NavigateAndWaitForCompletion(insecure_form_url, shell());
+
+  // Submit the form and wait for the interstitial to load.
+  TestNavigationObserver navigation_observer(
+      form_target_url, TestNavigationObserver::NavigationEvent::kFailure,
+      shell());
+  ExecuteScript(shell(), "submitForm();", false /*use_separate_isolate*/);
+  navigation_observer.Wait();
+
+  // Check the correct interstitial loaded.
+  EXPECT_TRUE(IsShowingInsecureFormInterstitial(shell()->tab()));
+}
+
+class SSLBrowserTestWithInsecureFormsWarningDisabled : public SSLBrowserTest {
+ public:
+  SSLBrowserTestWithInsecureFormsWarningDisabled() {
+    feature_list_.InitAndDisableFeature(
+        security_interstitials::kInsecureFormSubmissionInterstitial);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Visits a page that displays an insecure form, submits the form, and checks no
+// interstitial is displayed with the feature off.
+IN_PROC_BROWSER_TEST_F(SSLBrowserTestWithInsecureFormsWarningDisabled,
+                       TestNoInsecureFormWarning) {
+  GURL insecure_form_url = https_server_->GetURL("/insecure_form.html");
+  GURL form_target_url = GURL("http://does-not-exist.test/form_target.html?");
+  NavigateAndWaitForCompletion(insecure_form_url, shell());
+
+  // Submit the form and wait for the form target to load. We wait for a
+  // failure since the target url is not served.
+  TestNavigationObserver navigation_observer(
+      form_target_url, TestNavigationObserver::NavigationEvent::kFailure,
+      shell());
+  ExecuteScript(shell(), "submitForm();", false /*use_separate_isolate*/);
+  navigation_observer.Wait();
+
+  // Check no interstitial loaded.
+  EXPECT_FALSE(IsShowingSecurityInterstitial(shell()->tab()));
 }
 
 }  // namespace weblayer

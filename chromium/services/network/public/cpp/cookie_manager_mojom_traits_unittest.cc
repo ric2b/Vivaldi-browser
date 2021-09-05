@@ -92,19 +92,42 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookieInclusionStatus) {
           &invalid, &copied));
 }
 
-TEST(CookieManagerTraitsTest, Roundtrips_CookieWithStatus) {
+TEST(CookieManagerTraitsTest, Rountrips_CookieAccessResult) {
+  net::CookieAccessResult original = net::CookieAccessResult(
+      net::CookieEffectiveSameSite::LAX_MODE,
+      net::CookieInclusionStatus(
+          net::CookieInclusionStatus::
+              EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX,
+          net::CookieInclusionStatus::
+              WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT),
+      net::CookieAccessSemantics::LEGACY);
+  net::CookieAccessResult copied;
+
+  EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::CookieAccessResult>(
+      &original, &copied));
+
+  EXPECT_EQ(original.effective_same_site, copied.effective_same_site);
+  EXPECT_TRUE(copied.status.HasExactlyExclusionReasonsForTesting(
+      {net::CookieInclusionStatus::
+           EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
+  EXPECT_TRUE(copied.status.HasExactlyWarningReasonsForTesting(
+      {net::CookieInclusionStatus::
+           WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT}));
+}
+
+TEST(CookieManagerTraitsTest, Rountrips_CookieWithAccessResult) {
   net::CanonicalCookie original_cookie(
       "A", "B", "x.y", "/path", base::Time(), base::Time(), base::Time(),
       /* secure = */ true, /* http_only = */ false,
       net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_LOW);
 
-  net::CookieWithStatus original = {original_cookie,
-                                    net::CookieInclusionStatus()};
+  net::CookieWithAccessResult original = {original_cookie,
+                                          net::CookieAccessResult()};
+  net::CookieWithAccessResult copied;
 
-  net::CookieWithStatus copied;
-
-  EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::CookieWithStatus>(
-      &original, &copied));
+  EXPECT_TRUE(
+      mojo::test::SerializeAndDeserialize<mojom::CookieWithAccessResult>(
+          &original, &copied));
 
   EXPECT_EQ(original.cookie.Name(), copied.cookie.Name());
   EXPECT_EQ(original.cookie.Value(), copied.cookie.Value());
@@ -117,7 +140,39 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookieWithStatus) {
   EXPECT_EQ(original.cookie.IsHttpOnly(), copied.cookie.IsHttpOnly());
   EXPECT_EQ(original.cookie.SameSite(), copied.cookie.SameSite());
   EXPECT_EQ(original.cookie.Priority(), copied.cookie.Priority());
-  EXPECT_EQ(original.status, copied.status);
+  EXPECT_EQ(original.access_result.effective_same_site,
+            copied.access_result.effective_same_site);
+  EXPECT_EQ(original.access_result.status, copied.access_result.status);
+}
+
+TEST(CookieManagerTraitsTest, Rountrips_CookieAndLineWithAccessResult) {
+  net::CanonicalCookie original_cookie(
+      "A", "B", "x.y", "/path", base::Time(), base::Time(), base::Time(),
+      /* secure = */ true, /* http_only = */ false,
+      net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_LOW);
+
+  net::CookieAndLineWithAccessResult original(original_cookie, "cookie-string",
+                                              net::CookieAccessResult());
+  net::CookieAndLineWithAccessResult copied;
+
+  EXPECT_TRUE(
+      mojo::test::SerializeAndDeserialize<mojom::CookieAndLineWithAccessResult>(
+          &original, &copied));
+
+  EXPECT_EQ(original.cookie->Name(), copied.cookie->Name());
+  EXPECT_EQ(original.cookie->Value(), copied.cookie->Value());
+  EXPECT_EQ(original.cookie->Domain(), copied.cookie->Domain());
+  EXPECT_EQ(original.cookie->Path(), copied.cookie->Path());
+  EXPECT_EQ(original.cookie->CreationDate(), copied.cookie->CreationDate());
+  EXPECT_EQ(original.cookie->LastAccessDate(), copied.cookie->LastAccessDate());
+  EXPECT_EQ(original.cookie->ExpiryDate(), copied.cookie->ExpiryDate());
+  EXPECT_EQ(original.cookie->IsSecure(), copied.cookie->IsSecure());
+  EXPECT_EQ(original.cookie->IsHttpOnly(), copied.cookie->IsHttpOnly());
+  EXPECT_EQ(original.cookie->SameSite(), copied.cookie->SameSite());
+  EXPECT_EQ(original.cookie->Priority(), copied.cookie->Priority());
+  EXPECT_EQ(original.access_result.effective_same_site,
+            copied.access_result.effective_same_site);
+  EXPECT_EQ(original.cookie_string, copied.cookie_string);
 }
 
 TEST(CookieManagerTraitsTest, Roundtrips_CookieSameSite) {
@@ -127,6 +182,20 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookieSameSite) {
     net::CookieSameSite roundtrip;
     ASSERT_TRUE(SerializeAndDeserializeEnum<mojom::CookieSameSite>(cookie_state,
                                                                    &roundtrip));
+    EXPECT_EQ(cookie_state, roundtrip);
+  }
+}
+
+TEST(CookieManagerTraitsTest, Roundtrips_CookieEffectiveSameSite) {
+  for (net::CookieEffectiveSameSite cookie_state :
+       {net::CookieEffectiveSameSite::NO_RESTRICTION,
+        net::CookieEffectiveSameSite::LAX_MODE,
+        net::CookieEffectiveSameSite::STRICT_MODE,
+        net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
+        net::CookieEffectiveSameSite::UNDEFINED}) {
+    net::CookieEffectiveSameSite roundtrip;
+    ASSERT_TRUE(SerializeAndDeserializeEnum<mojom::CookieEffectiveSameSite>(
+        cookie_state, &roundtrip));
     EXPECT_EQ(cookie_state, roundtrip);
   }
 }
@@ -232,9 +301,12 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookieChangeInfo) {
       /* secure = */ false, /* http_only = */ false,
       net::CookieSameSite::UNSPECIFIED, net::COOKIE_PRIORITY_LOW);
 
-  net::CookieChangeInfo original(original_cookie,
-                                 net::CookieAccessSemantics::LEGACY,
-                                 net::CookieChangeCause::EXPLICIT);
+  net::CookieChangeInfo original(
+      original_cookie,
+      net::CookieAccessResult(net::CookieEffectiveSameSite::UNDEFINED,
+                              net::CookieInclusionStatus(),
+                              net::CookieAccessSemantics::LEGACY),
+      net::CookieChangeCause::EXPLICIT);
 
   net::CookieChangeInfo copied;
 
@@ -252,7 +324,8 @@ TEST(CookieManagerTraitsTest, Roundtrips_CookieChangeInfo) {
   EXPECT_EQ(original.cookie.IsHttpOnly(), copied.cookie.IsHttpOnly());
   EXPECT_EQ(original.cookie.SameSite(), copied.cookie.SameSite());
   EXPECT_EQ(original.cookie.Priority(), copied.cookie.Priority());
-  EXPECT_EQ(original.access_semantics, copied.access_semantics);
+  EXPECT_EQ(original.access_result.access_semantics,
+            copied.access_result.access_semantics);
   EXPECT_EQ(original.cause, copied.cause);
 }
 

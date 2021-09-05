@@ -170,7 +170,7 @@ class PasswordDialogViewTest : public DialogBrowserTest {
 };
 
 void PasswordDialogViewTest::SetUpOnMainThread() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On non-Mac platforms, animations are globally disabled during tests; on
   // Mac they are generally not, but these tests are dramatically slower and
   // flakier with animations.
@@ -185,8 +185,8 @@ void PasswordDialogViewTest::SetupChooseCredentials(
     const url::Origin& origin) {
   client()->PromptUserToChooseCredentials(
       std::move(local_credentials), origin,
-      base::Bind(&PasswordDialogViewTest::OnChooseCredential,
-                 base::Unretained(this)));
+      base::BindOnce(&PasswordDialogViewTest::OnChooseCredential,
+                     base::Unretained(this)));
   EXPECT_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE,
             controller()->GetState());
 }
@@ -407,8 +407,8 @@ IN_PROC_BROWSER_TEST_F(PasswordDialogViewTest, PopupAccountChooserInIncognito) {
       ChromePasswordManagerClient::FromWebContents(tab);
   client->PromptUserToChooseCredentials(
       std::move(local_credentials), url::Origin::Create(origin),
-      base::Bind(&PasswordDialogViewTest::OnChooseCredential,
-                 base::Unretained(this)));
+      base::BindOnce(&PasswordDialogViewTest::OnChooseCredential,
+                     base::Unretained(this)));
   EXPECT_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE,
             controller()->GetState());
   EXPECT_TRUE(controller()->current_account_chooser());

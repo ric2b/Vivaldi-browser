@@ -39,8 +39,16 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_controller_impl_win.h"
+#endif
+
 #if defined(OS_CHROMEOS)
 #include "ui/chromeos/devicetype_utils.h"
+#endif
+
+#if defined(OS_MAC)
+#include "base/mac/mac_util.h"
 #endif
 
 // Components for building event strings.
@@ -49,6 +57,9 @@ constexpr char kUpdates[] = "updates";
 constexpr char kPasswords[] = "passwords";
 constexpr char kSafeBrowsing[] = "safe-browsing";
 constexpr char kExtensions[] = "extensions";
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+constexpr char kChromeCleaner[] = "chrome-cleaner";
+#endif
 
 namespace {
 using Enabled = util::StrongAlias<class EnabledTag, bool>;
@@ -177,6 +188,14 @@ class TestSafetyCheckExtensionService : public TestExtensionService {
   std::unordered_map<std::string, ExtensionState> state_map_;
 };
 
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+class TestChromeCleanerControllerDelegate
+    : public safe_browsing::ChromeCleanerControllerDelegate {
+ public:
+  bool IsAllowedByPolicy() override { return false; }
+};
+#endif
+
 }  // namespace
 
 class SafetyCheckHandlerTest : public ChromeRenderViewHostTestHarness {
@@ -197,6 +216,11 @@ class SafetyCheckHandlerTest : public ChromeRenderViewHostTestHarness {
   void VerifyDisplayString(const base::DictionaryValue* event,
                            const std::string& expected);
 
+  // Replaces any instances of browser name (e.g. Google Chrome, Chromium,
+  // etc) with "browser" to make sure tests work both on Chromium and
+  // Google Chrome.
+  void ReplaceBrowserName(base::string16* s);
+
  protected:
   safety_check::TestUpdateCheckHelper* update_helper_ = nullptr;
   TestVersionUpdater* version_updater_ = nullptr;
@@ -207,12 +231,9 @@ class SafetyCheckHandlerTest : public ChromeRenderViewHostTestHarness {
   content::TestWebUI test_web_ui_;
   std::unique_ptr<TestingSafetyCheckHandler> safety_check_;
   base::HistogramTester histogram_tester_;
-
- private:
-  // Replaces any instances of browser name (e.g. Google Chrome, Chromium,
-  // etc) with "browser" to make sure tests work both on Chromium and
-  // Google Chrome.
-  void ReplaceBrowserName(base::string16* s);
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  TestChromeCleanerControllerDelegate test_chrome_cleaner_controller_delegate_;
+#endif
 };
 
 void SafetyCheckHandlerTest::SetUp() {
@@ -376,6 +397,27 @@ TEST_F(SafetyCheckHandlerTest, CheckUpdates_Relaunch) {
 }
 
 TEST_F(SafetyCheckHandlerTest, CheckUpdates_Disabled) {
+  const char* processor_variation = nullptr;
+#if defined(OS_MAC)
+  switch (base::mac::GetCPUType()) {
+    case base::mac::CPUType::kIntel:
+      processor_variation = " (x86_64)";
+      break;
+    case base::mac::CPUType::kTranslatedIntel:
+      processor_variation = " (x86_64 translated)";
+      break;
+    case base::mac::CPUType::kArm:
+      processor_variation = " (arm64)";
+      break;
+  }
+#elif defined(ARCH_CPU_64_BITS)
+  processor_variation = " (64-bit)";
+#elif defined(ARCH_CPU_32_BITS)
+  processor_variation = " (32-bit)";
+#else
+#error Update for a processor that is neither 32-bit nor 64-bit.
+#endif  // OS_*
+
   version_updater_->SetReturnedStatus(VersionUpdater::Status::DISABLED);
   safety_check_->PerformSafetyCheck();
   // TODO(crbug/1072432): Since the UNKNOWN state is not present in JS in M83,
@@ -389,8 +431,7 @@ TEST_F(SafetyCheckHandlerTest, CheckUpdates_Disabled) {
       event, "Version " + version_info::GetVersionNumber() + " (" +
                  (version_info::IsOfficialBuild() ? "Official Build"
                                                   : "Developer Build") +
-                 ") " + chrome::GetChannelName() +
-                 (sizeof(void*) == 8 ? " (64-bit)" : " (32-bit)"));
+                 ") " + chrome::GetChannelName() + processor_variation);
   histogram_tester_.ExpectBucketCount(
       "Settings.SafetyCheck.UpdatesResult",
       SafetyCheckHandler::UpdateStatus::kUnknown, 1);
@@ -477,12 +518,11 @@ TEST_F(SafetyCheckHandlerTest, CheckUpdates_DestroyedOnJavascriptDisallowed) {
 }
 
 TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_EnabledStandard) {
-  Profile::FromWebUI(&test_web_ui_)
-      ->GetPrefs()
-      ->SetBoolean(prefs::kSafeBrowsingEnabled, true);
-  Profile::FromWebUI(&test_web_ui_)
-      ->GetPrefs()
-      ->SetBoolean(prefs::kSafeBrowsingEnhanced, false);
+  TestingProfile::FromWebUI(&test_web_ui_)
+      ->AsTestingProfile()
+      ->GetTestingPrefService()
+      ->SetManagedPref(prefs::kSafeBrowsingEnabled,
+                       std::make_unique<base::Value>(true));
   safety_check_->PerformSafetyCheck();
   const base::DictionaryValue* event =
       GetSafetyCheckStatusChangedWithDataIfExists(
@@ -494,6 +534,30 @@ TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_EnabledStandard) {
   histogram_tester_.ExpectBucketCount(
       "Settings.SafetyCheck.SafeBrowsingResult",
       SafetyCheckHandler::SafeBrowsingStatus::kEnabledStandard, 1);
+}
+
+TEST_F(SafetyCheckHandlerTest,
+       CheckSafeBrowsing_EnabledStandardAvailableEnhanced) {
+  Profile::FromWebUI(&test_web_ui_)
+      ->GetPrefs()
+      ->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  Profile::FromWebUI(&test_web_ui_)
+      ->GetPrefs()
+      ->SetBoolean(prefs::kSafeBrowsingEnhanced, false);
+  safety_check_->PerformSafetyCheck();
+  const base::DictionaryValue* event =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kSafeBrowsing,
+          static_cast<int>(SafetyCheckHandler::SafeBrowsingStatus::
+                               kEnabledStandardAvailableEnhanced));
+  ASSERT_TRUE(event);
+  VerifyDisplayString(event,
+                      "Standard protection is on. For even more security, use "
+                      "enhanced protection.");
+  histogram_tester_.ExpectBucketCount(
+      "Settings.SafetyCheck.SafeBrowsingResult",
+      SafetyCheckHandler::SafeBrowsingStatus::kEnabledStandardAvailableEnhanced,
+      1);
 }
 
 TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_EnabledEnhanced) {
@@ -915,8 +979,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_NoneBlocklisted) {
   test_extension_prefs_->OnExtensionInstalled(
       extension.get(), extensions::Extension::State::ENABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension_id, extensions::NOT_BLACKLISTED);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension_id, extensions::NOT_BLOCKLISTED);
   safety_check_->PerformSafetyCheck();
   const base::DictionaryValue* event =
       GetSafetyCheckStatusChangedWithDataIfExists(
@@ -938,8 +1002,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_BlocklistedAllDisabled) {
   test_extension_prefs_->OnExtensionInstalled(
       extension.get(), extensions::Extension::State::DISABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension_id, extensions::BLACKLISTED_MALWARE);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension_id, extensions::BLOCKLISTED_MALWARE);
   test_extension_service_.AddExtensionState(extension_id, Enabled(false),
                                             UserCanDisable(false));
   safety_check_->PerformSafetyCheck();
@@ -963,8 +1027,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_BlocklistedReenabledAllByUser) {
   test_extension_prefs_->OnExtensionInstalled(
       extension.get(), extensions::Extension::State::ENABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension_id, extensions::BLACKLISTED_POTENTIALLY_UNWANTED);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension_id, extensions::BLOCKLISTED_POTENTIALLY_UNWANTED);
   test_extension_service_.AddExtensionState(extension_id, Enabled(true),
                                             UserCanDisable(true));
   safety_check_->PerformSafetyCheck();
@@ -987,8 +1051,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_BlocklistedReenabledAllByAdmin) {
   test_extension_prefs_->OnExtensionInstalled(
       extension.get(), extensions::Extension::State::ENABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension_id, extensions::BLACKLISTED_POTENTIALLY_UNWANTED);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension_id, extensions::BLOCKLISTED_POTENTIALLY_UNWANTED);
   test_extension_service_.AddExtensionState(extension_id, Enabled(true),
                                             UserCanDisable(false));
   safety_check_->PerformSafetyCheck();
@@ -1011,8 +1075,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_BlocklistedReenabledSomeByUser) {
   test_extension_prefs_->OnExtensionInstalled(
       extension.get(), extensions::Extension::State::ENABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension_id, extensions::BLACKLISTED_POTENTIALLY_UNWANTED);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension_id, extensions::BLOCKLISTED_POTENTIALLY_UNWANTED);
   test_extension_service_.AddExtensionState(extension_id, Enabled(true),
                                             UserCanDisable(true));
 
@@ -1022,8 +1086,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_BlocklistedReenabledSomeByUser) {
   test_extension_prefs_->OnExtensionInstalled(
       extension2.get(), extensions::Extension::State::ENABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension2_id, extensions::BLACKLISTED_POTENTIALLY_UNWANTED);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension2_id, extensions::BLOCKLISTED_POTENTIALLY_UNWANTED);
   test_extension_service_.AddExtensionState(extension2_id, Enabled(true),
                                             UserCanDisable(false));
 
@@ -1050,8 +1114,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_Error) {
   test_extension_prefs_->OnExtensionInstalled(
       extension.get(), extensions::Extension::State::ENABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension_id, extensions::BLACKLISTED_UNKNOWN);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension_id, extensions::BLOCKLISTED_UNKNOWN);
   test_extension_service_.AddExtensionState(extension_id, Enabled(true),
                                             UserCanDisable(true));
 
@@ -1062,8 +1126,8 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_Error) {
   test_extension_prefs_->OnExtensionInstalled(
       extension2.get(), extensions::Extension::State::ENABLED,
       syncer::StringOrdinal(), "");
-  test_extension_prefs_->SetExtensionBlacklistState(
-      extension2_id, extensions::BLACKLISTED_POTENTIALLY_UNWANTED);
+  test_extension_prefs_->SetExtensionBlocklistState(
+      extension2_id, extensions::BLOCKLISTED_POTENTIALLY_UNWANTED);
   test_extension_service_.AddExtensionState(extension2_id, Enabled(true),
                                             UserCanDisable(false));
 
@@ -1079,6 +1143,212 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_Error) {
       "Settings.SafetyCheck.ExtensionsResult",
       SafetyCheckHandler::ExtensionsStatus::kError, 1);
 }
+
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+class SafetyCheckHandlerChromeCleanerIdleTest
+    : public SafetyCheckHandlerTest,
+      public testing::WithParamInterface<
+          std::tuple<safe_browsing::ChromeCleanerController::IdleReason,
+                     SafetyCheckHandler::ChromeCleanerStatus,
+                     base::string16>> {
+ protected:
+  void SetUp() override {
+    SafetyCheckHandlerTest::SetUp();
+    idle_reason_ = testing::get<0>(GetParam());
+    expected_cct_status_ = testing::get<1>(GetParam());
+    expected_display_string_ = testing::get<2>(GetParam());
+  }
+
+  safe_browsing::ChromeCleanerController::IdleReason idle_reason_;
+  SafetyCheckHandler::ChromeCleanerStatus expected_cct_status_;
+  base::string16 expected_display_string_;
+};
+
+TEST_P(SafetyCheckHandlerChromeCleanerIdleTest, CheckChromeCleanerIdleStates) {
+  safe_browsing::ChromeCleanerControllerImpl::ResetInstanceForTesting();
+  safe_browsing::ChromeCleanerControllerImpl::GetInstance()->SetIdleForTesting(
+      idle_reason_);
+  safety_check_->PerformSafetyCheck();
+  // Ensure WebUI event is sent.
+  const base::DictionaryValue* event =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kChromeCleaner, static_cast<int>(expected_cct_status_));
+  ASSERT_TRUE(event);
+  VerifyDisplayString(event, expected_display_string_);
+  // Ensure UMA is logged.
+  if (expected_cct_status_ ==
+          SafetyCheckHandler::ChromeCleanerStatus::kHidden ||
+      expected_cct_status_ ==
+          SafetyCheckHandler::ChromeCleanerStatus::kChecking) {
+    // Hidden and checking state should not get recorded.
+    histogram_tester_.ExpectTotalCount(
+        "Settings.SafetyCheck.ChromeCleanerResult", 0);
+  } else {
+    histogram_tester_.ExpectBucketCount(
+        "Settings.SafetyCheck.ChromeCleanerResult", expected_cct_status_, 1);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_Initial,
+    SafetyCheckHandlerChromeCleanerIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::IdleReason::kInitial,
+        SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+        base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(CheckChromeCleaner_ReporterFoundNothing,
+                         SafetyCheckHandlerChromeCleanerIdleTest,
+                         ::testing::Values(std::make_tuple(
+                             safe_browsing::ChromeCleanerController::
+                                 IdleReason::kReporterFoundNothing,
+                             SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+                             base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_ReporterFailed,
+    SafetyCheckHandlerChromeCleanerIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::IdleReason::kReporterFailed,
+        SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+        base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(CheckChromeCleaner_ScanningFoundNothing,
+                         SafetyCheckHandlerChromeCleanerIdleTest,
+                         ::testing::Values(std::make_tuple(
+                             safe_browsing::ChromeCleanerController::
+                                 IdleReason::kScanningFoundNothing,
+                             SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+                             base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_ScanningFailed,
+    SafetyCheckHandlerChromeCleanerIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::IdleReason::kScanningFailed,
+        SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+        base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_ConnectionLost,
+    SafetyCheckHandlerChromeCleanerIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::IdleReason::kConnectionLost,
+        SafetyCheckHandler::ChromeCleanerStatus::kInfected,
+        base::UTF8ToUTF16("Browser found harmful software on your computer"))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_UserDeclinedCleanup,
+    SafetyCheckHandlerChromeCleanerIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::IdleReason::
+            kUserDeclinedCleanup,
+        SafetyCheckHandler::ChromeCleanerStatus::kInfected,
+        base::UTF8ToUTF16("Browser found harmful software on your computer"))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_CleaningFailed,
+    SafetyCheckHandlerChromeCleanerIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::IdleReason::kCleaningFailed,
+        SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+        base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_CleaningSucceed,
+    SafetyCheckHandlerChromeCleanerIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::IdleReason::kCleaningSucceeded,
+        SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+        base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(CheckChromeCleaner_CleanerDownloadFailed,
+                         SafetyCheckHandlerChromeCleanerIdleTest,
+                         ::testing::Values(std::make_tuple(
+                             safe_browsing::ChromeCleanerController::
+                                 IdleReason::kCleanerDownloadFailed,
+                             SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+                             base::UTF8ToUTF16(""))));
+
+class SafetyCheckHandlerChromeCleanerNonIdleTest
+    : public SafetyCheckHandlerTest,
+      public testing::WithParamInterface<
+          std::tuple<safe_browsing::ChromeCleanerController::State,
+                     SafetyCheckHandler::ChromeCleanerStatus,
+                     base::string16>> {
+ protected:
+  void SetUp() override {
+    SafetyCheckHandlerTest::SetUp();
+    state_ = testing::get<0>(GetParam());
+    expected_cct_status_ = testing::get<1>(GetParam());
+    expected_display_string_ = testing::get<2>(GetParam());
+  }
+
+  safe_browsing::ChromeCleanerController::State state_;
+  SafetyCheckHandler::ChromeCleanerStatus expected_cct_status_;
+  base::string16 expected_display_string_;
+};
+
+TEST_P(SafetyCheckHandlerChromeCleanerNonIdleTest,
+       CheckChromeCleanerNonIdleStates) {
+  safe_browsing::ChromeCleanerControllerImpl::ResetInstanceForTesting();
+  safe_browsing::ChromeCleanerControllerImpl::GetInstance()->SetStateForTesting(
+      state_);
+  safety_check_->PerformSafetyCheck();
+  const base::DictionaryValue* event =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kChromeCleaner, static_cast<int>(expected_cct_status_));
+  ASSERT_TRUE(event);
+  VerifyDisplayString(event, expected_display_string_);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_ReporterRunning,
+    SafetyCheckHandlerChromeCleanerNonIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::State::kReporterRunning,
+        SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+        base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_Scanning,
+    SafetyCheckHandlerChromeCleanerNonIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::State::kScanning,
+        SafetyCheckHandler::ChromeCleanerStatus::kHidden,
+        base::UTF8ToUTF16(""))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_Infected,
+    SafetyCheckHandlerChromeCleanerNonIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::State::kInfected,
+        SafetyCheckHandler::ChromeCleanerStatus::kInfected,
+        base::UTF8ToUTF16("Browser found harmful software on your computer"))));
+
+INSTANTIATE_TEST_SUITE_P(
+    CheckChromeCleaner_RebootRequired,
+    SafetyCheckHandlerChromeCleanerNonIdleTest,
+    ::testing::Values(std::make_tuple(
+        safe_browsing::ChromeCleanerController::State::kRebootRequired,
+        SafetyCheckHandler::ChromeCleanerStatus::kRebootRequired,
+        base::UTF8ToUTF16(
+            "To finish removing harmful software, restart your computer"))));
+
+TEST_F(SafetyCheckHandlerTest, CheckChromeCleaner_DisabledByAdmin) {
+  safe_browsing::ChromeCleanerControllerImpl::ResetInstanceForTesting();
+  safe_browsing::ChromeCleanerControllerImpl::GetInstance()
+      ->SetDelegateForTesting(&test_chrome_cleaner_controller_delegate_);
+
+  safety_check_->PerformSafetyCheck();
+  const base::DictionaryValue* event =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kChromeCleaner,
+          static_cast<int>(SafetyCheckHandler::ChromeCleanerStatus::kHidden));
+  ASSERT_TRUE(event);
+  VerifyDisplayString(event, "");
+}
+#endif
 
 TEST_F(SafetyCheckHandlerTest, CheckParentRanDisplayString) {
   // 1 second before midnight Dec 31st 2020, so that -(24h-1s) is still on the
@@ -1112,6 +1382,79 @@ TEST_F(SafetyCheckHandlerTest, CheckParentRanDisplayString) {
     EXPECT_EQ(base::UTF8ToUTF16(std::get<0>(tuple)), display_string);
   }
 }
+
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+TEST_F(SafetyCheckHandlerTest, CheckChromeCleanerRanDisplayString) {
+  // Test string without timestamp.
+  base::Time null_time;
+  base::string16 display_string =
+      safety_check_->GetStringForChromeCleanerRan(null_time, null_time);
+  ReplaceBrowserName(&display_string);
+  EXPECT_EQ(
+      display_string,
+      base::UTF8ToUTF16("Browser checks for unwanted software once a week"));
+  // Test strings with timestamp.
+  // 1 second before midnight Dec 31st 2020, so that -(24h-1s) is still on the
+  // same day. This test time is hard coded to prevent DST flakiness, see
+  // crbug.com/1066576.
+  const base::Time system_time =
+      base::Time::FromDoubleT(1609459199).LocalMidnight() -
+      base::TimeDelta::FromSeconds(1);
+  // Display strings for given time deltas in seconds.
+  std::vector<std::tuple<std::string, int>> tuples{
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: a moment ago.",
+                      1),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: a moment ago.",
+                      59),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 1 minute ago.",
+                      60),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 2 minutes ago.",
+                      60 * 2),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 59 minutes ago.",
+                      60 * 60 - 1),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 1 hour ago.",
+                      60 * 60),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 2 hours ago.",
+                      60 * 60 * 2),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 23 hours ago.",
+                      60 * 60 * 23),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: yesterday.",
+                      60 * 60 * 24),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: yesterday.",
+                      60 * 60 * 24 * 2 - 1),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 2 days ago.",
+                      60 * 60 * 24 * 2),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 2 days ago.",
+                      60 * 60 * 24 * 3 - 1),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 3 days ago.",
+                      60 * 60 * 24 * 3),
+      std::make_tuple("Browser checks for unwanted software once a week. Last "
+                      "checked: 3 days ago.",
+                      60 * 60 * 24 * 4 - 1)};
+  // Test that above time deltas produce the corresponding display strings.
+  for (auto tuple : tuples) {
+    const base::Time time =
+        system_time - base::TimeDelta::FromSeconds(std::get<1>(tuple));
+    display_string =
+        safety_check_->GetStringForChromeCleanerRan(time, system_time);
+    ReplaceBrowserName(&display_string);
+    EXPECT_EQ(base::UTF8ToUTF16(std::get<0>(tuple)), display_string);
+  }
+}
+#endif
 
 TEST_F(SafetyCheckHandlerTest, CheckSafetyCheckStartedWebUiEvents) {
   safety_check_->SendSafetyCheckStartedWebUiUpdates();
@@ -1153,10 +1496,16 @@ TEST_F(SafetyCheckHandlerTest, CheckSafetyCheckCompletedWebUiEvents) {
   // Mock safety check invocation.
   safety_check_->PerformSafetyCheck();
 
-  // Password mocks need to be triggered with a non-checking state to fire.
-  // All other mocks fire automatically when invoked.
+  // Set the password check mock response.
   test_leak_service_->set_state_and_notify(
       password_manager::BulkLeakCheckService::State::kSignedOut);
+
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // Set the Chrome cleaner mock response.
+  safe_browsing::ChromeCleanerControllerImpl::ResetInstanceForTesting();
+  safe_browsing::ChromeCleanerControllerImpl::GetInstance()->SetStateForTesting(
+      safe_browsing::ChromeCleanerController::State::kInfected);
+#endif
 
   // Check that the parent update is sent after all children checks completed.
   const base::DictionaryValue* event_parent =

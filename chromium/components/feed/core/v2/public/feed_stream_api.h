@@ -10,7 +10,10 @@
 
 #include "base/callback_forward.h"
 #include "base/observer_list_types.h"
+#include "base/strings/string_piece_forward.h"
+#include "base/time/time.h"
 #include "components/feed/core/v2/public/types.h"
+#include "url/gurl.h"
 
 namespace feedui {
 class StreamUpdate;
@@ -36,6 +39,10 @@ class FeedStreamApi {
     // after the Chrome process is closed.
     SurfaceId GetSurfaceId() const;
 
+    virtual void ReplaceDataStoreEntry(base::StringPiece key,
+                                       base::StringPiece data) = 0;
+    virtual void RemoveDataStoreEntry(base::StringPiece key) = 0;
+
    private:
     SurfaceId surface_id_;
   };
@@ -51,6 +58,15 @@ class FeedStreamApi {
   virtual void SetArticlesListVisible(bool is_visible) = 0;
   virtual bool IsArticlesListVisible() = 0;
 
+  // Returns true if activity logging is enabled. The returned value is
+  // ephemeral, this should be called for each candidate log, as it can change
+  // as the feed is refreshed or the user signs in/out.
+  virtual bool IsActivityLoggingEnabled() const = 0;
+
+  // Returns the client_instance_id. This value is reset whenever the feed
+  // stream is cleared (on sign-in, sign-out, and some data clear events).
+  virtual std::string GetClientInstanceId() = 0;
+
   // Invoked by RefreshTaskScheduler's scheduled task.
   virtual void ExecuteRefreshTask() = 0;
 
@@ -60,6 +76,12 @@ class FeedStreamApi {
   // further.
   virtual void LoadMore(SurfaceId surface,
                         base::OnceCallback<void(bool)> callback) = 0;
+
+  // Request to fetch and image for use in the feed. Calls |callback|
+  // with the network response when complete.
+  virtual void FetchImage(
+      const GURL& url,
+      base::OnceCallback<void(NetworkResponse)> callback) = 0;
 
   // Apply |operations| to the stream model. Does nothing if the model is not
   // yet loaded.
@@ -82,6 +104,9 @@ class FeedStreamApi {
   // Sends 'ThereAndBackAgainData' back to the server. |data| is a serialized
   // |feedwire::ThereAndBackAgainData| message.
   virtual void ProcessThereAndBackAgain(base::StringPiece data) = 0;
+  // Saves a view action for eventual upload. |data| is a serialized
+  //|feedwire::FeedAction| message.
+  virtual void ProcessViewAction(base::StringPiece data) = 0;
 
   // User interaction reporting. These should have no side-effects other than
   // reporting metrics.
@@ -90,6 +115,9 @@ class FeedStreamApi {
   // once for each viewed slice in the stream.
   virtual void ReportSliceViewed(SurfaceId surface_id,
                                  const std::string& slice_id) = 0;
+  // Some feed content has been loaded and is now available to the user on the
+  // feed surface. Reported only once after a surface is attached.
+  virtual void ReportFeedViewed(SurfaceId surface_id) = 0;
   // Navigation was started in response to a link in the Feed. This event
   // eventually leads to |ReportPageLoaded()| if a page is loaded successfully.
   virtual void ReportNavigationStarted() = 0;
@@ -97,6 +125,10 @@ class FeedStreamApi {
   virtual void ReportPageLoaded() = 0;
   // The user triggered the default open action, usually by tapping the card.
   virtual void ReportOpenAction(const std::string& slice_id) = 0;
+  // The user triggered an open action, visited a web page, and then navigated
+  // away or backgrouded the tab. |visit_time| is a measure of how long the
+  // visited page was foregrounded.
+  virtual void ReportOpenVisitComplete(base::TimeDelta visit_time) = 0;
   // The user triggered the 'open in new tab' action.
   virtual void ReportOpenInNewTabAction(const std::string& slice_id) = 0;
   // The user triggered the 'open in new incognito tab' action.

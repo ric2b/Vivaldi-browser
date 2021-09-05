@@ -39,7 +39,7 @@ std::unique_ptr<quic::ProofVerifier> CreateProofVerifier(
     return std::make_unique<ProofVerifierChromium>(
         context->cert_verifier(), context->ct_policy_enforcer(),
         context->transport_security_state(),
-        context->cert_transparency_verifier(),
+        context->cert_transparency_verifier(), context->sct_auditing_delegate(),
         HostsFromOrigins(
             context->quic_context()->params()->origins_to_force_quic_on),
         isolation_key);
@@ -290,6 +290,10 @@ void QuicTransportClient::CreateConnection() {
       quic::QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds),
       net_log_);
+
+  event_logger_ = std::make_unique<QuicEventLogger>(session_.get(), net_log_);
+  connection_->set_debug_visitor(event_logger_.get());
+  connection_->set_creator_debug_delegate(event_logger_.get());
 
   session_->Initialize();
   packet_reader_->StartReading();

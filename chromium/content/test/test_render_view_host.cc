@@ -154,13 +154,15 @@ gfx::Rect TestRenderWidgetHostView::GetViewBounds() {
   return gfx::Rect();
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 void TestRenderWidgetHostView::SetActive(bool active) {
   // <viettrungluu@gmail.com>: Do I need to do anything here?
 }
 
 void TestRenderWidgetHostView::SpeakSelection() {
 }
+
+void TestRenderWidgetHostView::SetWindowFrameInScreen(const gfx::Rect& rect) {}
 #endif
 
 gfx::Rect TestRenderWidgetHostView::GetBoundsInRootWindow() {
@@ -231,8 +233,7 @@ TestRenderViewHost::TestRenderViewHost(
                          main_frame_routing_id,
                          swapped_out,
                          false /* has_initialized_audio_host */),
-      delete_counter_(nullptr),
-      webkit_preferences_changed_counter_(nullptr) {
+      delete_counter_(nullptr) {
   // TestRenderWidgetHostView installs itself into this->view_ in its
   // constructor, and deletes itself when TestRenderWidgetHostView::Destroy() is
   // called.
@@ -303,13 +304,8 @@ void TestRenderViewHost::SimulateWasShown() {
 }
 
 WebPreferences TestRenderViewHost::TestComputeWebPreferences() {
-  return ComputeWebPreferences();
-}
-
-void TestRenderViewHost::OnWebkitPreferencesChanged() {
-  RenderViewHostImpl::OnWebkitPreferencesChanged();
-  if (webkit_preferences_changed_counter_)
-    ++*webkit_preferences_changed_counter_;
+  return static_cast<WebContentsImpl*>(WebContents::FromRenderViewHost(this))
+      ->ComputeWebPreferences();
 }
 
 bool TestRenderViewHost::IsTestRenderViewHost() const {

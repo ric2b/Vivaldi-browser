@@ -15,16 +15,92 @@
 namespace base {
 namespace trace_event {
 
+TEST(TraceEventArgumentTest, InitializerListCreatedContainers) {
+  std::string json;
+  TracedValue::Build(
+      {
+          {"empty_array", TracedValue::Array({})},
+          {"empty_dictionary", TracedValue::Dictionary({})},
+          {"nested_array", TracedValue::Array({
+                               TracedValue::Array({}),
+                               TracedValue::Dictionary({}),
+                               true,
+                           })},
+          {"nested_dictionary", TracedValue::Dictionary({
+                                    {"d", TracedValue::Dictionary({})},
+                                    {"a", TracedValue::Array({})},
+                                    {"b", true},
+                                })},
+      })
+      ->AppendAsTraceFormat(&json);
+  EXPECT_EQ(
+      "{\"empty_array\":[],\"empty_dictionary\":{},"
+      "\"nested_array\":[[],{},true],"
+      "\"nested_dictionary\":{\"d\":{},\"a\":[],\"b\":true}}",
+      json);
+}
+
+TEST(TraceEventArgumentTest, InitializerListCreatedFlatDictionary) {
+  std::string json;
+  TracedValue::Build({{"bool_var", true},
+                      {"double_var", 3.14},
+                      {"int_var", 2020},
+                      {"literal_var", "literal"}})
+      ->AppendAsTraceFormat(&json);
+  EXPECT_EQ(
+      "{\"bool_var\":true,\"double_var\":3.14,\"int_var\":2020,\""
+      "literal_var\":\"literal\"}",
+      json);
+}
+
+std::string SayHello() {
+  // Create a string by concatenating two strings, so that there is no literal
+  // corresponding to the result.
+  return std::string("hello ") + std::string("world");
+}
+
+TEST(TraceEventArgumentTest, StringAndPointerConstructors) {
+  std::string json;
+  const char* const_char_ptr_var = "const char* value";
+  TracedValue::Build(
+      {
+          {"literal_var", "literal"},
+          {"std_string_var", std::string("std::string value")},
+          {"string_from_function", SayHello()},
+          {"string_from_lambda", []() { return std::string("hello"); }()},
+          {"base_string_piece_var",
+           base::StringPiece("base::StringPiece value")},
+          {"const_char_ptr_var", const_char_ptr_var},
+          {"void_nullptr", static_cast<void*>(nullptr)},
+          {"int_nullptr", static_cast<int*>(nullptr)},
+          {"void_1234ptr", reinterpret_cast<void*>(0x1234)},
+      })
+      ->AppendAsTraceFormat(&json);
+  EXPECT_EQ(
+      "{\"literal_var\":\"literal\","
+      "\"std_string_var\":\"std::string value\","
+      "\"string_from_function\":\"hello world\","
+      "\"string_from_lambda\":\"hello\","
+      "\"base_string_piece_var\":\"base::StringPiece value\","
+      "\"const_char_ptr_var\":\"const char* value\","
+      "\"void_nullptr\":\"0x0\","
+      "\"int_nullptr\":\"0x0\","
+      "\"void_1234ptr\":\"0x1234\"}",
+      json);
+}
+
 TEST(TraceEventArgumentTest, FlatDictionary) {
   std::unique_ptr<TracedValue> value(new TracedValue());
   value->SetBoolean("bool", true);
   value->SetDouble("double", 0.0);
   value->SetInteger("int", 2014);
   value->SetString("string", "string");
+  value->SetPointer("ptr", reinterpret_cast<void*>(0x1234));
   std::string json = "PREFIX";
   value->AppendAsTraceFormat(&json);
   EXPECT_EQ(
-      "PREFIX{\"bool\":true,\"double\":0.0,\"int\":2014,\"string\":\"string\"}",
+      "PREFIX{\"bool\":true,\"double\":0.0,\"int\":2014,\"string\":\"string\","
+      "\"ptr\":\"0x1234\"}",
       json);
 }
 

@@ -23,6 +23,8 @@
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/assistant/assistant_controller_impl.h"
 #include "ash/autoclick/autoclick_controller.h"
+#include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/clipboard/clipboard_history_controller.h"
 #include "ash/dbus/ash_dbus_services.h"
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/detachable_base/detachable_base_notification_controller.h"
@@ -52,12 +54,14 @@
 #include "ash/focus_cycler.h"
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/frame/snap_controller_impl.h"
+#include "ash/frame_throttler/frame_throttling_controller.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/highlighter/highlighter_controller.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/hud_display/hud_display.h"
 #include "ash/ime/ime_controller_impl.h"
+#include "ash/in_session_auth/in_session_auth_dialog_controller_impl.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_factory.h"
 #include "ash/login/login_screen_controller.h"
@@ -75,6 +79,7 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_prefs.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/holding_space/holding_space_controller.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -382,10 +387,10 @@ void Shell::UntrackTrackInputMethodBounds(
       ->RemoveInputMethodBoundsTrackerObserver(tracker);
 }
 
-views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
-    views::Widget* widget) {
+std::unique_ptr<views::NonClientFrameView>
+Shell::CreateDefaultNonClientFrameView(views::Widget* widget) {
   // Use translucent-style window frames for dialogs.
-  return new NonClientFrameViewAsh(widget);
+  return std::make_unique<NonClientFrameViewAsh>(widget);
 }
 
 void Shell::SetDisplayWorkAreaInsets(Window* contains,
@@ -537,6 +542,8 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
       focus_cycler_(std::make_unique<FocusCycler>()),
       ime_controller_(std::make_unique<ImeControllerImpl>()),
       immersive_context_(std::make_unique<ImmersiveContextAsh>()),
+      in_session_auth_dialog_controller_(
+          std::make_unique<InSessionAuthDialogControllerImpl>()),
       keyboard_brightness_control_delegate_(
           std::make_unique<KeyboardBrightnessController>()),
       locale_update_controller_(std::make_unique<LocaleUpdateControllerImpl>()),
@@ -609,6 +616,10 @@ Shell::~Shell() {
   // Please keep in reverse order as in Init() because it's easy to miss one.
   if (window_modality_controller_)
     window_modality_controller_.reset();
+
+  // We may shutdown while a capture session is active, which is an event
+  // handler that depends on this shell and some of its members. Destroy early.
+  capture_mode_controller_.reset();
 
   RemovePreTargetHandler(magnifier_key_scroll_handler_.get());
   magnifier_key_scroll_handler_.reset();
@@ -851,6 +862,10 @@ Shell::~Shell() {
   // Destroys the MessageCenter singleton, so must happen late.
   message_center_controller_.reset();
 
+  // HoldingSpaceController observes SessionController and must be
+  // destructed before it.
+  holding_space_controller_.reset();
+
   ash_color_provider_.reset();
 
   shell_delegate_.reset();
@@ -910,6 +925,11 @@ void Shell::Init(
   accessibility_delegate_.reset(shell_delegate_->CreateAccessibilityDelegate());
   accessibility_controller_ = std::make_unique<AccessibilityControllerImpl>();
   toast_manager_ = std::make_unique<ToastManagerImpl>();
+
+  if (features::IsCaptureModeEnabled()) {
+    capture_mode_controller_ = std::make_unique<CaptureModeController>(
+        shell_delegate_->CreateCaptureModeDelegate());
+  }
 
   // Accelerometer file reader starts listening to tablet mode controller.
   AccelerometerReader::GetInstance()->StartListenToTabletModeController();
@@ -987,7 +1007,11 @@ void Shell::Init(
       display::Screen::GetScreen()->GetPrimaryDisplay());
 
   accelerator_controller_ = std::make_unique<AcceleratorControllerImpl>();
-
+  if (chromeos::features::IsClipboardHistoryEnabled()) {
+    clipboard_history_controller_ =
+        std::make_unique<ClipboardHistoryController>();
+    clipboard_history_controller_->Init();
+  }
   shelf_config_ = std::make_unique<ShelfConfig>();
   shelf_controller_ = std::make_unique<ShelfController>();
 
@@ -1013,10 +1037,8 @@ void Shell::Init(
   event_transformation_handler_.reset(new EventTransformationHandler);
   AddPreTargetHandler(event_transformation_handler_.get());
 
-  if (features::IsSwipingFromLeftEdgeToGoBackEnabled()) {
-    back_gesture_event_handler_ = std::make_unique<BackGestureEventHandler>();
-    AddPreTargetHandler(back_gesture_event_handler_.get());
-  }
+  back_gesture_event_handler_ = std::make_unique<BackGestureEventHandler>();
+  AddPreTargetHandler(back_gesture_event_handler_.get());
 
   toplevel_window_event_handler_ =
       std::make_unique<ToplevelWindowEventHandler>();
@@ -1172,6 +1194,8 @@ void Shell::Init(
   sms_observer_.reset(new SmsObserver());
   snap_controller_ = std::make_unique<SnapControllerImpl>();
   key_accessibility_enabler_ = std::make_unique<KeyAccessibilityEnabler>();
+  frame_throttling_controller_ =
+      std::make_unique<FrameThrottlingController>(context_factory);
 
   // Create UserSettingsEventLogger after |system_tray_model_| and
   // |video_detector_| which it observes.
@@ -1198,6 +1222,9 @@ void Shell::Init(
     display_alignment_controller_ =
         std::make_unique<DisplayAlignmentController>();
   }
+
+  if (features::IsTemporaryHoldingSpaceEnabled())
+    holding_space_controller_ = std::make_unique<HoldingSpaceController>();
 
   for (auto& observer : shell_observers_)
     observer.OnShellInitialized();

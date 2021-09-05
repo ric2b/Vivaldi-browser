@@ -3,8 +3,8 @@
 #include "sync/test/integration/notes_sync_test.h"
 
 #include "app/vivaldi_apptools.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "components/sync/test/fake_server/fake_server_verifier.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
@@ -47,7 +47,7 @@ void WaitForNotesModelToLoad(NotesModel* model) {
   if (model->loaded())
     return;
   base::RunLoop run_loop;
-  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
+  base::CurrentThread::ScopedNestableTaskAllower allow;
 
   NotesLoadObserver observer(run_loop.QuitClosure());
   model->AddObserver(&observer);

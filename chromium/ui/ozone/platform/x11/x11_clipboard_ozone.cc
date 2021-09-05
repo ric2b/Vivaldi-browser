@@ -25,23 +25,21 @@ namespace {
 
 const char kChromeSelection[] = "CHROME_SELECTION";
 const char kClipboard[] = "CLIPBOARD";
-const char kString[] = "STRING";
 const char kTargets[] = "TARGETS";
 const char kTimestamp[] = "TIMESTAMP";
-const char kUtf8String[] = "UTF8_STRING";
 
 // Helps to allow conversions for text/plain[;charset=utf-8] <=> [UTF8_]STRING.
 void ExpandTypes(std::vector<std::string>* list) {
   bool has_mime_type_text = Contains(*list, ui::kMimeTypeText);
-  bool has_string = Contains(*list, kString);
+  bool has_string = Contains(*list, kMimeTypeLinuxString);
   bool has_mime_type_utf8 = Contains(*list, kMimeTypeTextUtf8);
-  bool has_utf8_string = Contains(*list, kUtf8String);
+  bool has_utf8_string = Contains(*list, kMimeTypeLinuxUtf8String);
   if (has_mime_type_text && !has_string)
-    list->push_back(kString);
+    list->push_back(kMimeTypeLinuxString);
   if (has_string && !has_mime_type_text)
     list->push_back(ui::kMimeTypeText);
   if (has_mime_type_utf8 && !has_utf8_string)
-    list->push_back(kUtf8String);
+    list->push_back(kMimeTypeLinuxUtf8String);
   if (has_utf8_string && !has_mime_type_utf8)
     list->push_back(kMimeTypeTextUtf8);
 }
@@ -65,7 +63,7 @@ struct X11ClipboardOzone::SelectionState {
   std::vector<std::string> mime_types;
 
   // Data most recently read from remote clipboard.
-  std::vector<unsigned char> data;
+  PlatformClipboard::Data data;
 
   // Mime type of most recently read data from remote clipboard.
   std::string data_mime_type;
@@ -86,6 +84,8 @@ X11ClipboardOzone::X11ClipboardOzone()
       x_property_(gfx::GetAtom(kChromeSelection)),
       connection_(x11::Connection::Get()),
       x_window_(CreateDummyWindow("Chromium Clipboard Window")) {
+  connection_->xfixes().QueryVersion(
+      {x11::XFixes::major_version, x11::XFixes::minor_version});
   if (!connection_->xfixes().present())
     return;
   using_xfixes_ = true;
@@ -114,7 +114,7 @@ bool X11ClipboardOzone::DispatchXEvent(x11::Event* xev) {
   if (auto* notify = xev->As<x11::SelectionNotifyEvent>())
     return notify->requestor == x_window_ && OnSelectionNotify(*notify);
   if (auto* notify = xev->As<x11::XFixes::SelectionNotifyEvent>())
-    return notify->owner == x_window_ && OnSetSelectionOwnerNotify(*notify);
+    return notify->window == x_window_ && OnSetSelectionOwnerNotify(*notify);
 
   return false;
 }
@@ -161,15 +161,17 @@ bool X11ClipboardOzone::OnSelectionRequest(
 
     std::string key = target_name;
     // Allow conversions for text/plain[;charset=utf-8] <=> [UTF8_]STRING.
-    if (key == kUtf8String && !Contains(offer_data_map, kUtf8String)) {
+    if (key == kMimeTypeLinuxUtf8String &&
+        !Contains(offer_data_map, kMimeTypeLinuxUtf8String)) {
       key = kMimeTypeTextUtf8;
-    } else if (key == kString && !Contains(offer_data_map, kString)) {
+    } else if (key == kMimeTypeLinuxString &&
+               !Contains(offer_data_map, kMimeTypeLinuxString)) {
       key = kMimeTypeText;
     }
     auto it = offer_data_map.find(key);
     if (it != offer_data_map.end()) {
       ui::SetArrayProperty(event.requestor, event.property, event.target,
-                           it->second);
+                           it->second->data());
     }
   }
 
@@ -226,7 +228,8 @@ bool X11ClipboardOzone::OnSelectionNotify(
     ui::GetArrayProperty(x_window_, x_property_, &data, &type);
     ui::DeleteProperty(x_window_, x_property_);
     if (type != x11::Atom::None)
-      selection_state.data = std::move(data);
+      selection_state.data = scoped_refptr<base::RefCountedBytes>(
+          base::RefCountedBytes::TakeVector(&data));
 
     // If we have a saved callback, invoke it now, otherwise this was a prefetch
     // and we have already saved |data_| for the next call to
@@ -237,6 +240,13 @@ bool X11ClipboardOzone::OnSelectionNotify(
       std::move(selection_state.request_clipboard_data_callback)
           .Run(selection_state.data);
     }
+    return true;
+  } else if (static_cast<x11::Atom>(event.property) == x11::Atom::None &&
+             selection_state.request_clipboard_data_callback) {
+    // If the remote peer could not send data in the format we requested,
+    // or failed for any reason, we will send empty data.
+    std::move(selection_state.request_clipboard_data_callback)
+        .Run(selection_state.data);
     return true;
   }
 
@@ -251,7 +261,7 @@ bool X11ClipboardOzone::OnSetSelectionOwnerNotify(
     auto& selection_state = GetSelectionState(selection);
     selection_state.mime_types.clear();
     selection_state.data_mime_type.clear();
-    selection_state.data.clear();
+    selection_state.data.reset();
     QueryTargets(selection);
   }
 
@@ -299,14 +309,14 @@ void X11ClipboardOzone::QueryTargets(x11::Atom selection) {
 
 void X11ClipboardOzone::ReadRemoteClipboard(x11::Atom selection) {
   auto& selection_state = GetSelectionState(selection);
-  selection_state.data.clear();
+  selection_state.data.reset();
   // Allow conversions for text/plain[;charset=utf-8] <=> [UTF8_]STRING.
   std::string target = selection_state.data_mime_type;
   if (!Contains(selection_state.mime_types, target)) {
     if (target == kMimeTypeText) {
-      target = kString;
+      target = kMimeTypeLinuxString;
     } else if (target == kMimeTypeTextUtf8) {
-      target = kUtf8String;
+      target = kMimeTypeLinuxUtf8String;
     }
   }
 
@@ -344,8 +354,9 @@ void X11ClipboardOzone::RequestClipboardData(
   // If we have already prefetched the clipboard for the correct mime type,
   // then send it right away, otherwise save the callback and attempt to get the
   // requested mime type from the remote clipboard.
-  if (!using_xfixes_ || (selection_state.data_mime_type == mime_type &&
-                         !selection_state.data.empty())) {
+  if (!using_xfixes_ ||
+      (selection_state.data_mime_type == mime_type && selection_state.data &&
+       !selection_state.data->data().empty())) {
     data_map->emplace(mime_type, selection_state.data);
     std::move(callback).Run(selection_state.data);
     return;
@@ -392,6 +403,10 @@ bool X11ClipboardOzone::IsSelectionOwner(ClipboardBuffer buffer) {
 void X11ClipboardOzone::SetSequenceNumberUpdateCb(
     PlatformClipboard::SequenceNumberUpdateCb cb) {
   update_sequence_cb_ = std::move(cb);
+}
+
+bool X11ClipboardOzone::IsSelectionBufferAvailable() const {
+  return true;
 }
 
 }  // namespace ui

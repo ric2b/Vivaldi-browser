@@ -164,12 +164,16 @@ TEST(AXEnumUtilTest, Command) {
   TestEnumStringConversion<ax::mojom::Command>(ParseCommand);
 }
 
+TEST(AXEnumUtilTest, TextAlign) {
+  TestEnumStringConversion<ax::mojom::TextAlign>(ParseTextAlign);
+}
+
 TEST(AXEnumUtilTest, TextBoundary) {
   TestEnumStringConversion<ax::mojom::TextBoundary>(ParseTextBoundary);
 }
 
 TEST(AXEnumUtilTest, TextDirection) {
-  TestEnumStringConversion<ax::mojom::TextDirection>(ParseTextDirection);
+  TestEnumStringConversion<ax::mojom::WritingDirection>(ParseTextDirection);
 }
 
 TEST(AXEnumUtilTest, TextPosition) {

@@ -42,9 +42,6 @@
 #include "net/base/filename_util.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
@@ -370,12 +367,12 @@ class PpdProviderImpl : public PpdProvider {
   };
 
   PpdProviderImpl(const std::string& browser_locale,
-                  network::mojom::URLLoaderFactory* loader_factory,
+                  LoaderFactoryGetter loader_factory_getter,
                   scoped_refptr<PpdCache> ppd_cache,
                   const base::Version& current_version,
                   const PpdProvider::Options& options)
       : browser_locale_(browser_locale),
-        loader_factory_(loader_factory),
+        loader_factory_getter_(loader_factory_getter),
         ppd_cache_(ppd_cache),
         disk_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
             {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
@@ -789,7 +786,7 @@ class PpdProviderImpl : public PpdProvider {
 
       // TODO(luum): consider using unbounded size
       fetcher_->DownloadToString(
-          loader_factory_,
+          loader_factory_getter_.Run(),
           base::BindOnce(&PpdProviderImpl::OnURLFetchComplete, this),
           network::SimpleURLLoader::kMaxBoundedStringDownloadSize);
 
@@ -1230,7 +1227,7 @@ class PpdProviderImpl : public PpdProvider {
     size_t best_idx = -1;
     for (size_t i = 0; i < available_locales.size(); ++i) {
       const std::string& available = available_locales[i];
-      if (base::StringPiece(browser_locale_).starts_with(available + "-") &&
+      if (base::StartsWith(browser_locale_, available + "-") &&
           available.size() > best_len) {
         best_len = available.size();
         best_idx = i;
@@ -1737,7 +1734,7 @@ class PpdProviderImpl : public PpdProvider {
   // BrowserContext::GetApplicationLocale();
   const std::string browser_locale_;
 
-  network::mojom::URLLoaderFactory* loader_factory_;
+  LoaderFactoryGetter loader_factory_getter_;
 
   // For file:// fetches, a staging buffer and result flag for loading the file.
   std::string file_fetch_contents_;
@@ -1783,11 +1780,12 @@ PrinterSearchData::~PrinterSearchData() = default;
 // static
 scoped_refptr<PpdProvider> PpdProvider::Create(
     const std::string& browser_locale,
-    network::mojom::URLLoaderFactory* loader_factory,
+    LoaderFactoryGetter loader_factory_getter,
     scoped_refptr<PpdCache> ppd_cache,
     const base::Version& current_version,
     const PpdProvider::Options& options) {
-  return scoped_refptr<PpdProvider>(new PpdProviderImpl(
-      browser_locale, loader_factory, ppd_cache, current_version, options));
+  return scoped_refptr<PpdProvider>(
+      new PpdProviderImpl(browser_locale, loader_factory_getter, ppd_cache,
+                          current_version, options));
 }
 }  // namespace chromeos

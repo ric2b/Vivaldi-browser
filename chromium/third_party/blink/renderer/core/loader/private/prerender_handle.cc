@@ -74,9 +74,7 @@ PrerenderHandle* PrerenderHandle::Create(Document& document,
       prerender_handle_client;
   auto receiver = prerender_handle_client.InitWithNewPipeAndPassReceiver();
 
-  HeapMojoRemote<mojom::blink::PrerenderHandle,
-                 HeapMojoWrapperMode::kForceWithoutContextObserver>
-      remote_handle(context);
+  HeapMojoRemote<mojom::blink::PrerenderHandle> remote_handle(context);
   prerender_processor->AddPrerender(
       std::move(attributes), std::move(prerender_handle_client),
       remote_handle.BindNewPipeAndPassReceiver(
@@ -92,9 +90,7 @@ PrerenderHandle::PrerenderHandle(
     ExecutionContext* context,
     PrerenderClient* client,
     const KURL& url,
-    HeapMojoRemote<mojom::blink::PrerenderHandle,
-                   HeapMojoWrapperMode::kForceWithoutContextObserver>
-        remote_handle,
+    HeapMojoRemote<mojom::blink::PrerenderHandle> remote_handle,
     mojo::PendingReceiver<mojom::blink::PrerenderHandleClient> receiver)
     : ExecutionContextLifecycleObserver(context),
       url_(url),
@@ -108,7 +104,7 @@ PrerenderHandle::PrerenderHandle(
 PrerenderHandle::~PrerenderHandle() = default;
 
 void PrerenderHandle::Dispose() {
-  if (remote_handle_.is_bound())
+  if (remote_handle_.is_bound() && !GetExecutionContext()->IsContextDestroyed())
     remote_handle_->Abandon();
   Detach();
 }

@@ -75,8 +75,27 @@ const PrefsForManagedContentSettingsMapEntry
          CONTENT_SETTING_ASK},
         {prefs::kManagedWebUsbBlockedForUrls, ContentSettingsType::USB_GUARD,
          CONTENT_SETTING_BLOCK},
+        {prefs::kManagedFileSystemReadAskForUrls,
+         ContentSettingsType::FILE_SYSTEM_READ_GUARD, CONTENT_SETTING_ASK},
+        {prefs::kManagedFileSystemReadBlockedForUrls,
+         ContentSettingsType::FILE_SYSTEM_READ_GUARD, CONTENT_SETTING_BLOCK},
+        {prefs::kManagedFileSystemWriteAskForUrls,
+         ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, CONTENT_SETTING_ASK},
+        {prefs::kManagedFileSystemWriteBlockedForUrls,
+         ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, CONTENT_SETTING_BLOCK},
         {prefs::kManagedLegacyCookieAccessAllowedForDomains,
-         ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW}};
+         ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW},
+        {prefs::kManagedSerialAskForUrls, ContentSettingsType::SERIAL_GUARD,
+         CONTENT_SETTING_ASK},
+        {prefs::kManagedSerialBlockedForUrls, ContentSettingsType::SERIAL_GUARD,
+         CONTENT_SETTING_BLOCK},
+        {prefs::kManagedSensorsAllowedForUrls, ContentSettingsType::SENSORS,
+         CONTENT_SETTING_ALLOW},
+        {prefs::kManagedSensorsBlockedForUrls, ContentSettingsType::SENSORS,
+         CONTENT_SETTING_BLOCK},
+        {prefs::kManagedInsecurePrivateNetworkAllowedForUrls,
+         ContentSettingsType::INSECURE_PRIVATE_NETWORK, CONTENT_SETTING_ALLOW},
+};
 
 class VectorRuleIterator : public RuleIterator {
  public:
@@ -134,8 +153,18 @@ const PolicyProvider::PrefsForManagedDefaultMapEntry
          prefs::kManagedDefaultWebBluetoothGuardSetting},
         {ContentSettingsType::USB_GUARD,
          prefs::kManagedDefaultWebUsbGuardSetting},
+        {ContentSettingsType::FILE_SYSTEM_READ_GUARD,
+         prefs::kManagedDefaultFileSystemReadGuardSetting},
+        {ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
+         prefs::kManagedDefaultFileSystemWriteGuardSetting},
         {ContentSettingsType::LEGACY_COOKIE_ACCESS,
-         prefs::kManagedDefaultLegacyCookieAccessSetting}};
+         prefs::kManagedDefaultLegacyCookieAccessSetting},
+        {ContentSettingsType::SERIAL_GUARD,
+         prefs::kManagedDefaultSerialGuardSetting},
+        {ContentSettingsType::SENSORS, prefs::kManagedDefaultSensorsSetting},
+        {ContentSettingsType::INSECURE_PRIVATE_NETWORK,
+         prefs::kManagedDefaultInsecurePrivateNetworkSetting},
+};
 
 // static
 void PolicyProvider::RegisterProfilePrefs(
@@ -159,8 +188,19 @@ void PolicyProvider::RegisterProfilePrefs(
   registry->RegisterListPref(prefs::kManagedWebUsbAllowDevicesForUrls);
   registry->RegisterListPref(prefs::kManagedWebUsbAskForUrls);
   registry->RegisterListPref(prefs::kManagedWebUsbBlockedForUrls);
+  registry->RegisterListPref(prefs::kManagedFileSystemReadAskForUrls);
+  registry->RegisterListPref(prefs::kManagedFileSystemReadBlockedForUrls);
+  registry->RegisterListPref(prefs::kManagedFileSystemWriteAskForUrls);
+  registry->RegisterListPref(prefs::kManagedFileSystemWriteBlockedForUrls);
   registry->RegisterListPref(
       prefs::kManagedLegacyCookieAccessAllowedForDomains);
+  registry->RegisterListPref(prefs::kManagedSerialAskForUrls);
+  registry->RegisterListPref(prefs::kManagedSerialBlockedForUrls);
+  registry->RegisterListPref(prefs::kManagedSensorsAllowedForUrls);
+  registry->RegisterListPref(prefs::kManagedSensorsBlockedForUrls);
+  registry->RegisterListPref(
+      prefs::kManagedInsecurePrivateNetworkAllowedForUrls);
+
   // Preferences for default content setting policies. If a policy is not set of
   // the corresponding preferences below is set to CONTENT_SETTING_DEFAULT.
   registry->RegisterIntegerPref(prefs::kManagedDefaultAdsSetting,
@@ -187,8 +227,21 @@ void PolicyProvider::RegisterProfilePrefs(
                                 CONTENT_SETTING_DEFAULT);
   registry->RegisterIntegerPref(prefs::kManagedDefaultWebUsbGuardSetting,
                                 CONTENT_SETTING_DEFAULT);
+  registry->RegisterIntegerPref(
+      prefs::kManagedDefaultFileSystemReadGuardSetting,
+      CONTENT_SETTING_DEFAULT);
+  registry->RegisterIntegerPref(
+      prefs::kManagedDefaultFileSystemWriteGuardSetting,
+      CONTENT_SETTING_DEFAULT);
   registry->RegisterIntegerPref(prefs::kManagedDefaultLegacyCookieAccessSetting,
                                 CONTENT_SETTING_DEFAULT);
+  registry->RegisterIntegerPref(prefs::kManagedDefaultSerialGuardSetting,
+                                CONTENT_SETTING_DEFAULT);
+  registry->RegisterIntegerPref(prefs::kManagedDefaultSensorsSetting,
+                                CONTENT_SETTING_DEFAULT);
+  registry->RegisterIntegerPref(
+      prefs::kManagedDefaultInsecurePrivateNetworkSetting,
+      CONTENT_SETTING_DEFAULT);
 }
 
 PolicyProvider::PolicyProvider(PrefService* prefs) : prefs_(prefs) {
@@ -222,8 +275,22 @@ PolicyProvider::PolicyProvider(PrefService* prefs) : prefs_(prefs) {
   pref_change_registrar_.Add(prefs::kManagedPopupsBlockedForUrls, callback);
   pref_change_registrar_.Add(prefs::kManagedWebUsbAskForUrls, callback);
   pref_change_registrar_.Add(prefs::kManagedWebUsbBlockedForUrls, callback);
+  pref_change_registrar_.Add(prefs::kManagedFileSystemReadAskForUrls, callback);
+  pref_change_registrar_.Add(prefs::kManagedFileSystemReadBlockedForUrls,
+                             callback);
+  pref_change_registrar_.Add(prefs::kManagedFileSystemWriteAskForUrls,
+                             callback);
+  pref_change_registrar_.Add(prefs::kManagedFileSystemWriteBlockedForUrls,
+                             callback);
   pref_change_registrar_.Add(prefs::kManagedLegacyCookieAccessAllowedForDomains,
                              callback);
+  pref_change_registrar_.Add(prefs::kManagedSerialAskForUrls, callback);
+  pref_change_registrar_.Add(prefs::kManagedSerialBlockedForUrls, callback);
+  pref_change_registrar_.Add(prefs::kManagedSensorsAllowedForUrls, callback);
+  pref_change_registrar_.Add(prefs::kManagedSensorsBlockedForUrls, callback);
+  pref_change_registrar_.Add(
+      prefs::kManagedInsecurePrivateNetworkAllowedForUrls, callback);
+
   // The following preferences are only used to indicate if a default content
   // setting is managed and to hold the managed default setting value. If the
   // value for any of the following preferences is set then the corresponding
@@ -249,8 +316,17 @@ PolicyProvider::PolicyProvider(PrefService* prefs) : prefs_(prefs) {
                              callback);
   pref_change_registrar_.Add(prefs::kManagedDefaultWebUsbGuardSetting,
                              callback);
+  pref_change_registrar_.Add(prefs::kManagedDefaultFileSystemReadGuardSetting,
+                             callback);
+  pref_change_registrar_.Add(prefs::kManagedDefaultFileSystemWriteGuardSetting,
+                             callback);
   pref_change_registrar_.Add(prefs::kManagedDefaultLegacyCookieAccessSetting,
                              callback);
+  pref_change_registrar_.Add(prefs::kManagedDefaultSerialGuardSetting,
+                             callback);
+  pref_change_registrar_.Add(prefs::kManagedDefaultSensorsSetting, callback);
+  pref_change_registrar_.Add(
+      prefs::kManagedDefaultInsecurePrivateNetworkSetting, callback);
 }
 
 PolicyProvider::~PolicyProvider() {
@@ -537,6 +613,10 @@ void PolicyProvider::OnPreferenceChanged(const std::string& name) {
       name == prefs::kManagedCookiesAllowedForUrls ||
       name == prefs::kManagedCookiesBlockedForUrls ||
       name == prefs::kManagedCookiesSessionOnlyForUrls ||
+      name == prefs::kManagedFileSystemReadAskForUrls ||
+      name == prefs::kManagedFileSystemReadBlockedForUrls ||
+      name == prefs::kManagedFileSystemWriteAskForUrls ||
+      name == prefs::kManagedFileSystemWriteBlockedForUrls ||
       name == prefs::kManagedImagesAllowedForUrls ||
       name == prefs::kManagedImagesBlockedForUrls ||
       name == prefs::kManagedInsecureContentAllowedForUrls ||
@@ -549,7 +629,14 @@ void PolicyProvider::OnPreferenceChanged(const std::string& name) {
       name == prefs::kManagedPluginsBlockedForUrls ||
       name == prefs::kManagedPopupsAllowedForUrls ||
       name == prefs::kManagedPopupsBlockedForUrls ||
-      name == prefs::kManagedLegacyCookieAccessAllowedForDomains) {
+      name == prefs::kManagedWebUsbAskForUrls ||
+      name == prefs::kManagedWebUsbBlockedForUrls ||
+      name == prefs::kManagedLegacyCookieAccessAllowedForDomains ||
+      name == prefs::kManagedSerialAskForUrls ||
+      name == prefs::kManagedSerialBlockedForUrls ||
+      name == prefs::kManagedSensorsAllowedForUrls ||
+      name == prefs::kManagedSensorsBlockedForUrls ||
+      name == prefs::kManagedInsecurePrivateNetworkAllowedForUrls) {
     ReadManagedContentSettings(true);
     ReadManagedDefaultSettings();
   }

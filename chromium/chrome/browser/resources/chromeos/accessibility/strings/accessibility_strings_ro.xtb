@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Element din listă</translation>
 <translation id="1013742170491673792">căutare</translation>
 <translation id="1014370462248694370">Glisează cu două degete la dreapta</translation>
+<translation id="1016393160682012902">Apasă o tastă qwerty, o tastă Braille actualizabilă sau un gest de atingere pentru a-i învăța funcția. Apasă tasta Control împreună cu W sau Esc pentru a ieși.</translation>
 <translation id="1022586497894531524">Folosești feedbackul rostit ChromeVox pentru prima dată? Acest tutorial rapid explică noțiunile de bază pentru a începe să folosești ChromeVox.</translation>
 <translation id="1025074108959230262">Modul persistent este dezactivat</translation>
 <translation id="1031961866430398710">apoi</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Link intern</translation>
 <translation id="4909019435900810068">Mută înapoi cu un cuvânt</translation>
 <translation id="4911349081560453449">Nu există o casetă de selectare anterioară</translation>
-<translation id="4915087353619183190">Începe modul de învățare. Apasă o tastă qwerty, o tastă Braille actualizabilă sau un gest de atingere pentru a-i învăța funcția. Apasă tasta Control împreună cu w sau Esc pentru a ieși.</translation>
 <translation id="492295894462528572">Cuvânt înainte</translation>
 <translation id="495046168593986294">Derulează în sus</translation>
 <translation id="495170559598752135">Acțiuni</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Verde</translation>
 <translation id="602001110135236999">Derulează la stânga</translation>
 <translation id="6034000775414344507">Gri deschis</translation>
+<translation id="6036135911048686884">Explorează prin atingere</translation>
 <translation id="6037602951055904232">Deplasează înainte</translation>
 <translation id="6044160928851315051">Dezactivează ecranul</translation>
 <translation id="6082768461603900813">Navigarea de bază</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{liră}few{# semne liră}other{# de semne de liră}}</translation>
 <translation id="8378855320830505539">Regiune</translation>
 <translation id="8382679411218029383">Completare automată inline și listă</translation>
+<translation id="8394908167088220973">Redați/întrerupeți conținutul media</translation>
 <translation id="8428213095426709021">Setări</translation>
 <translation id="8428603554127842284">nivelul <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">bară meniu</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">se iese din conținutul structurat, cum ar fi tabelele</translation>
 <translation id="8779057862865475116">Nu există un link anterior</translation>
 <translation id="8796411681063377102">Următorul titlu de nivel 3</translation>
+<translation id="8823311177246872527">Pagina <ph name="CURRENTPAGE" /> din <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">banner</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8882002077197914455">Antet de rând</translation>

@@ -47,7 +47,7 @@
 - (BadgeButton*)passwordsSaveBadgeButton {
   BadgeButton* button =
       [self createButtonForType:BadgeType::kBadgeTypePasswordSave
-                     imageNamed:@"infobar_passwords_icon"
+                     imageNamed:@"password_key"
                   renderingMode:UIImageRenderingModeAlwaysTemplate];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
@@ -62,7 +62,7 @@
 - (BadgeButton*)passwordsUpdateBadgeButton {
   BadgeButton* button =
       [self createButtonForType:BadgeType::kBadgeTypePasswordUpdate
-                     imageNamed:@"infobar_passwords_icon"
+                     imageNamed:@"password_key"
                   renderingMode:UIImageRenderingModeAlwaysTemplate];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
@@ -113,7 +113,7 @@
       [UIColor colorNamed:kTextPrimaryColor], self.incognito,
       [UIColor colorNamed:kTextPrimaryDarkColor]);
   button.accessibilityTraits &= ~UIAccessibilityTraitButton;
-  button.enabled = NO;
+  button.userInteractionEnabled = NO;
   button.accessibilityIdentifier = kBadgeButtonIncognitoAccessibilityIdentifier;
   button.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_BADGE_INCOGNITO_HINT);

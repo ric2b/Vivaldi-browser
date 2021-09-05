@@ -533,7 +533,8 @@ const blink::Color BackgroundColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
-  return style.BackgroundColor().Resolve(style.GetColor());
+  return style.BackgroundColor().Resolve(style.GetCurrentColor(),
+                                         style.UsedColorScheme());
 }
 
 const CSSValue* BackgroundColor::CSSValueFromComputedStyleInternal(
@@ -722,7 +723,7 @@ const CSSValue* BlockSize::ParseSingleValue(
 
 bool BlockSize::IsLayoutDependent(const ComputedStyle* style,
                                   LayoutObject* layout_object) const {
-  return layout_object && layout_object->IsBox();
+  return layout_object && (layout_object->IsBox() || layout_object->IsSVG());
 }
 
 const CSSValue* BorderBlockEndColor::ParseSingleValue(
@@ -1297,7 +1298,7 @@ const blink::Color CaretColor::ColorIncludingFallback(
   // the background to ensure good visibility and contrast.
   StyleColor result = auto_color.IsAutoColor() ? StyleColor::CurrentColor()
                                                : auto_color.ToStyleColor();
-  return result.Resolve(style.GetColor());
+  return result.Resolve(style.GetCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* CaretColor::CSSValueFromComputedStyleInternal(
@@ -1306,12 +1307,15 @@ const CSSValue* CaretColor::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style) const {
   blink::Color color;
-  if (allow_visited_style)
+  if (allow_visited_style) {
     color = style.VisitedDependentColor(*this);
-  else if (style.CaretColor().IsAutoColor())
-    color = StyleColor::CurrentColor().Resolve(style.GetColor());
-  else
-    color = style.CaretColor().ToStyleColor().Resolve(style.GetColor());
+  } else if (style.CaretColor().IsAutoColor()) {
+    color = StyleColor::CurrentColor().Resolve(style.GetCurrentColor(),
+                                               style.UsedColorScheme());
+  } else {
+    color = style.CaretColor().ToStyleColor().Resolve(style.GetCurrentColor(),
+                                                      style.UsedColorScheme());
+  }
   return cssvalue::CSSColorValue::Create(color.Rgb());
 }
 
@@ -1446,7 +1450,7 @@ const blink::Color Color::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
-  return style.GetColor();
+  return style.GetCurrentColor();
 }
 
 const CSSValue* Color::CSSValueFromComputedStyleInternal(
@@ -1456,32 +1460,18 @@ const CSSValue* Color::CSSValueFromComputedStyleInternal(
     bool allow_visited_style) const {
   return cssvalue::CSSColorValue::Create(
       allow_visited_style ? style.VisitedDependentColor(*this).Rgb()
-                          : style.GetColor().Rgb());
+                          : style.GetCurrentColor().Rgb());
 }
 
 void Color::ApplyInitial(StyleResolverState& state) const {
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled()) {
-    state.SetCascadedColorValue(
-        CSSIdentifierValue::Create(CSSValueID::kInitial));
-    return;
-  }
   state.Style()->SetColor(state.Style()->InitialColorForColorScheme());
 }
 
 void Color::ApplyInherit(StyleResolverState& state) const {
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled()) {
-    state.SetCascadedColorValue(
-        CSSIdentifierValue::Create(CSSValueID::kInherit));
-    return;
-  }
   state.Style()->SetColor(state.ParentStyle()->GetColor());
 }
 
 void Color::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled()) {
-    state.SetCascadedColorValue(&value);
-    return;
-  }
   // As per the spec, 'color: currentColor' is treated as 'color: inherit'
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (identifier_value &&
@@ -1490,12 +1480,12 @@ void Color::ApplyValue(StyleResolverState& state, const CSSValue& value) const {
     return;
   }
   if (auto* initial_color_value = DynamicTo<CSSInitialColorValue>(value)) {
-    DCHECK(RuntimeEnabledFeatures::CSSCascadeEnabled());
     DCHECK_EQ(state.GetElement(), state.GetDocument().documentElement());
     state.Style()->SetColor(state.Style()->InitialColorForColorScheme());
     return;
   }
-  state.Style()->SetColor(StyleBuilderConverter::ConvertColor(state, value));
+  state.Style()->SetColor(
+      StyleBuilderConverter::ConvertStyleColor(state, value));
 }
 
 const CSSValue* ColorInterpolation::CSSValueFromComputedStyleInternal(
@@ -1664,7 +1654,8 @@ const blink::Color ColumnRuleColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
-  return style.ColumnRuleColor().Resolve(style.GetColor());
+  return style.ColumnRuleColor().Resolve(style.GetCurrentColor(),
+                                         style.UsedColorScheme());
 }
 
 const CSSValue* ColumnRuleColor::CSSValueFromComputedStyleInternal(
@@ -2406,8 +2397,7 @@ const CSSValue* Fill::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle& svg_style,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::AdjustSVGPaintForCurrentColor(
-      svg_style.FillPaint(), style.GetColor());
+  return ComputedStyleUtils::ValueForSVGPaint(svg_style.FillPaint(), style);
 }
 
 const CSSValue* FillOpacity::ParseSingleValue(
@@ -2537,10 +2527,7 @@ const CSSValue* FloodColor::ParseSingleValue(
 const blink::Color FloodColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
-  StyleColor result = style.FloodColor();
-  if (!result.IsCurrentColor())
-    return result.GetColor();
-  return visited_link ? style.InternalVisitedColor() : style.GetColor();
+  return style.ResolvedColor(style.FloodColor());
 }
 
 const CSSValue* FloodColor::CSSValueFromComputedStyleInternal(
@@ -2603,7 +2590,7 @@ const CSSValue* FontFeatureSettings::CSSValueFromComputedStyleInternal(
   for (wtf_size_t i = 0; i < feature_settings->size(); ++i) {
     const FontFeature& feature = feature_settings->at(i);
     auto* feature_value = MakeGarbageCollected<cssvalue::CSSFontFeatureValue>(
-        feature.Tag(), feature.Value());
+        feature.TagString(), feature.Value());
     list->Append(*feature_value);
   }
   return list;
@@ -2851,7 +2838,7 @@ const CSSValue* FontVariationSettings::CSSValueFromComputedStyleInternal(
     const FontVariationAxis& variation_axis = variation_settings->at(i);
     cssvalue::CSSFontVariationValue* variation_value =
         MakeGarbageCollected<cssvalue::CSSFontVariationValue>(
-            variation_axis.Tag(), variation_axis.Value());
+            variation_axis.TagString(), variation_axis.Value());
     list->Append(*variation_value);
   }
   return list;
@@ -2881,31 +2868,17 @@ const CSSValue* ForcedColorAdjust::CSSValueFromComputedStyleInternal(
 }
 
 void InternalVisitedColor::ApplyInitial(StyleResolverState& state) const {
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled()) {
-    state.SetCascadedVisitedColorValue(
-        CSSIdentifierValue::Create(CSSValueID::kInitial));
-    return;
-  }
   state.Style()->SetInternalVisitedColor(
       state.Style()->InitialColorForColorScheme());
 }
 
 void InternalVisitedColor::ApplyInherit(StyleResolverState& state) const {
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled()) {
-    state.SetCascadedVisitedColorValue(
-        CSSIdentifierValue::Create(CSSValueID::kInherit));
-    return;
-  }
   auto color = state.ParentStyle()->GetColor();
   state.Style()->SetInternalVisitedColor(color);
 }
 
 void InternalVisitedColor::ApplyValue(StyleResolverState& state,
                                       const CSSValue& value) const {
-  if (!RuntimeEnabledFeatures::CSSCascadeEnabled()) {
-    state.SetCascadedVisitedColorValue(&value);
-    return;
-  }
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (identifier_value &&
       identifier_value->GetValueID() == CSSValueID::kCurrentcolor) {
@@ -2913,21 +2886,20 @@ void InternalVisitedColor::ApplyValue(StyleResolverState& state,
     return;
   }
   if (auto* initial_color_value = DynamicTo<CSSInitialColorValue>(value)) {
-    DCHECK(RuntimeEnabledFeatures::CSSCascadeEnabled());
     DCHECK_EQ(state.GetElement(), state.GetDocument().documentElement());
     state.Style()->SetInternalVisitedColor(
         state.Style()->InitialColorForColorScheme());
     return;
   }
   state.Style()->SetInternalVisitedColor(
-      StyleBuilderConverter::ConvertColor(state, value, true));
+      StyleBuilderConverter::ConvertStyleColor(state, value, true));
 }
 
 const blink::Color InternalVisitedColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(visited_link);
-  return style.InternalVisitedColor();
+  return style.GetInternalVisitedCurrentColor();
 }
 
 const CSSValue* InternalVisitedColor::ParseSingleValue(
@@ -3305,7 +3277,7 @@ const CSSValue* InlineSize::ParseSingleValue(
 
 bool InlineSize::IsLayoutDependent(const ComputedStyle* style,
                                    LayoutObject* layout_object) const {
-  return layout_object && layout_object->IsBox();
+  return layout_object && (layout_object->IsBox() || layout_object->IsSVG());
 }
 
 const CSSValue* InsetBlockEnd::ParseSingleValue(
@@ -3363,7 +3335,7 @@ const blink::Color InternalVisitedBackgroundColor::ColorIncludingFallback(
   DCHECK(visited_link);
 
   blink::Color color = style.InternalVisitedBackgroundColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 
   // TODO: Technically someone could explicitly specify the color
   // transparent, but for now we'll just assume that if the background color
@@ -3372,8 +3344,10 @@ const blink::Color InternalVisitedBackgroundColor::ColorIncludingFallback(
   // that the alpha values have to match, it makes more sense to return the
   // unvisited background color if specified than it does to return black.
   // This behavior matches what Firefox 4 does as well.
-  if (color == blink::Color::kTransparent)
-    return style.BackgroundColor().Resolve(style.GetColor());
+  if (color == blink::Color::kTransparent) {
+    return style.BackgroundColor().Resolve(style.GetCurrentColor(),
+                                           style.UsedColorScheme());
+  }
 
   return color;
 }
@@ -3391,7 +3365,7 @@ const blink::Color InternalVisitedBorderLeftColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedBorderLeftColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedBorderLeftColor::ParseSingleValue(
@@ -3407,7 +3381,7 @@ const blink::Color InternalVisitedBorderTopColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedBorderTopColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedBorderTopColor::ParseSingleValue(
@@ -3425,7 +3399,8 @@ const blink::Color InternalVisitedCaretColor::ColorIncludingFallback(
   StyleAutoColor auto_color = style.InternalVisitedCaretColor();
   StyleColor result = auto_color.IsAutoColor() ? StyleColor::CurrentColor()
                                                : auto_color.ToStyleColor();
-  return result.Resolve(style.InternalVisitedColor());
+  return result.Resolve(style.GetInternalVisitedCurrentColor(),
+                        style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedCaretColor::ParseSingleValue(
@@ -3441,7 +3416,7 @@ const blink::Color InternalVisitedBorderRightColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedBorderRightColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedBorderRightColor::ParseSingleValue(
@@ -3457,7 +3432,7 @@ const blink::Color InternalVisitedBorderBottomColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedBorderBottomColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedBorderBottomColor::ParseSingleValue(
@@ -3512,7 +3487,7 @@ const blink::Color InternalVisitedColumnRuleColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedColumnRuleColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedColumnRuleColor::ParseSingleValue(
@@ -3527,7 +3502,7 @@ const blink::Color InternalVisitedOutlineColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedOutlineColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedOutlineColor::ParseSingleValue(
@@ -3550,7 +3525,7 @@ const blink::Color InternalVisitedTextDecorationColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.DecorationColorIncludingFallback(visited_link)
-      .Resolve(style.InternalVisitedColor());
+      .Resolve(style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedTextDecorationColor::ParseSingleValue(
@@ -3565,7 +3540,7 @@ const blink::Color InternalVisitedTextEmphasisColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedTextEmphasisColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedTextEmphasisColor::ParseSingleValue(
@@ -3580,7 +3555,7 @@ const blink::Color InternalVisitedTextFillColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedTextFillColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedTextFillColor::ParseSingleValue(
@@ -3595,7 +3570,7 @@ const blink::Color InternalVisitedTextStrokeColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(visited_link);
   return style.InternalVisitedTextStrokeColor().Resolve(
-      style.InternalVisitedColor());
+      style.GetInternalVisitedCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* InternalVisitedTextStrokeColor::ParseSingleValue(
@@ -3743,10 +3718,7 @@ const CSSValue* LightingColor::ParseSingleValue(
 const blink::Color LightingColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
-  StyleColor result = style.LightingColor();
-  if (!result.IsCurrentColor())
-    return result.GetColor();
-  return visited_link ? style.InternalVisitedColor() : style.GetColor();
+  return style.ResolvedColor(style.LightingColor());
 }
 
 const CSSValue* LightingColor::CSSValueFromComputedStyleInternal(
@@ -4450,7 +4422,8 @@ const blink::Color OutlineColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
-  return style.OutlineColor().Resolve(style.GetColor());
+  return style.OutlineColor().Resolve(style.GetCurrentColor(),
+                                      style.UsedColorScheme());
 }
 
 const CSSValue* OutlineColor::CSSValueFromComputedStyleInternal(
@@ -5843,10 +5816,7 @@ const CSSValue* StopColor::ParseSingleValue(
 const blink::Color StopColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
-  StyleColor result = style.StopColor();
-  if (!result.IsCurrentColor())
-    return result.GetColor();
-  return visited_link ? style.InternalVisitedColor() : style.GetColor();
+  return style.ResolvedColor(style.StopColor());
 }
 
 const CSSValue* StopColor::CSSValueFromComputedStyleInternal(
@@ -5884,8 +5854,7 @@ const CSSValue* Stroke::CSSValueFromComputedStyleInternal(
     const SVGComputedStyle& svg_style,
     const LayoutObject*,
     bool allow_visited_style) const {
-  return ComputedStyleUtils::AdjustSVGPaintForCurrentColor(
-      svg_style.StrokePaint(), style.GetColor());
+  return ComputedStyleUtils::ValueForSVGPaint(svg_style.StrokePaint(), style);
 }
 
 const CSSValue* StrokeDasharray::ParseSingleValue(
@@ -6018,17 +5987,14 @@ const CSSValue* ContentVisibility::ParseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
     const CSSParserLocalContext&) const {
-  auto id = range.Peek().Id();
-  if (id == CSSValueID::kHiddenMatchable &&
-      !RuntimeEnabledFeatures::CSSContentVisibilityHiddenMatchableEnabled()) {
+  if (range.Peek().Id() == CSSValueID::kHiddenMatchable &&
+      !RuntimeEnabledFeatures::CSSContentVisibilityHiddenMatchableEnabled(
+          context.GetExecutionContext())) {
     return nullptr;
   }
-  if (!css_parsing_utils::IdentMatches<CSSValueID::kVisible, CSSValueID::kAuto,
-                                       CSSValueID::kHidden,
-                                       CSSValueID::kHiddenMatchable>(id)) {
-    return nullptr;
-  }
-  return css_parsing_utils::ConsumeIdent(range);
+  return css_parsing_utils::ConsumeIdent<CSSValueID::kVisible,
+                                         CSSValueID::kAuto, CSSValueID::kHidden,
+                                         CSSValueID::kHiddenMatchable>(range);
 }
 
 const CSSValue* TabSize::ParseSingleValue(CSSParserTokenRange& range,
@@ -6132,7 +6098,7 @@ const blink::Color TextDecorationColor::ColorIncludingFallback(
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
   return style.DecorationColorIncludingFallback(visited_link)
-      .Resolve(style.GetColor());
+      .Resolve(style.GetCurrentColor(), style.UsedColorScheme());
 }
 
 const CSSValue* TextDecorationColor::CSSValueFromComputedStyleInternal(
@@ -7574,10 +7540,7 @@ const CSSValue* WebkitTapHighlightColor::ParseSingleValue(
 const blink::Color WebkitTapHighlightColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
-  StyleColor result = style.TapHighlightColor();
-  if (!result.IsCurrentColor())
-    return result.GetColor();
-  return visited_link ? style.InternalVisitedColor() : style.GetColor();
+  return style.ResolvedColor(style.TapHighlightColor());
 }
 
 const CSSValue* WebkitTapHighlightColor::CSSValueFromComputedStyleInternal(
@@ -7627,7 +7590,8 @@ const blink::Color WebkitTextEmphasisColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
-  return style.TextEmphasisColor().Resolve(style.GetColor());
+  return style.TextEmphasisColor().Resolve(style.GetCurrentColor(),
+                                           style.UsedColorScheme());
 }
 
 const CSSValue* WebkitTextEmphasisColor::CSSValueFromComputedStyleInternal(
@@ -7853,7 +7817,8 @@ const blink::Color WebkitTextFillColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
-  return style.TextFillColor().Resolve(style.GetColor());
+  return style.TextFillColor().Resolve(style.GetCurrentColor(),
+                                       style.UsedColorScheme());
 }
 
 const CSSValue* WebkitTextFillColor::CSSValueFromComputedStyleInternal(
@@ -7909,7 +7874,8 @@ const blink::Color WebkitTextStrokeColor::ColorIncludingFallback(
     bool visited_link,
     const ComputedStyle& style) const {
   DCHECK(!visited_link);
-  return style.TextStrokeColor().Resolve(style.GetColor());
+  return style.TextStrokeColor().Resolve(style.GetCurrentColor(),
+                                         style.UsedColorScheme());
 }
 
 const CSSValue* WebkitTextStrokeColor::CSSValueFromComputedStyleInternal(

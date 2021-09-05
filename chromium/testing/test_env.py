@@ -9,7 +9,6 @@ from __future__ import print_function
 import io
 import os
 import signal
-import stat
 import subprocess
 import sys
 import time

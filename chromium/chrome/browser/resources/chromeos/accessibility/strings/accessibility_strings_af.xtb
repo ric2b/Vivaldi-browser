@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Lysitem</translation>
 <translation id="1013742170491673792">gesoek</translation>
 <translation id="1014370462248694370">Swiep twee vingers na regs</translation>
+<translation id="1016393160682012902">Druk 'n qwerty-sleutel, 'n herlaaibare braille-sleutel, of raakgebaar om meer oor sy funksie te leer. Druk control saam met w of escape om uit te gaan.</translation>
 <translation id="1022586497894531524">Gebruik jy ChromeVox se gesproke terugvoer vir die eerste keer? Hierdie vinnige tutoriaal verduidelik die noodsaaklike dinge om met ChromeVox te kan begin.</translation>
 <translation id="1025074108959230262">Taaimodus gedeaktiveer</translation>
 <translation id="1031961866430398710">dan</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Interne skakel</translation>
 <translation id="4909019435900810068">Beweeg een woord terug</translation>
 <translation id="4911349081560453449">Geen vorige merkblokkie nie</translation>
-<translation id="4915087353619183190">Begin Leermodus. Druk 'n qwerty-sleutel, 'n herlaaibare braille-sleutel, of raakgebaar om meer oor sy funksie te leer. Druk control saam met w of escape om uit te gaan.</translation>
 <translation id="492295894462528572">Voorwoord</translation>
 <translation id="495046168593986294">Rollees op</translation>
 <translation id="495170559598752135">Handelinge</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Groen</translation>
 <translation id="602001110135236999">Rollees links</translation>
 <translation id="6034000775414344507">Liggrys</translation>
+<translation id="6036135911048686884">Raak Verken</translation>
 <translation id="6037602951055904232">Swenk vorentoe</translation>
 <translation id="6044160928851315051">Verdonker skerm</translation>
 <translation id="6082768461603900813">Basiese navigasie</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{pond}other{# pondtekens}}</translation>
 <translation id="8378855320830505539">Streek</translation>
 <translation id="8382679411218029383">Outovoltooiing inlyn en lys</translation>
+<translation id="8394908167088220973">Media speel/laat wag</translation>
 <translation id="8428213095426709021">Instellings</translation>
 <translation id="8428603554127842284">vlak <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">kieslysbalk</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">gaan by gestruktureerde inhoud, soos tabelle, uit</translation>
 <translation id="8779057862865475116">Geen vorige skakel nie</translation>
 <translation id="8796411681063377102">Volgende vlak 3-opskrif</translation>
+<translation id="8823311177246872527">Bladsy <ph name="CURRENTPAGE" /> van <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">hoof</translation>
 <translation id="8882002077197914455">Ry-opskrif:</translation>

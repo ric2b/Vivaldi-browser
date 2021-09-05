@@ -24,6 +24,10 @@ class MockPasswordProtectionService : public PasswordProtectionService {
   MOCK_CONST_METHOD0(GetSyncAccountType,
                      safe_browsing::LoginReputationClientRequest::
                          PasswordReuseEvent::SyncAccountType());
+  MOCK_CONST_METHOD0(
+      GetUrlDisplayExperiment,
+      safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment());
+
   MOCK_CONST_METHOD0(GetBrowserPolicyConnector,
                      const policy::BrowserPolicyConnector*());
   MOCK_CONST_METHOD0(GetCurrentContentAreaSize, gfx::Size());
@@ -42,9 +46,11 @@ class MockPasswordProtectionService : public PasswordProtectionService {
   MOCK_METHOD0(IsExtendedReporting, bool());
   MOCK_METHOD0(IsEnhancedProtection, bool());
   MOCK_METHOD0(IsIncognito, bool());
+  MOCK_METHOD0(IsUserMBBOptedIn, bool());
   MOCK_METHOD1(IsInPasswordAlertMode, bool(ReusedPasswordAccountType));
   MOCK_METHOD0(IsHistorySyncEnabled, bool());
   MOCK_METHOD0(IsUnderAdvancedProtection, bool());
+  MOCK_METHOD0(IsInExcludedCountry, bool());
   MOCK_METHOD0(ReportPasswordChanged, void());
   MOCK_METHOD1(UserClickedThroughSBInterstitial, bool(content::WebContents*));
   MOCK_METHOD1(MaybeLogPasswordReuseDetectedEvent, void(content::WebContents*));

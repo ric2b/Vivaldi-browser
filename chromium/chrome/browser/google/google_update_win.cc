@@ -19,6 +19,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/sequenced_task_runner_helpers.h"
@@ -46,7 +47,6 @@
 #include "chrome/installer/util/install_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/win/atl_module.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 
 namespace {
 
@@ -147,7 +147,7 @@ HRESULT CoGetClassObjectAsAdmin(gfx::AcceleratedWidget hwnd,
 
   // For Vista+, need to instantiate the class factory via the elevation
   // moniker. This ensures that the UAC dialog shows up.
-  auto class_id_as_string = base::win::String16FromGUID(class_id);
+  auto class_id_as_string = base::win::WStringFromGUID(class_id);
 
   base::string16 elevation_moniker_name = base::StringPrintf(
       L"Elevation:Administrator!clsid:%ls", class_id_as_string.c_str());
@@ -199,8 +199,8 @@ HRESULT CreateGoogleUpdate3WebClass(
 
   ConfigureProxyBlanket(class_factory.Get());
 
-  return class_factory->CreateInstance(
-      nullptr, IID_PPV_ARGS(google_update->GetAddressOf()));
+  return class_factory->CreateInstance(nullptr,
+                                       IID_PPV_ARGS(&(*google_update)));
 }
 
 // Returns the process-wide storage for the state of the last update check.
@@ -567,10 +567,10 @@ UpdateCheckResult UpdateCheckDriver::BeginUpdateCheckInternal() {
   if (!app_bundle_) {
     Microsoft::WRL::ComPtr<IAppBundleWeb> app_bundle;
     Microsoft::WRL::ComPtr<IDispatch> dispatch;
-    hresult = google_update_->createAppBundleWeb(dispatch.GetAddressOf());
+    hresult = google_update_->createAppBundleWeb(&dispatch);
     if (FAILED(hresult))
       return {error_code, hresult};
-    hresult = dispatch.CopyTo(app_bundle.GetAddressOf());
+    hresult = dispatch.As(&app_bundle);
     if (FAILED(hresult))
       return {error_code, hresult};
     dispatch.Reset();
@@ -614,11 +614,11 @@ UpdateCheckResult UpdateCheckDriver::BeginUpdateCheckInternal() {
     // this point onward result in it being released.
     Microsoft::WRL::ComPtr<IAppBundleWeb> app_bundle;
     app_bundle.Swap(app_bundle_);
-    hresult = app_bundle->get_appWeb(0, dispatch.GetAddressOf());
+    hresult = app_bundle->get_appWeb(0, &dispatch);
     if (FAILED(hresult))
       return {error_code, hresult};
     Microsoft::WRL::ComPtr<IAppWeb> app;
-    hresult = dispatch.CopyTo(app.GetAddressOf());
+    hresult = dispatch.As(&app);
     if (FAILED(hresult))
       return {error_code, hresult};
     ConfigureProxyBlanket(app.Get());
@@ -637,10 +637,10 @@ bool UpdateCheckDriver::GetCurrentState(
     CurrentState* state_value,
     HRESULT* hresult) const {
   Microsoft::WRL::ComPtr<IDispatch> dispatch;
-  *hresult = app_->get_currentState(dispatch.GetAddressOf());
+  *hresult = app_->get_currentState(&dispatch);
   if (FAILED(*hresult))
     return false;
-  *hresult = dispatch.CopyTo(current_state->GetAddressOf());
+  *hresult = dispatch.As(&(*current_state));
   if (FAILED(*hresult))
     return false;
   ConfigureProxyBlanket(current_state->Get());
@@ -771,9 +771,9 @@ bool UpdateCheckDriver::IsIntermediateState(
           SUCCEEDED(current_state->get_totalBytesToDownload(&total_bytes)) &&
           total_bytes) {
         // 0-50 is downloading.
-        *progress = gfx::ToFlooredInt((static_cast<double>(bytes_downloaded) /
-                                       static_cast<double>(total_bytes)) *
-                                      50.0);
+        *progress = base::ClampFloor((static_cast<double>(bytes_downloaded) /
+                                      static_cast<double>(total_bytes)) *
+                                     50.0);
       }
       break;
     }
@@ -935,14 +935,14 @@ base::Optional<UpdateState> GetLastUpdateState() {
 // Private API exposed for testing. --------------------------------------------
 
 void SetGoogleUpdateFactoryForTesting(
-    const GoogleUpdate3ClassFactory& google_update_factory) {
+    GoogleUpdate3ClassFactory google_update_factory) {
   if (g_google_update_factory) {
     delete g_google_update_factory;
     g_google_update_factory = nullptr;
   }
   if (!google_update_factory.is_null()) {
     g_google_update_factory =
-        new GoogleUpdate3ClassFactory(google_update_factory);
+        new GoogleUpdate3ClassFactory(std::move(google_update_factory));
   }
 }
 

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Siyahı elementi</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">İki barmağınızla sağa çəkin</translation>
+<translation id="1016393160682012902">Rejimin funksiyasını öyrənmək üçün hər hansı standart düyməyə, brayl düyməsinə basın və ya jestə toxunun. Çıxış üçün ctrl+w, yaxud esc düyməsinə basın.</translation>
 <translation id="1022586497894531524">ChromeVox şifahi rəy xidmətindən ilk dəfədir istifadə edirisiniz? Bu kiçik təlimat vasitəsilə ChromeVox ilə necə başlamağın qaydalarını öyrənin.</translation>
 <translation id="1025074108959230262">Yapışqan rejim deaktivdir</translation>
 <translation id="1031961866430398710">sonra</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Daxili link</translation>
 <translation id="4909019435900810068">Bir söz geri köçürün</translation>
 <translation id="4911349081560453449">Öncəki qeyd xanası yoxdur</translation>
-<translation id="4915087353619183190">Öyrənmə Rejimi Başladılır. Rejimin funksiyasını öyrənmək üçün hər hansı qwerty düyməsinə, brayl klaviaturası düyməsinə və ya işarə jestinə basın. Çıxış üçün Ctrl+W, yaxud Esc düyməsinə basın.</translation>
 <translation id="492295894462528572">Ön söz</translation>
 <translation id="495046168593986294">Yuxarı sürüşdürün</translation>
 <translation id="495170559598752135">Fəaliyyətlər</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Yaşıl</translation>
 <translation id="602001110135236999">Sola sürüşdürün</translation>
 <translation id="6034000775414344507">Açıq-boz</translation>
+<translation id="6036135911048686884">Toxunaraq araşdırma</translation>
 <translation id="6037602951055904232">Pan irəli</translation>
 <translation id="6044160928851315051">Ekranı tündləşdirin</translation>
 <translation id="6082768461603900813">Əsas Naviqasiya</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{funt}other{# funt işarəsi}}</translation>
 <translation id="8378855320830505539">Region</translation>
 <translation id="8382679411218029383">Avto tamamlama sətiriçi və siyahısı</translation>
+<translation id="8394908167088220973">Medianı Oxudun/Durdurun</translation>
 <translation id="8428213095426709021">Ayarlar</translation>
 <translation id="8428603554127842284">səviyyə <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">cədvəllər kimi strukturlaşdırılmış məzmundan çıxın</translation>
 <translation id="8779057862865475116">Öncəki keçid yoxdur</translation>
 <translation id="8796411681063377102">Növbəti 3-cü səviyyə başlığı</translation>
+<translation id="8823311177246872527">Səhifə <ph name="CURRENTPAGE" />/<ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">əsas</translation>
 <translation id="8882002077197914455">Sətir oxuyan</translation>

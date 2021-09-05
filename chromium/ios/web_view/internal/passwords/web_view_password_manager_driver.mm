@@ -18,7 +18,9 @@ using password_manager::PasswordManager;
 
 namespace ios_web_view {
 
-WebViewPasswordManagerDriver::WebViewPasswordManagerDriver() {}
+WebViewPasswordManagerDriver::WebViewPasswordManagerDriver(
+    password_manager::PasswordManager* password_manager)
+    : password_manager_(password_manager) {}
 
 WebViewPasswordManagerDriver::~WebViewPasswordManagerDriver() = default;
 
@@ -29,12 +31,21 @@ int WebViewPasswordManagerDriver::GetId() const {
 
 void WebViewPasswordManagerDriver::FillPasswordForm(
     const autofill::PasswordFormFillData& form_data) {
-  [delegate_ fillPasswordForm:form_data];
+  [bridge_ fillPasswordForm:form_data completionHandler:nil];
 }
 
 void WebViewPasswordManagerDriver::InformNoSavedCredentials(
     bool should_show_popup_without_passwords) {
-  [delegate_ informNoSavedCredentials];
+  [bridge_ onNoSavedCredentials];
+}
+
+void WebViewPasswordManagerDriver::FormEligibleForGenerationFound(
+    const autofill::PasswordFormGenerationData& form) {
+  if (GetPasswordGenerationHelper() &&
+      GetPasswordGenerationHelper()->IsGenerationEnabled(
+          /*log_debug_data*/ true)) {
+    [bridge_ formEligibleForGenerationFound:form];
+  }
 }
 
 void WebViewPasswordManagerDriver::GeneratedPasswordAccepted(
@@ -60,11 +71,11 @@ void WebViewPasswordManagerDriver::ClearPreviewedForm() {
 
 password_manager::PasswordGenerationFrameHelper*
 WebViewPasswordManagerDriver::GetPasswordGenerationHelper() {
-  return nullptr;
+  return [bridge_ passwordGenerationHelper];
 }
 
 PasswordManager* WebViewPasswordManagerDriver::GetPasswordManager() {
-  return delegate_.passwordManager;
+  return password_manager_;
 }
 
 PasswordAutofillManager*
@@ -87,6 +98,6 @@ bool WebViewPasswordManagerDriver::CanShowAutofillUi() const {
 }
 
 const GURL& WebViewPasswordManagerDriver::GetLastCommittedURL() const {
-  return delegate_.lastCommittedURL;
+  return bridge_.lastCommittedURL;
 }
 }  // namespace ios_web_view

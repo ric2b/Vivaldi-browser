@@ -30,8 +30,8 @@ void WMFAudioDecoder::Initialize(const AudioDecoderConfig& config,
 }
 
 void WMFAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
-                             const DecodeCB& decode_cb) {
-  impl_.Decode(buffer, decode_cb);
+                             DecodeCB decode_cb) {
+  impl_.Decode(buffer, std::move(decode_cb));
 }
 
 void WMFAudioDecoder::Reset(base::OnceClosure closure) {

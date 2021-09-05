@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_ANIMATION_CSS_CSS_ANIMATION_UPDATE_H_
 
 #include "base/macros.h"
+#include "third_party/blink/renderer/core/animation/animation_timeline.h"
 #include "third_party/blink/renderer/core/animation/effect_stack.h"
 #include "third_party/blink/renderer/core/animation/inert_effect.h"
 #include "third_party/blink/renderer/core/animation/interpolation.h"
@@ -32,6 +33,7 @@ class NewCSSAnimation {
                   const InertEffect& effect,
                   Timing timing,
                   StyleRuleKeyframes* style_rule,
+                  AnimationTimeline* timeline,
                   const Vector<EAnimPlayState>& play_state_list)
       : name(name),
         name_index(name_index),
@@ -40,11 +42,13 @@ class NewCSSAnimation {
         timing(timing),
         style_rule(style_rule),
         style_rule_version(this->style_rule->Version()),
+        timeline(timeline),
         play_state_list(play_state_list) {}
 
   void Trace(Visitor* visitor) const {
     visitor->Trace(effect);
     visitor->Trace(style_rule);
+    visitor->Trace(timeline);
   }
 
   AtomicString name;
@@ -54,6 +58,7 @@ class NewCSSAnimation {
   Timing timing;
   Member<StyleRuleKeyframes> style_rule;
   unsigned style_rule_version;
+  Member<AnimationTimeline> timeline;
   Vector<EAnimPlayState> play_state_list;
 };
 
@@ -116,10 +121,11 @@ class CORE_EXPORT CSSAnimationUpdate final {
                       const InertEffect& effect,
                       const Timing& timing,
                       StyleRuleKeyframes* style_rule,
+                      AnimationTimeline* timeline,
                       const Vector<EAnimPlayState>& play_state_list) {
-    new_animations_.push_back(NewCSSAnimation(animation_name, name_index,
-                                              position_index, effect, timing,
-                                              style_rule, play_state_list));
+    new_animations_.push_back(
+        NewCSSAnimation(animation_name, name_index, position_index, effect,
+                        timing, style_rule, timeline, play_state_list));
   }
   void CancelAnimation(wtf_size_t index, const Animation& animation) {
     cancelled_animation_indices_.push_back(index);
@@ -177,12 +183,10 @@ class CORE_EXPORT CSSAnimationUpdate final {
     return updated_compositor_keyframes_;
   }
 
-  struct NewTransition {
-    DISALLOW_NEW();
-
+  struct NewTransition : public GarbageCollected<NewTransition> {
    public:
     NewTransition();
-    ~NewTransition();
+    virtual ~NewTransition();
     void Trace(Visitor* visitor) const { visitor->Trace(effect); }
 
     PropertyHandle property = HashTraits<blink::PropertyHandle>::EmptyValue();
@@ -192,7 +196,7 @@ class CORE_EXPORT CSSAnimationUpdate final {
     double reversing_shortening_factor;
     Member<const InertEffect> effect;
   };
-  using NewTransitionMap = HeapHashMap<PropertyHandle, NewTransition>;
+  using NewTransitionMap = HeapHashMap<PropertyHandle, Member<NewTransition>>;
   const NewTransitionMap& NewTransitions() const { return new_transitions_; }
   const HashSet<PropertyHandle>& CancelledTransitions() const {
     return cancelled_transitions_;

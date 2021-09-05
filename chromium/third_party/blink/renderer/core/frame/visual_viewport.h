@@ -96,8 +96,6 @@ struct PaintPropertyTreeBuilderFragmentContext;
 //
 class CORE_EXPORT VisualViewport : public GarbageCollected<VisualViewport>,
                                    public ScrollableArea {
-  USING_GARBAGE_COLLECTED_MIXIN(VisualViewport);
-
  public:
   explicit VisualViewport(Page&);
   ~VisualViewport() override;
@@ -312,7 +310,7 @@ class CORE_EXPORT VisualViewport : public GarbageCollected<VisualViewport>,
   scoped_refptr<cc::ScrollbarLayerBase> scrollbar_layer_horizontal_;
   scoped_refptr<cc::ScrollbarLayerBase> scrollbar_layer_vertical_;
 
-  PropertyTreeState parent_property_tree_state_;
+  PropertyTreeStateOrAlias parent_property_tree_state_;
   scoped_refptr<TransformPaintPropertyNode> device_emulation_transform_node_;
   scoped_refptr<TransformPaintPropertyNode>
       overscroll_elasticity_transform_node_;

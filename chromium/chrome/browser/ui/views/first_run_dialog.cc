@@ -31,7 +31,7 @@
 
 #if defined(OS_WIN)
 #include "components/crash/content/app/breakpad_win.h"
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "components/crash/core/app/breakpad_linux.h"
 #endif
 
@@ -41,7 +41,7 @@ void InitCrashReporterIfEnabled(bool enabled) {
 #if defined(OS_WIN)
   if (enabled)
     breakpad::InitCrashReporter(std::string());
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (!crash_reporter::IsCrashpadEnabled() && enabled)
     breakpad::InitCrashReporter(std::string());
 #endif
@@ -114,8 +114,9 @@ void FirstRunDialog::Done() {
 bool FirstRunDialog::Accept() {
   GetWidget()->Hide();
 
-  ChangeMetricsReportingStateWithReply(report_crashes_->GetChecked(),
-                                       base::Bind(&InitCrashReporterIfEnabled));
+  ChangeMetricsReportingStateWithReply(
+      report_crashes_->GetChecked(),
+      base::BindRepeating(&InitCrashReporterIfEnabled));
 
   if (make_default_->GetChecked())
     shell_integration::SetAsDefaultBrowser();

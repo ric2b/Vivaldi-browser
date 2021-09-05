@@ -11,12 +11,12 @@
   margin-top: 20px;
 }
 
-.update-error {
-  font-weight: bold;
-}
-
 #adminMessageContainer {
   color: var(--oobe-subheader-text-color);
+}
+
+.bold {
+  font-weight: bold;
 }
 
 .update-illustration {

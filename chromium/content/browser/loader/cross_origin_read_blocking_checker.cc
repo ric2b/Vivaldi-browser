@@ -9,7 +9,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "net/base/io_buffer.h"
 #include "net/base/mime_sniffer.h"
-#include "services/network/cross_origin_read_blocking.h"
+#include "services/network/public/cpp/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -96,7 +96,7 @@ class CrossOriginReadBlockingChecker::BlobIOState {
 CrossOriginReadBlockingChecker::CrossOriginReadBlockingChecker(
     const network::ResourceRequest& request,
     const network::mojom::URLResponseHead& response,
-    const url::Origin& request_initiator_site_lock,
+    const url::Origin& request_initiator_origin_lock,
     const storage::BlobDataHandle& blob_data_handle,
     base::OnceCallback<void(Result)> callback)
     : callback_(std::move(callback)) {
@@ -115,7 +115,7 @@ CrossOriginReadBlockingChecker::CrossOriginReadBlockingChecker(
   corb_analyzer_ =
       std::make_unique<network::CrossOriginReadBlocking::ResponseAnalyzer>(
           request.url, request.request_initiator, response,
-          request_initiator_site_lock, request.mode, isolated_world_origin,
+          request_initiator_origin_lock, request.mode, isolated_world_origin,
           network_service_client);
   if (corb_analyzer_->ShouldBlock()) {
     OnBlocked();

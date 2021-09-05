@@ -28,7 +28,6 @@ import android.os.Build;
 import android.text.TextUtils;
 import android.util.Base64;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -42,7 +41,6 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.webapps.WebDisplayMode;
 import org.chromium.chrome.browser.webapps.WebappActivity;
 import org.chromium.chrome.browser.webapps.WebappAuthenticator;
@@ -252,10 +250,9 @@ public class ShortcutHelper {
     /**
      * Adds home screen shortcut which opens in the browser Activity.
      */
-    @SuppressWarnings("unused")
     @CalledByNative
-    public static void addShortcut(@Nullable Tab tab, String id, String url, String userTitle,
-            Bitmap icon, boolean isIconAdaptive, int source, String iconUrl) {
+    public static void addShortcut(String id, String url, String userTitle, Bitmap icon,
+            boolean isIconAdaptive, int source, String iconUrl) {
         Intent shortcutIntent = createShortcutIntent(url);
         shortcutIntent.putExtra(EXTRA_ID, id);
         shortcutIntent.putExtra(EXTRA_SOURCE, source);
@@ -678,12 +675,12 @@ public class ShortcutHelper {
     }
 
     /**
-     * Returns the ideal size for a badge icon of a WebAPK.
+     * Returns the ideal size for a monochrome icon of a WebAPK.
      * @param context Context to pull resources from.
-     * @return the dimensions in pixels which the badge icon should have.
+     * @return the dimensions in pixels which the monochrome icon should have.
      */
-    public static int getIdealBadgeIconSizeInPx(Context context) {
-        return getSizeFromResourceInPx(context, R.dimen.webapk_badge_icon_size);
+    public static int getIdealMonochromeIconSizeInPx(Context context) {
+        return getSizeFromResourceInPx(context, R.dimen.webapk_monochrome_icon_size);
     }
 
     /**
@@ -747,7 +744,7 @@ public class ShortcutHelper {
         // This ordering must be kept up to date with the C++ ShortcutHelper.
         return new int[] {getIdealHomescreenIconSizeInPx(context),
                 getMinimumHomescreenIconSizeInPx(context), getIdealSplashImageSizeInPx(context),
-                getMinimumSplashImageSizeInPx(context), getIdealBadgeIconSizeInPx(context),
+                getMinimumSplashImageSizeInPx(context), getIdealMonochromeIconSizeInPx(context),
                 getIdealAdaptiveLauncherIconSizeInPx(context),
                 ViewUtils.dpToPx(context, SHORTCUT_ICON_IDEAL_SIZE_DP)};
     }

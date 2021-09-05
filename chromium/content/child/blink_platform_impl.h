@@ -29,7 +29,6 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
  public:
   BlinkPlatformImpl();
   explicit BlinkPlatformImpl(
-      scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner);
   ~BlinkPlatformImpl() override;
 
@@ -54,8 +53,6 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
       const blink::WebString& value1,
       const blink::WebString& value2) override;
   void SuddenTerminationChanged(bool enabled) override {}
-  bool AllowScriptExtensionForServiceWorker(
-      const blink::WebSecurityOrigin& script_origin) override;
   blink::WebCrypto* Crypto() override;
   blink::ThreadSafeBrowserInterfaceBrokerProxy* GetBrowserInterfaceBroker()
       override;
@@ -65,7 +62,6 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
       const override;
 
  private:
-  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner_;
   const scoped_refptr<blink::ThreadSafeBrowserInterfaceBrokerProxy>
       browser_interface_broker_proxy_;

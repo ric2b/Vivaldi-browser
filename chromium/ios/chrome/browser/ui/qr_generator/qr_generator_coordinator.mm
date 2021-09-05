@@ -9,6 +9,7 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/ui/activity_services/activity_params.h"
 #import "ios/chrome/browser/ui/activity_services/activity_scenario.h"
 #import "ios/chrome/browser/ui/activity_services/activity_service_coordinator.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
@@ -58,11 +59,13 @@
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
                                      title:(NSString*)title
-                                       URL:(const GURL&)URL {
+                                       URL:(const GURL&)URL
+                                   handler:(id<QRGenerationCommands>)handler {
   if (self = [super initWithBaseViewController:viewController
                                        browser:browser]) {
     _title = title;
     _URL = URL;
+    _handler = handler;
   }
   return self;
 }
@@ -70,9 +73,6 @@
 #pragma mark - Chrome Coordinator
 
 - (void)start {
-  self.handler = HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                                    QRGenerationCommands);
-
   self.viewController = [[QRGeneratorViewController alloc] init];
 
   [self.viewController setModalPresentationStyle:UIModalPresentationFormSheet];
@@ -106,20 +106,28 @@
 - (void)confirmationAlertPrimaryAction {
   base::RecordAction(base::UserMetricsAction("MobileShareQRCode"));
 
+  NSString* imageTitle = l10n_util::GetNSStringF(
+      IDS_IOS_QR_CODE_ACTIVITY_TITLE, base::SysNSStringToUTF16(self.title));
+
+  ActivityParams* params =
+      [[ActivityParams alloc] initWithImage:self.viewController.content
+                                      title:imageTitle
+                                   scenario:ActivityScenario::QRCodeImage];
+
+  // Configure the image sharing scenario.
   self.activityServiceCoordinator = [[ActivityServiceCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser
-                        scenario:ActivityScenario::QRCodeImage];
+                          params:params];
 
   self.activityServiceCoordinator.positionProvider = self;
   self.activityServiceCoordinator.presentationProvider = self;
 
-  // Configure the image sharing scenario.
-  self.activityServiceCoordinator.image = self.viewController.content;
-  self.activityServiceCoordinator.title = l10n_util::GetNSStringF(
-      IDS_IOS_QR_CODE_ACTIVITY_TITLE, base::SysNSStringToUTF16(self.title));
-
   [self.activityServiceCoordinator start];
+}
+
+- (void)confirmationAlertSecondaryAction {
+  // No-op.
 }
 
 - (void)confirmationAlertLearnMoreAction {

@@ -22,7 +22,6 @@ extern const char kDisableSync[];
 extern const char kSyncDeferredStartupTimeoutSeconds[];
 extern const char kSyncDisableDeferredStartup[];
 extern const char kSyncIncludeSpecificsInProtocolLog[];
-extern const char kSyncServiceURL[];
 extern const char kSyncShortInitialRetryOverride[];
 extern const char kSyncShortNudgeDelayForTest[];
 
@@ -31,7 +30,8 @@ extern const base::Feature
     kSyncAllowWalletDataInTransportModeWithCustomPassphrase;
 extern const base::Feature kSyncWifiConfigurations;
 extern const base::Feature kSyncDeviceInfoInTransportMode;
-extern const base::Feature kProfileSyncServiceUsesThreadPool;
+extern const base::Feature kDecoupleSyncFromAndroidMasterSync;
+extern const base::Feature kFollowTrustedVaultKeyRotation;
 
 }  // namespace switches
 

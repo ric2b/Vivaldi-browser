@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -112,8 +113,7 @@ content::WebUIDataSource* CreateMdExtensionsSource(Profile* profile,
     {"toolbarTitle", IDS_EXTENSIONS_TOOLBAR_TITLE},
     {"mainMenu", IDS_EXTENSIONS_MENU_BUTTON_LABEL},
     {"search", IDS_EXTENSIONS_SEARCH},
-    // TODO(dpapad): Use a single merged string resource for "Clear search".
-    {"clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH},
+    {"clearSearch", IDS_CLEAR_SEARCH},
     {"sidebarExtensions", IDS_EXTENSIONS_SIDEBAR_EXTENSIONS},
     {"appsTitle", IDS_EXTENSIONS_APPS_TITLE},
     {"noExtensionsOrApps", IDS_EXTENSIONS_NO_INSTALLED_ITEMS},
@@ -393,8 +393,8 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui)
   // GetVisibleURL() because the load hasn't committed and this check isn't used
   // for a security decision, however a stronger check will be implemented if we
   // decide to invest more in this experiment.
-  if (web_ui->GetWebContents()->GetVisibleURL().query_piece().starts_with(
-          "checkup")) {
+  if (base::StartsWith(web_ui->GetWebContents()->GetVisibleURL().query_piece(),
+                       "checkup")) {
     ExtensionPrefs::Get(profile)->SetUserHasSeenExtensionsCheckupOnStartup(
         true);
   }

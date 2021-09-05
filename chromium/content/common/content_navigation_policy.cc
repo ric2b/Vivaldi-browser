@@ -6,9 +6,11 @@
 
 #include <bitset>
 
+#include "base/command_line.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/system/sys_info.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 
 namespace content {
 
@@ -30,13 +32,47 @@ bool DeviceHasEnoughMemoryForBackForwardCache() {
   return true;
 }
 
+bool IsBackForwardCacheDisabledByCommandLine() {
+  if (base::CommandLine::InitializedForCurrentProcess() &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableBackForwardCache)) {
+    return true;
+  }
+  return false;
+}
+
 bool IsBackForwardCacheEnabled() {
   if (!DeviceHasEnoughMemoryForBackForwardCache())
     return false;
+
+  if (IsBackForwardCacheDisabledByCommandLine())
+    return false;
+
   // The feature needs to be checked last, because checking the feature
   // activates the field trial and assigns the client either to a control or an
   // experiment group - such assignment should be final.
   return base::FeatureList::IsEnabled(features::kBackForwardCache);
+}
+
+bool IsSameSiteBackForwardCacheEnabled() {
+  if (!IsBackForwardCacheEnabled())
+    return false;
+  static constexpr base::FeatureParam<bool> enable_same_site_back_forward_cache(
+      &features::kBackForwardCache, "enable_same_site", false);
+  return enable_same_site_back_forward_cache.Get();
+}
+
+bool ShouldSkipSameSiteBackForwardCacheForPageWithUnload() {
+  if (!IsSameSiteBackForwardCacheEnabled())
+    return true;
+  static constexpr base::FeatureParam<bool> skip_same_site_if_unload_exists(
+      &features::kBackForwardCache, "skip_same_site_if_unload_exists", false);
+  return skip_same_site_if_unload_exists.Get();
+}
+
+bool CanCrossSiteNavigationsProactivelySwapBrowsingInstances() {
+  return IsProactivelySwapBrowsingInstanceEnabled() ||
+         IsBackForwardCacheEnabled();
 }
 
 const char kProactivelySwapBrowsingInstanceLevelParameterName[] = "level";
@@ -116,7 +152,7 @@ std::string GetRenderDocumentLevelName(RenderDocumentLevel level) {
   return render_document_level.GetName(level);
 }
 
-bool CreateNewHostForSameSiteSubframe() {
+bool ShouldCreateNewHostForSameSiteSubframe() {
   return GetRenderDocumentLevel() >= RenderDocumentLevel::kSubframe;
 }
 

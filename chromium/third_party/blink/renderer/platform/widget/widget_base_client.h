@@ -11,6 +11,7 @@
 #include "cc/paint/element_id.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
+#include "third_party/blink/public/mojom/widget/screen_orientation.mojom-blink.h"
 #include "third_party/blink/public/platform/input/input_handler_proxy.h"
 #include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/public/web/web_lifecycle_update.h"
@@ -32,9 +33,9 @@ class WebMouseEvent;
 // will need to implement.
 class WidgetBaseClient {
  public:
-  // Dispatch any pending input. This method will called before
-  // dispatching a RequestAnimationFrame to the widget.
-  virtual void DispatchRafAlignedInput(base::TimeTicks frame_time) = 0;
+  // Called to record the time taken to dispatch rAF aligned input.
+  virtual void RecordDispatchRafAlignedInputTime(
+      base::TimeTicks raf_aligned_input_start_time) {}
 
   // Called to update the document lifecycle, advance the state of animations
   // and dispatch rAF.
@@ -106,9 +107,6 @@ class WidgetBaseClient {
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) {}
 
-  virtual void OnDeferMainFrameUpdatesChanged(bool defer) {}
-  virtual void OnDeferCommitsChanged(bool defer) {}
-
   using LayerTreeFrameSinkCallback = base::OnceCallback<void(
       std::unique_ptr<cc::LayerTreeFrameSink>,
       std::unique_ptr<cc::RenderFrameMetadataObserver>)>;
@@ -139,29 +137,54 @@ class WidgetBaseClient {
       const gfx::Vector2dF& unused_delta,
       const cc::OverscrollBehavior& overscroll_behavior,
       bool event_processed) = 0;
-  virtual void QueueSyntheticEvent(std::unique_ptr<WebCoalescedInputEvent>) = 0;
 
   virtual WebTextInputType GetTextInputType() {
     return WebTextInputType::kWebTextInputTypeNone;
   }
 
-  virtual void GetWidgetInputHandler(
-      mojo::PendingReceiver<mojom::blink::WidgetInputHandler> request,
-      mojo::PendingRemote<mojom::blink::WidgetInputHandlerHost> host) = 0;
+  // Called to inform the Widget of the mouse cursor's visibility.
+  virtual void SetCursorVisibilityState(bool is_visible) {}
+
+  // Mouse capture has been lost.
+  virtual void MouseCaptureLost() {}
 
   // The FrameWidget interface if this is a FrameWidget.
-  virtual FrameWidget* FrameWidget() { return nullptr; }
-
-  // Send the composition change to the browser.
-  virtual void SendCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) = 0;
-
-  // Determine if there is a IME guard.
-  virtual bool HasCurrentImeGuard(bool request_to_show_virtual_keyboard) = 0;
+  virtual blink::FrameWidget* FrameWidget() { return nullptr; }
 
   // Called to inform the Widget that it has gained or lost keyboard focus.
   virtual void FocusChanged(bool) = 0;
+
+  // Call to schedule an animation.
+  virtual void ScheduleAnimation() {}
+
+  // TODO(bokan): Temporary to unblock synthetic gesture events running under
+  // VR. https://crbug.com/940063
+  virtual bool ShouldAckSyntheticInputImmediately() { return false; }
+
+  // Apply the visual properties.
+  virtual void UpdateVisualProperties(
+      const VisualProperties& visual_properties) = 0;
+
+  // Apply the updated screen rects.
+  virtual void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
+                                 const gfx::Rect& window_screen_rect) = 0;
+
+  virtual void OrientationChanged() {}
+
+  virtual ScreenInfo GetOriginalScreenInfo() = 0;
+
+  virtual void UpdatedSurfaceAndScreen(
+      const ScreenInfo& previous_original_screen_info) {}
+
+  virtual gfx::Rect ViewportVisibleRect() = 0;
+
+  virtual base::Optional<mojom::blink::ScreenOrientation>
+  ScreenOrientationOverride() {
+    return base::nullopt;
+  }
+
+  // Return the overridden device scale factor for testing.
+  virtual float GetDeviceScaleFactorForTesting() { return 0.f; }
 
   // Test-specific methods below this point.
   virtual void ScheduleAnimationForWebTests() {}

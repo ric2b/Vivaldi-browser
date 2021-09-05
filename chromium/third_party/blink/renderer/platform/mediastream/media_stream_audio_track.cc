@@ -10,8 +10,8 @@
 #include "base/strings/stringprintf.h"
 #include "media/base/audio_bus.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_sink.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_source.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
-#include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 
@@ -26,7 +26,7 @@ void SendLogMessage(const std::string& message) {
 }  // namespace
 
 MediaStreamAudioTrack::MediaStreamAudioTrack(bool is_local_track)
-    : WebPlatformMediaStreamTrack(is_local_track), is_enabled_(1) {
+    : MediaStreamTrackPlatform(is_local_track), is_enabled_(1) {
   SendLogMessage(
       base::StringPrintf("MediaStreamAudioTrack([this=%p] {is_local_track=%s})",
                          this, (is_local_track ? "true" : "false")));

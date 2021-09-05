@@ -15,6 +15,7 @@ from telemetry.web_perf import timeline_based_measurement
 
 RENDERING_BENCHMARK_UMA = [
     'Compositing.Display.DrawToSwapUs',
+    'CompositorLatency.TotalLatency',
     'Event.Latency.ScrollBegin.Touch.TimeToScrollUpdateSwapBegin4',
     'Event.Latency.ScrollUpdate.Touch.TimeToScrollUpdateSwapBegin4',
     'Event.Latency.ScrollBegin.Wheel.TimeToScrollUpdateSwapBegin4',
@@ -76,7 +77,8 @@ class _RenderingBenchmark(perf_benchmark.PerfBenchmark):
     return options
 
 
-@benchmark.Info(emails=['sadrul@chromium.org', 'vmiura@chromium.org'],
+@benchmark.Info(emails=['behdadb@chromium.org', 'jonross@chromium.org',
+                        'sadrul@chromium.org'],
                 documentation_url='https://bit.ly/rendering-benchmarks',
                 component='Internals>GPU>Metrics')
 class RenderingDesktop(_RenderingBenchmark):
@@ -103,7 +105,8 @@ class RenderingDesktop(_RenderingBenchmark):
           '--use-gpu-high-thread-priority-for-perf-tests')
 
 
-@benchmark.Info(emails=['sadrul@chromium.org', 'vmiura@chromium.org'],
+@benchmark.Info(emails=['behdadb@chromium.org', 'jonross@chromium.org',
+                        'sadrul@chromium.org'],
                 documentation_url='https://bit.ly/rendering-benchmarks',
                 component='Internals>GPU>Metrics')
 class RenderingMobile(_RenderingBenchmark):
@@ -124,6 +127,10 @@ class RenderingMobile(_RenderingBenchmark):
     # allows controls to unlock after page load, rather than in the middle of a
     # story.
     options.AppendExtraBrowserArgs('--disable-minimum-show-duration')
+    # Force online state for the offline indicator so it doesn't show and affect
+    # the benchmarks on bots, which are offline by default.
+    options.AppendExtraBrowserArgs(
+        '--force-online-connection-state-for-indicator')
 
   def CreateCoreTimelineBasedMeasurementOptions(self):
     options = super(

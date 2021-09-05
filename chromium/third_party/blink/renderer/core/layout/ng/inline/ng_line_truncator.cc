@@ -76,11 +76,11 @@ LayoutUnit NGLineTruncator::PlaceEllipsisNextTo(
       IsLtr(line_direction_)
           ? ellipsized_child->InlineOffset() + ellipsized_child->inline_size
           : ellipsized_child->InlineOffset() - ellipsis_width_;
-  NGLineHeightMetrics ellipsis_metrics;
+  FontHeight ellipsis_metrics;
   DCHECK(ellipsis_font_data_);
   if (ellipsis_font_data_) {
-    ellipsis_metrics = NGLineHeightMetrics(
-        ellipsis_font_data_->GetFontMetrics(), line_style_->GetFontBaseline());
+    ellipsis_metrics = ellipsis_font_data_->GetFontMetrics().GetFontHeight(
+        line_style_->GetFontBaseline());
   }
 
   DCHECK(ellipsis_text_);
@@ -245,8 +245,11 @@ LayoutUnit NGLineTruncator::TruncateLineInTheMiddle(
 
   const LayoutUnit static_width_left = line[initial_index_left].InlineOffset();
   LayoutUnit static_width_right = LayoutUnit(0);
-  for (wtf_size_t i = initial_index_right + 1; i < line.size(); ++i)
-    static_width_right += line[i].inline_size;
+  if (initial_index_right + 1 < line.size()) {
+    const NGLogicalLineItem& item = line[initial_index_right + 1];
+    static_width_right =
+        line_width - item.InlineOffset() + item.margin_line_left;
+  }
   const LayoutUnit available_width =
       available_width_ - static_width_left - static_width_right;
   if (available_width <= ellipsis_width_)

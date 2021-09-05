@@ -13,7 +13,8 @@
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow_controller.h"
 
-#if defined(OS_LINUX) && BUILDFLAG(ENABLE_DESKTOP_AURA)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+    BUILDFLAG(ENABLE_DESKTOP_AURA)
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 #endif
 
@@ -72,7 +73,8 @@ BOOL CALLBACK FindAllWindowsCallback(HWND hwnd, LPARAM param) {
 
 std::vector<aura::Window*> GetAllTopLevelWindows() {
   std::vector<aura::Window*> roots;
-#if defined(OS_LINUX) && BUILDFLAG(ENABLE_DESKTOP_AURA)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && \
+    BUILDFLAG(ENABLE_DESKTOP_AURA)
   roots = DesktopWindowTreeHostLinux::GetAllOpenWindows();
 #elif defined(OS_WIN)
   {
@@ -126,6 +128,13 @@ gfx::Size WidgetTest::GetNativeWidgetMinimumContentSize(Widget* widget) {
 #if !BUILDFLAG(ENABLE_DESKTOP_AURA) || defined(OS_WIN)
   return widget->GetNativeWindow()->delegate()->GetMinimumSize();
 #elif defined(USE_X11)
+  if (features::IsUsingOzonePlatform()) {
+    // TODO(https://crbug.com/1109114): this is effectively the same as the
+    // NOTREACHED in the #else section. Figure why that is there and fix for
+    // Ozone if needed.
+    NOTREACHED();
+    return gfx::Size();
+  }
   XSizeHints hints;
   long supplied_return;  // NOLINT(runtime/int)
   XGetWMNormalHints(

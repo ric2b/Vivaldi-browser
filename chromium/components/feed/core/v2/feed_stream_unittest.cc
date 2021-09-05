@@ -6,6 +6,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -18,6 +19,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -26,13 +28,15 @@
 #include "components/feed/core/common/pref_names.h"
 #include "components/feed/core/proto/v2/store.pb.h"
 #include "components/feed/core/proto/v2/ui.pb.h"
-#include "components/feed/core/proto/v2/wire/action_request.pb.h"
 #include "components/feed/core/proto/v2/wire/request.pb.h"
 #include "components/feed/core/proto/v2/wire/there_and_back_again_data.pb.h"
+#include "components/feed/core/proto/v2/xsurface.pb.h"
 #include "components/feed/core/shared_prefs/pref_names.h"
 #include "components/feed/core/v2/config.h"
 #include "components/feed/core/v2/feed_network.h"
+#include "components/feed/core/v2/image_fetcher.h"
 #include "components/feed/core/v2/metrics_reporter.h"
+#include "components/feed/core/v2/prefs.h"
 #include "components/feed/core/v2/protocol_translator.h"
 #include "components/feed/core/v2/refresh_task_scheduler.h"
 #include "components/feed/core/v2/scheduling.h"
@@ -42,8 +46,15 @@
 #include "components/feed/core/v2/test/proto_printer.h"
 #include "components/feed/core/v2/test/stream_builder.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/page_criteria.h"
+#include "components/offline_pages/core/prefetch/stub_prefetch_service.h"
+#include "components/offline_pages/core/stub_offline_page_model.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace feed {
@@ -113,6 +124,14 @@ std::vector<feedstore::StoredAction> ReadStoredActions(FeedStore* store) {
   return std::move(*cr.GetResult());
 }
 
+std::string SerializedOfflineBadgeContent() {
+  feedxsurface::OfflineBadgeContent testbadge;
+  std::string badge_serialized;
+  testbadge.set_available_offline(true);
+  testbadge.SerializeToString(&badge_serialized);
+  return badge_serialized;
+}
+
 // This is EXPECT_EQ, but also dumps the string values for ease of reading.
 #define EXPECT_STRINGS_EQUAL(WANT, GOT)                                       \
   {                                                                           \
@@ -159,6 +178,13 @@ class TestSurface : public FeedStream::SurfaceInterface {
 
     described_updates_.push_back(CurrentState());
   }
+  void ReplaceDataStoreEntry(base::StringPiece key,
+                             base::StringPiece data) override {
+    data_store_entries_[key.as_string()] = data.as_string();
+  }
+  void RemoveDataStoreEntry(base::StringPiece key) override {
+    data_store_entries_.erase(key.as_string());
+  }
 
   // Test functions.
 
@@ -174,6 +200,10 @@ class TestSurface : public FeedStream::SurfaceInterface {
     std::string result = base::JoinString(described_updates_, " -> ");
     described_updates_.clear();
     return result;
+  }
+
+  std::map<std::string, std::string> GetDataStoreEntries() const {
+    return data_store_entries_;
   }
 
   // The initial state of the stream, if it was received. This is nullopt if
@@ -226,6 +256,20 @@ class TestSurface : public FeedStream::SurfaceInterface {
   // The stream if it was attached using the constructor.
   FeedStream* stream_ = nullptr;
   std::vector<std::string> described_updates_;
+  std::map<std::string, std::string> data_store_entries_;
+};
+
+class TestImageFetcher : public ImageFetcher {
+ public:
+  explicit TestImageFetcher(
+      scoped_refptr<::network::SharedURLLoaderFactory> url_loader_factory)
+      : ImageFetcher(url_loader_factory) {}
+  void Fetch(const GURL& url,
+             base::OnceCallback<void(NetworkResponse)> callback) override {
+    // Emulate a response.
+    NetworkResponse response = {"dummyresponse", 200};
+    std::move(callback).Run(std::move(response));
+  }
 };
 
 class TestFeedNetwork : public FeedNetwork {
@@ -233,7 +277,9 @@ class TestFeedNetwork : public FeedNetwork {
   // FeedNetwork implementation.
   void SendQueryRequest(
       const feedwire::Request& request,
+      bool force_signed_out_request,
       base::OnceCallback<void(QueryRequestResult)> callback) override {
+    forced_signed_out_request = force_signed_out_request;
     ++send_query_call_count;
     // Emulate a successful response.
     // The response body is currently an empty message, because most of the
@@ -253,7 +299,7 @@ class TestFeedNetwork : public FeedNetwork {
         FROM_HERE, base::BindOnce(std::move(callback), std::move(result)));
   }
   void SendActionRequest(
-      const feedwire::ActionRequest& request,
+      const feedwire::UploadActionsRequest& request,
       base::OnceCallback<void(ActionRequestResult)> callback) override {
     action_request_sent = request;
     ++action_request_call_count;
@@ -262,11 +308,8 @@ class TestFeedNetwork : public FeedNetwork {
     if (injected_action_result != base::nullopt) {
       result = std::move(*injected_action_result);
     } else {
-      auto response = std::make_unique<feedwire::Response>();
-      response->mutable_feed_response()
-          ->mutable_feed_response()
-          ->mutable_consistency_token()
-          ->set_token(consistency_token);
+      auto response = std::make_unique<feedwire::UploadActionsResponse>();
+      response->mutable_consistency_token()->set_token(consistency_token);
 
       result.response_body = std::move(response);
     }
@@ -301,9 +344,10 @@ class TestFeedNetwork : public FeedNetwork {
     result.response_body = nullptr;
     InjectActionRequestResult(std::move(result));
   }
-  base::Optional<feedwire::ActionRequest> action_request_sent;
+  base::Optional<feedwire::UploadActionsRequest> action_request_sent;
   int action_request_call_count = 0;
   std::string consistency_token;
+  bool forced_signed_out_request = false;
 
  private:
   base::Optional<feedwire::Response> injected_response_;
@@ -317,28 +361,30 @@ class TestWireResponseTranslator : public FeedStream::WireResponseTranslator {
   RefreshResponseData TranslateWireResponse(
       feedwire::Response response,
       StreamModelUpdateRequest::Source source,
-      base::Time current_time) override {
-    if (injected_response_) {
-      if (injected_response_->model_update_request)
-        injected_response_->model_update_request->source = source;
-      RefreshResponseData result = std::move(*injected_response_);
-      injected_response_.reset();
+      bool was_signed_in_request,
+      base::Time current_time) const override {
+    if (!injected_responses_.empty()) {
+      if (injected_responses_[0].model_update_request)
+        injected_responses_[0].model_update_request->source = source;
+      RefreshResponseData result = std::move(injected_responses_[0]);
+      injected_responses_.erase(injected_responses_.begin());
       return result;
     }
     return FeedStream::WireResponseTranslator::TranslateWireResponse(
-        std::move(response), source, current_time);
+        std::move(response), source, was_signed_in_request, current_time);
   }
   void InjectResponse(std::unique_ptr<StreamModelUpdateRequest> response) {
-    injected_response_ = RefreshResponseData();
-    injected_response_->model_update_request = std::move(response);
+    RefreshResponseData data;
+    data.model_update_request = std::move(response);
+    InjectResponse(std::move(data));
   }
   void InjectResponse(RefreshResponseData response_data) {
-    injected_response_ = std::move(response_data);
+    injected_responses_.push_back(std::move(response_data));
   }
-  bool InjectedResponseConsumed() const { return !injected_response_; }
+  bool InjectedResponseConsumed() const { return injected_responses_.empty(); }
 
  private:
-  base::Optional<RefreshResponseData> injected_response_;
+  mutable std::vector<RefreshResponseData> injected_responses_;
 };
 
 class FakeRefreshTaskScheduler : public RefreshTaskScheduler {
@@ -371,11 +417,17 @@ class TestMetricsReporter : public MetricsReporter {
     MetricsReporter::ContentSliceViewed(surface_id, index_in_stream);
   }
   void OnLoadStream(LoadStreamStatus load_from_store_status,
-                    LoadStreamStatus final_status) override {
+                    LoadStreamStatus final_status,
+                    std::unique_ptr<LoadLatencyTimes> latencies) override {
     load_stream_status = final_status;
     LOG(INFO) << "OnLoadStream: " << final_status
               << " (store status: " << load_from_store_status << ")";
-    MetricsReporter::OnLoadStream(load_from_store_status, final_status);
+    MetricsReporter::OnLoadStream(load_from_store_status, final_status,
+                                  std::move(latencies));
+  }
+  void OnLoadMoreBegin(SurfaceId surface_id) override {
+    load_more_surface_id = surface_id;
+    MetricsReporter::OnLoadMoreBegin(surface_id);
   }
   void OnLoadMore(LoadStreamStatus final_status) override {
     load_more_status = final_status;
@@ -389,15 +441,99 @@ class TestMetricsReporter : public MetricsReporter {
     this->time_since_last_clear = time_since_last_clear;
     MetricsReporter::OnClearAll(time_since_last_clear);
   }
+  void OnUploadActions(UploadActionsStatus status) override {
+    upload_action_status = status;
+    MetricsReporter::OnUploadActions(status);
+  }
 
   // Test access.
 
   base::Optional<int> slice_viewed_index;
   base::Optional<LoadStreamStatus> load_stream_status;
+  base::Optional<SurfaceId> load_more_surface_id;
   base::Optional<LoadStreamStatus> load_more_status;
   base::Optional<LoadStreamStatus> background_refresh_status;
   base::Optional<base::TimeDelta> time_since_last_clear;
   base::Optional<TriggerType> refresh_trigger_type;
+  base::Optional<UploadActionsStatus> upload_action_status;
+};
+
+class TestPrefetchService : public offline_pages::StubPrefetchService {
+ public:
+  TestPrefetchService() = default;
+  // offline_pages::StubPrefetchService.
+  void SetSuggestionProvider(
+      offline_pages::SuggestionsProvider* suggestions_provider) override {
+    suggestions_provider_ = suggestions_provider;
+  }
+  void NewSuggestionsAvailable() override {
+    ++new_suggestions_available_call_count_;
+  }
+
+  // Test functionality.
+  offline_pages::SuggestionsProvider* suggestions_provider() {
+    return suggestions_provider_;
+  }
+  int NewSuggestionsAvailableCallCount() const {
+    return new_suggestions_available_call_count_;
+  }
+
+ private:
+  offline_pages::SuggestionsProvider* suggestions_provider_ = nullptr;
+  int new_suggestions_available_call_count_ = 0;
+};
+
+class TestOfflinePageModel : public offline_pages::StubOfflinePageModel {
+ public:
+  // offline_pages::OfflinePageModel
+  void AddObserver(Observer* observer) override {
+    CHECK(observers_.insert(observer).second);
+  }
+  void RemoveObserver(Observer* observer) override {
+    CHECK_EQ(1UL, observers_.erase(observer));
+  }
+  void GetPagesWithCriteria(
+      const offline_pages::PageCriteria& criteria,
+      offline_pages::MultipleOfflinePageItemCallback callback) override {
+    std::vector<offline_pages::OfflinePageItem> result;
+    for (const offline_pages::OfflinePageItem& item : items_) {
+      if (MeetsCriteria(criteria, item)) {
+        result.push_back(item);
+      }
+    }
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), result));
+  }
+
+  // Test functions.
+
+  void AddTestPage(const GURL& url) {
+    offline_pages::OfflinePageItem item;
+    item.url = url;
+    item.client_id =
+        offline_pages::ClientId(offline_pages::kSuggestedArticlesNamespace, "");
+    items_.push_back(item);
+  }
+
+  std::vector<offline_pages::OfflinePageItem>& items() { return items_; }
+
+  void CallObserverOfflinePageAdded(
+      const offline_pages::OfflinePageItem& item) {
+    for (Observer* observer : observers_) {
+      observer->OfflinePageAdded(this, item);
+    }
+  }
+
+  void CallObserverOfflinePageDeleted(
+      const offline_pages::OfflinePageItem& item) {
+    for (Observer* observer : observers_) {
+      observer->OfflinePageDeleted(item);
+    }
+  }
+
+ private:
+  std::vector<offline_pages::OfflinePageItem> items_;
+  std::set<Observer*> observers_;
 };
 
 class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
@@ -410,6 +546,12 @@ class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
     feed::RegisterProfilePrefs(profile_prefs_.registry());
     metrics_reporter_ = std::make_unique<TestMetricsReporter>(
         task_environment_.GetMockTickClock(), &profile_prefs_);
+
+    shared_url_loader_factory_ =
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+            &test_factory_);
+    image_fetcher_ =
+        std::make_unique<TestImageFetcher>(shared_url_loader_factory_);
 
     CHECK_EQ(kTestTimeEpoch, task_environment_.GetMockClock()->Now());
     CreateStream();
@@ -435,6 +577,8 @@ class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
     return result;
   }
   std::string GetLanguageTag() override { return "en-US"; }
+  void ClearAll() override {}
+  bool IsSignedIn() override { return is_signed_in_; }
 
   // For tests.
 
@@ -445,7 +589,8 @@ class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
     chrome_info.version = base::Version({99, 1, 9911, 2});
     stream_ = std::make_unique<FeedStream>(
         &refresh_scheduler_, metrics_reporter_.get(), this, &profile_prefs_,
-        &network_, store_.get(), task_environment_.GetMockClock(),
+        &network_, image_fetcher_.get(), store_.get(), &prefetch_service_,
+        &offline_page_model_, task_environment_.GetMockClock(),
         task_environment_.GetMockTickClock(), chrome_info);
 
     WaitForIdleTaskQueue();  // Wait for any initialization.
@@ -507,6 +652,9 @@ class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
   std::unique_ptr<TestMetricsReporter> metrics_reporter_;
   TestFeedNetwork network_;
   TestWireResponseTranslator response_translator_;
+  std::unique_ptr<TestImageFetcher> image_fetcher_;
+  network::TestURLLoaderFactory test_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
 
   std::unique_ptr<FeedStore> store_ = std::make_unique<FeedStore>(
       leveldb_proto::ProtoDatabaseProvider::GetUniqueDB<feedstore::Record>(
@@ -514,9 +662,12 @@ class FeedStreamTest : public testing::Test, public FeedStream::Delegate {
           /*file_path=*/{},
           task_environment_.GetMainThreadTaskRunner()));
   FakeRefreshTaskScheduler refresh_scheduler_;
+  TestPrefetchService prefetch_service_;
+  TestOfflinePageModel offline_page_model_;
   std::unique_ptr<FeedStream> stream_;
   bool is_eula_accepted_ = true;
   bool is_offline_ = false;
+  bool is_signed_in_ = true;
 };
 
 TEST_F(FeedStreamTest, IsArticlesListVisibleByDefault) {
@@ -558,6 +709,8 @@ TEST_F(FeedStreamTest, BackgroundRefreshSuccess) {
   TestSurface surface(stream_.get());
   WaitForIdleTaskQueue();
   EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
+  // Verify that prefetch service was informed.
+  EXPECT_EQ(1, prefetch_service_.NewSuggestionsAvailableCallCount());
 }
 
 TEST_F(FeedStreamTest, BackgroundRefreshNotAttemptedWhenModelIsLoading) {
@@ -729,6 +882,13 @@ TEST_F(FeedStreamTest, DetachSurface) {
   EXPECT_FALSE(surface.update);
 }
 
+TEST_F(FeedStreamTest, FetchImage) {
+  CallbackReceiver<NetworkResponse> receiver;
+  stream_->FetchImage(GURL("https://example.com"), receiver.Bind());
+
+  EXPECT_EQ("dummyresponse", receiver.GetResult()->response_bytes);
+}
+
 TEST_F(FeedStreamTest, LoadFromNetwork) {
   stream_->GetMetadata()->SetConsistencyToken("token");
 
@@ -846,6 +1006,7 @@ TEST_F(FeedStreamTest, LoadFromNetworkFailsDueToProtoTranslation) {
 
   EXPECT_EQ(LoadStreamStatus::kProtoTranslationFailed,
             metrics_reporter_->load_stream_status);
+  EXPECT_EQ(0, prefetch_service_.NewSuggestionsAvailableCallCount());
 }
 
 TEST_F(FeedStreamTest, DoNotLoadFromNetworkWhenOffline) {
@@ -897,26 +1058,28 @@ TEST_F(FeedStreamTest, LoadStreamAfterEulaIsAccepted) {
   EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
 }
 
-TEST_F(FeedStreamTest, DoNotLoadFromNetworkAfterHistoryIsDeleted) {
-  stream_->OnHistoryDeleted();
+TEST_F(FeedStreamTest, ForceSignedOutRequestAfterHistoryIsDeleted) {
+  stream_->OnAllHistoryDeleted();
   task_environment_.FastForwardBy(kSuppressRefreshDuration -
                                   base::TimeDelta::FromSeconds(1));
   response_translator_.InjectResponse(MakeTypicalInitialModelState());
   TestSurface surface(stream_.get());
   WaitForIdleTaskQueue();
 
-  EXPECT_EQ("loading -> no-cards", surface.DescribeUpdates());
+  EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
+  EXPECT_TRUE(network_.forced_signed_out_request);
+}
 
-  EXPECT_EQ(LoadStreamStatus::kCannotLoadFromNetworkSupressedForHistoryDelete,
-            metrics_reporter_->load_stream_status);
-
-  surface.Detach();
-  task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(2));
-  surface.Clear();
-  surface.Attach(stream_.get());
+TEST_F(FeedStreamTest, AllowSignedInRequestAfterHistoryIsDeletedAfterDelay) {
+  stream_->OnAllHistoryDeleted();
+  task_environment_.FastForwardBy(kSuppressRefreshDuration +
+                                  base::TimeDelta::FromSeconds(1));
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
   WaitForIdleTaskQueue();
 
   EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
+  EXPECT_FALSE(network_.forced_signed_out_request);
 }
 
 TEST_F(FeedStreamTest, ShouldMakeFeedQueryRequestConsumesQuota) {
@@ -1044,13 +1207,19 @@ TEST_F(FeedStreamTest, LoadMoreAppendsContent) {
   TestSurface surface(stream_.get());
   WaitForIdleTaskQueue();
   ASSERT_EQ("loading -> 2 slices", surface.DescribeUpdates());
+  EXPECT_EQ(1, prefetch_service_.NewSuggestionsAvailableCallCount());
+
   // Load page 2.
   response_translator_.InjectResponse(MakeTypicalNextPageState(2));
   CallbackReceiver<bool> callback;
   stream_->LoadMore(surface.GetSurfaceId(), callback.Bind());
+  // Ensure metrics reporter was informed at the start of the operation.
+  EXPECT_EQ(surface.GetSurfaceId(), metrics_reporter_->load_more_surface_id);
   WaitForIdleTaskQueue();
   ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
   EXPECT_EQ("2 slices +spinner -> 4 slices", surface.DescribeUpdates());
+  EXPECT_EQ(2, prefetch_service_.NewSuggestionsAvailableCallCount());
+
   // Load page 3.
   response_translator_.InjectResponse(MakeTypicalNextPageState(3));
   stream_->LoadMore(surface.GetSurfaceId(), callback.Bind());
@@ -1058,6 +1227,7 @@ TEST_F(FeedStreamTest, LoadMoreAppendsContent) {
   WaitForIdleTaskQueue();
   ASSERT_EQ(base::Optional<bool>(true), callback.GetResult());
   EXPECT_EQ("4 slices +spinner -> 6 slices", surface.DescribeUpdates());
+  EXPECT_EQ(3, prefetch_service_.NewSuggestionsAvailableCallCount());
 }
 
 TEST_F(FeedStreamTest, LoadMorePersistsData) {
@@ -1171,6 +1341,9 @@ TEST_F(FeedStreamTest, LoadMoreAbortsIfNoNextPageToken) {
   EXPECT_EQ(base::Optional<bool>(false), callback.GetResult());
   ASSERT_EQ(1, network_.send_query_call_count);
   EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
+  EXPECT_EQ(base::nullopt, metrics_reporter_->load_more_surface_id)
+      << "metrics reporter was informed about a load more operation which "
+         "didn't begin";
 }
 
 TEST_F(FeedStreamTest, LoadMoreFail) {
@@ -1232,11 +1405,33 @@ TEST_F(FeedStreamTest, LoadMoreBeforeLoad) {
 }
 
 TEST_F(FeedStreamTest, ReadNetworkResponse) {
+  base::HistogramTester histograms;
   network_.InjectRealResponse();
   TestSurface surface(stream_.get());
   WaitForIdleTaskQueue();
 
   ASSERT_EQ("loading -> 10 slices", surface.DescribeUpdates());
+
+  // Verify we're processing some of the data on the request.
+
+  // The response has a privacy_notice_fulfilled=true.
+  histograms.ExpectUniqueSample(
+      "ContentSuggestions.Feed.ActivityLoggingEnabled", 1, 1);
+
+  // The response has a privacy_notice_fulfilled=true.
+  histograms.ExpectUniqueSample("ContentSuggestions.Feed.NoticeCardFulfilled",
+                                1, 1);
+
+  // A request schedule with two entries was in the response. The first entry
+  // should have already been scheduled/consumed, leaving only the second
+  // entry still in the the refresh_offsets vector.
+  RequestSchedule schedule = prefs::GetRequestSchedule(profile_prefs_);
+  EXPECT_EQ(
+      std::vector<base::TimeDelta>({base::TimeDelta::FromSeconds(120000)}),
+      schedule.refresh_offsets);
+
+  // The stream's user attributes are set, so activity logging is enabled.
+  EXPECT_TRUE(stream_->IsActivityLoggingEnabled());
 }
 
 TEST_F(FeedStreamTest, ClearAllAfterLoadResultsInRefresh) {
@@ -1263,8 +1458,47 @@ TEST_F(FeedStreamTest, ClearAllWithNoSurfacesAttachedDoesNotReload) {
   WaitForIdleTaskQueue();
 
   EXPECT_EQ("loading -> 2 slices", surface.DescribeUpdates());
-  // Also check that the storage is cleared.
+}
+
+TEST_F(FeedStreamTest, ClearAllWhileLoadingMore) {
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  stream_->LoadMore(surface.GetSurfaceId(), base::DoNothing());
+  response_translator_.InjectResponse(MakeTypicalNextPageState(2));
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  stream_->OnCacheDataCleared();  // triggers ClearAll().
+  WaitForIdleTaskQueue();
+
+  EXPECT_EQ(
+      "loading -> 2 slices -> 2 slices +spinner -> 4 slices -> loading -> 2 "
+      "slices",
+      surface.DescribeUpdates());
+}
+
+TEST_F(FeedStreamTest, ClearAllWipesAllState) {
+  // Trigger saving a consistency token, so it can be cleared later.
+  network_.consistency_token = "token-11";
+  stream_->UploadAction(MakeFeedAction(42ul), true, base::DoNothing());
+  // Trigger saving a feed stream, so it can be cleared later.
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  // Enqueue an action, so it can be cleared later.
+  stream_->UploadAction(MakeFeedAction(43ul), false, base::DoNothing());
+
+  // Trigger ClearAll, this should erase everything.
+  stream_->OnCacheDataCleared();
+  WaitForIdleTaskQueue();
+
+  ASSERT_EQ("loading -> 2 slices -> loading -> cant-refresh",
+            surface.DescribeUpdates());
+
   EXPECT_EQ("", DumpStoreState());
+  EXPECT_EQ("", stream_->GetMetadata()->GetConsistencyToken());
+  EXPECT_FALSE(stream_->IsActivityLoggingEnabled());
 }
 
 TEST_F(FeedStreamTest, StorePendingAction) {
@@ -1275,6 +1509,25 @@ TEST_F(FeedStreamTest, StorePendingAction) {
       ReadStoredActions(stream_->GetStore());
   ASSERT_EQ(1ul, result.size());
   EXPECT_EQ(42ul, result[0].action().content_id().id());
+}
+
+TEST_F(FeedStreamTest, UploadActionWhileSignedOutIsNoOp) {
+  is_signed_in_ = false;
+  stream_->UploadAction(MakeFeedAction(42ul), false, base::DoNothing());
+  WaitForIdleTaskQueue();
+
+  EXPECT_EQ(0ul, ReadStoredActions(stream_->GetStore()).size());
+}
+
+TEST_F(FeedStreamTest, SignOutWhileUploadActionDoesNotUpload) {
+  stream_->UploadAction(MakeFeedAction(42ul), true, base::DoNothing());
+  is_signed_in_ = false;
+
+  WaitForIdleTaskQueue();
+
+  EXPECT_EQ(UploadActionsStatus::kAbortUploadForSignedOutUser,
+            metrics_reporter_->upload_action_status);
+  EXPECT_EQ(0, network_.action_request_call_count);
 }
 
 TEST_F(FeedStreamTest, StorePendingActionAndUploadNow) {
@@ -1296,6 +1549,22 @@ TEST_F(FeedStreamTest, StorePendingActionAndUploadNow) {
   ASSERT_EQ(0ul, result.size());
 }
 
+TEST_F(FeedStreamTest, ProcessViewActionResultsInDelayedUpload) {
+  network_.consistency_token = "token-11";
+
+  stream_->ProcessViewAction(MakeFeedAction(42ul).SerializeAsString());
+  WaitForIdleTaskQueue();
+  // Verify it's not uploaded immediately.
+  ASSERT_EQ(0, network_.action_request_call_count);
+
+  // Trigger a network refresh.
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  // Verify the action was uploaded.
+  EXPECT_EQ(1, network_.action_request_call_count);
+}
+
 TEST_F(FeedStreamTest, LoadStreamFromNetworkUploadsActions) {
   stream_->UploadAction(MakeFeedAction(99ul), false, base::DoNothing());
   WaitForIdleTaskQueue();
@@ -1304,17 +1573,38 @@ TEST_F(FeedStreamTest, LoadStreamFromNetworkUploadsActions) {
   WaitForIdleTaskQueue();
 
   EXPECT_EQ(1, network_.action_request_call_count);
-  EXPECT_EQ(
-      1,
-      network_.action_request_sent->feed_action_request().feed_action_size());
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
 
   // Uploaded action should have been erased from store.
   stream_->UploadAction(MakeFeedAction(100ul), true, base::DoNothing());
   WaitForIdleTaskQueue();
   EXPECT_EQ(2, network_.action_request_call_count);
-  EXPECT_EQ(
-      1,
-      network_.action_request_sent->feed_action_request().feed_action_size());
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
+}
+
+TEST_F(FeedStreamTest, UploadedActionsHaveSequentialNumbers) {
+  // Send 3 actions.
+  stream_->UploadAction(MakeFeedAction(1ul), false, base::DoNothing());
+  stream_->UploadAction(MakeFeedAction(2ul), false, base::DoNothing());
+  stream_->UploadAction(MakeFeedAction(3ul), true, base::DoNothing());
+  WaitForIdleTaskQueue();
+  ASSERT_EQ(1, network_.action_request_call_count);
+  feedwire::UploadActionsRequest request1 = *network_.action_request_sent;
+
+  // Send another action in a new request.
+  stream_->UploadAction(MakeFeedAction(4ul), true, base::DoNothing());
+  WaitForIdleTaskQueue();
+  ASSERT_EQ(2, network_.action_request_call_count);
+  feedwire::UploadActionsRequest request2 = *network_.action_request_sent;
+
+  // Verify that sent actions have sequential numbers.
+  ASSERT_EQ(3, request1.feed_actions_size());
+  ASSERT_EQ(1, request2.feed_actions_size());
+
+  EXPECT_EQ(1, request1.feed_actions(0).client_data().sequence_number());
+  EXPECT_EQ(2, request1.feed_actions(1).client_data().sequence_number());
+  EXPECT_EQ(3, request1.feed_actions(2).client_data().sequence_number());
+  EXPECT_EQ(4, request2.feed_actions(0).client_data().sequence_number());
 }
 
 TEST_F(FeedStreamTest, LoadMoreUploadsActions) {
@@ -1330,22 +1620,71 @@ TEST_F(FeedStreamTest, LoadMoreUploadsActions) {
   stream_->LoadMore(surface.GetSurfaceId(), base::DoNothing());
   WaitForIdleTaskQueue();
 
-  EXPECT_EQ(
-      1,
-      network_.action_request_sent->feed_action_request().feed_action_size());
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
   EXPECT_EQ("token-12", stream_->GetMetadata()->GetConsistencyToken());
 
   // Uploaded action should have been erased from the store.
   network_.action_request_sent.reset();
   stream_->UploadAction(MakeFeedAction(100ul), true, base::DoNothing());
   WaitForIdleTaskQueue();
-  EXPECT_EQ(
-      1,
-      network_.action_request_sent->feed_action_request().feed_action_size());
-  EXPECT_EQ(100ul, network_.action_request_sent->feed_action_request()
-                       .feed_action(0)
-                       .content_id()
-                       .id());
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
+  EXPECT_EQ(100ul,
+            network_.action_request_sent->feed_actions(0).content_id().id());
+}
+
+TEST_F(FeedStreamTest, LoadMoreUpdatesIsActivityLoggingEnabled) {
+  EXPECT_FALSE(stream_->IsActivityLoggingEnabled());
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+  EXPECT_TRUE(stream_->IsActivityLoggingEnabled());
+
+  int page = 2;
+  for (bool signed_in : {true, false}) {
+    for (bool waa_on : {true, false}) {
+      for (bool privacy_notice_fulfilled : {true, false}) {
+        response_translator_.InjectResponse(
+            MakeTypicalNextPageState(page++, kTestTimeEpoch, signed_in, waa_on,
+                                     privacy_notice_fulfilled));
+        CallbackReceiver<bool> callback;
+        stream_->LoadMore(surface.GetSurfaceId(), callback.Bind());
+        WaitForIdleTaskQueue();
+        EXPECT_EQ(stream_->IsActivityLoggingEnabled(), signed_in && waa_on);
+      }
+    }
+  }
+}
+
+TEST_F(FeedStreamTest, BackgroundingAppUploadsActions) {
+  stream_->UploadAction(MakeFeedAction(1ul), false, base::DoNothing());
+  stream_->OnEnterBackground();
+  WaitForIdleTaskQueue();
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
+  EXPECT_EQ(1ul,
+            network_.action_request_sent->feed_actions(0).content_id().id());
+}
+
+TEST_F(FeedStreamTest, BackgroundingAppDoesNotUploadActions) {
+  Config config;
+  config.upload_actions_on_enter_background = false;
+  SetFeedConfigForTesting(config);
+
+  network_.action_request_call_count = 0;
+  stream_->UploadAction(MakeFeedAction(1ul), false, base::DoNothing());
+  stream_->OnEnterBackground();
+  WaitForIdleTaskQueue();
+  EXPECT_EQ(0, network_.action_request_call_count);
+}
+
+TEST_F(FeedStreamTest, UploadedActionsAreNotSentAgain) {
+  stream_->UploadAction(MakeFeedAction(1ul), false, base::DoNothing());
+  stream_->OnEnterBackground();
+  WaitForIdleTaskQueue();
+  ASSERT_EQ(1, network_.action_request_call_count);
+
+  stream_->OnEnterBackground();
+  WaitForIdleTaskQueue();
+  EXPECT_EQ(1, network_.action_request_call_count);
 }
 
 TEST_F(FeedStreamTest, UploadActionsOneBatch) {
@@ -1354,16 +1693,12 @@ TEST_F(FeedStreamTest, UploadActionsOneBatch) {
   WaitForIdleTaskQueue();
 
   EXPECT_EQ(1, network_.action_request_call_count);
-  EXPECT_EQ(
-      3,
-      network_.action_request_sent->feed_action_request().feed_action_size());
+  EXPECT_EQ(3, network_.action_request_sent->feed_actions_size());
 
   stream_->UploadAction(MakeFeedAction(99ul), true, base::DoNothing());
   WaitForIdleTaskQueue();
   EXPECT_EQ(2, network_.action_request_call_count);
-  EXPECT_EQ(
-      1,
-      network_.action_request_sent->feed_action_request().feed_action_size());
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
 }
 
 TEST_F(FeedStreamTest, UploadActionsMultipleBatches) {
@@ -1385,9 +1720,7 @@ TEST_F(FeedStreamTest, UploadActionsMultipleBatches) {
   stream_->UploadAction(MakeFeedAction(99ul), true, base::DoNothing());
   WaitForIdleTaskQueue();
   EXPECT_EQ(4, network_.action_request_call_count);
-  EXPECT_EQ(
-      1,
-      network_.action_request_sent->feed_action_request().feed_action_size());
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
 }
 
 TEST_F(FeedStreamTest, UploadActionsSkipsStaleActionsByTimestamp) {
@@ -1402,13 +1735,9 @@ TEST_F(FeedStreamTest, UploadActionsSkipsStaleActionsByTimestamp) {
 
   // Just one action should have been uploaded.
   EXPECT_EQ(1, network_.action_request_call_count);
-  EXPECT_EQ(
-      1,
-      network_.action_request_sent->feed_action_request().feed_action_size());
-  EXPECT_EQ(3ul, network_.action_request_sent->feed_action_request()
-                     .feed_action(0)
-                     .content_id()
-                     .id());
+  EXPECT_EQ(1, network_.action_request_sent->feed_actions_size());
+  EXPECT_EQ(3ul,
+            network_.action_request_sent->feed_actions(0).content_id().id());
 
   ASSERT_TRUE(cr.GetResult());
   EXPECT_EQ(1ul, cr.GetResult()->upload_attempt_count);
@@ -1430,9 +1759,7 @@ TEST_F(FeedStreamTest, UploadActionsErasesStaleActionsByAttempts) {
 
   // Four requests, three pending actions in the last request.
   EXPECT_EQ(4, network_.action_request_call_count);
-  EXPECT_EQ(
-      3,
-      network_.action_request_sent->feed_action_request().feed_action_size());
+  EXPECT_EQ(3, network_.action_request_sent->feed_actions_size());
 
   // Action 0 should have been erased.
   ASSERT_TRUE(cr.GetResult());
@@ -1445,14 +1772,14 @@ TEST_F(FeedStreamTest, MetadataLoadedWhenDatabaseInitialized) {
 
   // Set the token and increment next action ID.
   stream_->GetMetadata()->SetConsistencyToken("token");
-  EXPECT_EQ(0, stream_->GetMetadata()->GetNextActionId().GetUnsafeValue());
+  EXPECT_EQ(1, stream_->GetMetadata()->GetNextActionId().GetUnsafeValue());
 
   // Creating a stream should load metadata.
   CreateStream();
 
   ASSERT_TRUE(stream_->GetMetadata());
   EXPECT_EQ("token", stream_->GetMetadata()->GetConsistencyToken());
-  EXPECT_EQ(1, stream_->GetMetadata()->GetNextActionId().GetUnsafeValue());
+  EXPECT_EQ(2, stream_->GetMetadata()->GetNextActionId().GetUnsafeValue());
 }
 
 TEST_F(FeedStreamTest, ModelUnloadsAfterTimeout) {
@@ -1523,6 +1850,224 @@ TEST_F(FeedStreamTest, ModelUnloadsAfterSecondTimeout) {
   task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(2));
   WaitForIdleTaskQueue();
   EXPECT_FALSE(stream_->GetModel());
+}
+
+TEST_F(FeedStreamTest, ProvidesPrefetchSuggestionsWhenModelLoaded) {
+  // Setup by triggering a model load.
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  // Because we loaded from the network,
+  // PrefetchService::NewSuggestionsAvailable() should have been called.
+  EXPECT_EQ(1, prefetch_service_.NewSuggestionsAvailableCallCount());
+
+  CallbackReceiver<std::vector<offline_pages::PrefetchSuggestion>> callback;
+  prefetch_service_.suggestions_provider()->GetCurrentArticleSuggestions(
+      callback.Bind());
+  WaitForIdleTaskQueue();
+
+  ASSERT_TRUE(callback.GetResult());
+  const std::vector<offline_pages::PrefetchSuggestion>& suggestions =
+      callback.GetResult().value();
+
+  ASSERT_EQ(2UL, suggestions.size());
+  EXPECT_EQ("http://content0/", suggestions[0].article_url);
+  EXPECT_EQ("title0", suggestions[0].article_title);
+  EXPECT_EQ("publisher0", suggestions[0].article_attribution);
+  EXPECT_EQ("snippet0", suggestions[0].article_snippet);
+  EXPECT_EQ("http://image0/", suggestions[0].thumbnail_url);
+  EXPECT_EQ("http://favicon0/", suggestions[0].favicon_url);
+
+  EXPECT_EQ("http://content1/", suggestions[1].article_url);
+}
+
+TEST_F(FeedStreamTest, ProvidesPrefetchSuggestionsWhenModelNotLoaded) {
+  store_->OverwriteStream(MakeTypicalInitialModelState(), base::DoNothing());
+
+  CallbackReceiver<std::vector<offline_pages::PrefetchSuggestion>> callback;
+  prefetch_service_.suggestions_provider()->GetCurrentArticleSuggestions(
+      callback.Bind());
+  WaitForIdleTaskQueue();
+
+  ASSERT_FALSE(stream_->GetModel());
+  ASSERT_TRUE(callback.GetResult());
+  const std::vector<offline_pages::PrefetchSuggestion>& suggestions =
+      callback.GetResult().value();
+
+  ASSERT_EQ(2UL, suggestions.size());
+  EXPECT_EQ("http://content0/", suggestions[0].article_url);
+  EXPECT_EQ("http://content1/", suggestions[1].article_url);
+  EXPECT_EQ(0, prefetch_service_.NewSuggestionsAvailableCallCount());
+}
+
+TEST_F(FeedStreamTest, ScrubsUrlsInProvidedPrefetchSuggestions) {
+  {
+    auto initial_state = MakeTypicalInitialModelState();
+    initial_state->content[0].mutable_prefetch_metadata(0)->set_uri(
+        "?notavalidurl?");
+    initial_state->content[0].mutable_prefetch_metadata(0)->set_image_url(
+        "?asdf?");
+    initial_state->content[0].mutable_prefetch_metadata(0)->set_favicon_url(
+        "?hi?");
+    initial_state->content[0].mutable_prefetch_metadata(0)->clear_uri();
+    store_->OverwriteStream(std::move(initial_state), base::DoNothing());
+  }
+
+  CallbackReceiver<std::vector<offline_pages::PrefetchSuggestion>> callback;
+  prefetch_service_.suggestions_provider()->GetCurrentArticleSuggestions(
+      callback.Bind());
+  WaitForIdleTaskQueue();
+
+  ASSERT_TRUE(callback.GetResult());
+  const std::vector<offline_pages::PrefetchSuggestion>& suggestions =
+      callback.GetResult().value();
+
+  ASSERT_EQ(2UL, suggestions.size());
+  EXPECT_EQ("", suggestions[0].article_url.possibly_invalid_spec());
+  EXPECT_EQ("", suggestions[0].thumbnail_url.possibly_invalid_spec());
+  EXPECT_EQ("", suggestions[0].favicon_url.possibly_invalid_spec());
+}
+
+TEST_F(FeedStreamTest, OfflineBadgesArePopulatedInitially) {
+  // Add two offline pages. We exclude tab-bound pages, so only the first is
+  // used.
+  offline_page_model_.AddTestPage(GURL("http://content0/"));
+  offline_page_model_.AddTestPage(GURL("http://content1/"));
+  offline_page_model_.items()[1].client_id.name_space =
+      offline_pages::kLastNNamespace;
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  EXPECT_EQ((std::map<std::string, std::string>(
+                {{"app/badge0", SerializedOfflineBadgeContent()}})),
+            surface.GetDataStoreEntries());
+}
+
+TEST_F(FeedStreamTest, OfflineBadgesArePopulatedOnNewOfflineItemAdded) {
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  ASSERT_EQ((std::map<std::string, std::string>({})),
+            surface.GetDataStoreEntries());
+
+  // Add an offline page.
+  offline_page_model_.AddTestPage(GURL("http://content1/"));
+  offline_page_model_.CallObserverOfflinePageAdded(
+      offline_page_model_.items()[0]);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+
+  EXPECT_EQ((std::map<std::string, std::string>(
+                {{"app/badge1", SerializedOfflineBadgeContent()}})),
+            surface.GetDataStoreEntries());
+}
+
+TEST_F(FeedStreamTest, OfflineBadgesAreRemovedWhenOfflineItemRemoved) {
+  offline_page_model_.AddTestPage(GURL("http://content0/"));
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  ASSERT_EQ((std::map<std::string, std::string>(
+                {{"app/badge0", SerializedOfflineBadgeContent()}})),
+            surface.GetDataStoreEntries());
+
+  // Remove the offline page.
+  offline_page_model_.CallObserverOfflinePageDeleted(
+      offline_page_model_.items()[0]);
+  task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+
+  EXPECT_EQ((std::map<std::string, std::string>()),
+            surface.GetDataStoreEntries());
+}
+
+TEST_F(FeedStreamTest, OfflineBadgesAreProvidedToNewSurfaces) {
+  offline_page_model_.AddTestPage(GURL("http://content0/"));
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  TestSurface surface2(stream_.get());
+  WaitForIdleTaskQueue();
+
+  EXPECT_EQ((std::map<std::string, std::string>(
+                {{"app/badge0", SerializedOfflineBadgeContent()}})),
+            surface2.GetDataStoreEntries());
+}
+
+TEST_F(FeedStreamTest, OfflineBadgesAreRemovedWhenModelIsUnloaded) {
+  offline_page_model_.AddTestPage(GURL("http://content0/"));
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  stream_->UnloadModel();
+
+  // Offline badge no longer present.
+  EXPECT_EQ((std::map<std::string, std::string>()),
+            surface.GetDataStoreEntries());
+}
+
+TEST_F(FeedStreamTest, MultipleOfflineBadgesWithSameUrl) {
+  {
+    std::unique_ptr<StreamModelUpdateRequest> state =
+        MakeTypicalInitialModelState();
+    const feedwire::PrefetchMetadata& prefetch_metadata1 =
+        state->content[0].prefetch_metadata(0);
+    feedwire::PrefetchMetadata& prefetch_metadata2 =
+        *state->content[0].add_prefetch_metadata();
+    prefetch_metadata2 = prefetch_metadata1;
+    prefetch_metadata2.set_badge_id("app/badge0b");
+    response_translator_.InjectResponse(std::move(state));
+  }
+  offline_page_model_.AddTestPage(GURL("http://content0/"));
+
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  EXPECT_EQ((std::map<std::string, std::string>(
+                {{"app/badge0", SerializedOfflineBadgeContent()},
+                 {"app/badge0b", SerializedOfflineBadgeContent()}})),
+            surface.GetDataStoreEntries());
+}
+
+TEST_F(FeedStreamTest, SendsClientInstanceId) {
+  stream_->GetMetadata()->SetConsistencyToken("token");
+
+  // Store is empty, so we should fallback to a network request.
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  ASSERT_EQ(1, network_.send_query_call_count);
+  ASSERT_TRUE(network_.query_request_sent);
+
+  // Instance ID is a random token. Verify it is not empty.
+  std::string first_instance_id = network_.query_request_sent->feed_request()
+                                      .client_info()
+                                      .client_instance_id();
+  EXPECT_NE("", first_instance_id);
+
+  // LoadMore, and verify the same token is used.
+  response_translator_.InjectResponse(MakeTypicalNextPageState(2));
+  stream_->LoadMore(surface.GetSurfaceId(), base::DoNothing());
+  WaitForIdleTaskQueue();
+
+  ASSERT_EQ(2, network_.send_query_call_count);
+  EXPECT_EQ(first_instance_id, network_.query_request_sent->feed_request()
+                                   .client_info()
+                                   .client_instance_id());
+
+  // Trigger a ClearAll to verify the instance ID changes.
+  stream_->OnSignedOut();
+  WaitForIdleTaskQueue();
+
+  const std::string new_instance_id =
+      stream_->GetRequestMetadata().client_instance_id;
+  ASSERT_NE("", new_instance_id);
+  ASSERT_NE(first_instance_id, new_instance_id);
 }
 
 }  // namespace

@@ -34,9 +34,8 @@ public final class TestWebLayer {
     }
 
     private TestWebLayer(@NonNull Context appContext) {
-        ClassLoader remoteClassLoader;
         try {
-            remoteClassLoader = WebLayer.getOrCreateRemoteContext(appContext).getClassLoader();
+            ClassLoader remoteClassLoader = WebLayer.getOrCreateRemoteClassLoader(appContext);
             Class TestWebLayerClass = remoteClassLoader.loadClass(
                     "org.chromium.weblayer_private.test.TestWebLayerImpl");
             mITestWebLayer = ITestWebLayer.Stub.asInterface(
@@ -113,5 +112,21 @@ public final class TestWebLayer {
 
     public boolean canInfoBarContainerScroll(Tab tab) throws RemoteException {
         return mITestWebLayer.canInfoBarContainerScroll(tab.getITab());
+    }
+
+    public String getDisplayedUrl(View urlBarView) throws RemoteException {
+        return mITestWebLayer.getDisplayedUrl(ObjectWrapper.wrap(urlBarView));
+    }
+
+    public String getTranslateInfoBarTargetLanguage(Tab tab) throws RemoteException {
+        return mITestWebLayer.getTranslateInfoBarTargetLanguage(tab.getITab());
+    }
+
+    public static void disableWebViewCompatibilityMode() {
+        WebLayer.disableWebViewCompatibilityMode();
+    }
+
+    public boolean didShowFullscreenToast(Tab tab) throws RemoteException {
+        return mITestWebLayer.didShowFullscreenToast(tab.getITab());
     }
 }

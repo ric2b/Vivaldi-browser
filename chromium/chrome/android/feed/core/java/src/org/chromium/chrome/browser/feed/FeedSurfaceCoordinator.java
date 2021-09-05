@@ -11,6 +11,7 @@ import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.os.Build;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -23,8 +24,8 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.FeatureList;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.GlobalDiscardableReferencePool;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.feed.action.FeedActionHandler;
 import org.chromium.chrome.browser.feed.library.api.host.action.ActionApi;
@@ -48,8 +49,8 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
-import org.chromium.chrome.feed.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.browser_ui.widget.displaystyle.ViewResizer;
 import org.chromium.components.feature_engagement.Tracker;
@@ -65,7 +66,7 @@ import java.util.List;
  */
 public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     @VisibleForTesting
-    public static final String FEED_CONTENT_FIRST_LOADED_TIME_MS_UMA = "FeedContentFirstLoadedTime";
+    public static final String FEED_STREAM_CREATED_TIME_MS_UMA = "FeedStreamCreatedTime";
 
     private final Activity mActivity;
     private final SnackbarManager mSnackbarManager;
@@ -73,6 +74,8 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     private final View mNtpHeader;
     private final boolean mShowDarkBackground;
     private final boolean mIsPlaceholderShown;
+    private final boolean mIsPlaceholderShownInV1;
+    private final boolean mV2Enabled;
     private final FeedSurfaceDelegate mDelegate;
     private final int mDefaultMargin;
     private final int mWideMargin;
@@ -84,6 +87,7 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     private FrameLayout mRootView;
     private ContextMenuManager mContextMenuManager;
     private Tracker mTracker;
+    private long mStreamCreatedTimeMs;
 
     // Homepage promo view will be not-null once we have it created, until it is destroyed.
     private @Nullable View mHomepagePromoView;
@@ -216,6 +220,9 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         mSectionHeaderView = sectionHeaderView;
         mShowDarkBackground = showDarkBackground;
         mIsPlaceholderShown = isPlaceholderShown;
+        mV2Enabled = FeatureList.isInitialized()
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.INTEREST_FEED_V2);
+        mIsPlaceholderShownInV1 = mIsPlaceholderShown && !mV2Enabled;
         mDelegate = delegate;
         mPageNavigationDelegate = pageNavigationDelegate;
         mBottomSheetController = bottomSheetController;
@@ -223,9 +230,12 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
         mActionOptions = actionOptions;
 
         Resources resources = mActivity.getResources();
-        mDefaultMargin =
-                resources.getDimensionPixelSize(R.dimen.content_suggestions_card_modern_margin);
-        mWideMargin = resources.getDimensionPixelSize(R.dimen.ntp_wide_card_lateral_margins);
+        mDefaultMargin = resources.getDimensionPixelSize(mV2Enabled
+                        ? R.dimen.content_suggestions_card_modern_margin_v2
+                        : R.dimen.content_suggestions_card_modern_margin);
+        mWideMargin = resources.getDimensionPixelSize(mV2Enabled
+                        ? R.dimen.ntp_wide_card_lateral_margins_v2
+                        : R.dimen.ntp_wide_card_lateral_margins);
 
         mRootView = new RootView(mActivity);
         mRootView.setPadding(0, resources.getDimensionPixelOffset(R.dimen.tab_strip_height), 0, 0);
@@ -233,19 +243,13 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
 
         mTracker = TrackerFactory.getTrackerForProfile(profile);
 
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.HOMEPAGE_PROMO_CARD)) {
+            mHomepagePromoController =
+                    new HomepagePromoController(mActivity, mSnackbarManager, mTracker);
+        }
+
         // Mediator should be created before any Stream changes.
         mMediator = new FeedSurfaceMediator(this, snapScrollHelper, mPageNavigationDelegate);
-
-        // Add the homepage promo card when the feed is enabled and the feature is enabled. A null
-        // mStream object means that the feed is disabled. The intialization of the mStream object
-        // is handled during the construction of the FeedSurfaceMediator where there might be cases
-        // where the mStream object remains null because the feed is disabled, in which case the
-        // homepage promo card cannot be added to the feed even if the feature is enabled.
-        if (mStream != null && ChromeFeatureList.isEnabled(ChromeFeatureList.HOMEPAGE_PROMO_CARD)) {
-            mHomepagePromoController =
-                    new HomepagePromoController(mActivity, mSnackbarManager, mTracker, mMediator);
-            mMediator.onHomepagePromoStateChange();
-        }
 
         mUserEducationHelper = new UserEducationHelper(mActivity, mHandler);
     }
@@ -299,8 +303,13 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     }
 
     /** @return The {@link Stream} that this class holds. */
-    Stream getStream() {
+    public Stream getStream() {
         return mStream;
+    }
+
+    /** @return Whether the placeholder shows in V1. */
+    public boolean isPlaceholderShownInV1() {
+        return mIsPlaceholderShownInV1;
     }
 
     /**
@@ -314,9 +323,8 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
             mScrollViewResizer = null;
         }
 
-        boolean v2Enabled = FeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.INTEREST_FEED_V2);
-        if (v2Enabled) {
+        mStreamCreatedTimeMs = SystemClock.elapsedRealtime();
+        if (mV2Enabled) {
             mStream = new FeedStream(mActivity, mShowDarkBackground, mSnackbarManager,
                     mPageNavigationDelegate, mBottomSheetController);
         } else {
@@ -330,14 +338,14 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
                     FeedProcessScopeFactory.getFeedConsumptionObserver(),
                     FeedProcessScopeFactory.getFeedLoggingBridge(), mActivity, mProfile);
             mStream = FeedV1StreamCreator.createStream(mActivity, mImageLoader, actionApi,
-                    mUiConfig, mSnackbarManager, mShowDarkBackground, mIsPlaceholderShown);
+                    mUiConfig, mSnackbarManager, mShowDarkBackground, mIsPlaceholderShownInV1);
         }
 
         mStreamLifecycleManager = mDelegate.createStreamLifecycleManager(mStream, mActivity);
 
         View view = mStream.getView();
         view.setBackgroundResource(R.color.default_bg_color);
-        if (mIsPlaceholderShown) {
+        if (mIsPlaceholderShownInV1) {
             // Set recyclerView as transparent until first patch of articles are loaded. Before
             // that, the placeholder is shown.
             view.getBackground().setAlpha(0);
@@ -358,7 +366,7 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
             mStream.setHeaderViews(Arrays.asList(new NonDismissibleHeader(mSectionHeaderView)));
         }
 
-        if (!v2Enabled) {
+        if (!mV2Enabled) {
             mStream.addScrollListener(new FeedLoggingBridge.ScrollEventReporter(
                     FeedProcessScopeFactory.getFeedLoggingBridge()));
         }
@@ -445,12 +453,19 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
             mSigninPromoView = (PersonalizedSigninPromoView) inflater.inflate(
                     R.layout.personalized_signin_promo_view_modern_content_suggestions, mRootView,
                     false);
+            // If the placeholder is shown in V1, delay to show the sign-in view until the articles
+            // are shown.
+            if (mIsPlaceholderShownInV1) {
+                mSigninPromoView.setVisibility(View.INVISIBLE);
+            }
         }
         return mSigninPromoView;
     }
 
-    /** Update header views in the Stream. */
-    void updateHeaderViews(boolean isSignInPromoVisible) {
+    /**
+     *  Update header views in the Stream.
+     *  */
+    void updateHeaderViews(boolean isSignInPromoVisible, View homepagePromoView) {
         if (mStream == null) return;
 
         List<Header> headers = new ArrayList<>();
@@ -459,13 +474,9 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
             headers.add(new NonDismissibleHeader(mNtpHeader));
         }
 
-        // TODO(wenyufu): check Finch flag for whether sign-in takes precedence over homepage promo
-        if (!isSignInPromoVisible && mHomepagePromoController != null) {
-            View promoView = mHomepagePromoController.getPromoView();
-            if (promoView != null) {
-                mHomepagePromoView = promoView;
-                headers.add(new HomepagePromoHeader());
-            }
+        if (homepagePromoView != null) {
+            mHomepagePromoView = homepagePromoView;
+            headers.add(new HomepagePromoHeader());
         }
 
         if (mSectionHeaderView != null) {
@@ -506,9 +517,9 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
     }
 
     public void onOverviewShownAtLaunch(long activityCreationTimeMs) {
-        StartSurfaceConfiguration.recordHistogram(FEED_CONTENT_FIRST_LOADED_TIME_MS_UMA,
-                mMediator.getContentFirstAvailableTimeMs() - activityCreationTimeMs,
-                mIsPlaceholderShown);
+        mMediator.onOverviewShownAtLaunch(activityCreationTimeMs, mIsPlaceholderShown);
+        StartSurfaceConfiguration.recordHistogram(FEED_STREAM_CREATED_TIME_MS_UMA,
+                mStreamCreatedTimeMs - activityCreationTimeMs, mIsPlaceholderShown);
     }
 
     Tracker getFeatureEngagementTracker() {
@@ -517,6 +528,10 @@ public class FeedSurfaceCoordinator implements FeedSurfaceProvider {
 
     UserEducationHelper getUserEducationHelper() {
         return mUserEducationHelper;
+    }
+
+    HomepagePromoController getHomepagePromoController() {
+        return mHomepagePromoController;
     }
 
     @VisibleForTesting

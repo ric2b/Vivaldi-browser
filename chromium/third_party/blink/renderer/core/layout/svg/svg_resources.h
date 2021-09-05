@@ -22,7 +22,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_container.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_client.h"
@@ -49,6 +48,8 @@ class SVGResources {
 
  public:
   SVGResources();
+  SVGResources(const SVGResources&) = delete;
+  SVGResources& operator=(const SVGResources&) = delete;
 
   static SVGElementResourceClient* GetClient(const LayoutObject&);
   static FloatRect ReferenceBoxForEffects(const LayoutObject&);
@@ -190,7 +191,6 @@ class SVGResources {
   std::unique_ptr<MarkerData> marker_data_;
   std::unique_ptr<FillStrokeData> fill_stroke_data_;
   LayoutSVGResourceContainer* linked_resource_;
-  DISALLOW_COPY_AND_ASSIGN(SVGResources);
 };
 
 class FilterData final : public GarbageCollected<FilterData> {
@@ -241,8 +241,6 @@ class FilterData final : public GarbageCollected<FilterData> {
 class SVGElementResourceClient final
     : public GarbageCollected<SVGElementResourceClient>,
       public SVGResourceClient {
-  USING_GARBAGE_COLLECTED_MIXIN(SVGElementResourceClient);
-
  public:
   explicit SVGElementResourceClient(SVGElement*);
 

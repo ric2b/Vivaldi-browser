@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "ash/public/cpp/login_accelerators.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
@@ -238,7 +239,8 @@ class DemoSetupTestBase : public OobeBaseTest {
   }
 
   void InvokeDemoModeWithAccelerator() {
-    test::ExecuteOobeJS("cr.ui.Oobe.handleAccelerator('demo_mode');");
+    WizardController::default_controller()->HandleAccelerator(
+        ash::LoginAcceleratorAction::kStartDemoMode);
   }
 
   void InvokeDemoModeWithTaps() {
@@ -581,7 +583,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OnlineSetupFlowSuccess) {
   // TODO(agawronska): Progress dialog transition is async - extra work is
   // needed to be able to check it reliably.
 
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
@@ -669,7 +671,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   EXPECT_EQ("admin-fr@cros-demo-mode.com",
             DemoSetupController::GetSubOrganizationEmail());
 
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
@@ -929,7 +931,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OfflineSetupFlowSuccess) {
   // TODO(agawronska): Progress dialog transition is async - extra work is
   // needed to be able to check it reliably.
 
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
@@ -1153,7 +1155,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, RetryOnErrorScreen) {
                                       JSExecution::kAsync);
   // TODO(agawronska): Progress dialog transition is async - extra work is
   // needed to be able to check it reliably.
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
 }
 
 // Test is flaky: crbug.com/1099402
@@ -1335,7 +1337,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupFRETest, DeviceFromFactory) {
   // TODO(agawronska): Progress dialog transition is async - extra work is
   // needed to be able to check it reliably.
 
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
@@ -1370,7 +1372,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupFRETest, NonEnterpriseDevice) {
   // TODO(agawronska): Progress dialog transition is async - extra work is
   // needed to be able to check it reliably.
 
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
@@ -1406,7 +1408,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupFRETest, LegacyDemoModeDevice) {
   // TODO(agawronska): Progress dialog transition is async - extra work is
   // needed to be able to check it reliably.
 
-  OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   EXPECT_TRUE(StartupUtils::IsOobeCompleted());
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }

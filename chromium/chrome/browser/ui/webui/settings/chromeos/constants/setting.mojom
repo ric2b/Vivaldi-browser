@@ -34,6 +34,7 @@ enum Setting {
   kDisconnectTetherNetwork = 23,
   kWifiMetered = 24,
   kCellularMetered = 25,
+  kCellularAddNetwork = 26,
 
   // Bluetooth section.
   kBluetoothOnOff = 100,
@@ -52,6 +53,10 @@ enum Setting {
   kMessagesOnOff = 206,
   kForgetPhone = 207,
   kNearbyShareOnOff = 208,
+  kPhoneHubOnOff = 209,
+  kPhoneHubNotificationsOnOff = 210,
+  kPhoneHubNotificationBadgeOnOff = 211,
+  kPhoneHubTaskContinuationOnOff = 212,
 
   // People section.
   kAddAccount = 300,
@@ -103,7 +108,8 @@ enum Setting {
   kSleepWhenLaptopLidClosed = 424,
   kDisplayResolution = 425,
   kDisplayRefreshRate = 426,
-  kRemoveDlc = 427,
+  // Note: Value 427 was for deprecated Remove DLC - see
+  // https://crbug.com/1108093. Do not reuse.
   kDisplayMirroring = 428,
   kAllowWindowsToSpanDisplays = 429,
   kAmbientColors = 430,
@@ -117,7 +123,8 @@ enum Setting {
   kAmbientModeOnOff = 501,
   kAmbientModeSource = 502,
   kChangeDeviceAccountImage = 503,
-  kAmbientModeUpdatePhotosContainers = 504,
+  // Note: Value 504 was for deprecated kAmbientModeUpdatePhotosContainers.
+  // Do not reuse.
 
   // Search and Assistant section.
   kPreferredSearchEngine = 600,
@@ -152,7 +159,9 @@ enum Setting {
 
   // Privacy section.
   kVerifiedAccess = 1101,
-  kKeepWifiOnDuringSleep = 1102,
+  // Note: Value 1102 was for deprecated "Keep wi-fi on during sleep" setting -
+  // see https://bugs.chromium.org/p/chromium/issues/detail?id=1077126.
+  // Do not reuse.
   kUsageStatsAndCrashReports = 1103,
 
   // Languages and Input section.
@@ -160,6 +169,10 @@ enum Setting {
   kShowInputOptionsInShelf = 1201,
   kShowPersonalInformationSuggestions = 1202,
   kShowEmojiSuggestions = 1203,
+  kChangeSystemLanguage = 1204,
+  kOfferTranslation = 1205,
+  kAddInputMethod = 1206,
+  kSpellCheck = 1207,
 
   // Files section.
   kGoogleDriveConnection = 1300,

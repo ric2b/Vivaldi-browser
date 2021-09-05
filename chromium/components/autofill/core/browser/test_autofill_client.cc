@@ -17,7 +17,8 @@
 namespace autofill {
 
 TestAutofillClient::TestAutofillClient()
-    : form_origin_(GURL("https://example.test")), source_id_(-1) {}
+    : form_origin_(GURL("https://example.test")),
+      last_committed_url_(GURL("https://example.test")) {}
 
 TestAutofillClient::~TestAutofillClient() {}
 
@@ -70,6 +71,10 @@ AddressNormalizer* TestAutofillClient::GetAddressNormalizer() {
   return &test_address_normalizer_;
 }
 
+const GURL& TestAutofillClient::GetLastCommittedURL() {
+  return last_committed_url_;
+}
+
 security_state::SecurityLevel
 TestAutofillClient::GetSecurityLevelForUmaHistograms() {
   return security_level_;
@@ -98,13 +103,13 @@ void TestAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {}
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 std::vector<std::string>
-TestAutofillClient::GetMerchantWhitelistForVirtualCards() {
-  return merchant_whitelist_;
+TestAutofillClient::GetAllowedMerchantsForVirtualCards() {
+  return allowed_merchants_;
 }
 
 std::vector<std::string>
-TestAutofillClient::GetBinRangeWhitelistForVirtualCards() {
-  return bin_range_whitelist_;
+TestAutofillClient::GetAllowedBinRangesForVirtualCards() {
+  return allowed_bin_ranges_;
 }
 
 void TestAutofillClient::ShowLocalCardMigrationDialog(

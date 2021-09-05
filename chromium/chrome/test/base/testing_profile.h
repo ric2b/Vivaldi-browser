@@ -5,12 +5,12 @@
 #ifndef CHROME_TEST_BASE_TESTING_PROFILE_H_
 #define CHROME_TEST_BASE_TESTING_PROFILE_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
@@ -90,6 +90,8 @@ class TestingProfile : public Profile {
   class Builder {
    public:
     Builder();
+    Builder(const Builder&) = delete;
+    Builder& operator=(const Builder&) = delete;
     ~Builder();
 
     // Sets a Delegate to be called back during profile init. This causes the
@@ -181,8 +183,6 @@ class TestingProfile : public Profile {
     TestingFactories testing_factories_;
     std::string profile_name_;
     base::Optional<bool> override_policy_connector_is_managed_;
-
-    DISALLOW_COPY_AND_ASSIGN(Builder);
   };
 
   // Multi-profile aware constructor that takes the path to a directory managed
@@ -220,9 +220,6 @@ class TestingProfile : public Profile {
 
   ~TestingProfile() override;
 
-  // Creates the favicon service. Consequent calls would recreate the service.
-  void CreateFaviconService();
-
   // !!!!!!!! WARNING: THIS IS GENERALLY NOT SAFE TO CALL! !!!!!!!!
   // This bypasses the BrowserContextDependencyManager, and in particular, it
   // destroys any previously-created HistoryService. That means any other
@@ -230,35 +227,13 @@ class TestingProfile : public Profile {
   // pointers.
   // Instead, use Builder::AddTestingFactory to inject your own factories.
   // !!!!!!!! WARNING: THIS IS GENERALLY NOT SAFE TO CALL! !!!!!!!!
-  // Creates the history service. If |delete_file| is true, the history file is
-  // deleted first, then the HistoryService is created. As TestingProfile
-  // deletes the directory containing the files used by HistoryService, this
-  // only matters if you're recreating the HistoryService.  If |no_db| is true,
-  // the history backend will fail to initialize its database; this is useful
-  // for testing error conditions. Returns true on success.
-  bool CreateHistoryService(bool delete_file, bool no_db) WARN_UNUSED_RESULT;
-
-  // Creates the BookmarkBarModel. If not invoked the bookmark bar model is
-  // NULL. If |delete_file| is true, the bookmarks file is deleted first, then
-  // the model is created. As TestingProfile deletes the directory containing
-  // the files used by HistoryService, the boolean only matters if you're
-  // recreating the BookmarkModel.
-  //
-  // NOTE: this does not block until the bookmarks are loaded. For that use
-  // WaitForBookmarkModelToLoad().
-  void CreateBookmarkModel(bool delete_file);
+  // Creates the history service. Returns true on success.
+  // TODO(crbug.com/1106699): Remove this API and adopt the Builder instead.
+  bool CreateHistoryService() WARN_UNUSED_RESULT;
 
   // Creates a WebDataService. If not invoked, the web data service is NULL.
+  // TODO(crbug.com/1106699): Remove this API and adopt the Builder instead.
   void CreateWebDataService();
-
-  // Blocks until the HistoryService finishes restoring its in-memory cache.
-  // This is NOT invoked from CreateHistoryService.
-  void BlockUntilHistoryIndexIsRefreshed();
-
-  // Blocks until the HistoryBackend is completely destroyed. This is mostly
-  // useful to ensure the destruction tasks do not outlive this class on which
-  // they depend.
-  void BlockUntilHistoryBackendDestroyed();
 
   // Allow setting a profile as Guest after-the-fact to simplify some tests.
   void SetGuestSession(bool guest);
@@ -316,14 +291,10 @@ class TestingProfile : public Profile {
   // Profile
   std::string GetProfileUserName() const override;
 
-  // TODO(https://crbug.com/1033903): Remove the default value.
-  Profile* GetOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  Profile* GetOffTheRecordProfile(const OTRProfileID& otr_profile_id) override;
   std::vector<Profile*> GetAllOffTheRecordProfiles() override;
   void DestroyOffTheRecordProfile(Profile* otr_profile) override;
-  // TODO(https://crbug.com/1033903): Remove the default value.
-  bool HasOffTheRecordProfile(
-      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  bool HasOffTheRecordProfile(const OTRProfileID& otr_profile_id) override;
   bool HasAnyOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
   const Profile* GetOriginalProfile() const override;
@@ -366,9 +337,9 @@ class TestingProfile : public Profile {
   void set_last_selected_directory(const base::FilePath& path) override;
   bool WasCreatedByVersionOrLater(const std::string& version) override;
   bool IsGuestSession() const override;
-  bool IsNewProfile() override;
+  bool IsNewProfile() const override;
   void SetExitType(ExitType exit_type) override {}
-  ExitType GetLastSessionExitType() override;
+  ExitType GetLastSessionExitType() const override;
   void ConfigureNetworkContextParams(
       bool in_memory,
       const base::FilePath& relative_partition_path,
@@ -407,13 +378,6 @@ class TestingProfile : public Profile {
   }
 
  private:
-  // We use a temporary directory to store testing profile data. This
-  // must be declared before anything that may make use of the
-  // directory so as to ensure files are closed before cleanup.  In a
-  // multi-profile environment, this is invalid and the directory is
-  // managed by the TestingProfileManager.
-  base::ScopedTempDir temp_dir_;
-
   // Called when profile is deleted.
   ProfileDestructionCallback profile_destruction_callback_;
 
@@ -429,9 +393,6 @@ class TestingProfile : public Profile {
   sync_preferences::TestingPrefServiceSyncable* testing_prefs_;
 
  private:
-  // Creates a temporary directory for use by this profile.
-  void CreateTempProfileDir();
-
   // Common initialization between the two constructors.
   void Init();
 

@@ -78,38 +78,59 @@ Mailbox ClientSharedImageInterface::CreateSharedImage(
     viz::ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     gpu::SurfaceHandle surface_handle) {
   DCHECK_EQ(surface_handle, kNullSurfaceHandle);
-  return AddMailbox(
-      proxy_->CreateSharedImage(format, size, color_space, usage));
+  return AddMailbox(proxy_->CreateSharedImage(
+      format, size, color_space, surface_origin, alpha_type, usage));
 }
 
 Mailbox ClientSharedImageInterface::CreateSharedImage(
     viz::ResourceFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage,
     base::span<const uint8_t> pixel_data) {
-  return AddMailbox(
-      proxy_->CreateSharedImage(format, size, color_space, usage, pixel_data));
+  return AddMailbox(proxy_->CreateSharedImage(format, size, color_space,
+                                              surface_origin, alpha_type, usage,
+                                              pixel_data));
 }
 
 Mailbox ClientSharedImageInterface::CreateSharedImage(
     gfx::GpuMemoryBuffer* gpu_memory_buffer,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
     const gfx::ColorSpace& color_space,
+    GrSurfaceOrigin surface_origin,
+    SkAlphaType alpha_type,
     uint32_t usage) {
   return AddMailbox(proxy_->CreateSharedImage(
-      gpu_memory_buffer, gpu_memory_buffer_manager, color_space, usage));
+      gpu_memory_buffer, gpu_memory_buffer_manager, color_space, surface_origin,
+      alpha_type, usage));
 }
+
+#if defined(OS_ANDROID)
+Mailbox ClientSharedImageInterface::CreateSharedImageWithAHB(
+    const Mailbox& mailbox,
+    uint32_t usage,
+    const SyncToken& sync_token) {
+  return AddMailbox(
+      proxy_->CreateSharedImageWithAHB(mailbox, usage, sync_token));
+}
+#endif
 
 ClientSharedImageInterface::SwapChainMailboxes
 ClientSharedImageInterface::CreateSwapChain(viz::ResourceFormat format,
                                             const gfx::Size& size,
                                             const gfx::ColorSpace& color_space,
+                                            GrSurfaceOrigin surface_origin,
+                                            SkAlphaType alpha_type,
                                             uint32_t usage) {
-  auto mailboxes = proxy_->CreateSwapChain(format, size, color_space, usage);
+  auto mailboxes = proxy_->CreateSwapChain(format, size, color_space,
+                                           surface_origin, alpha_type, usage);
   AddMailbox(mailboxes.front_buffer);
   AddMailbox(mailboxes.back_buffer);
   return mailboxes;

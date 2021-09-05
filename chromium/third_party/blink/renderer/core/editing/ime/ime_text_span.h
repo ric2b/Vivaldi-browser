@@ -84,6 +84,8 @@ class CORE_EXPORT ImeTextSpan {
   bool InterimCharSelection() const { return interim_char_selection_; }
   const Vector<String>& Suggestions() const { return suggestions_; }
 
+  ui::ImeTextSpan ToUiImeTextSpan();
+
  private:
   Type type_;
   unsigned start_offset_;
@@ -98,6 +100,8 @@ class CORE_EXPORT ImeTextSpan {
   bool interim_char_selection_;
   Vector<String> suggestions_;
 };
+
+ImeTextSpan::Type ConvertUiTypeToType(ui::ImeTextSpan::Type type);
 
 }  // namespace blink
 

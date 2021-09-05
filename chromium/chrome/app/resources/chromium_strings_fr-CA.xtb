@@ -1,13 +1,16 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr-CA">
+<translation id="1060499346270045814">{NUM_HOURS,plural, =1{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a 1 heure.}one{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a {NUM_HOURS} heure.}other{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a {NUM_HOURS} heures.}}</translation>
 <translation id="1065672644894730302">Échec de lecture de vos préférences.
 
 Certaines fonctionnalités ne seront peut-être pas disponibles et les modifications apportées à vos préférences ne seront pas enregistrées.</translation>
+<translation id="107513968719897256">Pour séparer votre navigation personnelle et celle de <ph name="NEW_USER" />, créez un profil dans Chromium</translation>
 <translation id="1098170124587656448">Chromium peut vous aider à vous protéger, entre autres, contre les violations de données et les extensions malveillantes</translation>
 <translation id="1104942323762546749">Chromium veut exporter vos mots de passe. Pour autoriser cette action, entrez votre mot de passe Windows.</translation>
 <translation id="113122355610423240">Chromium est votre navigateur par défaut</translation>
 <translation id="1185134272377778587">À propos de Chromium</translation>
+<translation id="1315551408014407711">Configurer votre nouveau profil Chromium</translation>
 <translation id="1396446129537741364">Chromium essaie d'afficher les mots de passe.</translation>
 <translation id="1414495520565016063">Vous êtes connecté à Chromium!</translation>
 <translation id="151962892725702025">Chromium OS n'a pas pu synchroniser vos données, car la synchronisation n'est pas offerte pour votre nom de domaine.</translation>
@@ -40,14 +43,18 @@ Certaines fonctionnalités ne seront peut-être pas disponibles et les modificat
 <translation id="2711502716910134313">Onglet Chromium</translation>
 <translation id="2718390899429598676">Pour une sécurité accrue, Chromium va chiffrer vos données.</translation>
 <translation id="2770231113462710648">Remplacer le navigateur par défaut par :</translation>
+<translation id="2797461000988640326">{NUM_MINS,plural, =1{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a 1 minute.}one{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a {NUM_MINS} minute.}other{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a {NUM_MINS} minutes.}}</translation>
 <translation id="2799223571221894425">Redémarrer</translation>
 <translation id="2847479871509788944">Supprimer de Chromium...</translation>
+<translation id="2853765747879685679">Me demander quand j'ouvre Chromium</translation>
+<translation id="2885378588091291677">Moniteur d'activité</translation>
 <translation id="2910007522516064972">À propos de &amp;Chromium</translation>
 <translation id="2977470724722393594">Chromium est à jour</translation>
 <translation id="2983934633046890458">Chromium essaie de modifier les mots de passe.</translation>
 <translation id="3032706164202344641">Chromium ne peut pas vérifier vos mots de passe. Réessayez plus tard.</translation>
 <translation id="3032787606318309379">Ajout à Chromium en cours...</translation>
 <translation id="3068515742935458733">Aidez-nous à améliorer Chromium en nous envoyant des rapports d'erreur et des <ph name="UMA_LINK" />.</translation>
+<translation id="3086207596048762442">Chromium vérifie la présence de logiciels indésirables une fois par semaine</translation>
 <translation id="3103660991484857065">Le programme d'installation n'a pas réussi à décompresser l'archive. Veuillez télécharger Chromium de nouveau.</translation>
 <translation id="3130323860337406239">Chromium se sert de votre microphone.</translation>
 <translation id="3155163173539279776">Relancer Chromium</translation>
@@ -65,7 +72,6 @@ Certaines fonctionnalités ne seront peut-être pas disponibles et les modificat
 <translation id="3474745554856756813">Cette action entraînera la suppression de <ph name="ITEMS_COUNT" /> éléments de cet appareil. Pour récupérer vos données plus tard, connectez-vous à Chromium en tant que <ph name="USER_EMAIL" />.</translation>
 <translation id="3509308970982693815">Veuillez fermer toutes les fenêtres Chromium et essayer de nouveau.</translation>
 <translation id="3575459661164320785">Nous avons trouvé un logiciel nuisible sur votre ordinateur. Chromium peut le supprimer, restaurer vos paramètres et désactiver les extensions pour que votre navigateur puisse fonctionner normalement de nouveau.</translation>
-<translation id="358997566136285270">Logo de Chromium</translation>
 <translation id="3639635944603682591">Les données de navigation de cette personne seront supprimées de cet appareil. Pour récupérer ces données, connectez-vous à Chromium en tant que <ph name="USER_EMAIL" />.</translation>
 <translation id="364817392622123556">{COUNT,plural, =0{Une nouvelle mise à jour de Chromium est proposée et sera appliquée dès que vous le relancerez.}=1{Une nouvelle mise à jour de Chromium est proposée et sera appliquée dès que vous le relancerez. Votre fenêtre de navigation privée ne sera pas rouverte.}one{Une nouvelle mise à jour de Chromium est proposée et sera appliquée dès que vous le relancerez. Votre fenêtre de navigation privée ne sera pas rouverte.}other{Une nouvelle mise à jour de Chromium est proposée et sera appliquée dès que vous le relancerez. Vos # fenêtres de navigation privée ne seront pas rouvertes.}}</translation>
 <translation id="3685209450716071127">Chromium ne peut pas vérifier vos mots de passe. Essayez de vérifier votre connexion Internet.</translation>
@@ -100,9 +106,11 @@ Certaines fonctionnalités ne seront peut-être pas disponibles et les modificat
 <translation id="4788777615168560705">Chromium ne peut pas vérifier vos mots de passe. Réessayez après 24 heures ou <ph name="BEGIN_LINK" />effectuez une vérification des mots de passe dans votre compte Google<ph name="END_LINK" />.</translation>
 <translation id="479167709087336770">Cela fait appel au même correcteur orthographique que celui qui est utilisé dans la recherche Google. Le texte que vous tapez dans le navigateur est envoyé à Google. Vous pouvez toujours modifier ce comportement dans les paramètres.</translation>
 <translation id="4888717733111232871">Règle de trafic entrant pour Chrome afin d'autoriser le trafic mDNS.</translation>
+<translation id="4893632094755846570">Cette action entraînera la suppression définitive de vos données de navigation sur cet appareil. Pour récupérer ces données, connectez-vous à Chromium en tant que</translation>
 <translation id="4943838377383847465">Chromium fonctionne en mode arrière-plan.</translation>
 <translation id="4987820182225656817">Les invités peuvent utiliser Chromium sans rien laisser derrière eux.</translation>
 <translation id="4994636714258228724">Ajouter un utilisateur à Chromium</translation>
+<translation id="5080135079858647714">Créer votre propre profil dans Chromium?</translation>
 <translation id="5224391634244552924">Aucun mot de passe enregistré. Chromium ne peut vérifier vos mots de passe que si vous les enregistrez.</translation>
 <translation id="5277894862589591112">Pour appliquer vos modifications, relancez Chromium</translation>
 <translation id="5358375970380395591">Vous vous connectez avec un compte géré et rendez son administrateur maître de votre profil Chromium. Vos données de Chromium, comme vos applications, vos favoris, votre historique, vos mots de passe et vos autres paramètres, vont être associées de manière permanente à <ph name="USER_NAME" />. Vous pourrez supprimer ces données à l'aide du tableau de bord des comptes Google, mais vous ne pourrez pas les associer à un autre compte. <ph name="LEARN_MORE" /></translation>
@@ -161,10 +169,12 @@ Certaines fonctionnalités ne seront peut-être pas disponibles et les modificat
 Certaines fonctionnalités seront peut-être inaccessibles. Veuillez spécifier un autre répertoire de profil ou utiliser une version plus récente de Chromium.</translation>
 <translation id="6734080038664603509">Mettre à jour &amp;Chromium</translation>
 <translation id="6734291798041940871">Chromium est déjà installé pour tous les utilisateurs sur votre ordinateur.</translation>
+<translation id="6762551859069255163">Utiliser différents profils dans Chromium pour séparer la navigation liée au travail de la navigation personnelle, ou pour différentes personnes qui utilisent cet appareil</translation>
 <translation id="6774082503108938489">Ton parent a désactivé le paramètre « Autorisations pour les sites, les applications et les extensions » dans Chromium. L'activation de ce <ph name="EXTENSION_TYPE_PARAMETER" /> n'est pas autorisée.</translation>
 <translation id="6847869444787758381">Chromium vous informera si jamais vos mots de passe sont compromis</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
 <translation id="6863361426438995919">Google Pay (copiée dans Chromium)</translation>
+<translation id="6863846675160669383">{NUM_DAYS,plural, =1{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a 1 jour.}one{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a {NUM_DAYS} jour.}other{Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a {NUM_DAYS} jours.}}</translation>
 <translation id="6893813176749746474">Chrome a été mis à jour, mais vous ne l'avez pas utilisé depuis au moins 30 jours.</translation>
 <translation id="6964305034639999644">Ouvrir le lien dans une fenêtre de navi&amp;gation privée Chromium</translation>
 <translation id="6990124437352146030">Chromium a besoin de votre autorisation pour accéder à votre micro pour ce site</translation>
@@ -195,6 +205,7 @@ Chromium est incapable de récupérer vos paramètres.</translation>
 <translation id="7585853947355360626">Si un paramètre ne s'affiche pas sur cette page, consultez les <ph name="LINK_BEGIN" />paramètres de Chromium OS<ph name="LINK_END" /></translation>
 <translation id="761356813943268536">Chromium utilise votre caméra et votre microphone</translation>
 <translation id="7617377681829253106">Chrome vient de s'améliorer</translation>
+<translation id="7628001322379820951">Chromium a trouvé des logiciels nuisibles sur votre ordinateur</translation>
 <translation id="7686590090926151193">Chromium n'est pas votre navigateur par défaut</translation>
 <translation id="7689606757190482937">Synchroniser et personnaliser Chromium sur vos appareils</translation>
 <translation id="7729447699958282447">Chromium n'a pas pu synchroniser vos données, car la synchronisation n'est pas offerte pour votre nom de domaine.</translation>
@@ -226,6 +237,7 @@ Chromium est incapable de récupérer vos paramètres.</translation>
 <translation id="8621669128220841554">Échec de l'installation en raison d'une erreur non spécifiée. Veuillez télécharger Chromium à nouveau.</translation>
 <translation id="8697124171261953979">Elle définit également quelle page s'affiche lorsque vous démarrez Chromium ou que vous effectuez une recherche dans l'omnibox.</translation>
 <translation id="8704119203788522458">Voici votre Chromium</translation>
+<translation id="8705191560707593947">Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : hier.</translation>
 <translation id="8796602469536043152">Chromium a besoin de votre autorisation pour accéder à votre appareil photo et à votre micro pour ce site</translation>
 <translation id="8803635938069941624">Conditions d'utilisation de Chromium OS</translation>
 <translation id="8821041990367117597">Chromium n'a pas pu synchroniser vos données, car vos renseignements de connexion ne sont plus à jour.</translation>
@@ -241,8 +253,10 @@ Chromium est incapable de récupérer vos paramètres.</translation>
 <translation id="91086099826398415">Ouvrir le lien dans un nouvel ongle&amp;t Chromium</translation>
 <translation id="911206726377975832">Supprimer également vos données de navigation?</translation>
 <translation id="9158494823179993217">Votre administrateur système a configuré Chromium pour ouvrir un autre navigateur afin d'accéder à <ph name="TARGET_URL_HOSTNAME" />.</translation>
+<translation id="9164845895615421500">Chromium vérifie la présence de logiciels indésirables une fois par semaine. Dernière vérification : il y a quelques instants.</translation>
 <translation id="9190841055450128916">Chromium (mDNS-In)</translation>
 <translation id="93478295209880648">Il se peut que Chromium ne fonctionne pas correctement, car il n'est plus compatible avec Windows XP ni Windows Vista</translation>
 <translation id="95514773681268843"><ph name="DOMAIN" /> exige que vous lisiez et acceptiez les présentes conditions d'utilisation pour utiliser cet appareil. Ces dernières n'étendent, ne modifient ni ne restreignent les conditions d'utilisation de Chrome OS.</translation>
+<translation id="965162752251293939">Qui utilise Chromium?</translation>
 <translation id="985602178874221306">Les auteurs de Chrome</translation>
 </translationbundle>

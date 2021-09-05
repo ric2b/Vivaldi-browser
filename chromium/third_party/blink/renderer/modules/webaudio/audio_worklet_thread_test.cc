@@ -65,14 +65,13 @@ class AudioWorkletThreadTest : public PageTestBase {
             window->GetReferrerPolicy(), window->GetSecurityOrigin(),
             window->IsSecureContext(), window->GetHttpsState(),
             nullptr /* worker_clients */, nullptr /* content_settings_client */,
-            window->GetSecurityContext().AddressSpace(),
-            OriginTrialContext::GetTokens(window).get(),
+            window->AddressSpace(), OriginTrialContext::GetTokens(window).get(),
             base::UnguessableToken::Create(), nullptr /* worker_settings */,
             kV8CacheOptionsDefault,
             MakeGarbageCollected<WorkletModuleResponsesMap>(),
             mojo::NullRemote() /* browser_interface_broker */,
             BeginFrameProviderParams(), nullptr /* parent_feature_policy */,
-            window->GetAgentClusterID()),
+            window->GetAgentClusterID(), window->GetExecutionContextToken()),
         base::nullopt, std::make_unique<WorkerDevToolsParams>());
     return thread;
   }
@@ -132,7 +131,7 @@ class AudioWorkletThreadTest : public PageTestBase {
     ASSERT_TRUE(thread->IsCurrentThread());
 // TODO(crbug.com/1022888): The worklet thread priority is always NORMAL on
 // linux.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     EXPECT_EQ(base::PlatformThread::GetCurrentThreadPriority(),
               base::ThreadPriority::NORMAL);
 #else

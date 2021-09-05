@@ -4,6 +4,8 @@
 
 #include "components/payments/core/features.h"
 
+#include "build/build_config.h"
+
 namespace payments {
 namespace features {
 
@@ -37,12 +39,17 @@ const base::Feature kWebPaymentsJustInTimePaymentApp{
 const base::Feature kAlwaysAllowJustInTimePaymentApp{
     "AlwaysAllowJustInTimePaymentApp", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kWebPaymentsPerMethodCanMakePaymentQuota{
-    "WebPaymentsPerMethodCanMakePaymentQuota",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kWebPaymentsRedactShippingAddress{
     "WebPaymentsRedactShippingAddress", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kAppStoreBilling {
+  "AppStoreBilling",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // OS_ANDROID
+};
 
 const base::Feature kAppStoreBillingDebug{"AppStoreBillingDebug",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
@@ -65,6 +72,18 @@ const base::Feature kPaymentHandlerPopUpSizeWindow{
 const base::Feature kAllowJITInstallationWhenAppIconIsMissing{
     "AllowJITInstallationWhenAppIconIsMissing",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kEnforceFullDelegation{"EnforceFullDelegation",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSecurePaymentConfirmation {
+  "SecurePaymentConfirmation",
+#if defined(OS_MAC)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // OS_MAC
+};
 
 }  // namespace features
 }  // namespace payments

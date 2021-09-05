@@ -11,7 +11,7 @@
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_media_stream_video_source.h"
 #include "third_party/blink/renderer/modules/mediastream/video_track_adapter_settings.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
@@ -67,15 +67,15 @@ MockMediaStreamVideoSource* MockMediaStreamRegistry::AddVideoTrack(
       "mock video source name", false /* remote */);
   auto native_source = std::make_unique<MockMediaStreamVideoSource>();
   auto* native_source_ptr = native_source.get();
-  native_source->SetOwner(source);
   source->SetPlatformSource(std::move(native_source));
 
   auto* component = MakeGarbageCollected<MediaStreamComponent>(
       String::FromUTF8(track_id), source);
   component->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
       native_source_ptr, adapter_settings, noise_reduction, is_screencast,
-      min_frame_rate, MediaStreamVideoSource::ConstraintsOnceCallback(),
-      true /* enabled */));
+      min_frame_rate, base::nullopt /* pan */, base::nullopt /* tilt */,
+      base::nullopt /* zoom */, false /* pan_tilt_zoom_allowed */,
+      MediaStreamVideoSource::ConstraintsOnceCallback(), true /* enabled */));
   descriptor_->AddRemoteTrack(component);
   return native_source_ptr;
 }
@@ -93,7 +93,6 @@ void MockMediaStreamRegistry::AddAudioTrack(const std::string& track_id) {
       "mock audio source name", false /* remote */);
   auto audio_source = std::make_unique<MockCDQualityAudioSource>();
   auto* audio_source_ptr = audio_source.get();
-  audio_source->SetOwner(source);
   source->SetPlatformSource(std::move(audio_source));
 
   auto* component = MakeGarbageCollected<MediaStreamComponent>(source);

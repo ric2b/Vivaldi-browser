@@ -15,6 +15,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
@@ -486,7 +487,7 @@ TEST_F(NotificationViewMDTest, UpdateButtonsStateTest) {
   EXPECT_TRUE(notification_view()->actions_row_->GetVisible());
 
   EXPECT_EQ(views::Button::STATE_NORMAL,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
 
   // Now construct a mouse move event 1 pixel inside the boundary of the action
   // button.
@@ -498,12 +499,12 @@ TEST_F(NotificationViewMDTest, UpdateButtonsStateTest) {
   generator.MoveMouseTo(cursor_location);
 
   EXPECT_EQ(views::Button::STATE_HOVERED,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
 
   notification_view()->CreateOrUpdateViews(*notification);
 
   EXPECT_EQ(views::Button::STATE_HOVERED,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
 
   // Now construct a mouse move event 1 pixel outside the boundary of the
   // widget.
@@ -513,7 +514,7 @@ TEST_F(NotificationViewMDTest, UpdateButtonsStateTest) {
   generator.MoveMouseTo(cursor_location);
 
   EXPECT_EQ(views::Button::STATE_NORMAL,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
 }
 
 TEST_F(NotificationViewMDTest, UpdateButtonCountTest) {
@@ -528,9 +529,9 @@ TEST_F(NotificationViewMDTest, UpdateButtonCountTest) {
   EXPECT_TRUE(notification_view()->actions_row_->GetVisible());
 
   EXPECT_EQ(views::Button::STATE_NORMAL,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
   EXPECT_EQ(views::Button::STATE_NORMAL,
-            notification_view()->action_buttons_[1]->state());
+            notification_view()->action_buttons_[1]->GetState());
 
   // Now construct a mouse move event 1 pixel inside the boundary of the action
   // button.
@@ -542,15 +543,15 @@ TEST_F(NotificationViewMDTest, UpdateButtonCountTest) {
   generator.MoveMouseTo(cursor_location);
 
   EXPECT_EQ(views::Button::STATE_HOVERED,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
   EXPECT_EQ(views::Button::STATE_NORMAL,
-            notification_view()->action_buttons_[1]->state());
+            notification_view()->action_buttons_[1]->GetState());
 
   notification->set_buttons(CreateButtons(1));
   UpdateNotificationViews(*notification);
 
   EXPECT_EQ(views::Button::STATE_HOVERED,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
   EXPECT_EQ(1u, notification_view()->action_buttons_.size());
 
   // Now construct a mouse move event 1 pixel outside the boundary of the
@@ -561,7 +562,7 @@ TEST_F(NotificationViewMDTest, UpdateButtonCountTest) {
   generator.MoveMouseTo(cursor_location);
 
   EXPECT_EQ(views::Button::STATE_NORMAL,
-            notification_view()->action_buttons_[0]->state());
+            notification_view()->action_buttons_[0]->GetState());
 }
 
 TEST_F(NotificationViewMDTest, TestActionButtonClick) {
@@ -757,7 +758,7 @@ TEST_F(NotificationViewMDTest, TestInlineReplyActivateWithKeyPress) {
 
 // Synthetic scroll events are not supported on Mac in the views
 // test framework.
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #define MAYBE_SlideOut DISABLED_SlideOut
 #else
 #define MAYBE_SlideOut SlideOut
@@ -784,7 +785,7 @@ TEST_F(NotificationViewMDTest, MAYBE_SlideOut) {
   EXPECT_TRUE(IsRemovedAfterIdle(kDefaultNotificationId));
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #define MAYBE_SlideOutNested DISABLED_SlideOutNested
 #else
 #define MAYBE_SlideOutNested SlideOutNested
@@ -810,7 +811,7 @@ TEST_F(NotificationViewMDTest, MAYBE_SlideOutNested) {
   EXPECT_TRUE(IsRemovedAfterIdle(kDefaultNotificationId));
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #define MAYBE_DisableSlideForcibly DISABLED_DisableSlideForcibly
 #else
 #define MAYBE_DisableSlideForcibly DisableSlideForcibly
@@ -988,7 +989,19 @@ TEST_F(NotificationViewMDTest, TestAccentColor) {
     notification_view()->ToggleExpanded();
   EXPECT_TRUE(notification_view()->actions_row_->GetVisible());
 
-  // By default, header does not have accent color.
+  auto app_icon_color_matches = [&](SkColor color) {
+    SkBitmap expected =
+        notification->GenerateMaskedSmallIcon(kSmallImageSizeMD, color)
+            .AsBitmap();
+    SkBitmap actual = *notification_view()
+                           ->header_row_->app_icon_view_for_testing()
+                           ->GetImage()
+                           .bitmap();
+    return gfx::test::AreBitmapsEqual(expected, actual);
+  };
+
+  // By default, header does not have accent color (default grey), and
+  // buttons have default accent color.
   EXPECT_FALSE(
       notification_view()->header_row_->accent_color_for_testing().has_value());
   EXPECT_EQ(
@@ -997,6 +1010,9 @@ TEST_F(NotificationViewMDTest, TestAccentColor) {
   EXPECT_EQ(
       kActionButtonTextColor,
       notification_view()->action_buttons_[1]->enabled_color_for_testing());
+  EXPECT_TRUE(app_icon_color_matches(
+      notification_view()->GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_NotificationDefaultAccentColor)));
 
   // If custom accent color is set, the header and the buttons should have the
   // same accent color.
@@ -1012,6 +1028,7 @@ TEST_F(NotificationViewMDTest, TestAccentColor) {
   EXPECT_EQ(
       kCustomAccentColor,
       notification_view()->action_buttons_[1]->enabled_color_for_testing());
+  EXPECT_TRUE(app_icon_color_matches(kCustomAccentColor));
 }
 
 TEST_F(NotificationViewMDTest, UseImageAsIcon) {

@@ -184,13 +184,18 @@
             "type": "string",
               "optional": true,
               "description": "The preference where to place the result."
-            },
-            "thumbnailBookmarkId": {
-              "type": "string",
-              "optional": true,
-              "description": "The bookmark id where to store the selected local path."
-            }
+          },
+          "thumbnailBookmarkId": {
+            "type": "string",
+            "optional": true,
+            "description": "The bookmark id where to store the selected local path."
+          },
+          "setPathInPrefs": {
+            "type": "boolean",
+            "optional": true,
+            "description": "If true, set the actual path in the given |preferencesPath| and do not create a mapping."
           }
+        }
       },
       {
         "id": "SharedDataValue",
@@ -1061,6 +1066,23 @@
         "type": "function",
         "description": "Shows the Chromecast dialog.",
         "parameters": [
+        ]
+      },
+      {
+        "name": "isFirstRun",
+        "type": "function",
+        "description": "chrome::IsChromeFirstRun()",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
         ]
       }
     ],

@@ -21,7 +21,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/safe_browsing/core/db/v4_embedded_test_server_util.h"
 #include "components/safe_browsing/core/db/v4_test_util.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -203,7 +203,7 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, ControlClick_HasTracker) {
 
   // Mac uses command instead of control for the new tab action.
   bool is_mac = false;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   is_mac = true;
 #endif
 
@@ -281,7 +281,7 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, ShiftClick_HasTracker) {
       entry, kUkmNumGestureScrollBeginInteractions, 0u);
 }
 
-IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, WhitelistedPopup_HasTracker) {
+IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, AllowlistedPopup_HasTracker) {
   base::HistogramTester tester;
   const GURL url =
       embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html");
@@ -290,8 +290,8 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, WhitelistedPopup_HasTracker) {
 
   // Is blocked by the popup blocker.
   ui_test_utils::NavigateToURL(browser(), url);
-  EXPECT_TRUE(content_settings::TabSpecificContentSettings::FromWebContents(
-                  web_contents)
+  EXPECT_TRUE(content_settings::PageSpecificContentSettings::GetForFrame(
+                  web_contents->GetMainFrame())
                   ->IsContentBlocked(ContentSettingsType::POPUPS));
 
   // Click through to open the popup.

@@ -35,7 +35,7 @@
 
 namespace {
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
 constexpr char kDeviceTypeForCheckbox[] = "computer";
 #else
 constexpr char kDeviceTypeForCheckbox[] = "other";
@@ -50,7 +50,7 @@ std::unique_ptr<views::ImageView> CreateIconView(
     const WebApplicationInfo& web_app_info) {
   constexpr int kIconSize = 48;
   gfx::ImageSkia image(std::make_unique<WebAppInfoImageSource>(
-                           kIconSize, web_app_info.icon_bitmaps),
+                           kIconSize, web_app_info.icon_bitmaps_any),
                        gfx::Size(kIconSize, kIconSize));
 
   auto icon_image_view = std::make_unique<views::ImageView>();
@@ -220,9 +220,8 @@ void ShowPWAInstallBubble(content::WebContents* web_contents,
   if (!browser)
     return;
 
-  if (browser->is_vivaldi()) {
-    VivaldiBrowserWindow* window =
-        VivaldiBrowserWindow::GetBrowserWindowForBrowser(browser);
+  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+  if (window) {
     g_bubble_ = new PWAConfirmationBubbleView(window->GetBubbleDialogAnchor(),
                                               nullptr, std::move(web_app_info),
                                               std::move(callback));

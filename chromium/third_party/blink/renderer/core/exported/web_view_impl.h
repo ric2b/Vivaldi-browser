@@ -87,15 +87,21 @@ class FullscreenController;
 class HTMLPlugInElement;
 class PageScaleConstraintsSet;
 class WebDevToolsAgentImpl;
-class WebElement;
 class WebInputMethodController;
 class WebLocalFrame;
 class WebLocalFrameImpl;
 class WebSettingsImpl;
 class WebViewClient;
 class WebFrameWidgetBase;
+class WebViewFrameWidget;
 
-struct WebTextAutosizerPageInfo;
+enum class FullscreenRequestType;
+
+namespace mojom {
+namespace blink {
+class TextAutosizerPageInfo;
+}
+}  // namespace mojom
 
 class VivaldiDoubleClickMenu;
 
@@ -109,6 +115,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   static WebViewImpl* Create(
       WebViewClient*,
       mojom::blink::PageVisibilityState visibility,
+      bool is_inside_portal,
       bool compositing_enabled,
       WebViewImpl* opener,
       mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle);
@@ -131,6 +138,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidAttachRemoteMainFrame() override;
   void DidDetachRemoteMainFrame() override;
   void SetPrerendererClient(WebPrerendererClient*) override;
+  void CloseWindowSoon() override;
   WebSettings* GetSettings() override;
   WebString PageEncoding() const override;
   bool TabsToLinks() const override;
@@ -174,6 +182,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void ResizeVisualViewport(const WebSize&) override;
   void Resize(const WebSize&) override;
   WebSize GetSize() override;
+  void SetScreenOrientationOverrideForTesting(
+      base::Optional<blink::mojom::ScreenOrientation> orientation) override;
   void ResetScrollAndScaleState() override;
   void SetIgnoreViewportTagScaleLimits(bool) override;
   WebSize ContentsPreferredMinimumSize() override;
@@ -185,15 +195,15 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   float ZoomFactorForDeviceScaleFactor() override {
     return zoom_factor_for_device_scale_factor_;
   }
-  void EnableAutoResizeMode(const WebSize& min_size,
-                            const WebSize& max_size) override;
-  void DisableAutoResizeMode() override;
-  void AudioStateChanged(bool is_audio_playing) override;
+  bool AutoResizeMode() override;
+  void EnableAutoResizeForTesting(const gfx::Size& min_window_size,
+                                  const gfx::Size& max_window_size) override;
+  void DisableAutoResizeForTesting(const gfx::Size& new_window_size) override;
   WebHitTestResult HitTestResultAt(const gfx::PointF&);
   WebHitTestResult HitTestResultForTap(const gfx::Point&,
                                        const WebSize&) override;
   uint64_t CreateUniqueIdentifierForRequest() override;
-  void EnableDeviceEmulation(const WebDeviceEmulationParams&) override;
+  void EnableDeviceEmulation(const DeviceEmulationParams&) override;
   void DisableDeviceEmulation() override;
   void PerformCustomContextMenuAction(unsigned action) override;
   void DidCloseContextMenu() override;
@@ -203,9 +213,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetPageFrozen(bool frozen) override;
   WebFrameWidget* MainFrameWidget() override;
   void SetBaseBackgroundColor(SkColor) override;
-  void SetInsidePortal(bool inside_portal) override;
+  void SetDeviceColorSpaceForTesting(
+      const gfx::ColorSpace& color_space) override;
   void PaintContent(cc::PaintCanvas*, const gfx::Rect&) override;
-  void SetTextAutosizerPageInfo(const WebTextAutosizerPageInfo&) override;
 
   // Overrides the page's background and base background color. You
   // can use this to enforce a transparent background, which is useful if you
@@ -221,18 +231,22 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void AnimateDoubleTapZoom(const gfx::Point&, const WebRect& block_bounds);
 
   // mojom::blink::PageBroadcast method:
-  void SetPageLifecycleState(mojom::blink::PageLifecycleStatePtr state,
-                             base::Optional<base::TimeTicks> navigation_start,
-                             SetPageLifecycleStateCallback callback) override;
+  void SetPageLifecycleState(
+      mojom::blink::PageLifecycleStatePtr state,
+      mojom::blink::PageRestoreParamsPtr page_restore_params,
+      SetPageLifecycleStateCallback callback) override;
+  void AudioStateChanged(bool is_audio_playing) override;
+  void SetInsidePortal(bool is_inside_portal) override;
 
-  void DispatchPagehide();
   void DispatchPageshow(base::TimeTicks navigation_start);
+  void DispatchPagehide(mojom::blink::PagehideDispatch pagehide_dispatch);
   void HookBackForwardCacheEviction(bool hook);
 
   float DefaultMinimumPageScaleFactor() const;
   float DefaultMaximumPageScaleFactor() const;
   float ClampPageScaleFactorToLimits(float) const;
   void ResetScaleStateImmediately();
+  base::Optional<mojom::blink::ScreenOrientation> ScreenOrientationOverride();
 
   HitTestResult CoreHitTestResultAt(const gfx::PointF&);
   void InvalidateRect(const IntRect&);
@@ -240,6 +254,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetZoomFactorOverride(float);
   void SetCompositorDeviceScaleFactorOverride(float);
   TransformationMatrix GetDeviceEmulationTransform() const;
+  void EnableAutoResizeMode(const gfx::Size& min_viewport_size,
+                            const gfx::Size& max_viewport_size);
+  void DisableAutoResizeMode();
 
   SkColor BackgroundColor() const;
   Color BaseBackgroundColor() const;
@@ -289,8 +306,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // Keyboard event to the Right Mouse button down event.
   WebInputEventResult SendContextMenuEvent();
 
-  void ShowContextMenuForElement(WebElement);
-
   // Notifies the WebView that a load has been committed. isNewNavigation
   // will be true if a new session history item should be created for that
   // load. isNavigationWithinPage will be true if the navigation does
@@ -308,7 +323,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidChangeContentsSize();
   void PageScaleFactorChanged();
   void MainFrameScrollOffsetChanged();
-  void TextAutosizerPageInfoChanged(const WebTextAutosizerPageInfo& page_info);
+  void TextAutosizerPageInfoChanged(
+      const mojom::blink::TextAutosizerPageInfo& page_info);
 
   bool ShouldAutoResize() const { return should_auto_resize_; }
 
@@ -334,6 +350,10 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetVisibilityState(mojom::blink::PageVisibilityState visibility_state,
                           bool is_initial_state) override;
   mojom::blink::PageVisibilityState GetVisibilityState() override;
+
+  void SetPageLifecycleStateFromNewPageCommit(
+      mojom::blink::PageVisibilityState visibility,
+      mojom::blink::PagehideDispatch pagehide_dispatch) override;
 
   // Called by a full frame plugin inside this view to inform it that its
   // zoom level has been updated.  The plugin should only call this function
@@ -371,7 +391,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   void EnterFullscreen(LocalFrame&,
                        const FullscreenOptions*,
-                       bool for_cross_process_descendant);
+                       FullscreenRequestType);
   void ExitFullscreen(LocalFrame&);
   void FullscreenElementChanged(Element* old_element, Element* new_element);
 
@@ -428,7 +448,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidEnterFullscreen();
   void DidExitFullscreen();
 
-  void SetMainFrameWidgetBase(WebFrameWidgetBase* widget);
+  void SetMainFrameWidgetBase(WebViewFrameWidget* widget);
   WebFrameWidgetBase* MainFrameWidgetBase();
 
   // Vivaldi start
@@ -452,6 +472,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, SetBaseBackgroundColorBeforeMainFrame);
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, LongPressImage);
   FRIEND_TEST_ALL_PREFIXES(WebViewTest, LongPressImageAndThenLongTapImage);
+  FRIEND_TEST_ALL_PREFIXES(WebViewTest, TouchDragContextMenu);
   friend class frame_test_helpers::WebViewHelper;
   friend class SimCompositor;
   friend class WebView;  // So WebView::Create can call our constructor
@@ -494,6 +515,10 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
                                      const FloatPoint&);
   void PropagateZoomFactorToLocalFrameRoots(Frame*, float);
 
+  void SetPageLifecycleStateInternal(
+      mojom::blink::PageLifecycleStatePtr new_state,
+      mojom::blink::PageRestoreParamsPtr page_restore_params);
+
   float MaximumLegiblePageScale() const;
   void RefreshPageScaleFactor();
   IntSize ContentsSize() const;
@@ -505,9 +530,14 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   void UpdateBaseBackgroundColor();
 
+  // Request the window to close from the renderer by sending the request to the
+  // browser.
+  void DoDeferredCloseWindowSoon();
+
   WebViewImpl(
       WebViewClient*,
       mojom::blink::PageVisibilityState visibility,
+      bool is_inside_portal,
       bool does_composite,
       WebViewImpl* opener,
       mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle);
@@ -553,6 +583,11 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   LocalFrame* FocusedLocalFrameInWidget() const;
   LocalFrame* FocusedLocalFrameAvailableForIme() const;
 
+  // Clear focus and text input state of the page. If there was a focused
+  // element, this will trigger updates to observers and send focus, selection,
+  // and text input-related events.
+  void RemoveFocusAndTextInputState();
+
   bool ScrollFocusedEditableElementIntoView();
   // Finds the zoom and scroll parameters for zooming into an editable element
   // with bounds |element_bounds_in_document| and caret bounds
@@ -568,6 +603,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
       float& scale,
       IntPoint& scroll,
       bool& need_animation);
+
+  // Sends any outstanding TrackedFeaturesUpdate messages to the browser.
+  void ReportActiveSchedulerTrackedFeatures();
 
   // These member variables should not be accessed within calls to WebWidget
   // APIs. They can be called from within WebView APIs, and internal methods,
@@ -682,6 +720,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   SkColor base_background_color_override_ = Color::kTransparent;
   bool background_color_override_enabled_ = false;
   SkColor background_color_override_ = Color::kTransparent;
+  base::Optional<SkColor> last_background_color_;
   float zoom_factor_override_ = 0.f;
 
   bool should_dispatch_first_visually_non_empty_layout_ = false;
@@ -713,8 +752,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   WeakPersistent<WebLocalFrameImpl> local_root_with_empty_mouse_wheel_listener_;
 
   // The WebWidget for the main frame. This is expected to be unset when the
-  // WebWidget destroys itself.
-  WeakPersistent<WebFrameWidgetBase> web_widget_;
+  // WebWidget destroys itself. This will be null if the main frame is remote.
+  WeakPersistent<WebViewFrameWidget> web_widget_;
 
   // We defer commits when transitioning to a new page. ChromeClientImpl calls
   // StopDeferringCommits() to release this when a new page is loaded.
@@ -736,10 +775,14 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // Set when a measurement begins, reset when the measurement is taken.
   base::Optional<base::TimeTicks> update_layers_start_time_;
 
+  base::Optional<mojom::blink::ScreenOrientation> screen_orientation_override_;
+
   mojom::blink::PageLifecycleStatePtr lifecycle_state_;
   mojo::AssociatedReceiver<mojom::blink::PageBroadcast> receiver_;
 
   std::unique_ptr<VivaldiDoubleClickMenu> vivaldi_double_click_menu_;
+
+  base::WeakPtrFactory<WebViewImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace blink

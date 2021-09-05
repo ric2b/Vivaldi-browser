@@ -34,7 +34,7 @@ FakeCrosHealthdClient* FakeCrosHealthdClient::Get() {
 
 mojo::Remote<mojom::CrosHealthdServiceFactory>
 FakeCrosHealthdClient::BootstrapMojoConnection(
-    base::OnceCallback<void(bool success)> result_callback) {
+    BootstrapMojoConnectionCallback result_callback) {
   mojo::Remote<mojom::CrosHealthdServiceFactory> remote(
       receiver_.BindNewPipeAndPassRemote());
 
@@ -62,6 +62,11 @@ void FakeCrosHealthdClient::SetProbeTelemetryInfoResponseForTesting(
   fake_service_.SetProbeTelemetryInfoResponseForTesting(info);
 }
 
+void FakeCrosHealthdClient::SetProbeProcessInfoResponseForTesting(
+    mojom::ProcessResultPtr& result) {
+  fake_service_.SetProbeProcessInfoResponseForTesting(result);
+}
+
 void FakeCrosHealthdClient::EmitAcInsertedEventForTesting() {
   // Flush the receiver, so any pending observers are registered before the
   // event is emitted.
@@ -81,6 +86,24 @@ void FakeCrosHealthdClient::EmitLidClosedEventForTesting() {
   // event is emitted.
   receiver_.FlushForTesting();
   fake_service_.EmitLidClosedEventForTesting();
+}
+
+void FakeCrosHealthdClient::RequestNetworkHealthForTesting(
+    chromeos::network_health::mojom::NetworkHealthService::
+        GetHealthSnapshotCallback callback) {
+  // Flush the receiver, so any requests to send the NetworkHealthService remote
+  // are processed before the request is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.RequestNetworkHealthForTesting(std::move(callback));
+}
+
+void FakeCrosHealthdClient::RunLanConnectivityRoutineForTesting(
+    chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines::
+        LanConnectivityCallback callback) {
+  // Flush the receiver, so the NetworkDiagnosticsRoutines interface is
+  // registered before routines are called on it.
+  receiver_.FlushForTesting();
+  fake_service_.RunLanConnectivityRoutineForTesting(std::move(callback));
 }
 
 }  // namespace cros_healthd

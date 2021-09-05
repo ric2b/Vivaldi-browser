@@ -128,7 +128,7 @@ class WaitForSwapDisplayClient : public DisplayClient {
 };
 
 std::unique_ptr<RenderPass> CreateTestRootRenderPass() {
-  const RenderPassId id = 1;
+  const RenderPassId id{1};
   const gfx::Rect output_rect = kSurfaceRect;
   const gfx::Rect damage_rect = kSurfaceRect;
   const gfx::Transform transform_to_root_target;
@@ -195,7 +195,8 @@ TransferableResource CreateTestTexture(
       child_context_provider->SharedImageInterface();
   DCHECK(sii);
   gpu::Mailbox mailbox = sii->CreateSharedImage(
-      RGBA_8888, size, gfx::ColorSpace(), gpu::SHARED_IMAGE_USAGE_DISPLAY,
+      RGBA_8888, size, gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin,
+      kPremul_SkAlphaType, gpu::SHARED_IMAGE_USAGE_DISPLAY,
       MakePixelSpan(pixels));
   gpu::SyncToken sync_token = sii->GenVerifiedSyncToken();
 
@@ -326,8 +327,9 @@ class RendererPerfTest : public testing::Test {
     output_surface->SetNeedsSwapSizeNotifications(true);
     auto overlay_processor = std::make_unique<OverlayProcessorStub>();
     display_ = std::make_unique<Display>(
-        &shared_bitmap_manager_, renderer_settings_, kArbitraryFrameSinkId,
-        std::move(output_surface), std::move(overlay_processor),
+        &shared_bitmap_manager_, renderer_settings_, &debug_settings_,
+        kArbitraryFrameSinkId, std::move(output_surface),
+        std::move(overlay_processor),
         /*display_scheduler=*/nullptr, base::ThreadTaskRunnerHandle::Get());
     display_->SetVisible(true);
     display_->Initialize(&client_, manager_.surface_manager());
@@ -682,6 +684,7 @@ class RendererPerfTest : public testing::Test {
   std::unique_ptr<CompositorFrameSinkSupport> support_;
   std::unique_ptr<gpu::GpuMemoryBufferManager> gpu_memory_buffer_manager_;
   RendererSettings renderer_settings_;
+  DebugRendererSettings debug_settings_;
   std::unique_ptr<Display> display_;
   scoped_refptr<ContextProvider> child_context_provider_;
   std::unique_ptr<ClientResourceProvider> child_resource_provider_;
@@ -699,7 +702,7 @@ RendererPerfTest<SkiaRenderer>::CreateOutputSurface(
   return SkiaOutputSurfaceImpl::Create(
       std::make_unique<SkiaOutputSurfaceDependencyImpl>(
           gpu_service, gpu::kNullSurfaceHandle),
-      renderer_settings_);
+      renderer_settings_, &debug_settings_);
 }
 
 template <>

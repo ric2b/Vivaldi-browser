@@ -20,10 +20,10 @@
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/ink_drop.h"
-#include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/rect_based_targeting_utils.h"
@@ -33,26 +33,8 @@
 #endif
 
 namespace {
-constexpr int kGlyphWidth = 16;
-constexpr int kTouchGlyphWidth = 24;
-
-class TabCloseButtonHighlightPathGenerator
-    : public views::HighlightPathGenerator {
- public:
-  TabCloseButtonHighlightPathGenerator() = default;
-
-  // views::HighlightPathGenerator:
-  SkPath GetHighlightPath(const views::View* view) override {
-    const gfx::Rect bounds = view->GetContentsBounds();
-    const gfx::Point center = bounds.CenterPoint();
-    const int radius = views::LayoutProvider::Get()->GetCornerRadiusMetric(
-        views::EMPHASIS_MAXIMUM, bounds.size());
-    return SkPath().addCircle(center.x(), center.y(), radius);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TabCloseButtonHighlightPathGenerator);
-};
+constexpr int kGlyphSize = 16;
+constexpr int kTouchGlyphSize = 24;
 
 }  //  namespace
 
@@ -73,17 +55,32 @@ TabCloseButton::TabCloseButton(views::ButtonListener* listener,
   SetAnimationDuration(base::TimeDelta());
   GetInkDrop()->SetHoverHighlightFadeDuration(base::TimeDelta());
 
+  // The ink drop highlight path is the same as the focus ring highlight path,
+  // but needs to be explicitly mirrored for RTL.
+  // TODO(http://crbug.com/1056490): Make ink drops in RTL work the same way as
+  // focus rings.
+  auto ink_drop_highlight_path =
+      std::make_unique<views::CircleHighlightPathGenerator>(gfx::Insets());
+  ink_drop_highlight_path->set_use_contents_bounds(true);
+  ink_drop_highlight_path->set_use_mirrored_rect(true);
+  views::HighlightPathGenerator::Install(this,
+                                         std::move(ink_drop_highlight_path));
+
   SetInstallFocusRingOnFocus(true);
-  views::HighlightPathGenerator::Install(
-      this, std::make_unique<TabCloseButtonHighlightPathGenerator>());
+  // TODO(http://crbug.com/1056490): Once this bug is solved and explicit
+  // mirroring for ink drops is not needed, we can combine these two.
+  auto ring_highlight_path =
+      std::make_unique<views::CircleHighlightPathGenerator>(gfx::Insets());
+  ring_highlight_path->set_use_contents_bounds(true);
+  focus_ring()->SetPathGenerator(std::move(ring_highlight_path));
 }
 
 TabCloseButton::~TabCloseButton() {}
 
 // static
-int TabCloseButton::GetWidth() {
-  return ui::TouchUiController::Get()->touch_ui() ? kTouchGlyphWidth
-                                                  : kGlyphWidth;
+int TabCloseButton::GetGlyphSize() {
+  return ui::TouchUiController::Get()->touch_ui() ? kTouchGlyphSize
+                                                  : kGlyphSize;
 }
 
 void TabCloseButton::SetIconColors(SkColor foreground_color,
@@ -134,26 +131,18 @@ void TabCloseButton::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 gfx::Size TabCloseButton::CalculatePreferredSize() const {
-  int width = GetWidth();
+  int width = GetGlyphSize();
   gfx::Size size(width, width);
   gfx::Insets insets = GetInsets();
   size.Enlarge(insets.width(), insets.height());
   return size;
 }
 
-std::unique_ptr<views::InkDropMask> TabCloseButton::CreateInkDropMask() const {
-  const gfx::Rect bounds = GetContentsBounds();
-  const int radius = views::LayoutProvider::Get()->GetCornerRadiusMetric(
-      views::EMPHASIS_MAXIMUM, bounds.size());
-  return std::make_unique<views::CircleInkDropMask>(
-      size(), GetMirroredRect(bounds).CenterPoint(), radius);
-}
-
 void TabCloseButton::PaintButtonContents(gfx::Canvas* canvas) {
   cc::PaintFlags flags;
   constexpr float kStrokeWidth = 1.5f;
-  float touch_scale = float{GetWidth()} / kGlyphWidth;
-  float size = (kGlyphWidth - 8) * touch_scale - kStrokeWidth;
+  float touch_scale = float{GetGlyphSize()} / kGlyphSize;
+  float size = (kGlyphSize - 8) * touch_scale - kStrokeWidth;
   gfx::RectF glyph_bounds(GetContentsBounds());
   glyph_bounds.ClampToCenteredSize(gfx::SizeF(size, size));
   flags.setAntiAlias(true);

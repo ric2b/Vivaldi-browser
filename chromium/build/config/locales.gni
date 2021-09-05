@@ -177,7 +177,7 @@ android_bundle_only_locales = [
 
 if (is_android) {
   if (is_vivaldi) {
-    android_bundle_only_locales -= [ "is"]
+    android_bundle_only_locales -= [ "is", "hy", "be" ]
   }
 
   locales = all_chrome_locales

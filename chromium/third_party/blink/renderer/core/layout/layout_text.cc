@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/core/layout/api/line_layout_api_shim.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_box.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
+#include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_object_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
@@ -74,25 +75,31 @@
 #include "third_party/blink/renderer/platform/text/hyphenation.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
 #include "third_party/blink/renderer/platform/text/text_run_iterator.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
 
+namespace {
+
 struct SameSizeAsLayoutText : public LayoutObject {
   uint32_t bitfields : 12;
+  DOMNodeId node_id;
   float widths[4];
   String text;
   void* pointers[2];
-  DOMNodeId node_id;
+  PhysicalOffset previous_starting_point;
 };
 
-static_assert(sizeof(LayoutText) == sizeof(SameSizeAsLayoutText),
-              "LayoutText should stay small");
+ASSERT_SIZE(LayoutText, SameSizeAsLayoutText);
 
 class SecureTextTimer;
 typedef HashMap<LayoutText*, SecureTextTimer*> SecureTextTimerMap;
-static SecureTextTimerMap* g_secure_text_timers = nullptr;
+static SecureTextTimerMap& GetSecureTextTimers() {
+  DEFINE_STATIC_LOCAL(SecureTextTimerMap, map, ());
+  return map;
+}
 
 class SecureTextTimer final : public TimerBase {
  public:
@@ -115,7 +122,7 @@ class SecureTextTimer final : public TimerBase {
 
  private:
   void Fired() override {
-    DCHECK(g_secure_text_timers->Contains(layout_text_));
+    DCHECK(GetSecureTextTimers().Contains(layout_text_));
     // Forcing setting text as it may be masked later
     layout_text_->ForceSetText(layout_text_->GetText().Impl());
   }
@@ -123,6 +130,19 @@ class SecureTextTimer final : public TimerBase {
   LayoutText* layout_text_;
   int last_typed_character_offset_;
 };
+
+class SelectionDisplayItemClient : public DisplayItemClient {
+  String DebugName() const final { return "Selection"; }
+};
+
+using SelectionDisplayItemClientMap =
+    HashMap<const LayoutText*, std::unique_ptr<SelectionDisplayItemClient>>;
+SelectionDisplayItemClientMap& GetSelectionDisplayItemClientMap() {
+  DEFINE_STATIC_LOCAL(SelectionDisplayItemClientMap, map, ());
+  return map;
+}
+
+}  // anonymous namespace
 
 LayoutText::LayoutText(Node* node, scoped_refptr<StringImpl> str)
     : LayoutObject(node),
@@ -244,7 +264,6 @@ void LayoutText::RemoveAndDestroyTextBoxes() {
   } else if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
     if (FirstInlineFragmentItemIndex()) {
       DetachAbstractInlineTextBoxesIfNeeded();
-      NGFragmentItems::LayoutObjectWillBeDestroyed(*this);
       ClearFirstInlineFragmentItemIndex();
     }
   } else if (NGPaintFragment* first_inline_fragment = FirstInlineFragment()) {
@@ -255,9 +274,10 @@ void LayoutText::RemoveAndDestroyTextBoxes() {
 }
 
 void LayoutText::WillBeDestroyed() {
-  if (SecureTextTimer* secure_text_timer =
-          g_secure_text_timers ? g_secure_text_timers->Take(this) : nullptr)
+  if (SecureTextTimer* secure_text_timer = GetSecureTextTimers().Take(this))
     delete secure_text_timer;
+
+  GetSelectionDisplayItemClientMap().erase(this);
 
   if (node_id_ != kInvalidDOMNodeId) {
     if (auto* manager = GetContentCaptureManager())
@@ -810,8 +830,24 @@ CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
 
 PositionWithAffinity LayoutText::PositionForPoint(
     const PhysicalOffset& point) const {
-  if (const LayoutBlockFlow* ng_block_flow = ContainingNGBlockFlow())
-    return ng_block_flow->PositionForPoint(*this, point);
+  if (IsInLayoutNGInlineFormattingContext()) {
+    NGInlineCursor cursor;
+    for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject()) {
+      if (!EnclosingIntRect(cursor.Current().RectInContainerBlock())
+               .Contains(FlooredIntPoint(point)))
+        continue;
+      if (auto position_with_affinity = cursor.PositionForPointInChild(point)) {
+        // Note: Due by Bidi adjustment, |position| isn't relative to this.
+        const Position& position = position_with_affinity.GetPosition();
+        DCHECK(position.IsOffsetInAnchor()) << position;
+        return position.ComputeContainerNode()
+            ->GetLayoutObject()
+            ->CreatePositionWithAffinity(position.OffsetInContainerNode(),
+                                         position_with_affinity.Affinity());
+      }
+    }
+    return CreatePositionWithAffinity(0);
+  }
 
   DCHECK(CanUseInlineBox(*this));
   if (!FirstTextBox() || TextLength() == 0)
@@ -1656,6 +1692,42 @@ PhysicalOffset LayoutText::FirstLineBoxTopLeft() const {
   return PhysicalOffset();
 }
 
+void LayoutText::LogicalStartingPointAndHeight(
+    LogicalOffset& logical_starting_point,
+    LayoutUnit& logical_height) const {
+  if (IsInLayoutNGInlineFormattingContext()) {
+    NGInlineCursor cursor;
+    cursor.MoveTo(*this);
+    if (!cursor)
+      return;
+    PhysicalOffset physical_offset = cursor.Current().OffsetInContainerBlock();
+    if (StyleRef().GetWritingDirection().IsHorizontalLtr()) {
+      cursor.MoveToLastForSameLayoutObject();
+      logical_height = cursor.Current().RectInContainerBlock().Bottom() -
+                       physical_offset.top;
+      logical_starting_point = {physical_offset.left, physical_offset.top};
+      return;
+    }
+    PhysicalSize outer_size = PhysicalSizeToBeNoop(ContainingBlock()->Size());
+    logical_starting_point = physical_offset.ConvertToLogical(
+        StyleRef().GetWritingDirection(), outer_size, cursor.Current().Size());
+    cursor.MoveToLastForSameLayoutObject();
+    PhysicalRect last_physical_rect = cursor.Current().RectInContainerBlock();
+    LogicalOffset logical_ending_point =
+        WritingModeConverter(StyleRef().GetWritingDirection(), outer_size)
+            .ToLogical(last_physical_rect)
+            .EndOffset();
+    logical_height =
+        logical_ending_point.block_offset - logical_starting_point.block_offset;
+    return;
+  }
+
+  if (const auto* text_box = FirstTextBox()) {
+    logical_starting_point = {text_box->LogicalLeft(), text_box->LogicalTop()};
+    logical_height = LastTextBox()->LogicalBottom() - text_box->LogicalTop();
+  }
+}
+
 bool LayoutText::CanOptimizeSetText() const {
   // If we have only one line of text and "contain: layout size" we can avoid
   // doing a layout and only paint in the SetText() operation.
@@ -1905,8 +1977,7 @@ void LayoutText::SecureText(UChar mask) {
 
   int last_typed_character_offset_to_reveal = -1;
   UChar revealed_text;
-  SecureTextTimer* secure_text_timer =
-      g_secure_text_timers ? g_secure_text_timers->at(this) : nullptr;
+  SecureTextTimer* secure_text_timer = GetSecureTextTimers().at(this);
   if (secure_text_timer && secure_text_timer->IsActive()) {
     last_typed_character_offset_to_reveal =
         secure_text_timer->LastTypedCharacterOffset();
@@ -2469,13 +2540,10 @@ bool LayoutText::IsAfterNonCollapsedCharacter(unsigned text_offset) const {
 
 void LayoutText::MomentarilyRevealLastTypedCharacter(
     unsigned last_typed_character_offset) {
-  if (!g_secure_text_timers)
-    g_secure_text_timers = new SecureTextTimerMap;
-
-  SecureTextTimer* secure_text_timer = g_secure_text_timers->at(this);
+  SecureTextTimer* secure_text_timer = GetSecureTextTimers().at(this);
   if (!secure_text_timer) {
     secure_text_timer = new SecureTextTimer(this);
-    g_secure_text_timers->insert(this, secure_text_timer);
+    GetSecureTextTimers().insert(this, secure_text_timer);
   }
   secure_text_timer->RestartWithNewText(last_typed_character_offset);
 }
@@ -2490,17 +2558,27 @@ scoped_refptr<AbstractInlineTextBox> LayoutText::FirstAbstractInlineTextBox() {
                                                   FirstTextBox());
 }
 
+void LayoutText::InvalidatePaint(const PaintInvalidatorContext& context) const {
+  if (ShouldInvalidateSelection() && !IsSelected())
+    GetSelectionDisplayItemClientMap().erase(this);
+  LayoutObject::InvalidatePaint(context);
+}
+
 void LayoutText::InvalidateDisplayItemClients(
-    PaintInvalidationReason invalidation_reason) const {
-  ObjectPaintInvalidator paint_invalidator(*this);
+    PaintInvalidationReason reason) const {
+  ObjectPaintInvalidator invalidator(*this);
+  invalidator.InvalidateDisplayItemClient(*this, reason);
+
+  if (const auto* selection_client = GetSelectionDisplayItemClient())
+    invalidator.InvalidateDisplayItemClient(*selection_client, reason);
 
   if (IsInLayoutNGInlineFormattingContext()) {
     if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
       NGInlineCursor cursor;
       for (cursor.MoveTo(*this); cursor;
            cursor.MoveToNextForSameLayoutObject()) {
-        paint_invalidator.InvalidateDisplayItemClient(
-            *cursor.Current().GetDisplayItemClient(), invalidation_reason);
+        invalidator.InvalidateDisplayItemClient(
+            *cursor.Current().GetDisplayItemClient(), reason);
       }
       return;
     }
@@ -2509,19 +2587,28 @@ void LayoutText::InvalidateDisplayItemClients(
     for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject())
       DCHECK_EQ(cursor.Current().GetDisplayItemClient(), this);
 #endif
-    paint_invalidator.InvalidateDisplayItemClient(*this, invalidation_reason);
     return;
   }
 
-  paint_invalidator.InvalidateDisplayItemClient(*this, invalidation_reason);
-
   for (InlineTextBox* box : TextBoxes()) {
-    paint_invalidator.InvalidateDisplayItemClient(*box, invalidation_reason);
-    if (EllipsisBox* ellipsis_box = box->Root().GetEllipsisBox()) {
-      paint_invalidator.InvalidateDisplayItemClient(*ellipsis_box,
-                                                    invalidation_reason);
-    }
+    invalidator.InvalidateDisplayItemClient(*box, reason);
+    if (EllipsisBox* ellipsis_box = box->Root().GetEllipsisBox())
+      invalidator.InvalidateDisplayItemClient(*ellipsis_box, reason);
   }
+}
+
+const DisplayItemClient* LayoutText::GetSelectionDisplayItemClient() const {
+  if (!IsSelected())
+    return nullptr;
+  if (IsInLayoutNGInlineFormattingContext() &&
+      RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+    if (const auto* client = GetSelectionDisplayItemClientMap().at(this))
+      return client;
+    return GetSelectionDisplayItemClientMap()
+        .insert(this, std::make_unique<SelectionDisplayItemClient>())
+        .stored_value->value.get();
+  }
+  return nullptr;
 }
 
 PhysicalRect LayoutText::DebugRect() const {
@@ -2530,10 +2617,11 @@ PhysicalRect LayoutText::DebugRect() const {
 
 DOMNodeId LayoutText::EnsureNodeId() {
   if (node_id_ == kInvalidDOMNodeId) {
-    auto* content_capture_manager = GetContentCaptureManager();
-    if (content_capture_manager) {
-      content_capture_manager->ScheduleTaskIfNeeded();
-      node_id_ = DOMNodeIds::IdForNode(GetNode());
+    if (auto* content_capture_manager = GetContentCaptureManager()) {
+      if (auto* node = GetNode()) {
+        content_capture_manager->ScheduleTaskIfNeeded(*node);
+        node_id_ = DOMNodeIds::IdForNode(node);
+      }
     }
   }
   return node_id_;

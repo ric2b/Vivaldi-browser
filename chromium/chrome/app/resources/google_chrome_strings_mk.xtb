@@ -10,17 +10,21 @@
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> претходно користеше Chrome</translation>
 <translation id="1097330777386562916">Избришете ги колачињата и податоците за сајтовите кога ќе го напуштите Chrome</translation>
 <translation id="110877069173485804">Ова е вашиот Chrome</translation>
+<translation id="1125124144982679672">Кој користи Chrome?</translation>
 <translation id="1142745911746664600">Не може да се ажурира Chrome</translation>
 <translation id="1154147086299354128">&amp;Отвори во Chrome</translation>
 <translation id="123620459398936149">Chrome OS не можеше да ги синхронизира вашите податоци. Ажурирајте ја пристапната фраза за Синхронизација.</translation>
 <translation id="1302523850133262269">Почекајте додека Chrome ги инсталира последните системски ажурирања.</translation>
+<translation id="1355000804395496115">Користете различни профили во Chrome за да ги одделите личното и професионалното прелистување или за различни луѓе кои го користат уредов.</translation>
 <translation id="137466361146087520">Google Chrome Beta</translation>
 <translation id="1399397803214730675">Овој компјутер веќе има најнова верзија на Google Chrome. Доколку софтверот не работи, деинсталирајте го Google Chrome и обидете се повторно.</translation>
 <translation id="1434626383986940139">Апликации на Chrome Canary</translation>
+<translation id="1513277449617685876">За да ги одвоите личното и прелистувањето на <ph name="NEW_USER" />, создајте нов профил во Chrome</translation>
 <translation id="1553358976309200471">Ажурирај го Chrome</translation>
 <translation id="1587223624401073077">Google Chrome ја користи вашата камера.</translation>
 <translation id="1587325591171447154">Датотеката <ph name="FILE_NAME" /> е опасна, па затоа Chrome ја блокираше.</translation>
 <translation id="1619887657840448962">За Chrome да биде побезбеден, ја оневозможивме следнава екстензија што не е наведена во <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> и може да е додадена без ваше знаење.</translation>
+<translation id="162448658176061655">Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: предмалку.</translation>
 <translation id="162629503687514352">Chrome OS не можеше да ги синхронизира вашите лозинки.</translation>
 <translation id="1628000112320670027">Добијте помош за Chrome</translation>
 <translation id="1662639173275167396">Chrome OS е овозможен од дополнителен <ph name="BEGIN_LINK_CROS_OSS" />софтвер со отворен код<ph name="END_LINK_CROS_OSS" />, како и <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Бета)<ph name="END_LINK_LINUX_OSS" />.</translation>
@@ -57,7 +61,6 @@
 <translation id="2534507159460261402">Google Pay (копирана во Chrome)</translation>
 <translation id="2580411288591421699">Не може да се инсталира истата верзија на Google Chrome што работи во моментов. Затворете го Google Chrome и обидете се повторно.</translation>
 <translation id="2586406160782125153">Ова ќе ги избрише податоците од прелистувањето од уредов. За да ги вратите вашите податоци подоцна, најавете се на Chrome како <ph name="USER_EMAIL" />.</translation>
-<translation id="2588322182880276190">Лого на Chrome</translation>
 <translation id="2622559029861875898">Chrome не може да провери дали се достапни ажурирања. Проверете ја интернет-врската.</translation>
 <translation id="2644798301485385923">Систем Chrome OS</translation>
 <translation id="2652691236519827073">Отвори го линкот во нова &amp;картичка на Chrome</translation>
@@ -70,6 +73,7 @@
 <translation id="2847461019998147611">Прикажи го Google Chrome на овој јазик</translation>
 <translation id="2857540653560290388">Се стартува Chrome…</translation>
 <translation id="2871893339301912279">Најавени сте на Chrome!</translation>
+<translation id="2885378588091291677">Управник со задачи</translation>
 <translation id="2888126860611144412">За Chrome</translation>
 <translation id="2929907241665500097">Chrome не се ажурираше, нешто тргна наопаку. <ph name="BEGIN_LINK" />Поправете ги проблемите со ажурирањето на Chrome и со неуспешните ажурирања.<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> - Мрежно најавување - Chrome</translation>
@@ -105,6 +109,7 @@
 <translation id="3889417619312448367">Деинсталирај го Google Chrome</translation>
 <translation id="4050175100176540509">Во најновата верзија се достапни значајни безбедносни подобрувања и нови карактеристики.</translation>
 <translation id="4053720452172726777">Приспособи го и контролирај го Google Chrome</translation>
+<translation id="4110895483821904099">Поставете нов профил на Chrome</translation>
 <translation id="4143243756087420366">Име и слика на Chrome</translation>
 <translation id="4147555960264124640">Се најавувате со управувана сметка и на нејзиниот администратор му давате контрола врз вашиот профил на Google Chrome. Вашите податоци на Chrome, како што се апликации, обележувачи, историја, лозинки и други поставки, трајно ќе се поврзат со <ph name="USER_NAME" />. Ќе може да ги избришете податоците преку информациската табла на сметките на Google, но нема да може да ги поврзете со друга сметка. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Инсталаторот не успеа да ја декомпримира архивата. Преземете го Google Chrome повторно.</translation>
@@ -138,6 +143,7 @@
 <translation id="4771048833395599659">Датотекава може да биде опасна, па затоа Chrome ја блокираше.</translation>
 <translation id="479167709087336770">Услугава ја користи истата проверка на правопис што се користи и во „Пребарување на Google“. Текстот што ќе го напишете во прелистувачот се испраќа до Google. Ваквото однесување може да го смените во поставки во секое време.</translation>
 <translation id="4891791193823137474">Остави Google Chrome да работи во заднина</translation>
+<translation id="489337168347244450">{NUM_DAYS,plural, =1{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред 1 ден.}one{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред {NUM_DAYS} ден.}other{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред {NUM_DAYS} дена.}}</translation>
 <translation id="4895437082222824641">Отвори го линкот во нова &amp;картичка на Chrome</translation>
 <translation id="4953650215774548573">Поставете го Google Chrome за ваш стандарден прелистувач</translation>
 <translation id="495931528404527476">Во Chrome</translation>
@@ -157,6 +163,7 @@
 Google Chrome не може да ги обнови вашите поставки.</translation>
 <translation id="556024056938947818">Google Chrome се обидува да прикаже лозинки.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
+<translation id="5633355459292055250">Прашувај кога ќе го отворам Chrome</translation>
 <translation id="5657226924540934362">Ако некоја поставка не се прикажува на страницава, погледнете во <ph name="LINK_BEGIN" />
     поставките за Chrome OS<ph name="LINK_END" /></translation>
 <translation id="565744775970812598">Датотеката <ph name="FILE_NAME" /> може да биде опасна, па затоа Chrome ја блокираше.</translation>
@@ -182,6 +189,7 @@ Google Chrome не може да ги обнови вашите поставки
 <translation id="6291549208091401781">Google Chrome веќе е инсталиран за сите корисници на вашиот компјутер.</translation>
 <translation id="6338556085225130112">Се ажурира Google Chrome</translation>
 <translation id="6368958679917195344">Chrome OS е овозможен од дополнителен <ph name="BEGIN_LINK_CROS_OSS" />софтвер со отворен код<ph name="END_LINK_CROS_OSS" />.</translation>
+<translation id="6454142105866844106">Chrome проверува дали има несакан софтвер еднаш неделно</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome Dev</translation>
 <translation id="6566149418543181476">Google Chrome се ажурира (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6676384891291319759">Пристап до интернет</translation>
@@ -199,14 +207,17 @@ Google Chrome не може да ги обнови вашите поставки
 <translation id="7106741999175697885">Управник со задачи - Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{Достапно е ново ажурирање за Chrome и ќе се примени штом рестартирате.}=1{Достапно е ново ажурирање за Chrome и ќе се примени штом рестартирате. Прозорецот „Инкогнито“ нема да се отвори повторно.}one{Достапно е ново ажурирање за Chrome и ќе се примени штом рестартирате. # прозорец „Инкогнито“ нема да се отвори повторно.}other{Достапно е ново ажурирање за Chrome и ќе се примени штом рестартирате. # прозорци „Инкогнито“ нема да се отворат повторно.}}</translation>
 <translation id="7155997830309522122">Ако е така, изменете ја зачуваната лозинка во Chrome за да се совпаѓа со новата лозинка.</translation>
+<translation id="7236955538461508933">{NUM_HOURS,plural, =1{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред 1 час.}one{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред {NUM_HOURS} час.}other{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред {NUM_HOURS} часа.}}</translation>
 <translation id="7242029209006116544">Се пријавувате со управувана сметка и на нејзиниот администратор му давате контрола врз вашиот профил на Google Chrome. Вашите податоци на Chrome, како апликации, обележувачи, историја, лозинки и други поставки, трајно ќе се поврзат со <ph name="USER_NAME" />. Ќе може да ги избришете податоците преку Информациска табла на сметките на Google, но нема да може да ги поврзувате со друга сметка. Изборно може да направите и нов профил за постоечките податоци од Chrome за да бидат одделни. <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">Овој јазик се користи за приказ на корисничкиот интерфејс на Google Chrome</translation>
 <translation id="7296210096911315575">Важни информации за користење и безбедност</translation>
 <translation id="7308322188646931570">На Chrome му треба пристап до меморијата за да презема датотеки</translation>
 <translation id="7339898014177206373">Нов прозорец</translation>
+<translation id="7386132805935307836">Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: вчера.</translation>
 <translation id="7398801000654795464">Бевте најавени на Chrome како <ph name="USER_EMAIL_ADDRESS" />. Користете ја истата сметка за повторно да се најавите.</translation>
 <translation id="7408085963519505752">Услови на Chrome OS</translation>
 <translation id="7419046106786626209">Chrome ОС не може да ги синхронизира вашите податоци бидејќи синхронизацијата не е достапна за вашиот домен.</translation>
+<translation id="7423733001651488593">Ова трајно ќе ги избрише податоците од прелистувањето на овој уред. За да ги вратите податоците, најавете се на Chrome како</translation>
 <translation id="7486227612705979895">Chrome ќе пристапува до Drive за да дава предлози во лентата за адреси</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7573289029918943991">За да видите дали уредот ви е ажуриран, одете на <ph name="LINK_BEGIN" />Поставки за Chrome OS<ph name="LINK_END" /></translation>
@@ -238,6 +249,7 @@ Google Chrome не може да ги обнови вашите поставки
 <translation id="828798499196665338">Родителот ги исклучил „Дозволите за сајтови, апликации и екстензии“ за Chrome. Не е дозволено овозможувањето на оваа<ph name="EXTENSION_TYPE_PARAMETER" />.</translation>
 <translation id="8290100596633877290">Google Chrome падна. Веднаш да се стартува повторно?</translation>
 <translation id="8342675569599923794">Датотекава е опасна, па затоа Chrome ја блокираше.</translation>
+<translation id="8344083974188970894">{NUM_MINS,plural, =1{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред 1 минута.}one{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред {NUM_MINS} мин.}other{Chrome проверува дали има несакан софтвер еднаш неделно. Последна проверка: пред {NUM_MINS} мин.}}</translation>
 <translation id="8370517070665726704">Авторски права <ph name="YEAR" /> Google LLC. Сите права се задржани.</translation>
 <translation id="840084489713044809">Google Chrome сака да ги извезе вашите лозинки.</translation>
 <translation id="8498858610309223613">Тукушто применивме посебно безбедносно ажурирање за Google Chrome. Рестартирајте сега и ќе ви ги вратиме картичките.</translation>
@@ -250,8 +262,10 @@ Google Chrome не може да ги обнови вашите поставки
 <translation id="8641606876632989680">Chrome ќе ве извести кога ќе се најавите со компромитирана лозинка</translation>
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Контролира и која страница се прикажува кога ќе стартувате Chrome.</translation>
+<translation id="8681614230122836773">Chrome најде штетен софтвер на вашиот компјутер</translation>
 <translation id="870251953148363156">&amp;Google Chrome се ажурира</translation>
 <translation id="873133009373065397">Google Chrome не може да го одреди или постави стандардниот прелистувач</translation>
+<translation id="8748242232968346981">Сакате ли да создадете сопствен профил во Chrome?</translation>
 <translation id="8823341990149967727">Chrome е застарен</translation>
 <translation id="8834965163890861871">Google Chrome се обидува да измени лозинки. Внесете ја својата лозинка за Windows за да го дозволите ова.</translation>
 <translation id="884296878221830158">Контролира и која страница се прикажува кога ќе стартувате Chrome или ако кликнете на копчето Дома.</translation>

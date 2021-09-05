@@ -14,18 +14,12 @@ class SwitchAccess {
         chrome.virtualKeyboardPrivate.KeyboardState.ENABLED);
 
     chrome.automation.getDesktop((desktop) => {
-      // These two must be initialized before the others.
-      AutoScanManager.initialize();
+      // NavigationManager must be initialized first.
       NavigationManager.initialize(desktop);
 
       Commands.initialize();
-      FocusRingManager.initialize();
-      MenuManager.initialize();
-      SwitchAccessPreferences.initialize();
-      TextNavigationManager.initialize();
-
-      // This can throw an error, so it is done last.
       KeyboardRootNode.startWatchingVisibility();
+      SwitchAccessPreferences.initialize();
     });
   }
 
@@ -53,26 +47,24 @@ class SwitchAccess {
   }
 
   /**
-   * Helper function to robustly find a node fitting a given predicate, even if
+   * Helper function to robustly find a node fitting a given FindParams, even if
    * that node has not yet been created.
    * Used to find the menu and back button.
-   * @param {!function(!AutomationNode): boolean} predicate
+   * @param {!chrome.automation.FindParams} findParams
    * @param {!function(!AutomationNode): void} foundCallback
    */
-  static findNodeMatchingPredicate(predicate, foundCallback) {
+  static findNodeMatching(findParams, foundCallback) {
     const desktop = NavigationManager.desktopNode;
     // First, check if the node is currently in the tree.
-    const treeWalker = new AutomationTreeWalker(
-        desktop, constants.Dir.FORWARD, {visit: predicate});
-    treeWalker.next();
-    if (treeWalker.node) {
-      foundCallback(treeWalker.node);
+    let node = desktop.find(findParams);
+    if (node) {
+      foundCallback(node);
       return;
     }
     // If it's not currently in the tree, listen for changes to the desktop
     // tree.
     const onDesktopChildrenChanged = (event) => {
-      if (predicate(event.target)) {
+      if (event.target.matches(findParams)) {
         // If the event target is the node we're looking for, we've found it.
         desktop.removeEventListener(
             chrome.automation.EventType.CHILDREN_CHANGED,
@@ -80,19 +72,20 @@ class SwitchAccess {
         foundCallback(event.target);
       } else if (event.target.children.length > 0) {
         // Otherwise, see if one of its children is the node we're looking for.
-        const treeWalker = new AutomationTreeWalker(
-            event.target, constants.Dir.FORWARD,
-            {visit: predicate, root: (node) => node == event.target});
-        treeWalker.next();
-        if (treeWalker.node) {
+        node = event.target.find(findParams);
+        if (node) {
           desktop.removeEventListener(
               chrome.automation.EventType.CHILDREN_CHANGED,
               onDesktopChildrenChanged, false);
-          foundCallback(treeWalker.node);
+          foundCallback(node);
         }
       }
     };
 
+    // Note: Cannot use an EventHandler here because in some cases we want
+    // to run foundCallback on the event.target, and in some cases we want to
+    // run foundCallback on one of the target's children. We would need to
+    // recalculate the interesting child twice to use EventHandler.
     desktop.addEventListener(
         chrome.automation.EventType.CHILDREN_CHANGED, onDesktopChildrenChanged,
         false);
@@ -102,9 +95,13 @@ class SwitchAccess {
    * Creates and records the specified error.
    * @param {SAConstants.ErrorType} errorType
    * @param {string} errorString
+   * @param {boolean} shouldRecover
    * @return {!Error}
    */
-  static error(errorType, errorString) {
+  static error(errorType, errorString, shouldRecover = false) {
+    if (shouldRecover) {
+      setTimeout(NavigationManager.moveToValidNode, 0);
+    }
     const errorTypeCountForUMA = Object.keys(SAConstants.ErrorType).length;
     chrome.metricsPrivate.recordEnumerationValue(
         'Accessibility.CrosSwitchAccess.Error', errorType,

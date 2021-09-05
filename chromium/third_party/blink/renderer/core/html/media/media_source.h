@@ -34,7 +34,7 @@
 #include <memory>
 #include "third_party/blink/public/platform/web_time_range.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/fileapi/url_registry.h"
+#include "third_party/blink/renderer/core/html/media/media_source_tracer.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
@@ -45,22 +45,28 @@ class HTMLMediaElement;
 class TimeRanges;
 class TrackBase;
 
-class CORE_EXPORT MediaSource : public URLRegistrable,
-                                public GarbageCollectedMixin {
+// Interface for the Media Source Extensions (MSE) API's MediaSource object
+// implementation (see also https://w3.org/TR/media-source/). Web apps can
+// extend an HTMLMediaElement's instance to use the MSE API (also known as
+// "attaching MSE to a media element") by using a Media Source object URL as the
+// media element's src attribute or the src attribute of a <source> inside the
+// media element.
+// TODO(https://crbug.com/878133): Migrate the HTMLME<->MS API communication to
+// be moderated by MediaSourceAttachment. Lifetime management of attached
+// HTMLMediaElement+MSE object groups using Oilpan may also be moved to be
+// moderated by MediaSourceAttachment, hopefully mitigating the need for this
+// interface in core eventually.
+class CORE_EXPORT MediaSource : public GarbageCollectedMixin {
  public:
-  static void SetRegistry(URLRegistry*);
-  static MediaSource* Lookup(const String& url) {
-    return registry_ ? static_cast<MediaSource*>(registry_->Lookup(url))
-                     : nullptr;
-  }
-
   // These two methods are called in sequence when an HTMLMediaElement is
   // attempting to attach to this object.  The WebMediaSource is not available
   // to the element initially, so between the two calls, the attachment could be
   // considered partially setup.
-  // If already attached, StartAttachingToMediaElement() returns false.
-  // Otherwise, must be in 'closed' state, and returns true to indicate
-  // attachment success.
+  // If already attached, StartAttachingToMediaElement() returns nullptr.
+  // Otherwise, must be in 'closed' state, and indicates success by returning a
+  // tracer object useful in at least same-thread attachments for enabling
+  // automatic idle unreferenced same-thread attachment object garbage
+  // collection.
   // CompleteAttachingToMediaElement() provides the MediaSource with the
   // underlying WebMediaSource, enabling parsing of media provided by the
   // application for playback, for example.
@@ -68,7 +74,8 @@ class CORE_EXPORT MediaSource : public URLRegistrable,
   // 'closed').
   // Once attached, the source uses the element to synchronously service some
   // API operations like duration change that may need to initiate seek.
-  virtual bool StartAttachingToMediaElement(HTMLMediaElement*) = 0;
+  virtual MediaSourceTracer* StartAttachingToMediaElement(
+      HTMLMediaElement*) = 0;
   virtual void CompleteAttachingToMediaElement(
       std::unique_ptr<WebMediaSource>) = 0;
 
@@ -85,12 +92,6 @@ class CORE_EXPORT MediaSource : public URLRegistrable,
   virtual WebTimeRanges SeekableInternal() const = 0;
   virtual TimeRanges* Buffered() const = 0;
   virtual void OnTrackChanged(TrackBase*) = 0;
-
-  // URLRegistrable
-  URLRegistry& Registry() const override { return *registry_; }
-
- private:
-  static URLRegistry* registry_;
 };
 
 }  // namespace blink

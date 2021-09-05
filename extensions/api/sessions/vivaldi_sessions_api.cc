@@ -265,7 +265,7 @@ ExtensionFunction::ResponseAction SessionsPrivateDeleteFunction::Run() {
   if (!base::PathExists(path)) {
     error_code = kErrorFileMissing;
   } else {
-    if (!base::DeleteFile(path, false)) {
+    if (!base::DeleteFile(path)) {
       error_code = kErrorDeleteFailure;
     }
   }

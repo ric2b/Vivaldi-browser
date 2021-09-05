@@ -46,6 +46,9 @@
 [submodule "third_party/dawn"]
 	path = third_party/dawn
 	url = ../../dawn/dawn.git
+[submodule "third_party/securemessage/src"]
+	path = third_party/securemessage/src
+	url = ../../external/github.com/google/securemessage.git
 [submodule "tools/page_cycler/acid3"]
 	path = tools/page_cycler/acid3
 	url = ../deps/acid3.git
@@ -55,6 +58,9 @@
 [submodule "third_party/wayland-protocols/src"]
 	path = third_party/wayland-protocols/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland-protocols.git
+[submodule "third_party/tint/src"]
+	path = third_party/tint/src
+	url = ../../dawn/tint.git
 [submodule "third_party/minigbm/src"]
 	path = third_party/minigbm/src
 	url = ../../chromiumos/platform/minigbm.git
@@ -88,9 +94,9 @@
 [submodule "third_party/ced/src"]
 	path = third_party/ced/src
 	url = ../../external/github.com/google/compact_enc_det.git
-[submodule "third_party/shaderc/src"]
-	path = third_party/shaderc/src
-	url = ../../external/github.com/google/shaderc.git
+[submodule "third_party/icu"]
+	path = third_party/icu
+	url = ../deps/icu.git
 [submodule "third_party/libgifcodec"]
 	path = third_party/libgifcodec
 	url = ../../skia/libgifcodec.git
@@ -121,9 +127,12 @@
 [submodule "third_party/libsync/src"]
 	path = third_party/libsync/src
 	url = ../../aosp/platform/system/core/libsync.git
-[submodule "third_party/icu"]
-	path = third_party/icu
-	url = ../deps/icu.git
+[submodule "third_party/nearby/src"]
+	path = third_party/nearby/src
+	url = ../../external/github.com/google/nearby-connections.git
+[submodule "third_party/shaderc/src"]
+	path = third_party/shaderc/src
+	url = ../../external/github.com/google/shaderc.git
 [submodule "third_party/pdfium"]
 	path = third_party/pdfium
 	url = ../../pdfium/pdfium.git
@@ -271,6 +280,9 @@
 [submodule "third_party/webgl/src"]
 	path = third_party/webgl/src
 	url = ../../external/khronosgroup/webgl.git
+[submodule "third_party/snappy/src"]
+	path = third_party/snappy/src
+	url = ../../external/github.com/google/snappy.git
 [submodule "buildtools/clang_format/script"]
 	path = buildtools/clang_format/script
 	url = ../llvm-project/cfe/tools/clang-format.git
@@ -280,9 +292,9 @@
 [submodule "third_party/wds/src"]
 	path = third_party/wds/src
 	url = ../../external/github.com/01org/wds.git
-[submodule "third_party/snappy/src"]
-	path = third_party/snappy/src
-	url = ../../external/github.com/google/snappy.git
+[submodule "third_party/ukey2/src"]
+	path = third_party/ukey2/src
+	url = ../../external/github.com/google/ukey2.git
 [submodule "third_party/openscreen/src"]
 	path = third_party/openscreen/src
 	url = ../../openscreen.git

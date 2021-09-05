@@ -12,11 +12,13 @@
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/common/content_navigation_policy.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -282,6 +284,11 @@ IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest,
 // current RFH (of old URL) not alive.
 IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest,
                        CheckWithFrameCrashDuringNavigation) {
+  // TODO(sreejakshetty): Investigate why the data is being deleted after crash
+  // when BackForwardCache is enabled.
+  DisableBackForwardCacheForTesting(shell()->web_contents(),
+                                    BackForwardCache::TEST_ASSUMES_NO_CACHING);
+
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL url_b(embedded_test_server()->GetURL("b.com", "/title2.html"));
@@ -298,7 +305,14 @@ IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest,
 
   // 2) Start navigation to B, but don't commit yet.
   TestNavigationManager manager(shell()->web_contents(), url_b);
-  shell()->LoadURL(url_b);
+  // We should disable proactive BrowsingInstance swap for the navigation below
+  // and also use PAGE_TRANSITION_LINK for the navigation to ensure that the
+  // speculative RFH is going to use the same BrowsingInstance as the original
+  // RFH. Otherwise, we'd create a new speculative RFH at ReadyToCommit time,
+  // deleting the RDHUD we created for the first speculative RFH.
+  DisableProactiveBrowsingInstanceSwapFor(rfh_a);
+  shell()->LoadURLForFrame(url_b, std::string(),
+                           ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK));
   EXPECT_TRUE(manager.WaitForRequestStart());
 
   FrameTreeNode* root = web_contents()->GetFrameTree()->root();
@@ -542,6 +556,14 @@ IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest,
   RenderFrameHostImpl* rfh_a = top_frame_host();
   RenderFrameHostImpl* rfh_b = rfh_a->child_at(0)->current_frame_host();
 
+  // Test needs these RenderFrameHosts to be pending deletion after navigating
+  // but it doesn't happen with BackForwardCache as it is stored in cache.
+  // BFCache case is covered explicitly by
+  // "RenderDocumentHostUserDataWithBackForwardCacheTest.BackForwardCacheNavigation"
+  // test.
+  DisableBackForwardCacheForTesting(shell()->web_contents(),
+                                    BackForwardCache::TEST_ASSUMES_NO_CACHING);
+
   // 2) Leave both rfh_a and rfh_b in pending deletion state.
   LeaveInPendingDeletionState(rfh_a);
   LeaveInPendingDeletionState(rfh_b);
@@ -666,6 +688,12 @@ IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest, FailedNavigation) {
   base::WeakPtr<Data> data = Data::GetForCurrentDocument(rfh_a)->GetWeakPtr();
   EXPECT_TRUE(data);
 
+  // This test expects old RenderFrameHost to be deleted after navigating to an
+  // error page, disable back-forward cache to ensure that RenderFrameHost gets
+  // deleted.
+  DisableBackForwardCacheForTesting(shell()->web_contents(),
+                                    BackForwardCache::TEST_ASSUMES_NO_CACHING);
+
   // 3) Browser-initiated navigation to an error page.
   NavigationHandleObserver observer(shell()->web_contents(), error_url);
   EXPECT_FALSE(NavigateToURL(shell(), error_url));
@@ -695,6 +723,9 @@ IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest, CrossSiteNavigation) {
   base::WeakPtr<Data> data = Data::GetForCurrentDocument(rfh_a)->GetWeakPtr();
   EXPECT_TRUE(data);
 
+  DisableBackForwardCacheForTesting(shell()->web_contents(),
+                                    BackForwardCache::TEST_ASSUMES_NO_CACHING);
+
   // 3) Navigate to B.
   EXPECT_TRUE(NavigateToURL(shell(), url_b));
   EXPECT_NE(rfh_a, top_frame_host());
@@ -723,7 +754,6 @@ IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest, SameSiteNavigation) {
 
   // 3) Navigate to A2.
   EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  EXPECT_EQ(rfh_a1, top_frame_host());
 
   // 4) The associated RenderDocumentHostUserData should be deleted.
   EXPECT_FALSE(data);

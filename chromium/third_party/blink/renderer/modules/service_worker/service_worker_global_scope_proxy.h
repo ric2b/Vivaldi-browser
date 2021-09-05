@@ -103,7 +103,6 @@ class ServiceWorkerGlobalScopeProxy final : public WebServiceWorkerContextProxy,
 
   // WorkerReportingProxy overrides:
   void CountFeature(WebFeature) override;
-  void CountDeprecation(WebFeature) override;
   void ReportException(const String& error_message,
                        std::unique_ptr<SourceLocation>,
                        int exception_id) override;
@@ -122,8 +121,7 @@ class ServiceWorkerGlobalScopeProxy final : public WebServiceWorkerContextProxy,
   void WillEvaluateImportedClassicScript(size_t script_size,
                                          size_t cached_metadata_size) override;
   void WillEvaluateModuleScript() override;
-  void DidEvaluateClassicScript(bool success) override;
-  void DidEvaluateModuleScript(bool success) override;
+  void DidEvaluateTopLevelScript(bool success) override;
   void DidCloseWorkerGlobalScope() override;
   void WillDestroyWorkerGlobalScope() override;
   void DidTerminateWorkerThread() override;

@@ -488,7 +488,9 @@ std::string AXNode::GetInnerText() const {
   // value or its placeholder. Otherwise we prefer to look at its descendant
   // text nodes because Blink doesn't always add all trailing white space to the
   // value attribute.
-  if (data().IsTextField() && children().empty()) {
+  const bool is_plain_text_field_without_descendants =
+      (data().IsTextField() && !GetUnignoredChildCount());
+  if (is_plain_text_field_without_descendants) {
     std::string value =
         data().GetStringAttribute(ax::mojom::StringAttribute::kValue);
     // If the value is empty, then there might be some placeholder text in the
@@ -499,9 +501,12 @@ std::string AXNode::GetInnerText() const {
   }
 
   // Ordinarily, plain text fields are leaves. We need to exclude them from the
-  // set of leaf nodes when they expose any descendants if we want to compute
-  // their inner text from their descendant text nodes.
-  if (IsLeaf() && !(data().IsTextField() && !children().empty())) {
+  // set of leaf nodes when they expose any descendants. This is because we want
+  // to compute their inner text from their descendant text nodes as we don't
+  // always trust the "value" attribute provided by Blink.
+  const bool is_plain_text_field_with_descendants =
+      (data().IsTextField() && GetUnignoredChildCount());
+  if (IsLeaf() && !is_plain_text_field_with_descendants) {
     switch (data().GetNameFrom()) {
       case ax::mojom::NameFrom::kNone:
       case ax::mojom::NameFrom::kUninitialized:
@@ -736,7 +741,7 @@ std::vector<AXNode::AXID> AXNode::GetTableRowNodeIds() const {
   return row_node_ids;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 
 //
 // Table column-like nodes. These nodes are only present on macOS.
@@ -763,7 +768,7 @@ base::Optional<int> AXNode::GetTableColColIndex() const {
   return index;
 }
 
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_APPLE)
 
 //
 // Table cell-like nodes.
@@ -1104,11 +1109,8 @@ bool AXNode::IsChildOfLeaf() const {
 }
 
 bool AXNode::IsLeaf() const {
-  return !GetUnignoredChildCount() || IsLeafIncludingIgnored();
-}
-
-bool AXNode::IsLeafIncludingIgnored() const {
-  if (children().empty())
+  // A node is also a leaf if all of it's descendants are ignored.
+  if (children().empty() || !GetUnignoredChildCount())
     return true;
 
 #if defined(OS_WIN)

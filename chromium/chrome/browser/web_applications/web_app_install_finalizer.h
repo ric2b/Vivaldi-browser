@@ -51,6 +51,7 @@ class WebAppInstallFinalizer final : public InstallFinalizer {
                                   UninstallWebAppCallback callback) override;
   bool WasExternalAppUninstalledByUser(const AppId& app_id) const override;
   void RemoveLegacyInstallFinalizerForTesting() override;
+  InstallFinalizer* legacy_finalizer_for_testing() override;
   void Start() override;
   void Shutdown() override;
 
@@ -83,14 +84,12 @@ class WebAppInstallFinalizer final : public InstallFinalizer {
   void OnDatabaseCommitCompletedForInstall(InstallFinalizedCallback callback,
                                            AppId app_id,
                                            bool success);
-  void OnDatabaseCommitCompletedForUpdate(InstallFinalizedCallback callback,
-                                          AppId app_id,
-                                          std::string old_name,
-                                          bool success);
-  void OnFallbackInstallFinalized(const AppId& app_in_sync_install_id,
-                                  InstallFinalizedCallback callback,
-                                  const AppId& installed_app_id,
-                                  InstallResultCode code);
+  void OnDatabaseCommitCompletedForUpdate(
+      InstallFinalizedCallback callback,
+      AppId app_id,
+      std::string old_name,
+      const WebApplicationInfo& web_app_info,
+      bool success);
 
   WebAppRegistrar& GetWebAppRegistrar() const;
 

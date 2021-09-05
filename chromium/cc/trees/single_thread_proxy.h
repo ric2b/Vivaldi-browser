@@ -70,6 +70,8 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void ClearHistory() override;
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer) override;
+  void SetEnableFrameRateThrottling(
+      bool enable_frame_rate_throttling) override {}
 
   void UpdateBrowserControlsState(BrowserControlsState constraints,
                                   BrowserControlsState current,
@@ -200,6 +202,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   bool defer_main_frame_update_;
   bool defer_commits_;
   bool animate_requested_;
+  bool update_layers_requested_;
   bool commit_requested_;
   bool inside_synchronous_composite_;
   bool needs_impl_frame_;

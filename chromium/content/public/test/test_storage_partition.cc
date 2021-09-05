@@ -71,10 +71,6 @@ DOMStorageContext* TestStoragePartition::GetDOMStorageContext() {
   return dom_storage_context_;
 }
 
-IdleManager* TestStoragePartition::GetIdleManager() {
-  return nullptr;
-}
-
 storage::mojom::IndexedDBControl& TestStoragePartition::GetIndexedDBControl() {
   // Bind and throw away the receiver. If testing is required, then add a method
   // to set the remote.
@@ -177,6 +173,18 @@ void TestStoragePartition::ClearCodeCaches(
 void TestStoragePartition::Flush() {}
 
 void TestStoragePartition::ResetURLLoaderFactories() {}
+
+void TestStoragePartition::AddObserver(DataRemovalObserver* observer) {
+  data_removal_observer_count_++;
+}
+
+void TestStoragePartition::RemoveObserver(DataRemovalObserver* observer) {
+  data_removal_observer_count_--;
+}
+
+int TestStoragePartition::GetDataRemovalObserverCount() {
+  return data_removal_observer_count_;
+}
 
 void TestStoragePartition::ClearBluetoothAllowedDevicesMapForTesting() {}
 

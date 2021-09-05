@@ -92,14 +92,17 @@ PlayerCompositorDelegateAndroid::PlayerCompositorDelegateAndroid(
 }
 
 void PlayerCompositorDelegateAndroid::OnCompositorReady(
-    mojom::PaintPreviewCompositor::Status status,
+    mojom::PaintPreviewCompositor::BeginCompositeStatus status,
     mojom::PaintPreviewBeginCompositeResponsePtr composite_response) {
   bool compositor_started =
-      status == mojom::PaintPreviewCompositor::Status::kSuccess;
+      status == mojom::PaintPreviewCompositor::BeginCompositeStatus::kSuccess ||
+      status ==
+          mojom::PaintPreviewCompositor::BeginCompositeStatus::kPartialSuccess;
   base::UmaHistogramBoolean(
       "Browser.PaintPreview.Player.CompositorProcessStartedCorrectly",
       compositor_started);
   if (!compositor_started && compositor_error_) {
+    LOG(ERROR) << "Compositor process failed to begin with code: " << status;
     std::move(compositor_error_).Run();
     return;
   }
@@ -216,14 +219,14 @@ void PlayerCompositorDelegateAndroid::OnBitmapCallback(
     const ScopedJavaGlobalRef<jobject>& j_bitmap_callback,
     const ScopedJavaGlobalRef<jobject>& j_error_callback,
     int request_id,
-    mojom::PaintPreviewCompositor::Status status,
+    mojom::PaintPreviewCompositor::BitmapStatus status,
     const SkBitmap& sk_bitmap) {
   TRACE_EVENT_NESTABLE_ASYNC_END2(
       "paint_preview", "PlayerCompositorDelegateAndroid::RequestBitmap",
       TRACE_ID_LOCAL(request_id), "status", static_cast<int>(status), "bytes",
       sk_bitmap.computeByteSize());
 
-  if (status == mojom::PaintPreviewCompositor::Status::kSuccess &&
+  if (status == mojom::PaintPreviewCompositor::BitmapStatus::kSuccess &&
       !sk_bitmap.isNull()) {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::TaskPriority::USER_VISIBLE},
@@ -249,7 +252,7 @@ void PlayerCompositorDelegateAndroid::OnBitmapCallback(
   }
 }
 
-void PlayerCompositorDelegateAndroid::OnClick(
+ScopedJavaLocalRef<jstring> PlayerCompositorDelegateAndroid::OnClick(
     JNIEnv* env,
     const JavaParamRef<jobject>& j_frame_guid,
     jint j_x,
@@ -259,13 +262,18 @@ void PlayerCompositorDelegateAndroid::OnClick(
           env, j_frame_guid),
       gfx::Rect(static_cast<int>(j_x), static_cast<int>(j_y), 1U, 1U));
   if (res.empty())
-    return;
+    return base::android::ConvertUTF8ToJavaString(env, "");
   base::UmaHistogramBoolean("Browser.PaintPreview.Player.LinkClicked", true);
   // TODO(crbug/1061435): Resolve cases where there are multiple links.
   // For now just return the first in the list.
-  Java_PlayerCompositorDelegateImpl_onLinkClicked(
-      env, java_ref_,
-      base::android::ConvertUTF8ToJavaString(env, res[0]->spec()));
+  return base::android::ConvertUTF8ToJavaString(env, res[0]->spec());
+}
+
+void PlayerCompositorDelegateAndroid::SetCompressOnClose(
+    JNIEnv* env,
+    jboolean compress_on_close) {
+  PlayerCompositorDelegate::SetCompressOnClose(
+      static_cast<bool>(compress_on_close));
 }
 
 void PlayerCompositorDelegateAndroid::Destroy(JNIEnv* env) {

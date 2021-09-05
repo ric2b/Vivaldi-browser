@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/passwords/password_save_unsynced_credentials_locally_view.h"
 #include "chrome/browser/ui/views/passwords/password_save_update_view.h"
 #include "chrome/browser/ui/views/passwords/password_save_update_with_account_store_view.h"
+#include "chrome/browser/ui/views/passwords/post_save_compromised_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -148,6 +149,14 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
     DCHECK(base::FeatureList::IsEnabled(
         password_manager::features::kEnablePasswordsAccountStorage));
     view = new MoveToAccountStoreBubbleView(web_contents, anchor_view);
+  } else if (model_state == password_manager::ui::PASSWORD_UPDATED_SAFE_STATE ||
+             model_state ==
+                 password_manager::ui::PASSWORD_UPDATED_MORE_TO_FIX ||
+             model_state ==
+                 password_manager::ui::PASSWORD_UPDATED_UNSAFE_STATE) {
+    DCHECK(base::FeatureList::IsEnabled(
+        password_manager::features::kCompromisedPasswordsReengagement));
+    view = new PostSaveCompromisedBubbleView(web_contents, anchor_view);
   } else {
     NOTREACHED();
   }
@@ -201,6 +210,14 @@ void PasswordBubbleViewBase::Init() {
   DCHECK(controller);
   SetTitle(controller->GetTitle());
   SetShowTitle(!controller->GetTitle().empty());
+}
+
+ax::mojom::Role PasswordBubbleViewBase::GetAccessibleWindowRole() {
+  // This bubble is displayed as non-modal when users finish typing their
+  // password. In absence of a focus change event, ATs will not notice the
+  // bubble unless an alert event is emitted, so we need it to have an
+  // alert role.
+  return ax::mojom::Role::kAlertDialog;
 }
 
 void PasswordBubbleViewBase::OnWidgetClosing(views::Widget* widget) {

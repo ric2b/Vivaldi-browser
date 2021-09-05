@@ -20,6 +20,7 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
@@ -145,17 +146,15 @@ class SessionRestoreImpl : public BrowserListObserver {
     SessionService* session_service =
         SessionServiceFactory::GetForProfile(profile_);
     DCHECK(session_service);
-    session_service->GetLastSession(
-        base::BindOnce(&SessionRestoreImpl::OnGotSession,
-                       base::Unretained(this)),
-        &cancelable_task_tracker_);
+    session_service->GetLastSession(base::BindOnce(
+        &SessionRestoreImpl::OnGotSession, weak_factory_.GetWeakPtr()));
 
     if (synchronous_) {
       {
         base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
         quit_closure_for_sync_restore_ = loop.QuitClosure();
         loop.Run();
-        quit_closure_for_sync_restore_ = base::Closure();
+        quit_closure_for_sync_restore_ = base::OnceClosure();
       }
       Browser* browser =
           ProcessSessionWindowsAndNotify(&windows_, active_window_id_);
@@ -343,7 +342,7 @@ class SessionRestoreImpl : public BrowserListObserver {
       windows_.swap(windows);
       active_window_id_ = active_window_id;
       CHECK(!quit_closure_for_sync_restore_.is_null());
-      quit_closure_for_sync_restore_.Run();
+      std::move(quit_closure_for_sync_restore_).Run();
       return;
     }
 
@@ -732,7 +731,7 @@ class SessionRestoreImpl : public BrowserListObserver {
 
   // The quit-closure to terminate the nested message-loop started for
   // synchronous session-restore.
-  base::Closure quit_closure_for_sync_restore_;
+  base::OnceClosure quit_closure_for_sync_restore_;
 
   // See description of CLOBBER_CURRENT_TAB.
   const bool clobber_existing_tab_;
@@ -744,9 +743,6 @@ class SessionRestoreImpl : public BrowserListObserver {
 
   // Set of URLs to open in addition to those restored from the session.
   std::vector<GURL> urls_to_open_;
-
-  // Used to get the session.
-  base::CancelableTaskTracker cancelable_task_tracker_;
 
   // Responsible for loading the tabs.
   scoped_refptr<TabLoader> tab_loader_;
@@ -768,6 +764,8 @@ class SessionRestoreImpl : public BrowserListObserver {
 
   // List of callbacks for session restore notification.
   SessionRestore::CallbackList* on_session_restored_callbacks_;
+
+  base::WeakPtrFactory<SessionRestoreImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(SessionRestoreImpl);
 };
@@ -871,8 +869,8 @@ bool SessionRestore::IsRestoringSynchronously() {
 
 // static
 SessionRestore::CallbackSubscription
-    SessionRestore::RegisterOnSessionRestoredCallback(
-        const base::Callback<void(int)>& callback) {
+SessionRestore::RegisterOnSessionRestoredCallback(
+    const base::RepeatingCallback<void(int)>& callback) {
   return on_session_restored_callbacks()->Add(callback);
 }
 

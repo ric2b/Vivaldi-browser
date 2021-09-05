@@ -192,6 +192,12 @@ Polymer({
     this.showPasswordPromptDialog_ = true;
   },
 
+  // Invalidate the token to trigger a password re-prompt. Used for PIN auto
+  // submit when too many attempts were made when using PrefStore based PIN.
+  onInvalidateTokenRequested_() {
+    this.authToken_ = undefined;
+  },
+
   /** @private */
   onPasswordPromptDialogClose_() {
     this.showPasswordPromptDialog_ = false;

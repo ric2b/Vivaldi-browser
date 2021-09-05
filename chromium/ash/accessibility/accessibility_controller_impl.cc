@@ -13,21 +13,23 @@
 #include "ash/accessibility/accessibility_highlight_controller.h"
 #include "ash/accessibility/accessibility_observer.h"
 #include "ash/accessibility/accessibility_panel_layout_manager.h"
+#include "ash/accessibility/point_scan_controller.h"
 #include "ash/autoclick/autoclick_controller.h"
+#include "ash/events/accessibility_event_rewriter.h"
 #include "ash/events/select_to_speak_event_handler.h"
-#include "ash/events/switch_access_event_handler.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_util.h"
+#include "ash/login_status.h"
 #include "ash/policy/policy_recommendation_restorer.h"
 #include "ash/public/cpp/accessibility_controller_client.h"
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/notification_utils.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
-#include "ash/session/session_observer.h"
 #include "ash/shell.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -176,6 +178,22 @@ constexpr const char* const kCopiedOnSigninAccessibilityPrefs[]{
     prefs::kDockedMagnifierAcceleratorDialogHasBeenAccepted,
     prefs::kDictationAcceleratorDialogHasBeenAccepted,
     prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2,
+};
+
+// List of switch access accessibility prefs that are to be copied (if changed
+// by the user) from the current user to the signin screen profile. That way
+// if a switch access user signs out, their switch continues to function.
+constexpr const char* const kSwitchAccessPrefsCopiedToSignin[]{
+    prefs::kAccessibilitySwitchAccessAutoScanEnabled,
+    prefs::kAccessibilitySwitchAccessAutoScanKeyboardSpeedMs,
+    prefs::kAccessibilitySwitchAccessAutoScanSpeedMs,
+    prefs::kAccessibilitySwitchAccessEnabled,
+    prefs::kAccessibilitySwitchAccessNextKeyCodes,
+    prefs::kAccessibilitySwitchAccessNextSetting,
+    prefs::kAccessibilitySwitchAccessPreviousKeyCodes,
+    prefs::kAccessibilitySwitchAccessPreviousSetting,
+    prefs::kAccessibilitySwitchAccessSelectKeyCodes,
+    prefs::kAccessibilitySwitchAccessSelectSetting,
 };
 
 // Helper function that is used to verify the validity of kFeatures and
@@ -595,12 +613,8 @@ void AccessibilityControllerImpl::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kAccessibilityCursorColorEnabled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
-  // TODO(crbug.com/1085442): Work with UX to pick default color, and consider
-  // storing this as an index into a color array or as a hex color string.
-  // For now this should match a color in cursorColorOptions_ from
-  // manage_a11y_page.js.
   registry->RegisterIntegerPref(
-      prefs::kAccessibilityCursorColor, 0xaa00ff,
+      prefs::kAccessibilityCursorColor, 0,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
       prefs::kAccessibilityDictationEnabled, false,
@@ -1124,6 +1138,13 @@ bool AccessibilityControllerImpl::IsSwitchAccessRunning() const {
 }
 
 bool AccessibilityControllerImpl::IsSwitchAccessSettingVisibleInTray() {
+  // Switch Access cannot be enabled on the sign-in page until crbug/1108808 has
+  // been fully resolved.
+  if (!switch_access().enabled() &&
+      Shell::Get()->session_controller()->login_status() ==
+          ash::LoginStatus::NOT_LOGGED_IN) {
+    return false;
+  }
   return switch_access().IsVisibleInTray();
   return IsEnterpriseIconVisibleInTrayMenu(
       prefs::kAccessibilitySwitchAccessEnabled);
@@ -1133,9 +1154,11 @@ bool AccessibilityControllerImpl::IsEnterpriseIconVisibleForSwitchAccess() {
   return switch_access().IsEnterpriseIconVisible();
 }
 
-void AccessibilityControllerImpl::
-    SetSwitchAccessIgnoreVirtualKeyEventForTesting(bool should_ignore) {
-  switch_access_event_handler_->set_ignore_virtual_key_events(should_ignore);
+void AccessibilityControllerImpl::SetAccessibilityEventRewriter(
+    AccessibilityEventRewriter* accessibility_event_rewriter) {
+  accessibility_event_rewriter_ = accessibility_event_rewriter;
+  if (accessibility_event_rewriter_)
+    UpdateKeyCodesAfterSwitchAccessEnabled();
 }
 
 void AccessibilityControllerImpl::HideSwitchAccessBackButton() {
@@ -1168,15 +1191,11 @@ void AccessibilityControllerImpl::
   Shell::Get()->policy_recommendation_restorer()->DisableForTesting();
 }
 
-void AccessibilityControllerImpl::ForwardKeyEventsToSwitchAccess(
-    bool should_forward) {
-  switch_access_event_handler_->set_forward_key_events(should_forward);
-}
+void AccessibilityControllerImpl::StartPointScanning() {
+  if (!point_scan_controller_)
+    point_scan_controller_.reset(new PointScanController());
 
-void AccessibilityControllerImpl::SetSwitchAccessEventHandlerDelegate(
-    SwitchAccessEventHandlerDelegate* delegate) {
-  switch_access_event_handler_delegate_ = delegate;
-  MaybeCreateSwitchAccessEventHandler();
+  point_scan_controller_->Start();
 }
 
 void AccessibilityControllerImpl::SetStickyKeysEnabled(bool enabled) {
@@ -1250,9 +1269,10 @@ base::TimeDelta AccessibilityControllerImpl::PlayShutdownSound() {
 }
 
 void AccessibilityControllerImpl::HandleAccessibilityGesture(
-    ax::mojom::Gesture gesture) {
+    ax::mojom::Gesture gesture,
+    gfx::PointF location) {
   if (client_)
-    client_->HandleAccessibilityGesture(gesture);
+    client_->HandleAccessibilityGesture(gesture, location);
 }
 
 void AccessibilityControllerImpl::ToggleDictation() {
@@ -1389,11 +1409,9 @@ void AccessibilityControllerImpl::OnActiveUserPrefServiceChanged(
   ObservePrefs(prefs);
 }
 
-SwitchAccessEventHandler*
-AccessibilityControllerImpl::GetSwitchAccessEventHandlerForTest() {
-  if (switch_access_event_handler_)
-    return switch_access_event_handler_.get();
-  return nullptr;
+AccessibilityEventRewriter*
+AccessibilityControllerImpl::GetAccessibilityEventRewriterForTest() {
+  return accessibility_event_rewriter_;
 }
 
 void AccessibilityControllerImpl::
@@ -1508,6 +1526,21 @@ void AccessibilityControllerImpl::ObservePrefs(PrefService* prefs) {
       base::BindRepeating(&AccessibilityControllerImpl::
                               UpdateSwitchAccessAutoScanKeyboardSpeedFromPref,
                           base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kAccessibilitySwitchAccessNextSetting,
+      base::BindRepeating(
+          &AccessibilityControllerImpl::SyncSwitchAccessPrefsToSignInProfile,
+          base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kAccessibilitySwitchAccessPreviousSetting,
+      base::BindRepeating(
+          &AccessibilityControllerImpl::SyncSwitchAccessPrefsToSignInProfile,
+          base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kAccessibilitySwitchAccessSelectSetting,
+      base::BindRepeating(
+          &AccessibilityControllerImpl::SyncSwitchAccessPrefsToSignInProfile,
+          base::Unretained(this)));
   pref_change_registrar_->Add(
       prefs::kAccessibilityTabletModeShelfNavigationButtonsEnabled,
       base::BindRepeating(&AccessibilityControllerImpl::
@@ -1736,7 +1769,14 @@ void AccessibilityControllerImpl::MaybeCreateSelectToSpeakEventHandler() {
 
 void AccessibilityControllerImpl::UpdateSwitchAccessKeyCodesFromPref(
     SwitchAccessCommand command) {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableExperimentalAccessibilitySwitchAccess)) {
+    return;
+  }
+
   DCHECK(active_user_prefs_);
+
+  SyncSwitchAccessPrefsToSignInProfile();
 
   std::string pref_key = PrefKeyForSwitchAccessCommand(command);
   const base::ListValue* key_codes_pref = active_user_prefs_->GetList(pref_key);
@@ -1756,10 +1796,9 @@ void AccessibilityControllerImpl::UpdateSwitchAccessKeyCodesFromPref(
     base::UmaHistogramEnumeration(uma_name, uma_value);
   }
 
-  if (!switch_access_event_handler_)
-    return;
-
-  switch_access_event_handler_->SetKeyCodesForCommand(key_codes, command);
+  if (accessibility_event_rewriter_)
+    accessibility_event_rewriter_->SetKeyCodesForSwitchAccessCommand(key_codes,
+                                                                     command);
 }
 
 void AccessibilityControllerImpl::UpdateSwitchAccessAutoScanEnabledFromPref() {
@@ -1768,6 +1807,7 @@ void AccessibilityControllerImpl::UpdateSwitchAccessAutoScanEnabledFromPref() {
       prefs::kAccessibilitySwitchAccessAutoScanEnabled);
 
   base::UmaHistogramBoolean("Accessibility.CrosSwitchAccess.AutoScan", enabled);
+  SyncSwitchAccessPrefsToSignInProfile();
 }
 
 void AccessibilityControllerImpl::UpdateSwitchAccessAutoScanSpeedFromPref() {
@@ -1778,6 +1818,7 @@ void AccessibilityControllerImpl::UpdateSwitchAccessAutoScanSpeedFromPref() {
   base::UmaHistogramCustomCounts(
       "Accessibility.CrosSwitchAccess.AutoScan.SpeedMs", speed_ms, 1 /* min */,
       10000 /* max */, 100 /* buckets */);
+  SyncSwitchAccessPrefsToSignInProfile();
 }
 
 void AccessibilityControllerImpl::
@@ -1789,48 +1830,74 @@ void AccessibilityControllerImpl::
   base::UmaHistogramCustomCounts(
       "Accessibility.CrosSwitchAccess.AutoScan.KeyboardSpeedMs", speed_ms,
       1 /* min */, 10000 /* max */, 100 /* buckets */);
+  SyncSwitchAccessPrefsToSignInProfile();
 }
 
 void AccessibilityControllerImpl::SwitchAccessDisableDialogClosed(
     bool disable_dialog_accepted) {
   switch_access_disable_dialog_showing_ = false;
+  // Always deactivate switch access. Turning switch access off ensures it is
+  // re-activated correctly.
+  // The pref was already disabled, but we left switch access on so the user
+  // could interact with the dialog.
+  DeactivateSwitchAccess();
   if (disable_dialog_accepted) {
-    // The pref was already disabled, but we left switch access on until they
-    // accepted the dialog.
-    if (client_)
-      client_->OnSwitchAccessDisabled();
-    switch_access_bubble_controller_.reset();
-    switch_access_event_handler_.reset();
     NotifyAccessibilityStatusChanged();
+    SyncSwitchAccessPrefsToSignInProfile();
   } else {
-    // Reset the preference (which was already set to false) to match the
-    // behavior of keeping Switch Access enabled.
-    switch_access().SetEnabled(true);
+    // Reset the preference (which was already set to false). Doing so turns
+    // switch access back on.
+    skip_switch_access_notification_ = true;
+    SetSwitchAccessEnabled(true);
   }
 }
 
-void AccessibilityControllerImpl::MaybeCreateSwitchAccessEventHandler() {
-  // Construct the handler as needed when Switch Access is enabled and the
-  // delegate is set. Otherwise, destroy the handler when Switch Access is
-  // disabled or the delegate has been destroyed.
-  if (!switch_access().enabled() || !switch_access_event_handler_delegate_) {
-    switch_access_event_handler_.reset();
-    return;
-  }
-
-  if (switch_access_event_handler_)
-    return;
-
-  switch_access_event_handler_ = std::make_unique<SwitchAccessEventHandler>(
-      switch_access_event_handler_delegate_);
-
-  if (!active_user_prefs_)
-    return;
-
-  // Update the key codes for each command once the handler is initialized.
+void AccessibilityControllerImpl::UpdateKeyCodesAfterSwitchAccessEnabled() {
   UpdateSwitchAccessKeyCodesFromPref(SwitchAccessCommand::kSelect);
   UpdateSwitchAccessKeyCodesFromPref(SwitchAccessCommand::kNext);
   UpdateSwitchAccessKeyCodesFromPref(SwitchAccessCommand::kPrevious);
+}
+
+void AccessibilityControllerImpl::ActivateSwitchAccess() {
+  switch_access_bubble_controller_ =
+      std::make_unique<SwitchAccessMenuBubbleController>();
+  UpdateKeyCodesAfterSwitchAccessEnabled();
+  if (::switches::IsSwitchAccessPointScanningEnabled())
+    StartPointScanning();
+  if (skip_switch_access_notification_) {
+    skip_switch_access_notification_ = false;
+    return;
+  }
+
+  ShowAccessibilityNotification(A11yNotificationType::kSwitchAccessEnabled);
+}
+
+void AccessibilityControllerImpl::DeactivateSwitchAccess() {
+  if (client_)
+    client_->OnSwitchAccessDisabled();
+  switch_access_bubble_controller_.reset();
+}
+
+void AccessibilityControllerImpl::SyncSwitchAccessPrefsToSignInProfile() {
+  if (!active_user_prefs_ || IsSigninPrefService(active_user_prefs_))
+    return;
+
+  PrefService* signin_prefs =
+      Shell::Get()->session_controller()->GetSigninScreenPrefService();
+  DCHECK(signin_prefs);
+
+  for (const auto* pref_path : kSwitchAccessPrefsCopiedToSignin) {
+    const PrefService::Preference* pref =
+        active_user_prefs_->FindPreference(pref_path);
+
+    // Ignore if the pref has not been set by the user.
+    if (!pref || !pref->IsUserControlled())
+      continue;
+
+    // Copy the pref value to the signin profile.
+    const base::Value* value = pref->GetValue();
+    signin_prefs->Set(pref_path, *value);
+  }
 }
 
 void AccessibilityControllerImpl::UpdateShortcutsEnabledFromPref() {
@@ -1975,12 +2042,9 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
         // user accepts the dialog.
         return;
       } else {
-        switch_access_bubble_controller_ =
-            std::make_unique<SwitchAccessMenuBubbleController>();
-        MaybeCreateSwitchAccessEventHandler();
-        ShowAccessibilityNotification(
-            A11yNotificationType::kSwitchAccessEnabled);
+        ActivateSwitchAccess();
       }
+      SyncSwitchAccessPrefsToSignInProfile();
       break;
     case FeatureType::kVirtualKeyboard:
       keyboard::SetAccessibilityKeyboardEnabled(enabled);

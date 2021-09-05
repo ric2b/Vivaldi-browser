@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">ତାଲିକା ଆଇଟମ୍</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">ଦୁଇ ଆଙ୍ଗୁଠିକୁ ଡାହାଣକୁ ସ୍ୱାଇପ୍ କରନ୍ତୁ</translation>
+<translation id="1016393160682012902">ଏହାର ଫଙ୍କସନ୍ ବିଷୟରେ ଜାଣିବାକୁ କୌଣସି qwerty କୀ, ରିଫ୍ରେସ୍ କରାଯାଇପାରୁଥିବା ବ୍ରେଲି କୀ ଦବାନ୍ତୁ କିମ୍ବା ଜେଶ୍ଚରକୁ ସ୍ପର୍ଶ କରନ୍ତୁ। ବାହାରି ଯିବାକୁ w ସହିତ Control କୀ କିମ୍ବା Escape କୀ ଦବାନ୍ତୁ।</translation>
 <translation id="1022586497894531524">ଆପଣ କ'ଣ 'ChromeVoxର କୁହାଯାଉଥିବା ମତାମତ' ସୁବିଧା ପ୍ରଥମ ଥର ପାଇଁ ବ୍ୟବହାର କରୁଛନ୍ତି କି? ଏହି ଦ୍ରୁତ ଟ୍ୟୁଟୋରିଆଲ୍, ChromeVox ଆରମ୍ଭ କରି ଏହାକୁ କିପରି ବ୍ୟବହାର କରିବେ ତାହା ବିଷୟରେ ଆବଶ୍ୟକ ଜିନିଷଗୁଡ଼ିକୁ ବୁଝାଏ।</translation>
 <translation id="1025074108959230262">ଷ୍ଟିକି ମୋଡ୍ ଅକ୍ଷମ କରାଗଲା</translation>
 <translation id="1031961866430398710">ତା’ପରେ</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">ଇଣ୍ଟର୍ନଲ୍ ଲିଙ୍କ୍</translation>
 <translation id="4909019435900810068">ଗୋଟିଏ ଶବ୍ଦ ପଛକୁ ନିଅନ୍ତୁ</translation>
 <translation id="4911349081560453449">କୌଣସି ପୂର୍ବବର୍ତ୍ତୀ ଚେକବକ୍ସ ନାହିଁ</translation>
-<translation id="4915087353619183190">ଲର୍ନ ମୋଡ୍ ଆରମ୍ଭ ହେଉଛି। ଏହାର କାର୍ଯ୍ୟକାରିତା ବିଷୟରେ ଜାଣିବାକୁ କ୍ୟୁଆର୍‌ଟି କୀ, ରିଫ୍ରେଶ୍‌ ହୋ‍ଇପାରୁଥିବା ବ୍ରେଲି କୀ ଦବାନ୍ତୁ କିମ୍ବା ସ୍ପର୍ଶ ଦ୍ଵାରା ନିର୍ଦ୍ଦେଶ ଦିଅନ୍ତୁ। ପ୍ରସ୍ଥାନ କରିବାକୁ କଣ୍ଟ୍ରୋଲ୍‍ ଏବଂ w କିମ୍ବା ଏସ୍କେପ୍‌ କୀ ଦବାନ୍ତୁ।</translation>
 <translation id="492295894462528572">ଭୂମିକା</translation>
 <translation id="495046168593986294">ଉପରକୁ ସ୍କ୍ରୋଲ୍ କରନ୍ତୁ</translation>
 <translation id="495170559598752135">କାର୍ଯ୍ୟ</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">ସବୁଜ</translation>
 <translation id="602001110135236999">ବାମକୁ ସ୍କ୍ରୋଲ୍ କରନ୍ତୁ</translation>
 <translation id="6034000775414344507">ହାଲ୍‌କା ଧୂସର</translation>
+<translation id="6036135911048686884">ଏକ୍ସପ୍ଲୋର୍ କରିବାକୁ ସ୍ପର୍ଶ କରନ୍ତୁ</translation>
 <translation id="6037602951055904232">ପ୍ୟାନ୍ ଫର୍‌ୱାର୍ଡ କରନ୍ତୁ</translation>
 <translation id="6044160928851315051">ସ୍କ୍ରିନ୍‌କୁ କଳା କରନ୍ତୁ</translation>
 <translation id="6082768461603900813">ମୌଳିକ ନାଭିଗେସନ୍</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ପାଉଣ୍ଡ}other{#ଟି ପାଉଣ୍ଡ ଚିହ୍ନ}}</translation>
 <translation id="8378855320830505539">ଅଞ୍ଚଳ</translation>
 <translation id="8382679411218029383">ସ୍ୱତଃସମ୍ପୂର୍ଣ୍ଣ ଇନ୍‍ଲାଇନ୍ ଓ ତାଲିକା</translation>
+<translation id="8394908167088220973">ମିଡିଆ ଚଲାନ୍ତୁ/ବିରତ କରନ୍ତୁ</translation>
 <translation id="8428213095426709021">ସେଟିଂସ୍</translation>
 <translation id="8428603554127842284">ସ୍ତର <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">ସଂଗଠିତ ବିଷୟବସ୍ତୁ, ଯେପରି ଟେବଲ୍‌ଗୁଡ଼ିକରୁ ପ୍ରସ୍ଥାନ କରନ୍ତୁ</translation>
 <translation id="8779057862865475116">କୌଣସି ପୂର୍ବବର୍ତ୍ତୀ ଲିଙ୍କ୍ ନାହିଁ</translation>
 <translation id="8796411681063377102">ପରବର୍ତ୍ତୀ ସ୍ତର 3 ଶୀର୍ଷକ</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" /> ରୁ <ph name="CURRENTPAGE" /> ପୃଷ୍ଠା</translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">ମୁଖ୍ୟ</translation>
 <translation id="8882002077197914455">ଧାଡ଼ି ଶୀର୍ଷକ</translation>

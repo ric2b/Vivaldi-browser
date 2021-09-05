@@ -5,11 +5,15 @@
 #include <memory>
 #include <string>
 
+#include "base/files/file_path_watcher.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
-#include "chrome/browser/password_manager/account_storage/account_password_store_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_manager_test_base.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
@@ -23,6 +27,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/password_manager/core/browser/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/password_store_factory_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/driver/profile_sync_service.h"
@@ -32,6 +37,9 @@
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browsing_data_remover_test_util.h"
+#include "content/public/test/content_mock_cert_verifier.h"
+#include "content/public/test/test_launcher.h"
+#include "google_apis/gaia/gaia_switches.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_status_code.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -54,12 +62,51 @@ MATCHER_P3(MatchesLoginAndRealm, username, password, signon_realm, "") {
          arg->signon_realm == signon_realm;
 }
 
+const char kTestUserEmail[] = "user@email.com";
+const char kExampleHostname[] = "www.example.com";
+const char kExamplePslHostname[] = "psl.example.com";
+
 // Note: This helper applies to ChromeOS too, but is currently unused there. So
 // define it out to prevent a compile error due to the unused function.
 #if !defined(OS_CHROMEOS)
 void GetNewTab(Browser* browser, content::WebContents** web_contents) {
   PasswordManagerBrowserTestBase::GetNewTab(browser, web_contents);
 }
+
+// Helper class that waits until a given path does not exist on the filesystem
+// anymore.
+class PathDeletionWaiter {
+ public:
+  explicit PathDeletionWaiter(const base::FilePath& path) : path_(path) {}
+
+  // Blocks until the path passed into the constructor does not exist anymore.
+  // Returns true if the path was deleted (or didn't exist in the first place),
+  // or false if some error occurred.
+  bool WaitForPathToBeDeleted() {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+
+    if (!base::PathExists(path_)) {
+      return true;
+    }
+    watcher_.Watch(path_, /*recursive=*/true,
+                   base::BindRepeating(&PathDeletionWaiter::PathChanged,
+                                       base::Unretained(this)));
+    run_loop_.Run();
+    return !base::PathExists(path_);
+  }
+
+ private:
+  void PathChanged(const base::FilePath& path, bool error) {
+    if (error || !base::PathExists(path_)) {
+      run_loop_.Quit();
+    }
+  }
+
+  const base::FilePath path_;
+  base::FilePathWatcher watcher_;
+  base::RunLoop run_loop_;
+};
+
 #endif  // !defined(OS_CHROMEOS)
 
 // This test fixture is similar to SingleClientPasswordsSyncTest, but it also
@@ -77,40 +124,86 @@ class PasswordManagerSyncTest : public SyncTest {
         {password_manager::features::kEnablePasswordsAccountStorage,
          password_manager::features::kFillOnAccountSelect},
         {});
+
+    DisableVerifier();
   }
 
   ~PasswordManagerSyncTest() override = default;
+
+  void SetUp() override {
+    // Setup HTTPS server serving files from standard test directory.
+    // This needs to happen here (really early) because the test server must
+    // already be running in SetUpCommandLine();
+    static constexpr base::FilePath::CharType kDocRoot[] =
+        FILE_PATH_LITERAL("chrome/test/data");
+    https_test_server()->ServeFilesFromSourceDirectory(
+        base::FilePath(kDocRoot));
+    ASSERT_TRUE(https_test_server()->Start());
+
+    SyncTest::SetUp();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Make sure that fake Gaia pages served by the test server match the Gaia
+    // URL (as specified by GaiaUrls::gaia_url()). Note that even though the
+    // hostname is the same, it's necessary to override the port to the one used
+    // by the test server.
+    command_line->AppendSwitchASCII(
+        switches::kGaiaUrl,
+        https_test_server()->GetURL("accounts.google.com", "/").spec());
+
+    mock_cert_verifier_.SetUpCommandLine(command_line);
+  }
 
   void SetUpInProcessBrowserTestFixture() override {
     SyncTest::SetUpInProcessBrowserTestFixture();
 
     test_signin_client_factory_ =
         secondary_account_helper::SetUpSigninClient(&test_url_loader_factory_);
+    mock_cert_verifier_.SetUpInProcessBrowserTestFixture();
+  }
+
+  void TearDownInProcessBrowserTestFixture() override {
+    mock_cert_verifier_.TearDownInProcessBrowserTestFixture();
   }
 
   void SetUpOnMainThread() override {
     SyncTest::SetUpOnMainThread();
 
     ASSERT_TRUE(embedded_test_server()->Start());
+
     host_resolver()->AddRule("*", "127.0.0.1");
+
+    // Whitelist all certs for the HTTPS server.
+    auto cert = https_test_server()->GetCertificate();
+    net::CertVerifyResult verify_result;
+    verify_result.cert_status = 0;
+    verify_result.verified_cert = cert;
+    mock_cert_verifier_.mock_cert_verifier()->AddResultForCert(
+        cert.get(), verify_result, net::OK);
 
     fake_server::SetKeystoreNigoriInFakeServer(GetFakeServer());
   }
 
   void TearDownOnMainThread() override {
+    ASSERT_TRUE(https_test_server()->ShutdownAndWaitUntilComplete());
     ASSERT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
     SyncTest::TearDownOnMainThread();
   }
 
   // Also stores the AccountInfo for the signed-in account in
   // |signed_in_account_| as a side effect.
-  void SetupSyncTransportWithPasswordAccountStorage() {
+  void SetupSyncTransportWithoutPasswordAccountStorage() {
     ASSERT_TRUE(signed_in_account_.IsEmpty());
     // Setup Sync for a secondary account (i.e. in transport mode).
     signed_in_account_ = secondary_account_helper::SignInSecondaryAccount(
-        GetProfile(0), &test_url_loader_factory_, "user@email.com");
+        GetProfile(0), &test_url_loader_factory_, kTestUserEmail);
     ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
     ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
+  }
+
+  void SetupSyncTransportWithPasswordAccountStorage() {
+    SetupSyncTransportWithoutPasswordAccountStorage();
 
     // Let the user opt in to the account-scoped password storage, and wait for
     // it to become active.
@@ -130,18 +223,27 @@ class PasswordManagerSyncTest : public SyncTest {
   }
 
   GURL GetWWWOrigin() {
-    return embedded_test_server()->GetURL("www.example.com", "/");
+    return embedded_test_server()->GetURL(kExampleHostname, "/");
   }
   GURL GetPSLOrigin() {
-    return embedded_test_server()->GetURL("psl.example.com", "/");
+    return embedded_test_server()->GetURL(kExamplePslHostname, "/");
+  }
+  GURL GetHttpsOrigin(const std::string& hostname) {
+    return https_test_server()->GetURL(hostname, "/");
   }
 
   // Returns a credential for the origin returned by GetWWWOrigin().
   autofill::PasswordForm CreateTestPasswordForm(const std::string& username,
                                                 const std::string& password) {
+    return CreateTestPasswordForm(username, password, GetWWWOrigin());
+  }
+
+  autofill::PasswordForm CreateTestPasswordForm(const std::string& username,
+                                                const std::string& password,
+                                                const GURL& origin) {
     autofill::PasswordForm form;
-    form.signon_realm = GetWWWOrigin().spec();
-    form.url = GetWWWOrigin();
+    form.signon_realm = origin.spec();
+    form.url = origin;
     form.username_value = base::UTF8ToUTF16(username);
     form.password_value = base::UTF8ToUTF16(password);
     form.date_created = base::Time::Now();
@@ -152,10 +254,7 @@ class PasswordManagerSyncTest : public SyncTest {
   autofill::PasswordForm CreateTestPSLPasswordForm(
       const std::string& username,
       const std::string& password) {
-    autofill::PasswordForm form = CreateTestPasswordForm(username, password);
-    form.signon_realm = GetPSLOrigin().spec();
-    form.url = GetPSLOrigin();
-    return form;
+    return CreateTestPasswordForm(username, password, GetPSLOrigin());
   }
 
   // Adds a credential to the Sync fake server for the origin returned by
@@ -211,19 +310,17 @@ class PasswordManagerSyncTest : public SyncTest {
   }
 
   void NavigateToFile(content::WebContents* web_contents,
+                      const std::string& hostname,
                       const std::string& path) {
-    ASSERT_EQ(web_contents,
-              GetBrowser(0)->tab_strip_model()->GetActiveWebContents());
-    NavigationObserver observer(web_contents);
-    GURL url = embedded_test_server()->GetURL("www.example.com", path);
-    ui_test_utils::NavigateToURL(GetBrowser(0), url);
-    observer.Wait();
-    // After navigation, the password manager retrieves any matching credentials
-    // from the store(s). So before doing anything else (like filling and
-    // submitting a form), do a roundtrip to the stores to make sure the
-    // credentials have finished loading.
-    GetAllLoginsFromProfilePasswordStore();
-    GetAllLoginsFromAccountPasswordStore();
+    NavigateToFileImpl(web_contents,
+                       embedded_test_server()->GetURL(hostname, path));
+  }
+
+  void NavigateToFileHttps(content::WebContents* web_contents,
+                           const std::string& hostname,
+                           const std::string& path) {
+    NavigateToFileImpl(web_contents,
+                       https_test_server()->GetURL(hostname, path));
   }
 
   void FillAndSubmitPasswordForm(content::WebContents* web_contents,
@@ -239,12 +336,36 @@ class PasswordManagerSyncTest : public SyncTest {
     observer.Wait();
   }
 
+  net::EmbeddedTestServer* https_test_server() { return &https_test_server_; }
+
  private:
+  void NavigateToFileImpl(content::WebContents* web_contents, const GURL& url) {
+    ASSERT_EQ(web_contents,
+              GetBrowser(0)->tab_strip_model()->GetActiveWebContents());
+    NavigationObserver observer(web_contents);
+    ui_test_utils::NavigateToURL(GetBrowser(0), url);
+    observer.Wait();
+    // After navigation, the password manager retrieves any matching credentials
+    // from the store(s). So before doing anything else (like filling and
+    // submitting a form), do a roundtrip to the stores to make sure the
+    // credentials have finished loading.
+    GetAllLoginsFromProfilePasswordStore();
+    GetAllLoginsFromAccountPasswordStore();
+  }
+
   base::test::ScopedFeatureList feature_list_;
-  AccountInfo signed_in_account_;
 
   secondary_account_helper::ScopedSigninClientFactory
       test_signin_client_factory_;
+
+  // A test server instance that runs on HTTPS (as opposed to the default
+  // |embedded_test_server()|). This is necessary to simulate Gaia pages, which
+  // must be on a secure (cryptographic) scheme.
+  net::EmbeddedTestServer https_test_server_{
+      net::EmbeddedTestServer::TYPE_HTTPS};
+  content::ContentMockCertVerifier mock_cert_verifier_;
+
+  AccountInfo signed_in_account_;
 };
 
 #if !defined(OS_CHROMEOS)
@@ -258,7 +379,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, ChooseDestinationStore) {
   // Part 1: Save a password; it should go into the account store by default.
   {
     // Navigate to a page with a password form, fill it out, and submit it.
-    NavigateToFile(web_contents, "/password/password_form.html");
+    NavigateToFile(web_contents, kExampleHostname,
+                   "/password/password_form.html");
     FillAndSubmitPasswordForm(web_contents, "accountuser", "accountpass");
 
     // Save the password and check the store.
@@ -290,7 +412,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, ChooseDestinationStore) {
     // Some PasswordManager browser tests work around this by disabling
     // autofill on pageload, see PasswordManagerBrowserTestWithAutofillDisabled.
     // NavigateToFile(web_contents, "/password/password_form.html");
-    NavigateToFile(web_contents, "/password/simple_password.html");
+    NavigateToFile(web_contents, kExampleHostname,
+                   "/password/simple_password.html");
     FillAndSubmitPasswordForm(web_contents, "localuser", "localpass");
 
     // Save the password and check the store.
@@ -316,7 +439,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, UpdateInProfileStore) {
   GetNewTab(GetBrowser(0), &web_contents);
 
   // Go to a form and submit a different password.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "newpass");
 
   // There should be an update bubble; accept it.
@@ -342,7 +466,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, UpdateInAccountStore) {
   GetNewTab(GetBrowser(0), &web_contents);
 
   // Go to a form and submit a different password.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "newpass");
 
   // There should be an update bubble; accept it.
@@ -370,7 +495,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   GetNewTab(GetBrowser(0), &web_contents);
 
   // Go to a form and submit a different password.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "newpass");
 
   // There should be an update bubble; accept it.
@@ -405,7 +531,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   GetNewTab(GetBrowser(0), &web_contents);
 
   // Go to a form and submit a different password.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "newpass");
 
   // There should be an update bubble; accept it.
@@ -453,7 +580,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
 
   // Go to a form and submit the version of the credentials from the profile
   // store.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "localpass");
 
   // Now the credential should of course still be in the profile store...
@@ -491,7 +619,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
 
   // Go to a form and submit the version of the credentials from the account
   // store.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "accountpass");
 
   // Now the credential should of course still be in the account store...
@@ -517,7 +646,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   GetNewTab(GetBrowser(0), &web_contents);
 
   // Go to a form (on www.) and submit it with the saved credentials.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "pass");
 
   // Now the PSL-matched credential should have been automatically saved for
@@ -547,7 +677,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   GetNewTab(GetBrowser(0), &web_contents);
 
   // Go to a form (on www.) and submit it with the saved credentials.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "pass");
 
   // Now the PSL-matched credential should have been automatically saved for
@@ -577,7 +708,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   GetNewTab(GetBrowser(0), &web_contents);
 
   // Go to a form (on www.) and submit it with the saved credentials.
-  NavigateToFile(web_contents, "/password/simple_password.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/simple_password.html");
   FillAndSubmitPasswordForm(web_contents, "user", "pass");
 
   // Now the PSL-matched credential should have been automatically saved for
@@ -592,9 +724,76 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
                   MatchesLoginAndRealm("user", "pass", GetPSLOrigin())));
 }
 
-IN_PROC_BROWSER_TEST_F(
-    PasswordManagerSyncTest,
-    SaveInProfileStoreIfSaveButtonClickedInUnsyncedPasswordsBubble) {
+IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
+                       DontOfferToSavePrimaryAccountCredential) {
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  SetupSyncTransportWithPasswordAccountStorage();
+
+  content::WebContents* web_contents = nullptr;
+  GetNewTab(GetBrowser(0), &web_contents);
+
+  // Navigate to a Gaia signin form and submit a credential for the primary
+  // account.
+  NavigateToFileHttps(web_contents, "accounts.google.com",
+                      "/password/simple_password.html");
+  FillAndSubmitPasswordForm(web_contents, kTestUserEmail, "pass");
+
+  // Since the submitted credential is for the primary account, Chrome should
+  // not offer to save it.
+  BubbleObserver bubble_observer(web_contents);
+  EXPECT_FALSE(bubble_observer.IsSavePromptAvailable());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
+                       OfferToSaveNonPrimaryAccountCredential) {
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  SetupSyncTransportWithPasswordAccountStorage();
+
+  content::WebContents* web_contents = nullptr;
+  GetNewTab(GetBrowser(0), &web_contents);
+
+  // Navigate to a Gaia signin form and submit a credential for an account that
+  // is *not* the primary one.
+  NavigateToFileHttps(web_contents, "accounts.google.com",
+                      "/password/simple_password.html");
+  FillAndSubmitPasswordForm(web_contents, "different-user@gmail.com", "pass");
+
+  // Since the submitted credential is *not* for the primary account, Chrome
+  // should offer to save it normally.
+  BubbleObserver bubble_observer(web_contents);
+  EXPECT_TRUE(bubble_observer.IsSavePromptAvailable());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
+                       OfferToUpdatePrimaryAccountCredential) {
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  // The password for the primary account is already saved.
+  AddLocalCredential(CreateTestPasswordForm(
+      kTestUserEmail, "pass", GetHttpsOrigin("accounts.google.com")));
+
+  SetupSyncTransportWithPasswordAccountStorage();
+
+  content::WebContents* web_contents = nullptr;
+  GetNewTab(GetBrowser(0), &web_contents);
+
+  // Navigate to a Gaia signin form and submit a new password for the primary
+  // account.
+  NavigateToFileHttps(web_contents, "accounts.google.com",
+                      "/password/simple_password.html");
+  FillAndSubmitPasswordForm(web_contents, kTestUserEmail, "newpass");
+
+  // Since (an outdated version of) the credential is already saved, Chrome
+  // should offer to update it, even though it otherwise does *not* offer to
+  // save this credential.
+  BubbleObserver bubble_observer(web_contents);
+  EXPECT_TRUE(bubble_observer.IsUpdatePromptAvailable());
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
+                       SignOutWithUnsyncedPasswordsOpensBubble) {
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   content::WebContents* web_contents = nullptr;
   GetNewTab(GetBrowser(0), &web_contents);
@@ -604,7 +803,8 @@ IN_PROC_BROWSER_TEST_F(
   // Force credentials saved to the account to be unsynced.
   GetFakeServer()->SetHttpError(net::HTTP_BAD_REQUEST);
 
-  NavigateToFile(web_contents, "/password/password_form.html");
+  NavigateToFile(web_contents, kExampleHostname,
+                 "/password/password_form.html");
   FillAndSubmitPasswordForm(web_contents, "accountuser", "accountpass");
 
   // Save the password in the account store.
@@ -616,15 +816,7 @@ IN_PROC_BROWSER_TEST_F(
               ElementsAre(MatchesLogin("accountuser", "accountpass")));
 
   SignOut();
-
-  // Fake user clicking the Save button in the UI.
   bubble_observer.WaitForSaveUnsyncedCredentialsPrompt();
-  bubble_observer.AcceptSaveUnsyncedCredentialsPrompt();
-
-  std::vector<std::unique_ptr<autofill::PasswordForm>> profile_credentials =
-      GetAllLoginsFromProfilePasswordStore();
-  EXPECT_THAT(profile_credentials,
-              ElementsAre(MatchesLogin("accountuser", "accountpass")));
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
@@ -662,6 +854,117 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   // The opt-in should be gone as well.
   EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
       GetProfile(0)->GetPrefs(), GetSyncService(0)));
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
+                       PRE_ClearAccountStoreOnStartup) {
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  SetupSyncTransportWithoutPasswordAccountStorage();
+
+  ASSERT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+      GetProfile(0)->GetPrefs(), GetSyncService(0)));
+
+  // Manually add a credential to the account store, without actually opting in.
+  // This simulates the case (for the following test) where the user revoked
+  // their opt-in, but the account store was *not* cleared correctly, e.g. due
+  // to a poorly-timed crash.
+  auto* account_store = passwords_helper::GetAccountPasswordStore(0);
+  account_store->AddLogin(CreateTestPasswordForm("accountuser", "accountpass"));
+
+  // Also add a credential to the profile store.
+  AddLocalCredential("localuser", "localpass");
+
+  ASSERT_THAT(GetAllLoginsFromProfilePasswordStore(),
+              ElementsAre(MatchesLogin("localuser", "localpass")));
+  ASSERT_THAT(GetAllLoginsFromAccountPasswordStore(),
+              ElementsAre(MatchesLogin("accountuser", "accountpass")));
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, ClearAccountStoreOnStartup) {
+  base::HistogramTester histograms;
+
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
+
+  ASSERT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+      GetProfile(0)->GetPrefs(), GetSyncService(0)));
+
+  // The "original" is defined in password_model_type_controller.cc.
+  const int kNotOptedInAndHadToClear = 2;
+
+  // Since there's no opt-in, the account-scoped store should have been cleared
+  // during startup, and the credential added by the PRE_ test should be gone.
+  EXPECT_THAT(GetAllLoginsFromAccountPasswordStore(), IsEmpty());
+  histograms.ExpectUniqueSample(
+      "PasswordManager.AccountStorage.ClearedOnStartup",
+      /*sample=*/kNotOptedInAndHadToClear, 1);
+
+  // Just as a sanity check: The credential in the profile-scoped store should
+  // still be there.
+  ASSERT_THAT(GetAllLoginsFromProfilePasswordStore(),
+              ElementsAre(MatchesLogin("localuser", "localpass")));
+}
+
+// A variant of PasswordManagerSyncTest where the account storage feature flag
+// is enabled in PRE_ tests, but not in regular tests. This allows testing the
+// behavior when the feature flag gets turned off.
+class PasswordManagerTurnAccountStorageOffSyncTest
+    : public PasswordManagerSyncTest {
+ public:
+  PasswordManagerTurnAccountStorageOffSyncTest() {
+    // kEnablePasswordsAccountStorage is enabled iff this is a PRE_ test.
+    if (content::IsPreTest()) {
+      feature_list_.InitAndEnableFeature(
+          password_manager::features::kEnablePasswordsAccountStorage);
+    } else {
+      feature_list_.InitAndDisableFeature(
+          password_manager::features::kEnablePasswordsAccountStorage);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerTurnAccountStorageOffSyncTest,
+                       PRE_DeletesAccountStoreWhenFeatureTurnedOff) {
+  ASSERT_TRUE(base::FeatureList::IsEnabled(
+      password_manager::features::kEnablePasswordsAccountStorage));
+
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  // Set up the password account storage, and add a credential just so that it's
+  // not empty.
+  AddCredentialToFakeServer(CreateTestPasswordForm("user", "pass"));
+  SetupSyncTransportWithPasswordAccountStorage();
+  ASSERT_THAT(GetAllLoginsFromAccountPasswordStore(),
+              ElementsAre(MatchesLogin("user", "pass")));
+
+  // Make sure that the account store actually exists on disk at the expected
+  // path.
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(base::PathExists(
+        password_manager::GetLoginDatabaseForAccountStoragePathForTesting(
+            GetProfile(0)->GetPath())));
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerTurnAccountStorageOffSyncTest,
+                       DeletesAccountStoreWhenFeatureTurnedOff) {
+  ASSERT_FALSE(base::FeatureList::IsEnabled(
+      password_manager::features::kEnablePasswordsAccountStorage));
+
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  // Since the feature flag is now disabled, the account-scoped store should get
+  // deleted soon after browser startup.
+  PathDeletionWaiter waiter(
+      password_manager::GetLoginDatabaseForAccountStoragePathForTesting(
+          GetProfile(0)->GetPath()));
+  EXPECT_TRUE(waiter.WaitForPathToBeDeleted());
 }
 
 #endif  // !defined(OS_CHROMEOS)

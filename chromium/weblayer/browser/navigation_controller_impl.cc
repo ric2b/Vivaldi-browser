@@ -14,6 +14,7 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/page_transition_types.h"
+#include "weblayer/browser/navigation_ui_data_impl.h"
 #include "weblayer/browser/tab_impl.h"
 #include "weblayer/public/navigation_observer.h"
 
@@ -30,6 +31,29 @@ using base::android::ScopedJavaLocalRef;
 #endif
 
 namespace weblayer {
+
+class NavigationControllerImpl::DelayDeletionHelper {
+ public:
+  explicit DelayDeletionHelper(NavigationControllerImpl* controller)
+      : controller_(controller->weak_ptr_factory_.GetWeakPtr()) {
+    // This should never be called reentrantly.
+    DCHECK(!controller->should_delay_web_contents_deletion_);
+    controller->should_delay_web_contents_deletion_ = true;
+  }
+
+  DelayDeletionHelper(const DelayDeletionHelper&) = delete;
+  DelayDeletionHelper& operator=(const DelayDeletionHelper&) = delete;
+
+  ~DelayDeletionHelper() {
+    if (controller_)
+      controller_->should_delay_web_contents_deletion_ = false;
+  }
+
+  bool WasControllerDeleted() { return controller_.get() == nullptr; }
+
+ private:
+  base::WeakPtr<NavigationControllerImpl> controller_;
+};
 
 // NavigationThrottle implementation responsible for delaying certain
 // operations and performing them when safe. This is necessary as content
@@ -111,6 +135,12 @@ NavigationControllerImpl::CreateNavigationThrottle(
   return throttle;
 }
 
+NavigationImpl* NavigationControllerImpl::GetNavigationImplFromHandle(
+    content::NavigationHandle* handle) {
+  auto iter = navigation_map_.find(handle);
+  return iter == navigation_map_.end() ? nullptr : iter->second.get();
+}
+
 #if defined(OS_ANDROID)
 void NavigationControllerImpl::SetNavigationControllerImpl(
     JNIEnv* env,
@@ -118,18 +148,28 @@ void NavigationControllerImpl::SetNavigationControllerImpl(
   java_controller_ = java_controller;
 }
 
-void NavigationControllerImpl::Navigate(JNIEnv* env,
-                                        const JavaParamRef<jstring>& url) {
-  Navigate(GURL(base::android::ConvertJavaStringToUTF8(env, url)));
-}
-
-void NavigationControllerImpl::NavigateWithParams(
+void NavigationControllerImpl::Navigate(
     JNIEnv* env,
     const JavaParamRef<jstring>& url,
-    jboolean should_replace_current_entry) {
+    jboolean should_replace_current_entry,
+    jboolean disable_intent_processing,
+    jboolean disable_network_error_auto_reload,
+    jboolean enable_auto_play) {
   auto params = std::make_unique<content::NavigationController::LoadURLParams>(
       GURL(base::android::ConvertJavaStringToUTF8(env, url)));
   params->should_replace_current_entry = should_replace_current_entry;
+  // On android, the transition type largely dictates whether intent processing
+  // happens. PAGE_TRANSITION_TYPED does not process intents, where as
+  // PAGE_TRANSITION_LINK will (with the caveat that even links may not trigger
+  // intent processing under some circumstances).
+  params->transition_type = disable_intent_processing
+                                ? ui::PAGE_TRANSITION_TYPED
+                                : ui::PAGE_TRANSITION_LINK;
+  if (disable_network_error_auto_reload)
+    params->navigation_ui_data = std::make_unique<NavigationUIDataImpl>(true);
+  if (enable_auto_play)
+    params->was_activated = content::mojom::WasActivatedOption::kYes;
+
   DoNavigate(std::move(params));
 }
 
@@ -197,6 +237,13 @@ void NavigationControllerImpl::Navigate(
       std::make_unique<content::NavigationController::LoadURLParams>(url);
   load_params->should_replace_current_entry =
       params.should_replace_current_entry;
+  if (params.disable_network_error_auto_reload) {
+    load_params->navigation_ui_data =
+        std::make_unique<NavigationUIDataImpl>(true);
+  }
+  if (params.enable_auto_play)
+    load_params->was_activated = content::mojom::WasActivatedOption::kYes;
+
   DoNavigate(std::move(load_params));
 }
 
@@ -335,6 +382,7 @@ void NavigationControllerImpl::DidFinishNavigation(
   if (!navigation_handle->IsInMainFrame())
     return;
 
+  DelayDeletionHelper deletion_helper(this);
   DCHECK(navigation_map_.find(navigation_handle) != navigation_map_.end());
   auto* navigation = navigation_map_[navigation_handle].get();
   if (navigation_handle->GetNetErrorCode() == net::OK &&
@@ -346,10 +394,15 @@ void NavigationControllerImpl::DidFinishNavigation(
       Java_NavigationControllerImpl_navigationCompleted(
           AttachCurrentThread(), java_controller_,
           navigation->java_navigation());
+      if (deletion_helper.WasControllerDeleted())
+        return;
     }
 #endif
-    for (auto& observer : observers_)
+    for (auto& observer : observers_) {
       observer.NavigationCompleted(navigation);
+      if (deletion_helper.WasControllerDeleted())
+        return;
+    }
   } else {
 #if defined(OS_ANDROID)
     if (java_controller_) {
@@ -358,10 +411,15 @@ void NavigationControllerImpl::DidFinishNavigation(
       Java_NavigationControllerImpl_navigationFailed(
           AttachCurrentThread(), java_controller_,
           navigation->java_navigation());
+      if (deletion_helper.WasControllerDeleted())
+        return;
     }
 #endif
-    for (auto& observer : observers_)
+    for (auto& observer : observers_) {
       observer.NavigationFailed(navigation);
+      if (deletion_helper.WasControllerDeleted())
+        return;
+    }
   }
 
   // Note InsertVisualStateCallback currently does not take into account
@@ -459,11 +517,6 @@ void NavigationControllerImpl::DoNavigate(
     return;
   }
 
-  // For WebLayer's production use cases, navigations from the embedder are most
-  // appropriately viewed as being from links with user gestures. In particular,
-  // this ensures that intents resulting from these navigations get launched as
-  // the embedder expects.
-  params->transition_type = ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK);
   params->has_user_gesture = true;
   web_contents()->GetController().LoadURLWithParams(*params);
   // So that if the user had entered the UI in a bar it stops flashing the

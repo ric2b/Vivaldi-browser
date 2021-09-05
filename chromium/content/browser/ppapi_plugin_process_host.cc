@@ -36,16 +36,16 @@
 #include "content/public/common/zygote/zygote_buildflags.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/ppapi_permissions.h"
+#include "sandbox/policy/sandbox_type.h"
+#include "sandbox/policy/switches.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
-#include "services/service_manager/sandbox/sandbox_type.h"
-#include "services/service_manager/sandbox/switches.h"
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
+#include "sandbox/policy/win/sandbox_win.h"
 #include "sandbox/win/src/process_mitigations.h"
 #include "sandbox/win/src/sandbox_policy.h"
-#include "services/service_manager/sandbox/win/sandbox_win.h"
 #include "ui/display/win/dpi.h"
 #include "ui/gfx/font_render_params.h"
 #endif
@@ -97,10 +97,9 @@ class PpapiPluginSandboxedProcessLauncherDelegate
 
 #if !defined(NACL_WIN64)
     // We don't support PPAPI win32k lockdown prior to Windows 10.
-    if (base::win::GetVersion() >= base::win::Version::WIN10 &&
-        service_manager::IsWin32kLockdownEnabled()) {
+    if (base::win::GetVersion() >= base::win::Version::WIN10) {
       result =
-          service_manager::SandboxWin::AddWin32kLockdownPolicy(policy, true);
+          sandbox::policy::SandboxWin::AddWin32kLockdownPolicy(policy, true);
       if (result != sandbox::SBOX_ALL_OK)
         return false;
     }
@@ -108,7 +107,7 @@ class PpapiPluginSandboxedProcessLauncherDelegate
     const base::string16& sid =
         browser_client->GetAppContainerSidForSandboxType(GetSandboxType());
     if (!sid.empty())
-      service_manager::SandboxWin::AddAppContainerPolicy(policy, sid.c_str());
+      sandbox::policy::SandboxWin::AddAppContainerPolicy(policy, sid.c_str());
 
     // Only Flash needs to be able to execute dynamic code.
     if (!permissions_.HasPermission(ppapi::PERMISSION_FLASH)) {
@@ -134,15 +133,15 @@ class PpapiPluginSandboxedProcessLauncherDelegate
   }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
-  service_manager::SandboxType GetSandboxType() override {
+  sandbox::policy::SandboxType GetSandboxType() override {
 #if defined(OS_WIN)
     if (is_broker_)
-      return service_manager::SandboxType::kNoSandbox;
+      return sandbox::policy::SandboxType::kNoSandbox;
 #endif  // OS_WIN
-    return service_manager::SandboxType::kPpapi;
+    return sandbox::policy::SandboxType::kPpapi;
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   bool DisclaimResponsibility() override { return true; }
 #endif
 
@@ -368,10 +367,10 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   base::CommandLine::StringType plugin_launcher =
       browser_command_line.GetSwitchValueNative(switches::kPpapiPluginLauncher);
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   int flags = plugin_launcher.empty() ? ChildProcessHost::CHILD_ALLOW_SELF :
                                         ChildProcessHost::CHILD_NORMAL;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   // Flash needs to JIT, but other plugins do not.
   int flags = permissions_.HasPermission(ppapi::PERMISSION_FLASH)
                   ? ChildProcessHost::CHILD_PLUGIN
@@ -413,10 +412,10 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
 
   if (!is_broker_) {
     static const char* const kPluginForwardSwitches[] = {
-      service_manager::switches::kDisableSeccompFilterSandbox,
-      service_manager::switches::kNoSandbox,
-#if defined(OS_MACOSX)
-      service_manager::switches::kEnableSandboxLogging,
+      sandbox::policy::switches::kDisableSeccompFilterSandbox,
+      sandbox::policy::switches::kNoSandbox,
+#if defined(OS_MAC)
+      sandbox::policy::switches::kEnableSandboxLogging,
 #endif
       switches::kPpapiStartupDialog,
     };

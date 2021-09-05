@@ -280,6 +280,8 @@ bool MultipleFieldsTemporalInputTypeView::
 
 void MultipleFieldsTemporalInputTypeView::PickerIndicatorChooseValue(
     const String& value) {
+  if (will_be_destroyed_)
+    return;
   if (GetElement().IsValidValue(value)) {
     GetElement().setValue(value, TextFieldEventBehavior::kDispatchInputEvent);
     return;
@@ -307,6 +309,8 @@ void MultipleFieldsTemporalInputTypeView::PickerIndicatorChooseValue(
 
 void MultipleFieldsTemporalInputTypeView::PickerIndicatorChooseValue(
     double value) {
+  if (will_be_destroyed_)
+    return;
   DCHECK(std::isfinite(value) || std::isnan(value));
   if (std::isnan(value)) {
     GetElement().setValue(g_empty_string,
@@ -493,8 +497,7 @@ void MultipleFieldsTemporalInputTypeView::HandleKeydownEvent(
     return;
   if (picker_indicator_is_visible_ &&
       ((event.key() == "ArrowDown" && event.getModifierState("Alt")) ||
-       (LayoutTheme::GetTheme().ShouldOpenPickerWithF4Key() &&
-        event.key() == "F4") ||
+       (event.key() == "F4") ||
        (features::IsFormControlsRefreshEnabled() && event.key() == " "))) {
     if (PickerIndicatorElement* element = GetPickerIndicatorElement())
       element->OpenPopup();

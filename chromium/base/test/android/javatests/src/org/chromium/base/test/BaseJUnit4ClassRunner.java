@@ -15,7 +15,6 @@ import android.support.test.internal.util.AndroidRunnerParams;
 import androidx.annotation.CallSuper;
 
 import org.junit.rules.MethodRule;
-import org.junit.rules.RuleChain;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runner.notification.RunNotifier;
@@ -236,14 +235,7 @@ public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
      */
     @CallSuper
     protected List<TestRule> getDefaultTestRules() {
-        // Order is important here. Outer rule setUp's run first, and tearDown's run last.
-        // Base setUp() should go first to initialize ContextUtils and clear out prefs.
-        // Base's tearDown() should come last since it deletes files.
-        // Activities must be destroyed before lifetimes are checked, so DestroyActivitiesRule()
-        // must come last so that its tearDown() runs before LifetimeAssertRule's.
-        return Collections.singletonList(RuleChain.outerRule(new BaseJUnit4TestRule())
-                                                 .around(new LifetimeAssertRule())
-                                                 .around(new DestroyActivitiesRule()));
+        return Arrays.asList(new BaseJUnit4TestRule(), new MockitoErrorHandler());
     }
 
     /**
@@ -273,8 +265,7 @@ public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
      */
     @Override
     public void run(RunNotifier notifier) {
-        if (BaseChromiumAndroidJUnitRunner.shouldListTests(
-                    InstrumentationRegistry.getArguments())) {
+        if (BaseChromiumAndroidJUnitRunner.shouldListTests()) {
             for (Description child : getDescription().getChildren()) {
                 notifier.fireTestFinished(child);
             }
@@ -357,11 +348,23 @@ public class BaseJUnit4ClassRunner extends AndroidJUnit4ClassRunner {
         return false;
     }
 
-    /*
+    /**
      * Overriding this method to take screenshot of failure before tear down functions are run.
      */
     @Override
     protected Statement withAfters(FrameworkMethod method, Object test, Statement base) {
         return super.withAfters(method, test, new ScreenshotOnFailureStatement(base));
+    }
+
+    /**
+     * This function replicates the androidx AndroidJUnit4ClassRunner version of this function.
+     * We can delete this override when we migrate to androidx.
+     */
+    @Override
+    protected Statement methodInvoker(FrameworkMethod method, Object test) {
+        if (UiThreadStatement.shouldRunOnUiThread(method)) {
+            return new UiThreadStatement(super.methodInvoker(method, test));
+        }
+        return super.methodInvoker(method, test);
     }
 }

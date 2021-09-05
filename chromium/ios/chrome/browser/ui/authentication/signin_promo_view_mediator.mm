@@ -22,10 +22,10 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
-#import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
+#import "ios/public/provider/chrome/browser/signin/signin_presenter.h"
 #import "ios/public/provider/chrome/browser/signin/signin_resources_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -74,6 +74,7 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SAFETY_CHECK:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return false;
   }
@@ -124,6 +125,7 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SAFETY_CHECK:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -176,6 +178,7 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SAFETY_CHECK:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -228,6 +231,7 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SAFETY_CHECK:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -272,6 +276,7 @@ const char* DisplayedCountPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SAFETY_CHECK:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -314,6 +319,7 @@ const char* AlreadySeenSigninViewPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SAFETY_CHECK:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }

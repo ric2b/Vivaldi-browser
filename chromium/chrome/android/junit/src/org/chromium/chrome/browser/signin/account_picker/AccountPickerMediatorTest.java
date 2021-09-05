@@ -18,11 +18,13 @@ import org.robolectric.RuntimeEnvironment;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.signin.DisplayableProfileData;
+import org.chromium.chrome.browser.signin.account_picker.AccountPickerCoordinator.AccountPickerAccessPoint;
 import org.chromium.chrome.browser.signin.account_picker.AccountPickerProperties.AddAccountRowProperties;
 import org.chromium.chrome.browser.signin.account_picker.AccountPickerProperties.ExistingAccountRowProperties;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.test.util.FakeProfileDataSource;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -35,9 +37,11 @@ public class AccountPickerMediatorTest {
     private static final String ACCOUNT_NAME1 = "test.account1@gmail.com";
     private static final String ACCOUNT_NAME2 = "test.account2@gmail.com";
 
+    private final FakeProfileDataSource mFakeProfileDataSource = new FakeProfileDataSource();
+
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule =
-            new AccountManagerTestRule(new FakeProfileDataSource());
+            new AccountManagerTestRule(mFakeProfileDataSource);
 
     @Mock
     private AccountPickerCoordinator.Listener mListenerMock;
@@ -59,11 +63,26 @@ public class AccountPickerMediatorTest {
     }
 
     @Test
-    public void testModelPopulatedWhenStarted() {
+    public void testModelPopulatedWhenStartedFromWeb() {
         addAccount(ACCOUNT_NAME1, FULL_NAME1);
         addAccount(ACCOUNT_NAME2, "");
-        mMediator = new AccountPickerMediator(
-                RuntimeEnvironment.application, mModelList, mListenerMock, ACCOUNT_NAME1);
+        mMediator = new AccountPickerMediator(RuntimeEnvironment.application, mModelList,
+                mListenerMock, ACCOUNT_NAME1, AccountPickerAccessPoint.WEB);
+        // ACCOUNT_NAME1, ACCOUNT_NAME2, ADD_ACCOUNT, INCOGNITO MODE.
+        Assert.assertEquals(4, mModelList.size());
+        checkItemForExistingAccountRow(0, ACCOUNT_NAME1, FULL_NAME1, /* isSelectedAccount= */ true);
+        checkItemForExistingAccountRow(1, ACCOUNT_NAME2, "", /* isSelectedAccount= */ false);
+        checkItemForAddAccountRow(2);
+        checkItemForIncognitoAccountRow(3);
+    }
+
+    @Test
+    public void testModelPopulatedWhenStartedFromSettings() {
+        addAccount(ACCOUNT_NAME1, FULL_NAME1);
+        addAccount(ACCOUNT_NAME2, "");
+        mMediator = new AccountPickerMediator(RuntimeEnvironment.application, mModelList,
+                mListenerMock, ACCOUNT_NAME1, AccountPickerAccessPoint.SETTING);
+        // ACCOUNT_NAME1, ACCOUNT_NAME2, ADD_ACCOUNT
         Assert.assertEquals(3, mModelList.size());
         checkItemForExistingAccountRow(0, ACCOUNT_NAME1, FULL_NAME1, /* isSelectedAccount= */ true);
         checkItemForExistingAccountRow(1, ACCOUNT_NAME2, "", /* isSelectedAccount= */ false);
@@ -71,16 +90,35 @@ public class AccountPickerMediatorTest {
     }
 
     @Test
-    public void testModelUpdatedAfterSetSelectedAccountName() {
+    public void testModelUpdatedAfterSetSelectedAccountNameFromSettings() {
         addAccount(ACCOUNT_NAME1, FULL_NAME1);
         addAccount(ACCOUNT_NAME2, "");
-        mMediator = new AccountPickerMediator(
-                RuntimeEnvironment.application, mModelList, mListenerMock, ACCOUNT_NAME1);
+        mMediator = new AccountPickerMediator(RuntimeEnvironment.application, mModelList,
+                mListenerMock, ACCOUNT_NAME1, AccountPickerAccessPoint.SETTING);
         mMediator.setSelectedAccountName(ACCOUNT_NAME2);
+        // ACCOUNT_NAME1, ACCOUNT_NAME2, ADD_ACCOUNT
         Assert.assertEquals(3, mModelList.size());
         checkItemForExistingAccountRow(
                 0, ACCOUNT_NAME1, FULL_NAME1, /* isSelectedAccount= */ false);
         checkItemForExistingAccountRow(1, ACCOUNT_NAME2, "", /* isSelectedAccount= */ true);
+        checkItemForAddAccountRow(2);
+    }
+
+    @Test
+    public void testProfileDataUpdateWhenAccountPickerIsShownFromSettings() {
+        addAccount(ACCOUNT_NAME1, FULL_NAME1);
+        addAccount(ACCOUNT_NAME2, "");
+        mMediator = new AccountPickerMediator(RuntimeEnvironment.application, mModelList,
+                mListenerMock, ACCOUNT_NAME1, AccountPickerAccessPoint.SETTING);
+        String fullName2 = "Full Name2";
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mFakeProfileDataSource.setProfileData(ACCOUNT_NAME2,
+                    new ProfileDataSource.ProfileData(ACCOUNT_NAME2, null, fullName2, null));
+        });
+        // ACCOUNT_NAME1, ACCOUNT_NAME2, ADD_ACCOUNT
+        Assert.assertEquals(3, mModelList.size());
+        checkItemForExistingAccountRow(0, ACCOUNT_NAME1, FULL_NAME1, /* isSelectedAccount= */ true);
+        checkItemForExistingAccountRow(1, ACCOUNT_NAME2, fullName2, /* isSelectedAccount= */ false);
         checkItemForAddAccountRow(2);
     }
 
@@ -106,9 +144,17 @@ public class AccountPickerMediatorTest {
         verify(mListenerMock).addAccount();
     }
 
+    private void checkItemForIncognitoAccountRow(int position) {
+        MVCListAdapter.ListItem item = mModelList.get(position);
+        Assert.assertEquals(AccountPickerProperties.ItemType.INCOGNITO_ACCOUNT_ROW, item.type);
+        item.model.get(AccountPickerProperties.IncognitoAccountRowProperties.ON_CLICK_LISTENER)
+                .run();
+        verify(mListenerMock).goIncognitoMode();
+    }
+
     private void addAccount(String accountName, String fullName) {
         ProfileDataSource.ProfileData profileData =
                 new ProfileDataSource.ProfileData(accountName, null, fullName, null);
-        mAccountManagerTestRule.addAccount(accountName, profileData);
+        mAccountManagerTestRule.addAccount(profileData);
     }
 }

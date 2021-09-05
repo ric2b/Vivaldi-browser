@@ -15,6 +15,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
@@ -107,20 +108,16 @@ class ExistingUserController : public LoginDisplay::Delegate,
              const SigninSpecifics& specifics) override;
   void OnSigninScreenReady() override;
   void OnStartEnterpriseEnrollment() override;
-  void OnStartEnableDebuggingScreen() override;
   void OnStartKioskEnableScreen() override;
   void OnStartKioskAutolaunchScreen() override;
   void ResetAutoLoginTimer() override;
-  void ShowWrongHWIDScreen() override;
-  void ShowUpdateRequiredScreen() override;
-  void Signout() override;
 
   void CompleteLogin(const UserContext& user_context);
   void OnGaiaScreenReady();
   void SetDisplayEmail(const std::string& email);
   void SetDisplayAndGivenName(const std::string& display_name,
                               const std::string& given_name);
-  bool IsUserWhitelisted(const AccountId& account_id);
+  bool IsUserAllowlisted(const AccountId& account_id);
 
   // user_manager::UserManager::Observer:
   void LocalStateChanged(user_manager::UserManager* user_manager) override;
@@ -130,11 +127,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // Set a delegate that we will pass AuthStatusConsumer events to.
-  // Used for testing.
-  void set_login_status_consumer(AuthStatusConsumer* consumer) {
-    auth_status_consumer_ = consumer;
-  }
+  // Add/remove a delegate that we will pass AuthStatusConsumer events to.
+  void AddLoginStatusConsumer(AuthStatusConsumer* consumer);
+  void RemoveLoginStatusConsumer(const AuthStatusConsumer* consumer);
 
   // Returns value of LoginPerformer::auth_mode() (cached if performer is
   // destroyed).
@@ -177,7 +172,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void OnPasswordChangeDetected(const UserContext& user_context) override;
   void OnOldEncryptionDetected(const UserContext& user_context,
                                bool has_incomplete_migration) override;
-  void WhiteListCheckFailed(const std::string& email) override;
+  void AllowlistCheckFailed(const std::string& email) override;
   void PolicyLoadFailed() override;
   void SetAuthFlowOffline(bool offline) override;
 
@@ -207,9 +202,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
 
   // Enters the enterprise enrollment screen.
   void ShowEnrollmentScreen();
-
-  // Shows "enable developer features" screen.
-  void ShowEnableDebuggingScreen();
 
   // Shows privacy notification in case of auto lunch managed guest session.
   void ShowAutoLaunchManagedGuestSessionNotification();
@@ -347,9 +339,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Used to execute login operations.
   std::unique_ptr<LoginPerformer> login_performer_;
 
-  // Delegate to forward all authentication status events to.
+  // Delegates to forward all authentication status events to.
   // Tests can use this to receive authentication status events.
-  AuthStatusConsumer* auth_status_consumer_ = nullptr;
+  base::ObserverList<AuthStatusConsumer> auth_status_consumers_;
 
   // AccountId of the last login attempt.
   AccountId last_login_attempt_account_id_ = EmptyAccountId();

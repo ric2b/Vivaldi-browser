@@ -65,6 +65,12 @@ std::string ShortcutTextFromEvent(const content::NativeWebKeyboardEvent& event);
 
 std::string ShortcutText(int windows_key_code, int modifiers, int dom_code);
 
+std::string GetImagePathFromProfilePath(const std::string& preferences_path,
+                                        const std::string& profile_path);
+void SetImagePathForProfilePath(const std::string& preferences_path,
+                                const std::string& avatar_path,
+                                const std::string& profile_path);
+
 }  // namespace vivaldi
 
 #endif  // EXTENSIONS_TOOLS_VIVALDI_TOOLS_H_

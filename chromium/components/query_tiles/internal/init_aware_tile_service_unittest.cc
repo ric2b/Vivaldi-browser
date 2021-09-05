@@ -44,6 +44,8 @@ class MockInitializableTileService : public InitializableTileService {
               (override));
   MOCK_METHOD(void, CancelTask, (), (override));
   MOCK_METHOD(void, PurgeDb, (), (override));
+  MOCK_METHOD(Logger*, GetLogger, (), (override));
+  MOCK_METHOD(void, SetServerUrl, (const std::string&), (override));
 
   // Callback stubs.
   MOCK_METHOD(void, GetTilesCallbackStub, (TileList), ());

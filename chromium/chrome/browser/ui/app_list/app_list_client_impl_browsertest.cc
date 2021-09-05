@@ -132,7 +132,6 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, UninstallApp) {
 
   apps::AppServiceProxy* app_service_proxy_ =
       apps::AppServiceProxyFactory::GetForProfile(profile());
-  DCHECK(app_service_proxy_);
   app_service_proxy_->FlushMojoCallsForTesting();
 
   run_loop.RunUntilIdle();
@@ -162,8 +161,8 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ShowAppInfo) {
   Browser* settings_app =
       chrome::SettingsWindowManager::GetInstance()->FindBrowserForProfile(
           profile());
-  content::WaitForLoadStop(
-      settings_app->tab_strip_model()->GetActiveWebContents());
+  EXPECT_TRUE(content::WaitForLoadStop(
+      settings_app->tab_strip_model()->GetActiveWebContents()));
 
   EXPECT_EQ(
       chrome::GetOSSettingsUrl(

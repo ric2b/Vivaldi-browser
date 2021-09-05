@@ -203,6 +203,18 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_ANDROID_PERMISSION_OFF_PLURAL" desc="Text at the top of the Website list, explaining to the user that multiple permissions, such as the location service, are turned off. Contains a link to the settings menu to change it.">
         Turn on permissions for Vivaldi in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
+      <message name="IDS_ACCESSIBILITY_MENU_BACK" desc="Content description for the back navigation button.">
+        Go back
+      </message>
+      <message name="IDS_ACCESSIBILITY_MENU_HOME" desc="Content description for the home navigation button.">
+        Go to homepage
+      </message>
+      <message name="IDS_MENU_BACK" desc="Tooltip for the button to advance to the previous web page. [CHAR-LIMIT=27]">
+        Back
+      </message>
+      <message name="IDS_MENU_HOME" desc="Tooltip for the homepage button. [CHAR-LIMIT=27]">
+        Homepage
+      </message>
     </messages>
   </release>
 </grit>

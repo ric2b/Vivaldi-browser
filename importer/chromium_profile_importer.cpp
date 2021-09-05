@@ -32,7 +32,7 @@ ChromiumProfileImporter::ChromiumProfileImporter() {
       GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_BETA));
   chromeProfiles.push_back(
       GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_DEV));
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_VIVALDI));
 #endif
 }

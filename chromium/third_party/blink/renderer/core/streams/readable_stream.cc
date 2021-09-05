@@ -860,6 +860,12 @@ class ReadableStream::TeeEngine::PullAlgorithm final : public StreamAlgorithm {
                 script_state, engine_->controller_[branch]);
           }
         }
+
+        // TODO(ricea): Implement https://github.com/whatwg/streams/pull/1045 so
+        // this step can be numbered correctly.
+        // Resolve |cancelPromise| with undefined.
+        engine_->cancel_promise_->ResolveWithUndefined(script_state);
+
         //    3. Set closed to true.
         engine_->closed_ = true;
 
@@ -1068,6 +1074,11 @@ void ReadableStream::TeeEngine::Start(ScriptState* script_state,
       //      [[readableStreamController]], r).
       ReadableStreamDefaultController::Error(GetScriptState(),
                                              engine_->controller_[1], r);
+
+      // TODO(ricea): Implement https://github.com/whatwg/streams/pull/1045 so
+      // this step can be numbered correctly.
+      // Resolve |cancelPromise| with undefined.
+      engine_->cancel_promise_->ResolveWithUndefined(GetScriptState());
     }
 
     void Trace(Visitor* visitor) const override {
@@ -1581,19 +1592,13 @@ void ReadableStream::Tee(ScriptState* script_state,
   *branch2 = engine->Branch2();
 }
 
-void ReadableStream::LockAndDisturb(ScriptState* script_state,
-                                    ExceptionState& exception_state) {
-  ScriptState::Scope scope(script_state);
-
+void ReadableStream::LockAndDisturb(ScriptState* script_state) {
   if (reader_) {
     return;
   }
 
-  ReadableStreamReader* reader =
-      AcquireDefaultReader(script_state, this, false, exception_state);
-  if (!reader) {
-    return;
-  }
+  ReadableStreamReader* reader = GetReaderNotForAuthorCode(script_state);
+  DCHECK(reader);
 
   is_disturbed_ = true;
 }
@@ -1601,20 +1606,38 @@ void ReadableStream::LockAndDisturb(ScriptState* script_state,
 void ReadableStream::Serialize(ScriptState* script_state,
                                MessagePort* port,
                                ExceptionState& exception_state) {
+  // https://streams.spec.whatwg.org/#rs-transfer
+  // 1. If ! IsReadableStreamLocked(value) is true, throw a "DataCloneError"
+  //    DOMException.
   if (IsLocked(this)) {
     exception_state.ThrowTypeError("Cannot transfer a locked stream");
     return;
   }
 
+  // Done by SerializedScriptValue::TransferReadableStream():
+  // 2. Let port1 be a new MessagePort in the current Realm.
+  // 3. Let port2 be a new MessagePort in the current Realm.
+  // 4. Entangle port1 and port2.
+
+  // 5. Let writable be a new WritableStream in the current Realm.
+  // 6. Perform ! SetUpCrossRealmTransformWritable(writable, port1).
   auto* writable =
       CreateCrossRealmTransformWritable(script_state, port, exception_state);
   if (exception_state.HadException()) {
     return;
   }
 
+  // 7. Let promise be ! ReadableStreamPipeTo(value, writable, false, false,
+  //    false).
   auto promise =
       PipeTo(script_state, this, writable, MakeGarbageCollected<PipeOptions>());
+
+  // 8. Set promise.[[PromiseIsHandled]] to true.
   promise.MarkAsHandled();
+
+  // This step is done in a roundabout way by the caller:
+  // 9. Set dataHolder.[[port]] to ! StructuredSerializeWithTransfer(port2,
+  //    « port2 »).
 }
 
 ReadableStream* ReadableStream::Deserialize(ScriptState* script_state,
@@ -1624,6 +1647,17 @@ ReadableStream* ReadableStream::Deserialize(ScriptState* script_state,
   // run author code.
   v8::Isolate::AllowJavascriptExecutionScope allow_js(
       script_state->GetIsolate());
+
+  // https://streams.spec.whatwg.org/#rs-transfer
+  // These steps are done by V8ScriptValueDeserializer::ReadDOMObject().
+  // 1. Let deserializedRecord be !
+  //    StructuredDeserializeWithTransfer(dataHolder.[[port]], the current
+  //    Realm).
+  // 2. Let port be deserializedRecord.[[Deserialized]].
+
+  // 3. Perform ! SetUpCrossRealmTransformReadable(value, port).
+  // In the standard |value| contains an uninitialized ReadableStream. In the
+  // implementation, we create the stream here.
   auto* readable =
       CreateCrossRealmTransformReadable(script_state, port, exception_state);
   if (exception_state.HadException()) {
@@ -1633,8 +1667,11 @@ ReadableStream* ReadableStream::Deserialize(ScriptState* script_state,
 }
 
 ReadableStreamDefaultReader* ReadableStream::GetReaderNotForAuthorCode(
-    ScriptState* script_state,
-    ExceptionState& exception_state) {
+    ScriptState* script_state) {
+  DCHECK(!IsLocked(this));
+
+  // Since the stream is not locked, AcquireDefaultReader cannot fail.
+  NonThrowableExceptionState exception_state(__FILE__, __LINE__);
   return AcquireDefaultReader(script_state, this, false, exception_state);
 }
 

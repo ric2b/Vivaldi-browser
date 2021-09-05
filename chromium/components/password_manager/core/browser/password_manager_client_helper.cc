@@ -4,15 +4,36 @@
 
 #include "components/password_manager/core/browser/password_manager_client_helper.h"
 
+#include "base/metrics/field_trial_params.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager.h"
+#include "components/password_manager/core/browser/password_sync_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 
 namespace password_manager {
+
+namespace {
+
+bool IsPrimaryAccountSignIn(const signin::IdentityManager& identity_manager,
+                            const base::string16& username,
+                            const std::string& signon_realm) {
+  CoreAccountInfo primary_account = identity_manager.GetPrimaryAccountInfo(
+      signin::ConsentLevel::kNotRequired);
+  return sync_util::IsGaiaCredentialPage(signon_realm) &&
+         !primary_account.IsEmpty() &&
+         gaia::AreEmailsSame(base::UTF16ToUTF8(username),
+                             primary_account.email);
+}
+
+}  // namespace
 
 PasswordManagerClientHelper::PasswordManagerClientHelper(
     PasswordManagerClient* delegate)
@@ -47,10 +68,10 @@ void PasswordManagerClientHelper::NotifySuccessfulLoginWithExistingPassword(
 }
 
 void PasswordManagerClientHelper::OnCredentialsChosen(
-    const PasswordManagerClient::CredentialsCallback& callback,
+    PasswordManagerClient::CredentialsCallback callback,
     bool one_local_credential,
     const autofill::PasswordForm* form) {
-  callback.Run(form);
+  std::move(callback).Run(form);
   // If a site gets back a credential some navigations are likely to occur. They
   // shouldn't trigger the autofill password manager.
   if (form)
@@ -85,12 +106,34 @@ bool PasswordManagerClientHelper::ShouldPromptToEnableAutoSignIn() const {
 
 bool PasswordManagerClientHelper::ShouldPromptToMovePasswordToAccount(
     const PasswordFormManagerForUI& submitted_manager) const {
-  return delegate_->GetPasswordFeatureManager()
-             ->ShouldShowAccountStorageBubbleUi() &&
-         delegate_->GetPasswordFeatureManager()->GetDefaultPasswordStore() ==
-             autofill::PasswordForm::Store::kAccountStore &&
-         submitted_manager.IsMovableToAccountStore() &&
-         !delegate_->IsIncognito();
+  PasswordFeatureManager* feature_manager =
+      delegate_->GetPasswordFeatureManager();
+  if (!feature_manager->ShouldShowAccountStorageBubbleUi())
+    return false;
+  if (feature_manager->GetDefaultPasswordStore() ==
+      autofill::PasswordForm::Store::kProfileStore) {
+    return false;
+  }
+  if (!submitted_manager.IsMovableToAccountStore())
+    return false;
+  if (delegate_->IsIncognito())
+    return false;
+  // It's not useful to store the password for the primary account inside
+  // that same account.
+  if (IsPrimaryAccountSignIn(
+          *delegate_->GetIdentityManager(),
+          submitted_manager.GetPendingCredentials().username_value,
+          submitted_manager.GetPendingCredentials().signon_realm)) {
+    return false;
+  }
+  int max_move_to_account_offers_for_non_opted_in_user =
+      base::GetFieldTrialParamByFeatureAsInt(
+          features::kEnablePasswordsAccountStorage,
+          features::kMaxMoveToAccountOffersForNonOptedInUser,
+          features::kMaxMoveToAccountOffersForNonOptedInUserDefaultValue);
+  return feature_manager->IsOptedInForAccountStorage() ||
+         feature_manager->GetMoveOfferedToNonOptedInUserCount() <
+             max_move_to_account_offers_for_non_opted_in_user;
 }
 
 }  // namespace password_manager

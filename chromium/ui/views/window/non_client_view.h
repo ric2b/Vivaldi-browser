@@ -15,6 +15,7 @@
 namespace views {
 
 class ClientView;
+enum class CloseRequestResult;
 
 ////////////////////////////////////////////////////////////////////////////////
 // NonClientFrameView
@@ -92,9 +93,6 @@ class VIEWS_EXPORT NonClientFrameView : public View,
   // Whether the widget can be resized or maximized has changed.
   virtual void SizeConstraintsChanged() = 0;
 
-  // Called when whether the non-client view should paint as active has changed.
-  virtual void PaintAsActiveChanged(bool active);
-
   // View:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
@@ -165,14 +163,13 @@ class VIEWS_EXPORT NonClientView : public View, public ViewTargeterDelegate {
   NonClientFrameView* frame_view() const { return frame_view_.get(); }
 
   // Replaces the current NonClientFrameView (if any) with the specified one.
-  void SetFrameView(NonClientFrameView* frame_view);
+  void SetFrameView(std::unique_ptr<NonClientFrameView> frame_view);
 
   // Replaces the current |overlay_view_| (if any) with the specified one.
   void SetOverlayView(View* view);
 
-  // Returns true if the ClientView determines that the containing window can be
-  // closed, false otherwise.
-  bool CanClose();
+  // Returned value signals whether the ClientView can be closed.
+  CloseRequestResult OnWindowCloseRequested();
 
   // Called by the containing Window when it is closed.
   void WindowClosing();

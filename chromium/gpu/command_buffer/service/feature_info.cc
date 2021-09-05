@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/texture_definition.h"
 #include "gpu/config/gpu_switches.h"
@@ -24,7 +25,7 @@
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gl_version_info.h"
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 #include "ui/gl/gl_fence_egl.h"
 #else
 #include "base/mac/mac_util.h"
@@ -193,11 +194,11 @@ FeatureInfo::FeatureInfo(
           .status_values[GPU_FEATURE_TYPE_ANDROID_SURFACE_CONTROL] ==
       gpu::kGpuFeatureStatusEnabled;
 
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)
   feature_flags_.chromium_image_ycbcr_420v = base::Contains(
       gpu_feature_info.supported_buffer_formats_for_allocation_and_texturing,
       gfx::BufferFormat::YUV_420_BIPLANAR);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   feature_flags_.chromium_image_ycbcr_420v = true;
 #endif
 
@@ -428,6 +429,38 @@ void FeatureInfo::EnableOESTextureHalfFloatLinear() {
   feature_flags_.gpu_memory_buffer_formats.Add(gfx::BufferFormat::RGBA_F16);
 }
 
+void FeatureInfo::EnableANGLEInstancedArrayIfPossible(
+    const gfx::ExtensionSet& extensions) {
+  if (!feature_flags_.angle_instanced_arrays) {
+    if (gfx::HasExtension(extensions, "GL_ANGLE_instanced_arrays") ||
+        (gfx::HasExtension(extensions, "GL_ARB_instanced_arrays") &&
+         gfx::HasExtension(extensions, "GL_ARB_draw_instanced")) ||
+        gl_version_info_->is_es3 || gl_version_info_->is_desktop_core_profile) {
+      AddExtensionString("GL_ANGLE_instanced_arrays");
+      feature_flags_.angle_instanced_arrays = true;
+      validators_.vertex_attribute.AddValue(
+          GL_VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE);
+    }
+  }
+}
+
+void FeatureInfo::EnableWEBGLMultiDrawIfPossible(
+    const gfx::ExtensionSet& extensions) {
+  if (!feature_flags_.webgl_multi_draw) {
+    if (!is_passthrough_cmd_decoder_ ||
+        gfx::HasExtension(extensions, "GL_ANGLE_multi_draw")) {
+      if (gfx::HasExtension(extensions, "GL_ANGLE_instanced_arrays") ||
+          feature_flags_.angle_instanced_arrays || gl_version_info_->is_es3 ||
+          gl_version_info_->is_desktop_core_profile) {
+        feature_flags_.webgl_multi_draw = true;
+        AddExtensionString("GL_WEBGL_multi_draw");
+
+        EnableANGLEInstancedArrayIfPossible(extensions);
+      }
+    }
+  }
+}
+
 void FeatureInfo::InitializeFeatures() {
   // Figure out what extensions to turn on.
   std::string extensions_string(gl::GetGLExtensionsFromCurrentContext());
@@ -473,7 +506,6 @@ void FeatureInfo::InitializeFeatures() {
   AddExtensionString("GL_CHROMIUM_strict_attribs");
   AddExtensionString("GL_CHROMIUM_texture_mailbox");
   AddExtensionString("GL_CHROMIUM_trace_marker");
-  AddExtensionString("GL_EXT_debug_marker");
 
   // Pre es3, there are no PBOS and all unpack state is handled in client side.
   // With es3, unpack state is needed in server side. We always mark these
@@ -1099,6 +1131,11 @@ void FeatureInfo::InitializeFeatures() {
     validators_.g_l_state.AddValue(GL_TEXTURE_BINDING_EXTERNAL_OES);
   }
 
+  if (gfx::HasExtension(extensions, "GL_EXT_YUV_target")) {
+    validators_.texture_fbo_target.AddValue(GL_TEXTURE_EXTERNAL_OES);
+    feature_flags_.ext_yuv_target = true;
+  }
+
   // ANGLE only exposes this extension when it has native support of the
   // GL_ETC1_RGB8 format.
   if (gfx::HasExtension(extensions, "GL_OES_compressed_ETC1_RGB8_texture")) {
@@ -1166,6 +1203,7 @@ void FeatureInfo::InitializeFeatures() {
     // textures via glFramebufferTexture2D, and copy destinations via
     // glCopyPixels.
     validators_.texture_bind_target.AddValue(GL_TEXTURE_RECTANGLE_ARB);
+    validators_.texture_fbo_target.AddValue(GL_TEXTURE_RECTANGLE_ARB);
     validators_.texture_target.AddValue(GL_TEXTURE_RECTANGLE_ARB);
     validators_.get_tex_param_target.AddValue(GL_TEXTURE_RECTANGLE_ARB);
     validators_.g_l_state.AddValue(GL_TEXTURE_BINDING_RECTANGLE_ARB);
@@ -1177,7 +1215,7 @@ void FeatureInfo::InitializeFeatures() {
         gfx::BufferFormat::YUV_420_BIPLANAR);
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Mac can create GLImages out of AR30 IOSurfaces only after High Sierra.
   feature_flags_.chromium_image_ar30 = base::mac::IsAtLeastOS10_13();
 #elif !defined(OS_WIN)
@@ -1246,14 +1284,7 @@ void FeatureInfo::InitializeFeatures() {
         !have_arb_occlusion_query2;
   }
 
-  if (gfx::HasExtension(extensions, "GL_ANGLE_instanced_arrays") ||
-      (gfx::HasExtension(extensions, "GL_ARB_instanced_arrays") &&
-       gfx::HasExtension(extensions, "GL_ARB_draw_instanced")) ||
-      gl_version_info_->is_es3 || gl_version_info_->is_desktop_core_profile) {
-    AddExtensionString("GL_ANGLE_instanced_arrays");
-    feature_flags_.angle_instanced_arrays = true;
-    validators_.vertex_attribute.AddValue(GL_VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE);
-  }
+  EnableANGLEInstancedArrayIfPossible(extensions);
 
   bool have_es2_draw_buffers_vendor_agnostic =
       gl_version_info_->is_desktop_core_profile ||
@@ -1530,7 +1561,7 @@ void FeatureInfo::InitializeFeatures() {
     validators_.g_l_state.AddValue(GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT);
   }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (workarounds_.ignore_egl_sync_failures) {
     gl::GLFenceEGL::SetIgnoreFailures();
   }
@@ -1569,8 +1600,6 @@ void FeatureInfo::InitializeFeatures() {
       gfx::HasExtension(extensions, "GL_ANGLE_client_arrays");
   feature_flags_.angle_request_extension =
       gfx::HasExtension(extensions, "GL_ANGLE_request_extension");
-  feature_flags_.ext_debug_marker =
-      gfx::HasExtension(extensions, "GL_EXT_debug_marker");
   feature_flags_.ext_pixel_buffer_object =
       gfx::HasExtension(extensions, "GL_ARB_pixel_buffer_object") ||
       gfx::HasExtension(extensions, "GL_NV_pixel_buffer_object");
@@ -1581,6 +1610,11 @@ void FeatureInfo::InitializeFeatures() {
   feature_flags_.angle_robust_resource_initialization =
       gfx::HasExtension(extensions, "GL_ANGLE_robust_resource_initialization");
   feature_flags_.nv_fence = gfx::HasExtension(extensions, "GL_NV_fence");
+
+  if (gfx::HasExtension(extensions, "GL_EXT_debug_marker")) {
+    feature_flags_.ext_debug_marker = true;
+    AddExtensionString("GL_EXT_debug_marker");
+  }
 
   // UnpremultiplyAndDitherCopyCHROMIUM is only implemented on the full decoder.
   feature_flags_.unpremultiply_and_dither_copy = !is_passthrough_cmd_decoder_;
@@ -1628,18 +1662,9 @@ void FeatureInfo::InitializeFeatures() {
     feature_flags_.khr_robust_buffer_access_behavior = true;
   }
 
-  if (!is_passthrough_cmd_decoder_ ||
-      gfx::HasExtension(extensions, "GL_ANGLE_multi_draw")) {
+  EnableWEBGLMultiDrawIfPossible(extensions);
 
-    if (gfx::HasExtension(extensions, "GL_ANGLE_instanced_arrays") ||
-        feature_flags_.angle_instanced_arrays || gl_version_info_->is_es3 ||
-        gl_version_info_->is_desktop_core_profile) {
-      feature_flags_.webgl_multi_draw = true;
-      AddExtensionString("GL_WEBGL_multi_draw");
-    }
-  }
-
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (is_passthrough_cmd_decoder_ &&
       gfx::HasExtension(extensions, "GL_ANGLE_base_vertex_base_instance")) {
 #else

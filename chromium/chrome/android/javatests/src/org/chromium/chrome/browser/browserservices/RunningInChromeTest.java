@@ -9,7 +9,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import static org.chromium.chrome.browser.browserservices.TrustedWebActivityTestUtil.createSession;
@@ -35,8 +34,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
 import org.chromium.chrome.browser.dependency_injection.ModuleOverridesRule;
@@ -145,7 +144,7 @@ public class RunningInChromeTest {
         launch(createTrustedWebActivityIntent(mTestPage));
 
         String scope = Origin.createOrThrow(mTestPage).toString();
-        CriteriaHelper.pollUiThread(() -> assertTrue(showingNotification(scope)));
+        CriteriaHelper.pollUiThread(() -> showingNotification(scope));
     }
 
     @Test
@@ -156,13 +155,11 @@ public class RunningInChromeTest {
         launch(createTrustedWebActivityIntent(mTestPage));
 
         String scope = Origin.createOrThrow(mTestPage).toString();
-        CriteriaHelper.pollUiThread(() ->
-                assertTrue(showingNotification(scope)));
+        CriteriaHelper.pollUiThread(() -> showingNotification(scope));
 
         mCustomTabActivityTestRule.loadUrl("https://www.example.com/");
 
-        CriteriaHelper.pollUiThread(() ->
-                assertFalse(showingNotification(scope)));
+        CriteriaHelper.pollUiThread(() -> !showingNotification(scope));
     }
 
     @Test
@@ -173,11 +170,11 @@ public class RunningInChromeTest {
         launch(createTrustedWebActivityIntent(mTestPage));
 
         String scope = Origin.createOrThrow(mTestPage).toString();
-        CriteriaHelper.pollUiThread(() -> assertTrue(showingNotification(scope)));
+        CriteriaHelper.pollUiThread(() -> showingNotification(scope));
 
         mCustomTabActivityTestRule.getActivity().finish();
 
-        CriteriaHelper.pollUiThread(() -> assertFalse(showingNotification(scope)));
+        CriteriaHelper.pollUiThread(() -> !showingNotification(scope));
     }
 
     private boolean showingNotification(String tag) {

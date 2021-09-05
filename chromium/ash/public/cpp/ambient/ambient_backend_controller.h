@@ -27,6 +27,13 @@ struct ASH_PUBLIC_EXPORT AmbientModeTopic {
   AmbientModeTopic& operator=(const AmbientModeTopic&);
   ~AmbientModeTopic();
 
+  // Returns a non-empty url to load the landscape or portrait image.
+  std::string GetUrl() const;
+
+  // Details, i.e. the attribution, to be displayed for the current photo on
+  // ambient.
+  std::string details;
+
   // Image url.
   std::string url;
 
@@ -49,6 +56,10 @@ struct ASH_PUBLIC_EXPORT WeatherInfo {
 
   // Weather temperature in Fahrenheit.
   base::Optional<float> temp_f;
+
+  // If the temperature should be displayed in celsius. Conversion must happen
+  // before the value in temp_f is displayed.
+  bool show_celsius = false;
 };
 
 // Trimmed-down version of |backdrop::ScreenUpdate| proto from the backdrop
@@ -67,7 +78,7 @@ struct ASH_PUBLIC_EXPORT ScreenUpdate {
   // Fahrenheit. Will be a null-opt if:
   // 1. The weather setting was disabled in the request, or
   // 2. Fatal errors, such as response parsing failure, happened during the
-  // process, and a dummy |ScreenUpdate| instance was returned to indicate
+  // process, and a default |ScreenUpdate| instance was returned to indicate
   // the error.
   base::Optional<WeatherInfo> weather_info;
 };
@@ -80,8 +91,14 @@ class ASH_PUBLIC_EXPORT AmbientBackendController {
   using GetSettingsCallback =
       base::OnceCallback<void(const base::Optional<AmbientSettings>& settings)>;
   using UpdateSettingsCallback = base::OnceCallback<void(bool success)>;
+  using OnSettingPreviewFetchedCallback =
+      base::OnceCallback<void(const std::vector<std::string>& preview_urls)>;
   using OnPersonalAlbumsFetchedCallback =
       base::OnceCallback<void(PersonalAlbums)>;
+  // TODO(wutao): Make |settings| move only.
+  using OnSettingsAndAlbumsFetchedCallback =
+      base::OnceCallback<void(const base::Optional<AmbientSettings>& settings,
+                              PersonalAlbums personal_albums)>;
 
   static AmbientBackendController* Get();
 
@@ -94,7 +111,7 @@ class ASH_PUBLIC_EXPORT AmbientBackendController {
   // server.
   // Upon completion, |callback| is run with the parsed |ScreenUpdate|. If any
   // errors happened during the process, e.g. failed to fetch access token, a
-  // dummy instance will be returned.
+  // default instance will be returned.
   virtual void FetchScreenUpdateInfo(
       int num_topics,
       OnScreenUpdateInfoFetchedCallback callback) = 0;
@@ -106,11 +123,22 @@ class ASH_PUBLIC_EXPORT AmbientBackendController {
   virtual void UpdateSettings(const AmbientSettings& settings,
                               UpdateSettingsCallback callback) = 0;
 
+  // Fetch preview images for live album.
+  virtual void FetchSettingPreview(int preview_width,
+                                   int preview_height,
+                                   OnSettingPreviewFetchedCallback) = 0;
+
   virtual void FetchPersonalAlbums(int banner_width,
                                    int banner_height,
                                    int num_albums,
                                    const std::string& resume_token,
                                    OnPersonalAlbumsFetchedCallback) = 0;
+
+  // Fetch the Settings and albums as one API.
+  virtual void FetchSettingsAndAlbums(int banner_width,
+                                      int banner_height,
+                                      int num_albums,
+                                      OnSettingsAndAlbumsFetchedCallback) = 0;
 
   // Set the photo refresh interval in ambient mode.
   virtual void SetPhotoRefreshInterval(base::TimeDelta interval) = 0;

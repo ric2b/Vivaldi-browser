@@ -2,10 +2,20 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
+import("//build/config/chromecast_build.gni")
 import("//testing/test.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
+}
+
+large_variation_key_size_enabled =
+    is_chromecast
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "LARGE_VARIATION_KEY_SIZE=$large_variation_key_size_enabled" ]
 }
 
 static_library("variations") {
@@ -45,10 +55,10 @@ static_library("variations") {
     "variations_client.h",
     "variations_crash_keys.cc",
     "variations_crash_keys.h",
-    "variations_http_header_provider.cc",
-    "variations_http_header_provider.h",
     "variations_id_collection.cc",
     "variations_id_collection.h",
+    "variations_ids_provider.cc",
+    "variations_ids_provider.h",
     "variations_murmur_hash.cc",
     "variations_murmur_hash.h",
     "variations_request_scheduler.cc",
@@ -73,6 +83,7 @@ static_library("variations") {
   }
 
   deps = [
+    ":buildflags",
     "proto",
     "//base",
     "//components/crash/core/common:crash_key",
@@ -96,7 +107,10 @@ if (is_android) {
   }
 
   android_library("load_seed_result_enum_java") {
-    deps = [ "//base:base_java" ]
+    deps = [
+      "//base:base_java",
+      "//third_party/android_deps:androidx_annotation_annotation_java",
+    ]
     srcjar_deps = [ ":load_seed_result_enum_srcjar" ]
   }
 
@@ -135,8 +149,8 @@ source_set("unit_tests") {
     "synthetic_trial_registry_unittest.cc",
     "variations_associated_data_unittest.cc",
     "variations_crash_keys_unittest.cc",
-    "variations_http_header_provider_unittest.cc",
     "variations_id_collection_unittest.cc",
+    "variations_ids_provider_unittest.cc",
     "variations_murmur_hash_unittest.cc",
     "variations_request_scheduler_unittest.cc",
     "variations_seed_processor_unittest.cc",

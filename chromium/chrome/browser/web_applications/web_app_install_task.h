@@ -19,6 +19,7 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
+#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/common/web_application_info.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -36,21 +37,22 @@ class WebContents;
 
 namespace web_app {
 
-class AppShortcutManager;
-class FileHandlerManager;
+class OsIntegrationManager;
 class InstallFinalizer;
 class WebAppDataRetriever;
 class WebAppUrlLoader;
 
+// Used to do a variety of tasks involving installing web applications. Only one
+// of the public Load*, Update*, or Install* methods can be called on a single
+// object. WebAppInstallManager is a queue of WebAppInstallTask jobs. Basically,
+// WebAppInstallTask is an implementation detail of WebAppInstallManager.
 class WebAppInstallTask : content::WebContentsObserver {
  public:
   using RetrieveWebApplicationInfoWithIconsCallback =
       base::OnceCallback<void(std::unique_ptr<WebApplicationInfo>)>;
 
   WebAppInstallTask(Profile* profile,
-                    AppRegistrar* registrar,
-                    AppShortcutManager* shortcut_manager,
-                    FileHandlerManager* file_handler_manager,
+                    OsIntegrationManager* os_integration_manager,
                     InstallFinalizer* install_finalizer,
                     std::unique_ptr<WebAppDataRetriever> data_retriever);
   ~WebAppInstallTask() override;
@@ -65,21 +67,21 @@ class WebAppInstallTask : content::WebContentsObserver {
 
   void SetInstallParams(const InstallManager::InstallParams& install_params);
 
-  using LoadWebAppAndCheckInstallabilityCallback = base::OnceCallback<void(
+  using LoadWebAppAndCheckManifestCallback = base::OnceCallback<void(
       std::unique_ptr<content::WebContents> web_contents,
       const AppId& app_id,
       InstallResultCode code)>;
-  // Load a web app from the given URL and check installability.
-  void LoadWebAppAndCheckInstallability(
-      const GURL& url,
-      WebappInstallSource install_source,
-      WebAppUrlLoader* url_loader,
-      LoadWebAppAndCheckInstallabilityCallback callback);
+  // Load a web app from the given URL and check for valid manifest.
+  void LoadWebAppAndCheckManifest(const GURL& url,
+                                  WebappInstallSource install_source,
+                                  WebAppUrlLoader* url_loader,
+                                  LoadWebAppAndCheckManifestCallback callback);
 
   // Checks a WebApp installability, retrieves manifest and icons and
   // then performs the actual installation.
   void InstallWebAppFromManifest(
       content::WebContents* web_contents,
+      bool bypass_service_worker_check,
       WebappInstallSource install_source,
       InstallManager::WebAppInstallDialogCallback dialog_callback,
       InstallManager::OnceInstallCallback callback);
@@ -171,7 +173,7 @@ class WebAppInstallTask : content::WebContentsObserver {
 
   void OnWebAppUrlLoadedGetWebApplicationInfo(WebAppUrlLoader::Result result);
 
-  void OnWebAppUrlLoadedCheckInstallabilityAndRetrieveManifest(
+  void OnWebAppUrlLoadedCheckAndRetrieveManifest(
       content::WebContents* web_contents,
       WebAppUrlLoader::Result result);
   void OnWebAppInstallabilityChecked(
@@ -228,16 +230,13 @@ class WebAppInstallTask : content::WebContentsObserver {
       std::unique_ptr<WebApplicationInfo> web_app_info,
       const AppId& app_id,
       InstallResultCode code);
-  void OnShortcutsCreated(std::unique_ptr<WebApplicationInfo> web_app_info,
-                          const AppId& app_id,
-                          bool shortcut_created);
-  void OnRegisteredRunOnOsLogin(const AppId& app_id,
-                                bool registered_run_on_os_login);
-  void OnUpdateFinalizedRegisterShortcutsMenu(
-      const std::vector<WebApplicationShortcutsMenuItemInfo>& shortcut_infos,
-      const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps,
-      const AppId& app_id,
-      InstallResultCode code);
+  void OnOsHooksCreated(bool open_as_window,
+                        const AppId& app_id,
+                        const OsHooksResults os_hooks_results);
+
+  // Whether the install task has been 'initiated' by calling one of the public
+  // methods.
+  bool initiated_ = false;
 
   // Whether we should just obtain WebApplicationInfo instead of the actual
   // installation.
@@ -260,9 +259,7 @@ class WebAppInstallTask : content::WebContentsObserver {
   std::unique_ptr<WebApplicationInfo> web_application_info_;
   std::unique_ptr<content::WebContents> web_contents_;
 
-  AppRegistrar* registrar_;
-  AppShortcutManager* shortcut_manager_;
-  FileHandlerManager* file_handler_manager_;
+  OsIntegrationManager* os_integration_manager_;
   InstallFinalizer* install_finalizer_;
   Profile* const profile_;
 

@@ -131,8 +131,8 @@ class PageLoadMetricsObserverDelegate {
   virtual const LargestContentfulPaintHandler&
   GetExperimentalLargestContentfulPaintHandler() const = 0;
 
-  // UKM SourceId for the current page load.
-  virtual ukm::SourceId GetSourceId() const = 0;
+  // UKM source ID for the current page load.
+  virtual ukm::SourceId GetPageUkmSourceId() const = 0;
 
   // Whether the associated navigation is the first navigation in its associated
   // WebContents. Note that, for newly opened tabs that display the New Tab

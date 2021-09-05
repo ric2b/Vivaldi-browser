@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_empty_state_view.h"
 
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_constants.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -15,13 +16,16 @@
 #endif
 
 namespace {
-const CGFloat kVerticalMargin = 16;
+const CGFloat kVerticalMargin = 16.0;
+const CGFloat kImageHeight = 150.0;
+const CGFloat kImageWidth = 150.0;
 }  // namespace
 
 @interface TabGridEmptyStateView ()
 @property(nonatomic, strong) UIView* container;
 @property(nonatomic, strong) UIScrollView* scrollView;
 @property(nonatomic, strong) NSLayoutConstraint* scrollViewHeight;
+@property(nonatomic, copy, readonly) UIImage* image;
 @property(nonatomic, copy, readonly) NSString* title;
 @property(nonatomic, copy, readonly) NSString* body;
 @end
@@ -32,18 +36,34 @@ const CGFloat kVerticalMargin = 16;
 
 - (instancetype)initWithPage:(TabGridPage)page {
   if (self = [super initWithFrame:CGRectZero]) {
+    BOOL illustratedEmptyState =
+        base::FeatureList::IsEnabled(kIllustratedEmptyStates);
     switch (page) {
       case TabGridPageIncognitoTabs:
+        if (illustratedEmptyState) {
+          _image = [UIImage imageNamed:@"tab_grid_incognito_tabs_empty"];
+        }
         _title = l10n_util::GetNSString(
-            IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_STATE_TITLE);
+            illustratedEmptyState
+                ? IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_TITLE
+                : IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_STATE_TITLE);
         _body = l10n_util::GetNSString(
-            IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_STATE_BODY);
+            illustratedEmptyState
+                ? IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_MESSAGE
+                : IDS_IOS_TAB_GRID_INCOGNITO_TABS_EMPTY_STATE_BODY);
         break;
       case TabGridPageRegularTabs:
+        if (illustratedEmptyState) {
+          _image = [UIImage imageNamed:@"tab_grid_regular_tabs_empty"];
+        }
         _title = l10n_util::GetNSString(
-            IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_STATE_TITLE);
+            illustratedEmptyState
+                ? IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_TITLE
+                : IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_STATE_TITLE);
         _body = l10n_util::GetNSString(
-            IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_STATE_BODY);
+            illustratedEmptyState
+                ? IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_MESSAGE
+                : IDS_IOS_TAB_GRID_REGULAR_TABS_EMPTY_STATE_BODY);
         break;
       case TabGridPageRemoteTabs:
         // No-op. Empty page.
@@ -70,7 +90,10 @@ const CGFloat kVerticalMargin = 16;
     if (self.subviews.count == 0)
       [self setupViews];
     [self.container.widthAnchor
-        constraintEqualToAnchor:self.safeAreaLayoutGuide.widthAnchor]
+        constraintLessThanOrEqualToAnchor:self.safeAreaLayoutGuide.widthAnchor]
+        .active = YES;
+    [self.container.centerXAnchor
+        constraintEqualToAnchor:self.safeAreaLayoutGuide.centerXAnchor]
         .active = YES;
   }
 }
@@ -99,10 +122,23 @@ const CGFloat kVerticalMargin = 16;
   bottomLabel.translatesAutoresizingMaskIntoConstraints = NO;
   bottomLabel.text = self.body;
   bottomLabel.textColor = UIColorFromRGB(kTabGridEmptyStateBodyTextColor);
-  bottomLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    bottomLabel.font =
+        [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+  } else {
+    bottomLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  }
   bottomLabel.adjustsFontForContentSizeCategory = YES;
   bottomLabel.numberOfLines = 0;
   bottomLabel.textAlignment = NSTextAlignmentCenter;
+
+  UIImageView* imageView = nil;
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    imageView = [[UIImageView alloc] initWithImage:self.image];
+    imageView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [container addSubview:imageView];
+  }
 
   [container addSubview:topLabel];
   [container addSubview:bottomLabel];
@@ -117,14 +153,28 @@ const CGFloat kVerticalMargin = 16;
   scrollViewHeightConstraint.active = YES;
   self.scrollViewHeight = scrollViewHeightConstraint;
 
+  if (base::FeatureList::IsEnabled(kIllustratedEmptyStates)) {
+    [NSLayoutConstraint activateConstraints:@[
+      [imageView.topAnchor constraintEqualToAnchor:container.topAnchor],
+      [imageView.widthAnchor constraintEqualToConstant:kImageWidth],
+      [imageView.heightAnchor constraintEqualToConstant:kImageHeight],
+      [imageView.centerXAnchor constraintEqualToAnchor:container.centerXAnchor],
+    ]];
+  }
+
+  auto anchorForTopLabel = base::FeatureList::IsEnabled(kIllustratedEmptyStates)
+                               ? imageView.bottomAnchor
+                               : container.topAnchor;
+
   [NSLayoutConstraint activateConstraints:@[
-    [topLabel.topAnchor constraintEqualToAnchor:container.topAnchor
+    [topLabel.topAnchor constraintEqualToAnchor:anchorForTopLabel
                                        constant:kVerticalMargin],
     [topLabel.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
     [topLabel.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
     [topLabel.bottomAnchor
         constraintEqualToAnchor:bottomLabel.topAnchor
                        constant:-kTabGridEmptyStateVerticalMargin],
+
     [bottomLabel.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
     [bottomLabel.trailingAnchor
         constraintEqualToAnchor:container.trailingAnchor],
@@ -133,7 +183,6 @@ const CGFloat kVerticalMargin = 16;
 
     [container.topAnchor constraintEqualToAnchor:scrollView.topAnchor],
     [container.bottomAnchor constraintEqualToAnchor:scrollView.bottomAnchor],
-    [container.centerXAnchor constraintEqualToAnchor:scrollView.centerXAnchor],
 
     [scrollView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
     [scrollView.topAnchor constraintGreaterThanOrEqualToAnchor:self.topAnchor],

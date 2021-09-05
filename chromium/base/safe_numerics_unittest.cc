@@ -1609,6 +1609,8 @@ TEST(SafeNumerics, CompoundNumericOperations) {
   EXPECT_EQ(2, d.ValueOrDie());
   d *= d;
   EXPECT_EQ(4, d.ValueOrDie());
+  d *= 0.5;
+  EXPECT_EQ(2, d.ValueOrDie());
 
   CheckedNumeric<int> too_large = std::numeric_limits<int>::max();
   EXPECT_TRUE(too_large.IsValid());
@@ -1658,6 +1660,118 @@ TEST(SafeNumerics, VariadicNumericOperations) {
     auto h = ClampRsh(ClampAdd(1, 1, 1, 1), ClampSub(4U, 2));
     EXPECT_EQ(static_cast<decltype(h)::type>(1), h);
   }
+}
+
+TEST(SafeNumerics, CeilInt) {
+  constexpr float kMax = std::numeric_limits<int>::max();
+  constexpr float kMin = std::numeric_limits<int>::min();
+  constexpr float kInfinity = std::numeric_limits<float>::infinity();
+  constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
+
+  constexpr int kIntMax = std::numeric_limits<int>::max();
+  constexpr int kIntMin = std::numeric_limits<int>::min();
+
+  EXPECT_EQ(kIntMax, ClampCeil(kInfinity));
+  EXPECT_EQ(kIntMax, ClampCeil(kMax));
+  EXPECT_EQ(kIntMax, ClampCeil(kMax + 100.0f));
+  EXPECT_EQ(0, ClampCeil(kNaN));
+
+  EXPECT_EQ(-100, ClampCeil(-100.5f));
+  EXPECT_EQ(0, ClampCeil(0.0f));
+  EXPECT_EQ(101, ClampCeil(100.5f));
+
+  EXPECT_EQ(kIntMin, ClampCeil(-kInfinity));
+  EXPECT_EQ(kIntMin, ClampCeil(kMin));
+  EXPECT_EQ(kIntMin, ClampCeil(kMin - 100.0f));
+  EXPECT_EQ(0, ClampCeil(-kNaN));
+}
+
+TEST(SafeNumerics, FloorInt) {
+  constexpr float kMax = std::numeric_limits<int>::max();
+  constexpr float kMin = std::numeric_limits<int>::min();
+  constexpr float kInfinity = std::numeric_limits<float>::infinity();
+  constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
+
+  constexpr int kIntMax = std::numeric_limits<int>::max();
+  constexpr int kIntMin = std::numeric_limits<int>::min();
+
+  EXPECT_EQ(kIntMax, ClampFloor(kInfinity));
+  EXPECT_EQ(kIntMax, ClampFloor(kMax));
+  EXPECT_EQ(kIntMax, ClampFloor(kMax + 100.0f));
+  EXPECT_EQ(0, ClampFloor(kNaN));
+
+  EXPECT_EQ(-101, ClampFloor(-100.5f));
+  EXPECT_EQ(0, ClampFloor(0.0f));
+  EXPECT_EQ(100, ClampFloor(100.5f));
+
+  EXPECT_EQ(kIntMin, ClampFloor(-kInfinity));
+  EXPECT_EQ(kIntMin, ClampFloor(kMin));
+  EXPECT_EQ(kIntMin, ClampFloor(kMin - 100.0f));
+  EXPECT_EQ(0, ClampFloor(-kNaN));
+}
+
+TEST(SafeNumerics, RoundInt) {
+  constexpr float kMax = std::numeric_limits<int>::max();
+  constexpr float kMin = std::numeric_limits<int>::min();
+  constexpr float kInfinity = std::numeric_limits<float>::infinity();
+  constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
+
+  constexpr int kIntMax = std::numeric_limits<int>::max();
+  constexpr int kIntMin = std::numeric_limits<int>::min();
+
+  EXPECT_EQ(kIntMax, ClampRound(kInfinity));
+  EXPECT_EQ(kIntMax, ClampRound(kMax));
+  EXPECT_EQ(kIntMax, ClampRound(kMax + 100.0f));
+  EXPECT_EQ(0, ClampRound(kNaN));
+
+  EXPECT_EQ(-100, ClampRound(-100.1f));
+  EXPECT_EQ(-101, ClampRound(-100.5f));
+  EXPECT_EQ(-101, ClampRound(-100.9f));
+  EXPECT_EQ(0, ClampRound(0.0f));
+  EXPECT_EQ(100, ClampRound(100.1f));
+  EXPECT_EQ(101, ClampRound(100.5f));
+  EXPECT_EQ(101, ClampRound(100.9f));
+
+  EXPECT_EQ(kIntMin, ClampRound(-kInfinity));
+  EXPECT_EQ(kIntMin, ClampRound(kMin));
+  EXPECT_EQ(kIntMin, ClampRound(kMin - 100.0f));
+  EXPECT_EQ(0, ClampRound(-kNaN));
+}
+
+TEST(SafeNumerics, Int64) {
+  constexpr double kMax = std::numeric_limits<int64_t>::max();
+  constexpr double kMin = std::numeric_limits<int64_t>::min();
+  constexpr double kInfinity = std::numeric_limits<double>::infinity();
+  constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+  constexpr int64_t kInt64Max = std::numeric_limits<int64_t>::max();
+  constexpr int64_t kInt64Min = std::numeric_limits<int64_t>::min();
+
+  EXPECT_EQ(kInt64Max, ClampFloor<int64_t>(kInfinity));
+  EXPECT_EQ(kInt64Max, ClampCeil<int64_t>(kInfinity));
+  EXPECT_EQ(kInt64Max, ClampRound<int64_t>(kInfinity));
+  EXPECT_EQ(kInt64Max, ClampFloor<int64_t>(kMax));
+  EXPECT_EQ(kInt64Max, ClampCeil<int64_t>(kMax));
+  EXPECT_EQ(kInt64Max, ClampRound<int64_t>(kMax));
+  EXPECT_EQ(kInt64Max, ClampFloor<int64_t>(kMax + 100.0));
+  EXPECT_EQ(kInt64Max, ClampCeil<int64_t>(kMax + 100.0));
+  EXPECT_EQ(kInt64Max, ClampRound<int64_t>(kMax + 100.0));
+  EXPECT_EQ(0, ClampFloor<int64_t>(kNaN));
+  EXPECT_EQ(0, ClampCeil<int64_t>(kNaN));
+  EXPECT_EQ(0, ClampRound<int64_t>(kNaN));
+
+  EXPECT_EQ(kInt64Min, ClampFloor<int64_t>(-kInfinity));
+  EXPECT_EQ(kInt64Min, ClampCeil<int64_t>(-kInfinity));
+  EXPECT_EQ(kInt64Min, ClampRound<int64_t>(-kInfinity));
+  EXPECT_EQ(kInt64Min, ClampFloor<int64_t>(kMin));
+  EXPECT_EQ(kInt64Min, ClampCeil<int64_t>(kMin));
+  EXPECT_EQ(kInt64Min, ClampRound<int64_t>(kMin));
+  EXPECT_EQ(kInt64Min, ClampFloor<int64_t>(kMin - 100.0));
+  EXPECT_EQ(kInt64Min, ClampCeil<int64_t>(kMin - 100.0));
+  EXPECT_EQ(kInt64Min, ClampRound<int64_t>(kMin - 100.0));
+  EXPECT_EQ(0, ClampFloor<int64_t>(-kNaN));
+  EXPECT_EQ(0, ClampCeil<int64_t>(-kNaN));
+  EXPECT_EQ(0, ClampRound<int64_t>(-kNaN));
 }
 
 #if defined(__clang__)

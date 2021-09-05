@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
@@ -43,8 +44,8 @@
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/platform/geometry/float_size.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
 
@@ -89,6 +90,15 @@ class StyleEngineTest : public testing::Test {
     auto* sheet = MakeGarbageCollected<StyleSheetContents>(context);
     sheet->ParseString(text);
     GetStyleEngine().InjectSheet(StyleSheetKey(key), sheet, origin);
+  }
+
+  bool IsUseCounted(mojom::WebFeature feature) {
+    return GetDocument().IsUseCounted(feature);
+  }
+
+  void ClearUseCounter(mojom::WebFeature feature) {
+    GetDocument().ClearUseCounterForTesting(feature);
+    DCHECK(!IsUseCounted(feature));
   }
 
  private:
@@ -364,7 +374,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   ASSERT_TRUE(t5);
 
   // There's no @keyframes rule named dummy-animation
-  ASSERT_FALSE(GetStyleEngine().Resolver()->FindKeyframesRule(
+  ASSERT_FALSE(GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation")));
 
   auto* keyframes_parsed_sheet = MakeGarbageCollected<StyleSheetContents>(
@@ -378,7 +388,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   // After injecting the style sheet, a @keyframes rule named dummy-animation
   // is found with one keyframe.
   StyleRuleKeyframes* keyframes =
-      GetStyleEngine().Resolver()->FindKeyframesRule(
+      GetStyleEngine().GetStyleResolver().FindKeyframesRule(
           t5, AtomicString("dummy-animation"));
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(1u, keyframes->Keyframes().size());
@@ -391,7 +401,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
 
   // Author @keyframes rules take precedence; now there are two keyframes (from
   // and to).
-  keyframes = GetStyleEngine().Resolver()->FindKeyframesRule(
+  keyframes = GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation"));
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(2u, keyframes->Keyframes().size());
@@ -399,7 +409,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   GetDocument().body()->RemoveChild(style_element);
   UpdateAllLifecyclePhases();
 
-  keyframes = GetStyleEngine().Resolver()->FindKeyframesRule(
+  keyframes = GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation"));
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(1u, keyframes->Keyframes().size());
@@ -408,7 +418,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   UpdateAllLifecyclePhases();
 
   // Injected @keyframes rules are no longer available once removed.
-  ASSERT_FALSE(GetStyleEngine().Resolver()->FindKeyframesRule(
+  ASSERT_FALSE(GetStyleEngine().GetStyleResolver().FindKeyframesRule(
       t5, AtomicString("dummy-animation")));
 
   // Custom properties
@@ -2167,7 +2177,8 @@ TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
       CSSPropertyID::kColorScheme, "dark");
   UpdateAllLifecyclePhases();
 
-  EXPECT_EQ(Color::kBlack, GetDocument().View()->BaseBackgroundColor());
+  EXPECT_EQ(Color(0x12, 0x12, 0x12),
+            GetDocument().View()->BaseBackgroundColor());
 
   color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
   UpdateAllLifecyclePhases();
@@ -2697,6 +2708,29 @@ TEST_F(StyleEngineTest,
                                     GetCSSPropertyColor()));
 }
 
+TEST_F(StyleEngineTest, SummaryDisplayUseCount) {
+  // Should not be use-counted: wrong element type.
+  GetDocument().body()->setInnerHTML(
+      "<style>div { display: block; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(
+      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
+
+  // Should not be use-counted: wrong display type:
+  GetDocument().body()->setInnerHTML(
+      "<style>summary { display: inline; }</style><summary></summary>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(
+      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
+
+  // Should be use-counted:
+  GetDocument().body()->setInnerHTML(
+      "<style>summary { display: block; }</style><summary></summary>");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(
+      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
+}
+
 TEST_F(StyleEngineTest, RevertUseCount) {
   ScopedCSSRevertForTest scoped_feature(true);
 
@@ -2709,6 +2743,53 @@ TEST_F(StyleEngineTest, RevertUseCount) {
       "<style>div { display: revert; }</style><div></div>");
   UpdateAllLifecyclePhases();
   EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
+}
+
+TEST_F(StyleEngineTest, RevertUseCountForCustomProperties) {
+  ScopedCSSRevertForTest scoped_feature(true);
+
+  GetDocument().body()->setInnerHTML(
+      "<style>div { --x: unset; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
+
+  GetDocument().body()->setInnerHTML(
+      "<style>div { --x: revert; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
+}
+
+TEST_F(StyleEngineTest, NoRevertUseCountForForcedColors) {
+  ScopedForcedColorsForTest scoped_feature(true);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #elem { color: red; }
+    </style>
+    <div id=ref></div>
+    <div id=elem></div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  Element* ref = GetDocument().getElementById("ref");
+  Element* elem = GetDocument().getElementById("elem");
+  ASSERT_TRUE(ref);
+  ASSERT_TRUE(elem);
+
+  // This test assumes that the initial color is not 'red'. Verify that
+  // assumption.
+  ASSERT_NE(ComputedValue(ref, "color")->CssText(),
+            ComputedValue(elem, "color")->CssText());
+
+  EXPECT_EQ("rgb(255, 0, 0)", ComputedValue(elem, "color")->CssText());
+
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetForcedColors(GetDocument(), ForcedColors::kActive);
+  UpdateAllLifecyclePhases();
+  EXPECT_EQ(ComputedValue(ref, "color")->CssText(),
+            ComputedValue(elem, "color")->CssText());
+
+  EXPECT_FALSE(GetDocument().IsUseCounted(WebFeature::kCSSKeywordRevert));
 }
 
 TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
@@ -2848,6 +2929,259 @@ TEST_F(StyleEngineTest, AtPropertyInUserOrigin) {
   ASSERT_TRUE(ComputedValue(GetDocument().body(), "--y"));
   EXPECT_EQ("20px", ComputedValue(GetDocument().body(), "--x")->CssText());
   EXPECT_EQ("30px", ComputedValue(GetDocument().body(), "--y")->CssText());
+}
+
+TEST_F(StyleEngineTest, SystemColorComputeToSelfUseCount) {
+  // Don't count system color use by itself - only in conjunction with
+  // color-scheme.
+  GetDocument().body()->setInnerHTML(
+      "<style>div { color: MenuText; }</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(
+      GetDocument().IsUseCounted(WebFeature::kCSSSystemColorComputeToSelf));
+
+  // Count system color use when used on an element with a different
+  // color-scheme from its parent.
+  GetDocument().body()->setInnerHTML(
+      "<style>"
+      "div { color: MenuText; color-scheme: dark; }"
+      "</style><div></div>");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(
+      GetDocument().IsUseCounted(WebFeature::kCSSSystemColorComputeToSelf));
+}
+
+TEST_F(StyleEngineTest, InvalidVariableUnsetUseCount) {
+  // Do not count for basic variable usage.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: bar; }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count when a fallback handles the unknown variable.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: var(--unknown,bar); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for explicit 'unset'.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: unset; }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count when we anyway end up with the guaranteed-invalid value.
+  // (Applies to registered properties as well).
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --y {
+        syntax: "*";
+        inherits: true;
+      }
+      @property --z {
+        syntax: "*";
+        inherits: false;
+      }
+      #inner {
+        --x: var(--unknown);
+        --y: var(--unknown);
+        --z: var(--unknown);
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count when 'unset' inherits something that not guaranteed-invalid.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #outer { --x: foo; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for non-universal registered custom properties.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "<length>";
+        inherits: true;
+        initial-value: 0px;
+      }
+      #outer { --x: 1px; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count for universal registered custom properties.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "*";
+        inherits: true;
+      }
+      #outer { --x: bar; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for non-inherited universal registered custom properties
+  // without initial value.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "*";
+        inherits: false;
+      }
+      #outer { --x: bar; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count for universal registered custom properties even with an
+  // initial-value defined.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --x {
+        syntax: "*";
+        inherits: true;
+        initial-value: foo;
+      }
+      #outer { --x: bar; }
+      #inner { --x: var(--unknown); }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Do not count for cycles.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @property --a {
+        syntax: "*";
+        inherits: true;
+      }
+      @property --b {
+        syntax: "*";
+        inherits: true;
+      }
+      #outer {
+        --a: foo;
+        --b: foo;
+        --c: foo;
+        --d: foo;
+      }
+      #inner {
+        --a: var(--b);
+        --b: var(--a);
+        --c: var(--d);
+        --d: var(--c);
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Count for @keyframes
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @keyframes anim {
+        from { --x: var(--unknown); }
+        to { --x: var(--unknown); }
+      }
+      #outer {
+        --x: foo;
+      }
+      #inner {
+        animation: anim 10s;
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
+
+  // Don't count for @keyframes if there's nothing to inherit.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @keyframes anim {
+        from { --x: var(--unknown); }
+        to { --x: var(--unknown); }
+      }
+      #inner {
+        animation: anim 10s;
+      }
+    </style>
+    <div id=outer>
+      <div id=inner></div>
+    <div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSInvalidVariableUnset));
+  ClearUseCounter(WebFeature::kCSSInvalidVariableUnset);
 }
 
 class ParameterizedStyleEngineTest

@@ -335,13 +335,14 @@ class MockService : public TestExtensionService {
   }
 
   ExtensionDownloader::Factory GetDownloaderFactory() {
-    return base::Bind(&MockService::CreateExtensionDownloader,
-                      base::Unretained(this));
+    return base::BindRepeating(&MockService::CreateExtensionDownloader,
+                               base::Unretained(this));
   }
 
   ExtensionDownloader::Factory GetAuthenticatedDownloaderFactory() {
-    return base::Bind(&MockService::CreateExtensionDownloaderWithIdentity,
-                      base::Unretained(this));
+    return base::BindRepeating(
+        &MockService::CreateExtensionDownloaderWithIdentity,
+        base::Unretained(this));
   }
 
   void OverrideDownloaderDelegate(ExtensionDownloaderDelegate* delegate) {
@@ -453,7 +454,7 @@ class ServiceForManifestTests : public MockService {
 
   void set_extensions(ExtensionList extensions,
                       ExtensionList disabled_extensions,
-                      ExtensionList blacklisted_extensions = ExtensionList()) {
+                      ExtensionList blocklisted_extensions = ExtensionList()) {
     registry_->ClearAll();
     for (ExtensionList::const_iterator it = extensions.begin();
          it != extensions.end(); ++it) {
@@ -463,9 +464,9 @@ class ServiceForManifestTests : public MockService {
          it != disabled_extensions.end(); ++it) {
       registry_->AddDisabled(*it);
     }
-    for (ExtensionList::const_iterator it = blacklisted_extensions.begin();
-         it != blacklisted_extensions.end(); ++it) {
-      registry_->AddBlacklisted(*it);
+    for (ExtensionList::const_iterator it = blocklisted_extensions.begin();
+         it != blocklisted_extensions.end(); ++it) {
+      registry_->AddBlocklisted(*it);
     }
   }
 
@@ -907,7 +908,7 @@ class ExtensionUpdaterTest : public testing::Test {
     UpdateManifestResults updates;
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    ManifestInvalidErrorList errors;
+    ManifestInvalidFailureDataList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     EXPECT_TRUE(updateable.empty());
@@ -1022,7 +1023,7 @@ class ExtensionUpdaterTest : public testing::Test {
 
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    ManifestInvalidErrorList errors;
+    ManifestInvalidFailureDataList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     EXPECT_THAT(not_updateable, testing::UnorderedElementsAre(id2, id3));
@@ -1030,7 +1031,8 @@ class ExtensionUpdaterTest : public testing::Test {
     for (const auto& id : ids_with_error) {
       auto it = std::find_if(
           errors.begin(), errors.end(),
-          [&](const std::pair<ExtensionId, ManifestInvalidError>& error) {
+          [&](const std::pair<
+              ExtensionId, ExtensionDownloaderDelegate::FailureData>& error) {
             return error.first == id;
           });
       EXPECT_TRUE(it != errors.end());
@@ -1072,7 +1074,7 @@ class ExtensionUpdaterTest : public testing::Test {
 
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    ManifestInvalidErrorList errors;
+    ManifestInvalidFailureDataList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     // All the apps should be updateable.
@@ -1154,7 +1156,7 @@ class ExtensionUpdaterTest : public testing::Test {
 
     std::vector<UpdateManifestResult*> updateable;
     std::set<std::string> not_updateable;
-    ManifestInvalidErrorList errors;
+    ManifestInvalidFailureDataList errors;
     helper.downloader().DetermineUpdates(*fetch_data, updates, &updateable,
                                          &not_updateable, &errors);
     EXPECT_THAT(not_updateable, testing::UnorderedElementsAre(id1, id4));
@@ -1162,7 +1164,8 @@ class ExtensionUpdaterTest : public testing::Test {
     for (const auto& id : ids_with_error) {
       auto it = std::find_if(
           errors.begin(), errors.end(),
-          [&](const std::pair<ExtensionId, ManifestInvalidError>& error) {
+          [&](const std::pair<
+              ExtensionId, ExtensionDownloaderDelegate::FailureData>& error) {
             return error.first == id;
           });
       EXPECT_TRUE(it != errors.end());
@@ -1532,7 +1535,7 @@ class ExtensionUpdaterTest : public testing::Test {
     } else {
       EXPECT_TRUE(updater.downloader_->extension_loader_);
       EXPECT_CALL(delegate,
-                  OnExtensionDownloadFinished(_, _, _, _, requests, _))
+                  OnExtensionDownloadFinished_(_, _, _, _, requests, _))
           .WillOnce(
               DoAll(testing::SaveArg<0>(&crx_file_info),
                     InvokeWithoutArgs(&delegate,
@@ -1930,7 +1933,7 @@ class ExtensionUpdaterTest : public testing::Test {
           *updater.downloader_->extensions_queue_.active_request();
 
       CRXFileInfo crx_file_info;
-      EXPECT_CALL(delegate, OnExtensionDownloadFinished(_, _, _, _, _, _))
+      EXPECT_CALL(delegate, OnExtensionDownloadFinished_(_, _, _, _, _, _))
           .WillOnce(
               DoAll(testing::SaveArg<0>(&crx_file_info),
                     InvokeWithoutArgs(&delegate,
@@ -2577,7 +2580,7 @@ TEST_F(ExtensionUpdaterTest, TestUpdatingDisabledExtensions) {
 }
 
 // crbug.com/1098540: Tests that removely disabled extensions that are part of
-// the blacklisted extensions are still receive updates.
+// the blocklisted extensions are still receive updates.
 TEST_F(ExtensionUpdaterTest, TestUpdatingRemotelyDisabledExtensions) {
   ExtensionDownloaderTestHelper helper;
   ServiceForManifestTests service(prefs_.get(), helper.url_loader_factory());
@@ -2589,23 +2592,23 @@ TEST_F(ExtensionUpdaterTest, TestUpdatingRemotelyDisabledExtensions) {
   OverrideUpdateService(&updater, &update_service);
 
   ExtensionList enabled_extensions;
-  ExtensionList blacklisted_extensions;
+  ExtensionList blocklisted_extensions;
   service.CreateTestExtensions(1, 1, &enabled_extensions, nullptr,
                                Manifest::INTERNAL);
-  service.CreateTestExtensions(2, 1, &blacklisted_extensions, nullptr,
+  service.CreateTestExtensions(2, 1, &blocklisted_extensions, nullptr,
                                Manifest::INTERNAL);
-  service.CreateTestExtensions(3, 1, &blacklisted_extensions, nullptr,
+  service.CreateTestExtensions(3, 1, &blocklisted_extensions, nullptr,
                                Manifest::INTERNAL);
   ASSERT_EQ(1u, enabled_extensions.size());
-  ASSERT_EQ(2u, blacklisted_extensions.size());
+  ASSERT_EQ(2u, blocklisted_extensions.size());
   const std::string& enabled_id = enabled_extensions[0]->id();
-  const std::string& remotely_blacklisted_id = blacklisted_extensions[0]->id();
+  const std::string& remotely_blocklisted_id = blocklisted_extensions[0]->id();
   service.extension_prefs()->AddDisableReason(
-      remotely_blacklisted_id, disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
-  // We expect that both enabled and remotely blacklisted extensions are
+      remotely_blocklisted_id, disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
+  // We expect that both enabled and remotely blocklisted extensions are
   // auto-updated.
   EXPECT_CALL(update_service, CanUpdate(enabled_id)).WillOnce(Return(true));
-  EXPECT_CALL(update_service, CanUpdate(remotely_blacklisted_id))
+  EXPECT_CALL(update_service, CanUpdate(remotely_blocklisted_id))
       .WillOnce(Return(true));
   EXPECT_CALL(update_service,
               StartUpdateCheck(
@@ -2614,7 +2617,7 @@ TEST_F(ExtensionUpdaterTest, TestUpdatingRemotelyDisabledExtensions) {
                   _));
 
   service.set_extensions(enabled_extensions, ExtensionList(),
-                         blacklisted_extensions);
+                         blocklisted_extensions);
   updater.Start();
   updater.CheckNow(ExtensionUpdater::CheckParams());
 }

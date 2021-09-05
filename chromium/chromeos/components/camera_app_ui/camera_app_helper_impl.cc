@@ -27,21 +27,41 @@ mojom::ScreenState ToMojoScreenState(ash::ScreenState s) {
   }
 }
 
+bool HasExternalScreen() {
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
+    if (!display.IsInternal()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 CameraAppHelperImpl::CameraAppHelperImpl(
+    chromeos::CameraAppUI* camera_app_ui,
     CameraResultCallback camera_result_callback,
     aura::Window* window)
-    : camera_result_callback_(std::move(camera_result_callback)) {
+    : camera_app_ui_(camera_app_ui),
+      camera_result_callback_(std::move(camera_result_callback)),
+      has_external_screen_(HasExternalScreen()) {
   DCHECK(window);
   window->SetProperty(ash::kCanConsumeSystemKeysKey, true);
   ash::TabletMode::Get()->AddObserver(this);
   ash::ScreenBacklight::Get()->AddObserver(this);
+  display::Screen::GetScreen()->AddObserver(this);
 }
 
 CameraAppHelperImpl::~CameraAppHelperImpl() {
   ash::TabletMode::Get()->RemoveObserver(this);
   ash::ScreenBacklight::Get()->RemoveObserver(this);
+  display::Screen::GetScreen()->RemoveObserver(this);
+}
+
+void CameraAppHelperImpl::Bind(
+    mojo::PendingReceiver<mojom::CameraAppHelper> receiver) {
+  receiver_.reset();
+  receiver_.Bind(std::move(receiver));
 }
 
 void CameraAppHelperImpl::HandleCameraResult(
@@ -80,6 +100,30 @@ void CameraAppHelperImpl::SetScreenStateMonitor(
   std::move(callback).Run(mojo_state);
 }
 
+void CameraAppHelperImpl::IsMetricsAndCrashReportingEnabled(
+    IsMetricsAndCrashReportingEnabledCallback callback) {
+  DCHECK_NE(camera_app_ui_, nullptr);
+  std::move(callback).Run(
+      camera_app_ui_->delegate()->IsMetricsAndCrashReportingEnabled());
+}
+
+void CameraAppHelperImpl::SetExternalScreenMonitor(
+    mojo::PendingRemote<ExternalScreenMonitor> monitor,
+    SetExternalScreenMonitorCallback callback) {
+  external_screen_monitor_ =
+      mojo::Remote<ExternalScreenMonitor>(std::move(monitor));
+  std::move(callback).Run(has_external_screen_);
+}
+
+void CameraAppHelperImpl::CheckExternalScreenState() {
+  if (has_external_screen_ == HasExternalScreen())
+    return;
+  has_external_screen_ = !has_external_screen_;
+
+  if (external_screen_monitor_.is_bound())
+    external_screen_monitor_->Update(has_external_screen_);
+}
+
 void CameraAppHelperImpl::OnTabletModeStarted() {
   if (tablet_monitor_.is_bound())
     tablet_monitor_->Update(true);
@@ -93,6 +137,15 @@ void CameraAppHelperImpl::OnTabletModeEnded() {
 void CameraAppHelperImpl::OnScreenStateChanged(ash::ScreenState screen_state) {
   if (screen_state_monitor_.is_bound())
     screen_state_monitor_->Update(ToMojoScreenState(screen_state));
+}
+
+void CameraAppHelperImpl::OnDisplayAdded(const display::Display& new_display) {
+  CheckExternalScreenState();
+}
+
+void CameraAppHelperImpl::OnDisplayRemoved(
+    const display::Display& old_display) {
+  CheckExternalScreenState();
 }
 
 }  // namespace chromeos_camera

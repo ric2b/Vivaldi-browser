@@ -8,7 +8,7 @@
 #include "base/task/post_task.h"
 #include "base/version.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/driver/sync_util.h"
+#include "components/sync/base/sync_util.h"
 #include "components/sync/engine_impl/net/url_translator.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -19,7 +19,6 @@
 #include "prefs/vivaldi_gen_prefs.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
-
 #include "sync/vivaldi_sync_auth_manager.h"
 
 namespace vivaldi {
@@ -144,9 +143,9 @@ void VivaldiProfileSyncService::OnEngineInitialized(
     const std::string& birthday,
     const std::string& bag_of_chips,
     bool success) {
-  ProfileSyncService::OnEngineInitialized(
-      initial_types, js_backend, debug_info_listener, birthday, bag_of_chips,
-      success);
+  ProfileSyncService::OnEngineInitialized(initial_types, js_backend,
+                                          debug_info_listener, birthday,
+                                          bag_of_chips, success);
 
   if (!force_local_data_reset_)
     return;
@@ -172,5 +171,17 @@ void VivaldiProfileSyncService::OnClearDataComplete(
     scoped_refptr<net::HttpResponseHeaders> headers) {
   is_clearing_sync_data_ = false;
   NotifyObservers();
+}
+
+std::string VivaldiProfileSyncService::GetEncryptionBootstrapToken() const {
+  return sync_prefs_.GetEncryptionBootstrapToken();
+}
+
+void VivaldiProfileSyncService::SetEncryptionBootstrapToken(
+    const std::string& token) {
+  StopImpl(CLEAR_DATA);
+  GetUserSettings()->SetSyncRequested(true);
+  sync_prefs_.SetEncryptionBootstrapToken(token);
+  startup_controller_->TryStart(/*force_immediate=*/true);
 }
 }  // namespace vivaldi

@@ -8,6 +8,8 @@
 
 #include <utility>
 
+#include "base/macros.h"
+#include "base/no_destructor.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -20,7 +22,6 @@
 #include "net/http/http_util.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
-#include "net/url_request/url_request.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
@@ -91,8 +92,8 @@ net::RedirectInfo CreateRedirectInfo(
       original_request.method, original_request.url,
       original_request.site_for_cookies,
       original_request.update_first_party_url_on_redirect
-          ? net::URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT
-          : net::URLRequest::NEVER_CHANGE_FIRST_PARTY_URL,
+          ? net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT
+          : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL,
       original_request.referrer_policy, original_request.referrer.spec(),
       response_code, new_url, referrer_policy_header,
       false /* insecure_scheme_was_upgraded */, false /* copy_fragment */,
@@ -961,6 +962,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnRequestError(
   factory_->request_handler_->OnErrorOccurred(
       factory_->browser_context_, &info_.value(), true /* started */,
       status.error_code);
+  state_ = state;
 
   // Deletes |this|.
   factory_->RemoveRequest(network_service_request_id_, request_id_);

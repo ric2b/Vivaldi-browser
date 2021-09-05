@@ -12,10 +12,11 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/platform_window/platform_window.h"
-#include "ui/platform_window/platform_window_handler/wm_drag_handler.h"
-#include "ui/platform_window/platform_window_handler/wm_drop_handler.h"
+#include "ui/platform_window/wm/wm_drag_handler.h"
+#include "ui/platform_window/wm/wm_drop_handler.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
@@ -29,6 +30,8 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
  public:
   FakePlatformWindow() { SetWmDragHandler(this, this); }
   ~FakePlatformWindow() override = default;
+
+  void set_modifiers(int modifiers) { modifiers_ = modifiers; }
 
   // ui::PlatformWindow
   void Show(bool inactive) override {}
@@ -63,9 +66,10 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
   void SizeConstraintsChanged() override {}
 
   // ui::WmDragHandler
-  void StartDrag(const OSExchangeData& data,
+  bool StartDrag(const OSExchangeData& data,
                  int operation,
                  gfx::NativeCursor cursor,
+                 bool can_grab_pointer,
                  WmDragHandler::Delegate* delegate) override {
     drag_handler_delegate_ = delegate;
     source_data_ = std::make_unique<OSExchangeData>(data.provider().Clone());
@@ -73,7 +77,14 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
         FROM_HERE,
         base::BindOnce(&FakePlatformWindow::ProcessDrag, base::Unretained(this),
                        std::move(source_data_), operation));
+
+    base::RunLoop run_loop;
+    drag_loop_quit_closure_ = run_loop.QuitClosure();
+    run_loop.Run();
+    return true;
   }
+
+  void CancelDrag() override { std::move(drag_loop_quit_closure_).Run(); }
 
   void OnDragEnter(const gfx::PointF& point,
                    std::unique_ptr<OSExchangeData> data,
@@ -81,7 +92,7 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
     ui::WmDropHandler* drop_handler = ui::GetWmDropHandler(*this);
     if (!drop_handler)
       return;
-    drop_handler->OnDragEnter(point, std::move(data), operation);
+    drop_handler->OnDragEnter(point, std::move(data), operation, modifiers_);
   }
 
   int OnDragMotion(const gfx::PointF& point, int operation) {
@@ -89,14 +100,14 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
     if (!drop_handler)
       return 0;
 
-    return drop_handler->OnDragMotion(point, operation);
+    return drop_handler->OnDragMotion(point, operation, modifiers_);
   }
 
   void OnDragDrop(std::unique_ptr<OSExchangeData> data) {
     ui::WmDropHandler* drop_handler = ui::GetWmDropHandler(*this);
     if (!drop_handler)
       return;
-    drop_handler->OnDragDrop(std::move(data));
+    drop_handler->OnDragDrop(std::move(data), modifiers_);
   }
 
   void OnDragLeave() {
@@ -108,6 +119,7 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
 
   void CloseDrag(uint32_t dnd_action) {
     drag_handler_delegate_->OnDragFinished(dnd_action);
+    std::move(drag_loop_quit_closure_).Run();
   }
 
   void ProcessDrag(std::unique_ptr<OSExchangeData> data, int operation) {
@@ -121,6 +133,8 @@ class FakePlatformWindow : public ui::PlatformWindow, public ui::WmDragHandler {
  private:
   WmDragHandler::Delegate* drag_handler_delegate_ = nullptr;
   std::unique_ptr<ui::OSExchangeData> source_data_;
+  base::OnceClosure drag_loop_quit_closure_;
+  int modifiers_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(FakePlatformWindow);
 };
@@ -136,6 +150,7 @@ class FakeDragDropDelegate : public aura::client::DragDropDelegate {
   int num_updates() const { return num_updates_; }
   int num_exits() const { return num_exits_; }
   int num_drops() const { return num_drops_; }
+  int last_event_flags() const { return last_event_flags_; }
   ui::OSExchangeData* received_data() const { return received_data_.get(); }
 
   void SetOperation(int operation) { destination_operation_ = operation; }
@@ -144,10 +159,12 @@ class FakeDragDropDelegate : public aura::client::DragDropDelegate {
   // aura::client::DragDropDelegate:
   void OnDragEntered(const ui::DropTargetEvent& event) override {
     ++num_enters_;
+    last_event_flags_ = event.flags();
   }
 
   int OnDragUpdated(const ui::DropTargetEvent& event) override {
     ++num_updates_;
+    last_event_flags_ = event.flags();
     return destination_operation_;
   }
 
@@ -157,6 +174,7 @@ class FakeDragDropDelegate : public aura::client::DragDropDelegate {
                     std::unique_ptr<ui::OSExchangeData> data) override {
     ++num_drops_;
     received_data_ = std::move(data);
+    last_event_flags_ = event.flags();
     return destination_operation_;
   }
 
@@ -166,6 +184,7 @@ class FakeDragDropDelegate : public aura::client::DragDropDelegate {
   int num_drops_;
   std::unique_ptr<ui::OSExchangeData> received_data_;
   int destination_operation_;
+  int last_event_flags_ = ui::EF_NONE;
 
   DISALLOW_COPY_AND_ASSIGN(FakeDragDropDelegate);
 };
@@ -176,6 +195,11 @@ class DesktopDragDropClientOzoneTest : public ViewsTestBase {
  public:
   DesktopDragDropClientOzoneTest() = default;
   ~DesktopDragDropClientOzoneTest() override = default;
+
+  void SetModifiers(int modifiers) {
+    DCHECK(platform_window_);
+    platform_window_->set_modifiers(modifiers);
+  }
 
   int StartDragAndDrop(int operation) {
     auto data = std::make_unique<ui::OSExchangeData>();
@@ -189,7 +213,7 @@ class DesktopDragDropClientOzoneTest : public ViewsTestBase {
     return client_->StartDragAndDrop(
         std::move(data), widget_->GetNativeWindow()->GetRootWindow(),
         widget_->GetNativeWindow(), gfx::Point(), operation,
-        ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE);
+        ui::mojom::DragEventSource::kMouse);
   }
 
   // ViewsTestBase:
@@ -254,7 +278,27 @@ TEST_F(DesktopDragDropClientOzoneTest, StartDrag) {
   EXPECT_EQ(1, dragdrop_delegate_->num_enters());
   EXPECT_EQ(1, dragdrop_delegate_->num_updates());
   EXPECT_EQ(1, dragdrop_delegate_->num_drops());
-  EXPECT_EQ(1, dragdrop_delegate_->num_exits());
+  EXPECT_EQ(0, dragdrop_delegate_->num_exits());
+
+  EXPECT_EQ(ui::EF_NONE, dragdrop_delegate_->last_event_flags());
+}
+
+TEST_F(DesktopDragDropClientOzoneTest, StartDragCtrlPressed) {
+  SetModifiers(ui::EF_CONTROL_DOWN);
+  // Set the operation which the destination can accept.
+  dragdrop_delegate_->SetOperation(ui::DragDropTypes::DRAG_COPY);
+  // Start Drag and Drop with the operations suggested.
+  int operation = StartDragAndDrop(ui::DragDropTypes::DRAG_COPY |
+                                   ui::DragDropTypes::DRAG_MOVE);
+  // The |operation| decided through negotiation should be 'DRAG_COPY'.
+  EXPECT_EQ(ui::DragDropTypes::DRAG_COPY, operation);
+
+  EXPECT_EQ(1, dragdrop_delegate_->num_enters());
+  EXPECT_EQ(1, dragdrop_delegate_->num_updates());
+  EXPECT_EQ(1, dragdrop_delegate_->num_drops());
+  EXPECT_EQ(0, dragdrop_delegate_->num_exits());
+
+  EXPECT_EQ(ui::EF_CONTROL_DOWN, dragdrop_delegate_->last_event_flags());
 }
 
 TEST_F(DesktopDragDropClientOzoneTest, ReceiveDrag) {
@@ -290,7 +334,7 @@ TEST_F(DesktopDragDropClientOzoneTest, ReceiveDrag) {
   EXPECT_EQ(1, dragdrop_delegate_->num_enters());
   EXPECT_EQ(1, dragdrop_delegate_->num_updates());
   EXPECT_EQ(1, dragdrop_delegate_->num_drops());
-  EXPECT_EQ(1, dragdrop_delegate_->num_exits());
+  EXPECT_EQ(0, dragdrop_delegate_->num_exits());
 }
 
 TEST_F(DesktopDragDropClientOzoneTest, TargetDestroyedDuringDrag) {

@@ -9,14 +9,13 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink.h"
-#include "third_party/blink/public/platform/web_media_stream_source.h"
-#include "third_party/blink/public/platform/web_media_stream_track.h"
+#include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_audio.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_video_content.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_video_device.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -260,7 +259,7 @@ blink::VideoCaptureSettings ApplyConstraintsProcessor::SelectVideoSettings(
   // values. However, initialize |settings| with the default values as a
   // fallback in case GetSettings returns nothing and leaves |settings|
   // unmodified.
-  blink::WebMediaStreamTrack::Settings settings;
+  MediaStreamTrackPlatform::Settings settings;
   settings.width = blink::MediaStreamVideoSource::kDefaultWidth;
   settings.height = blink::MediaStreamVideoSource::kDefaultHeight;
   settings.frame_rate = blink::MediaStreamVideoSource::kDefaultFrameRate;
@@ -283,8 +282,8 @@ ApplyConstraintsProcessor::GetCurrentAudioSource() {
 blink::MediaStreamVideoTrack*
 ApplyConstraintsProcessor::GetCurrentVideoTrack() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  blink::MediaStreamVideoTrack* track =
-      blink::MediaStreamVideoTrack::GetVideoTrack(current_request_->Track());
+  MediaStreamVideoTrack* track = MediaStreamVideoTrack::GetVideoTrack(
+      WebMediaStreamTrack(current_request_->Track()));
   DCHECK(track);
   return track;
 }

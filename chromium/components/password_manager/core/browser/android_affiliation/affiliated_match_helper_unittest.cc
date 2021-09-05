@@ -17,8 +17,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/test/task_environment.h"
-#include "components/password_manager/core/browser/android_affiliation/affiliation_service.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#include "components/password_manager/core/browser/android_affiliation/android_affiliation_service.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -27,11 +27,13 @@ namespace password_manager {
 
 namespace {
 
-using StrategyOnCacheMiss = AffiliationService::StrategyOnCacheMiss;
+using StrategyOnCacheMiss = AndroidAffiliationService::StrategyOnCacheMiss;
 
-class MockAffiliationService : public testing::StrictMock<AffiliationService> {
+class MockAffiliationService
+    : public testing::StrictMock<AndroidAffiliationService> {
  public:
-  MockAffiliationService() : testing::StrictMock<AffiliationService>(nullptr) {
+  MockAffiliationService()
+      : testing::StrictMock<AndroidAffiliationService>(nullptr) {
     testing::DefaultValue<AffiliatedFacets>::Set(AffiliatedFacets());
   }
 
@@ -158,7 +160,7 @@ autofill::PasswordForm GetTestAndroidCredentials(const char* signon_realm) {
 autofill::PasswordForm GetTestBlacklistedAndroidCredentials(
     const char* signon_realm) {
   autofill::PasswordForm form = GetTestAndroidCredentials(signon_realm);
-  form.blacklisted_by_user = true;
+  form.blocked_by_user = true;
   return form;
 }
 

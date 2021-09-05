@@ -557,22 +557,22 @@ attribute TrustedString str;
 void func(TrustedString str);
 ```
 
-### [Unforgeable] _(m,a)_
+### [LegacyUnforgeable] _(m,a)_
 
-Standard: [Unforgeable](http://heycam.github.io/webidl/#Unforgeable)
+Standard: [LegacyUnforgeable](https://heycam.github.io/webidl/#Unforgeable)
 
 Summary: Makes interface members unconfigurable and also controls where the member is defined.
 
 Usage: Can be specified on interface methods or non-static interface attributes:
 
 ```webidl
-[Unforgeable] void func();
-[Unforgeable] attribute DOMString str;
+[LegacyUnforgeable] void func();
+[LegacyUnforgeable] attribute DOMString str;
 ```
 
-By default, interface members are configurable (i.e. you can modify a property descriptor corresponding to the member and also you can delete the property). `[Unforgeable]` makes the member unconfiguable so that you cannot modify or delete the property corresponding to the member.
+By default, interface members are configurable (i.e. you can modify a property descriptor corresponding to the member and also you can delete the property). `[LegacyUnforgeable]` makes the member unconfiguable so that you cannot modify or delete the property corresponding to the member.
 
-`[Unforgeable]` changes where the member is defined, too. By default, attribute getters/setters and methods are defined on a prototype chain. `[Unforgeable]` defines the member on the instance object instead of the prototype object.
+`[LegacyUnforgeable]` changes where the member is defined, too. By default, attribute getters/setters and methods are defined on a prototype chain. `[LegacyUnforgeable]` defines the member on the instance object instead of the prototype object.
 
 ### [Unscopable] _(o, a)_
 
@@ -649,6 +649,28 @@ Summary: `[CallWith]` indicates that the bindings code calls the Blink implement
 Each value changes the signature of the Blink methods by adding an additional parameter to the head of the parameter list, such as `ScriptState*` for `[CallWith=ScriptState]`.
 
 `[GetterCallWith]` and `[SetterCallWith]` apply to attributes, and only affects the signature of the getter and setter, respectively.
+
+NOTE: The `ExecutionContext` that you can get with [CallWith=ExecutionContext] or that you can extract from [CallWith=ScriptState] is the ExecutionContext associated with the V8 wrapper of the receiver object, which might be different from the ExecutionContext of the document tree to which the receiver object belongs.  See the following example.
+
+```js
+// V8 wrapper of |span| is associated with |windowA|.
+span = windowA.document.createElement("span");
+// |span| belongs to the document tree of |windowB|.
+windowB.document.body.appendChild(span);
+```
+
+```c++
+// Suppose [CallWith=ExecutionContext] void foo();
+void HTMLSpanElement::foo(ExecutionContext* execution_context) {
+  // The ExecutionContext associated with the creation context of the V8 wrapper
+  // of the receiver object.
+  execution_context;  // the ExecutionContext of |windowA|
+
+  // Node::GetExecutionContext() returns the ExecutionContext of the document
+  // tree to which |this| (the receiver object) belongs.
+  GetExecutionContext();  // the ExecutionContext of |windowB|
+}
+```
 
 #### [CallWith=ScriptState] _(m, a*)_
 
@@ -968,7 +990,7 @@ This attribute must be accompanied by either `[Measure]` or `[MeasureAs]`.
 [HighEntropy, Measure] const INTERESTING_CONSTANT = 1;
 ```
 
-Attributes labeled with `[HighEntropy=Direct]` are simple surfaces which can be expressed as a sequence of bytes without any need for additional parsing logic.
+Attributes and methods labeled with `[HighEntropy=Direct]` are simple surfaces which can be expressed as a sequence of bytes without any need for additional parsing logic.
 For now, this label is only supported for attribute getters, although the `[HighEntropy]` label is supported more broadly.
 
 ```webidl

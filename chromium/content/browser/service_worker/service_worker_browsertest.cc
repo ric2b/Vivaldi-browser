@@ -393,6 +393,7 @@ class ConsoleMessageContextObserver
 
   // ServiceWorkerContextCoreObserver overrides.
   void OnReportConsoleMessage(int64_t version_id,
+                              const GURL& scope,
                               const ConsoleMessage& console_message) override {
     messages_.push_back(console_message.message);
     if (messages_.size() == expected_message_count_) {
@@ -552,7 +553,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, FetchPageWithSaveData) {
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
       SetBrowserClientForTesting(&content_browser_client);
-  shell()->web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
+  shell()->web_contents()->OnWebPreferencesChanged();
   auto observer = base::MakeRefCounted<WorkerStateObserver>(
       wrapper(), ServiceWorkerVersion::ACTIVATED);
   observer->Init();
@@ -597,7 +598,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, CrossOriginFetchWithSaveData) {
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
       SetBrowserClientForTesting(&content_browser_client);
-  shell()->web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
+  shell()->web_contents()->OnWebPreferencesChanged();
   auto observer = base::MakeRefCounted<WorkerStateObserver>(
       wrapper(), ServiceWorkerVersion::ACTIVATED);
   observer->Init();
@@ -638,7 +639,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
       SetBrowserClientForTesting(&content_browser_client);
-  shell()->web_contents()->GetRenderViewHost()->OnWebkitPreferencesChanged();
+  shell()->web_contents()->OnWebPreferencesChanged();
   auto observer = base::MakeRefCounted<WorkerStateObserver>(
       wrapper(), ServiceWorkerVersion::ACTIVATED);
   observer->Init();
@@ -937,6 +938,31 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, GetRunningServiceWorkerInfos) {
             running_info.script_url);
   EXPECT_EQ(shell()->web_contents()->GetMainFrame()->GetProcess()->GetID(),
             running_info.render_process_id);
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, StartWorkerWhileInstalling) {
+  StartServerAndNavigateToSetup();
+  const char kWorkerUrl[] = "/service_worker/while_true_in_install_worker.js";
+  auto observer = base::MakeRefCounted<WorkerStateObserver>(
+      wrapper(), ServiceWorkerVersion::INSTALLING);
+  observer->Init();
+  blink::mojom::ServiceWorkerRegistrationOptions options(
+      embedded_test_server()->GetURL(kWorkerUrl),
+      blink::mojom::ScriptType::kClassic,
+      blink::mojom::ServiceWorkerUpdateViaCache::kImports);
+  public_context()->RegisterServiceWorker(
+      embedded_test_server()->GetURL(kWorkerUrl), options,
+      base::BindOnce(&ExpectResultAndRun, true, base::DoNothing()));
+  observer->Wait();
+
+  base::RunLoop run_loop;
+  wrapper()->StartActiveServiceWorker(
+      embedded_test_server()->GetURL(kWorkerUrl),
+      base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
+        EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorNotFound);
+        run_loop.Quit();
+      }));
+  run_loop.Run();
 }
 
 // Make sure that a fetch event is dispatched to a stopped worker in the task

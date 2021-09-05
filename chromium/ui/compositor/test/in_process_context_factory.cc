@@ -47,7 +47,7 @@
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 #include "ui/accelerated_widget_mac/ca_transaction_observer.h"
 #endif
 
@@ -83,7 +83,6 @@ class DirectOutputSurface : public viz::OutputSurface {
   void BindFramebuffer() override {
     context_provider()->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER, 0);
   }
-  void SetDrawRectangle(const gfx::Rect& rect) override {}
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
@@ -194,6 +193,10 @@ class InProcessContextFactory::PerCompositorData
       const std::vector<float>& refresh_rates) override {}
 #endif
 
+  void SetDelegatedInkPointRenderer(
+      mojo::PendingReceiver<viz::mojom::DelegatedInkPointRenderer> receiver)
+      override {}
+
   void SetSurfaceHandle(gpu::SurfaceHandle surface_handle) {
     surface_handle_ = surface_handle;
   }
@@ -259,7 +262,7 @@ InProcessContextFactory::InProcessContextFactory(
       << "gl::GLSurfaceTestSupport::InitializeOneOff()";
   if (use_skia_renderer)
     renderer_settings_.use_skia_renderer = true;
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   renderer_settings_.release_overlay_resources_after_gpu_query = true;
   // Ensure that tests don't wait for frames that will never come.
   ui::CATransactionCoordinator::Get().DisableForTesting();
@@ -326,7 +329,7 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
         std::make_unique<viz::SkiaOutputSurfaceDependencyImpl>(
             viz::TestGpuServiceHolder::GetInstance()->gpu_service(),
             gpu::kNullSurfaceHandle),
-        renderer_settings_);
+        renderer_settings_, &debug_settings_);
   } else if (use_test_surface_) {
     gfx::SurfaceOrigin surface_origin = gfx::SurfaceOrigin::kBottomLeft;
     display_output_surface = std::make_unique<cc::PixelTestOutputSurface>(
@@ -358,9 +361,10 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
       display_output_surface->capabilities().max_frames_pending);
 
   data->SetDisplay(std::make_unique<viz::Display>(
-      &shared_bitmap_manager_, renderer_settings_, compositor->frame_sink_id(),
-      std::move(display_output_surface), std::move(overlay_processor),
-      std::move(scheduler), compositor->task_runner()));
+      &shared_bitmap_manager_, renderer_settings_, &debug_settings_,
+      compositor->frame_sink_id(), std::move(display_output_surface),
+      std::move(overlay_processor), std::move(scheduler),
+      compositor->task_runner()));
   frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source.get(),
                                                 compositor->frame_sink_id());
   // Note that we are careful not to destroy a prior |data->begin_frame_source|

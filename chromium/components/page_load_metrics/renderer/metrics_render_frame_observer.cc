@@ -173,7 +173,7 @@ void MetricsRenderFrameObserver::DidStartResponse(
     int request_id,
     const network::mojom::URLResponseHead& response_head,
     network::mojom::RequestDestination request_destination,
-    content::PreviewsState previews_state) {
+    blink::PreviewsState previews_state) {
   if (provisional_frame_resource_data_use_ &&
       blink::IsRequestDestinationFrame(request_destination)) {
     // TODO(rajendrant): This frame request might start before the provisional
@@ -247,7 +247,7 @@ void MetricsRenderFrameObserver::DidLoadResourceFromMemoryCache(
   }
 }
 
-void MetricsRenderFrameObserver::FrameDetached() {
+void MetricsRenderFrameObserver::WillDetach() {
   if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->SendLatest();
     page_timing_metrics_sender_.reset();
@@ -352,11 +352,11 @@ void MetricsRenderFrameObserver::OnAdResourceObserved(int request_id) {
   ad_request_ids_.insert(request_id);
 }
 
-void MetricsRenderFrameObserver::OnMainFrameDocumentIntersectionChanged(
-    const blink::WebRect& main_frame_document_intersection) {
+void MetricsRenderFrameObserver::OnMainFrameIntersectionChanged(
+    const blink::WebRect& main_frame_intersection) {
   if (page_timing_metrics_sender_)
-    page_timing_metrics_sender_->OnMainFrameDocumentIntersectionChanged(
-        main_frame_document_intersection);
+    page_timing_metrics_sender_->OnMainFrameIntersectionChanged(
+        main_frame_intersection);
 }
 
 void MetricsRenderFrameObserver::OnThroughputDataAvailable(
@@ -521,7 +521,7 @@ MetricsRenderFrameObserver::Timing MetricsRenderFrameObserver::GetTiming()
       if (first_input_delay.has_value()) {
         back_forward_cache_timing
             ->first_input_delay_after_back_forward_cache_restore =
-            ClampDelta(first_input_delay->InSecondsF(), navigation_start);
+            first_input_delay;
       }
       timing->back_forward_cache_timings.push_back(
           std::move(back_forward_cache_timing));

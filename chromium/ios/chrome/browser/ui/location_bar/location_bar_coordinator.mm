@@ -9,7 +9,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/google/core/common/google_util.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/search_engines/util.h"
@@ -65,14 +64,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-// The histogram recording CLAuthorizationStatus for omnibox queries.
-const char* const kOmniboxQueryLocationAuthorizationStatusHistogram =
-    "Omnibox.QueryIosLocationAuthorizationStatus";
-// The number of possible CLAuthorizationStatus values to report.
-const int kLocationAuthorizationStatusCount = 5;
-}  // namespace
 
 @interface LocationBarCoordinator () <LoadQueryCommands,
                                       LocationBarDelegate,
@@ -271,6 +262,10 @@ const int kLocationAuthorizationStatusCount = 5;
   return self.omniboxCoordinator.animatee;
 }
 
+- (UIResponder<UITextInput>*)omniboxScribbleForwardingTarget {
+  return self.omniboxCoordinator.scribbleInput;
+}
+
 #pragma mark - LoadQueryCommands
 
 - (void)loadQuery:(NSString*)query immediately:(BOOL)immediately {
@@ -314,13 +309,6 @@ const int kLocationAuthorizationStatusCount = 5;
     UrlLoadParams params = UrlLoadParams::InCurrentTab(web_params);
     params.disposition = disposition;
     UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
-
-    if (google_util::IsGoogleSearchUrl(url)) {
-      UMA_HISTOGRAM_ENUMERATION(
-          kOmniboxQueryLocationAuthorizationStatusHistogram,
-          [CLLocationManager authorizationStatus],
-          kLocationAuthorizationStatusCount);
-    }
   }
   [self cancelOmniboxEdit];
 }
@@ -342,7 +330,11 @@ const int kLocationAuthorizationStatusCount = 5;
     }
   }
   // Dismiss the edit menu.
-  [[UIMenuController sharedMenuController] setMenuVisible:NO animated:NO];
+  if (@available(iOS 13, *)) {
+    [[UIMenuController sharedMenuController] hideMenu];
+  } else {
+    [[UIMenuController sharedMenuController] setMenuVisible:NO animated:NO];
+  }
 
   // When the NTP and fakebox are visible, make the fakebox animates into place
   // before focusing the omnibox.
@@ -383,6 +375,10 @@ const int kLocationAuthorizationStatusCount = 5;
 
 - (LocationBarModel*)locationBarModel {
   return [self.delegate locationBarModel];
+}
+
+- (void)locationBarRequestScribbleTargetFocus {
+  [self.omniboxCoordinator focusOmniboxForScribble];
 }
 
 #pragma mark - LocationBarViewControllerDelegate

@@ -19,7 +19,6 @@
 #include "ui/views/controls/button/button_controller_delegate.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/painter.h"
-#include "ui/views/widget/widget_observer.h"
 
 namespace views {
 namespace test {
@@ -28,7 +27,6 @@ class ButtonTestApi;
 
 class Button;
 class ButtonController;
-class ButtonObserver;
 class Event;
 
 // An interface implemented by an object to let it know that a button was
@@ -107,19 +105,18 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   int tag() const { return tag_; }
   void set_tag(int tag) { tag_ = tag; }
 
+  void set_listener(ButtonListener* listener) { listener_ = listener; }
+
   void SetAccessibleName(const base::string16& name);
   const base::string16& GetAccessibleName() const;
 
   // Get/sets the current display state of the button.
-  ButtonState state() const { return state_; }
+  ButtonState GetState() const;
   // Clients passing in STATE_DISABLED should consider calling
   // SetEnabled(false) instead because the enabled flag can affect other things
   // like event dispatching, focus traversals, etc. Calling SetEnabled(false)
   // will also set the state of |this| to STATE_DISABLED.
   void SetState(ButtonState state);
-  // Returns the visual appearance state of the button. This takes into account
-  // both the button's display state and the state of the containing widget.
-  ButtonState GetVisualState() const;
 
   // Starts throbbing. See HoverAnimation for a description of cycles_til_stop.
   // This method does nothing if |animate_on_state_change_| is false.
@@ -141,7 +138,7 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   void set_request_focus_on_press(bool value) {
 // On Mac, buttons should not request focus on a mouse press. Hence keep the
 // default value i.e. false.
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
     request_focus_on_press_ = value;
 #endif
   }
@@ -180,8 +177,8 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   // Highlights the ink drop for the button.
   void SetHighlighted(bool bubble_visible);
 
-  void AddButtonObserver(ButtonObserver* observer);
-  void RemoveButtonObserver(ButtonObserver* observer);
+  PropertyChangedSubscription AddStateChangedCallback(
+      PropertyChangedCallback callback);
 
   // Overridden from View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -209,8 +206,6 @@ class VIEWS_EXPORT Button : public InkDropHostView,
       const ViewHierarchyChangedDetails& details) override;
   void OnFocus() override;
   void OnBlur() override;
-  void AddedToWidget() override;
-  void RemovedFromWidget() override;
 
   // Overridden from InkDropHostView:
   std::unique_ptr<InkDrop> CreateInkDrop() override;
@@ -237,7 +232,7 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   // Construct the Button with a Listener. The listener can be null. This can be
   // true of buttons that don't have a listener - e.g. menubuttons where there's
   // no default action and checkboxes.
-  explicit Button(ButtonListener* listener);
+  explicit Button(ButtonListener* listener = nullptr);
 
   // Called when the button has been clicked or tapped and should request focus
   // if necessary.
@@ -301,30 +296,7 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   friend class test::ButtonTestApi;
   FRIEND_TEST_ALL_PREFIXES(BlueButtonTest, Border);
 
-  // Bridge class to allow Button to observe a Widget without being a
-  // WidgetObserver. This is desirable because many Button subclasses are
-  // themselves WidgetObservers, and if Button is a WidgetObserver, any change
-  // to its WidgetObserver overrides requires updating all the subclasses as
-  // well.
-  class WidgetObserverButtonBridge : public WidgetObserver {
-   public:
-    explicit WidgetObserverButtonBridge(Button* owner);
-    ~WidgetObserverButtonBridge() override;
-
-    // WidgetObserver:
-    void OnWidgetPaintAsActiveChanged(Widget* widget,
-                                      bool paint_as_active) override;
-    void OnWidgetDestroying(Widget* widget) override;
-
-   private:
-    Button* owner_;
-
-    DISALLOW_COPY_AND_ASSIGN(WidgetObserverButtonBridge);
-  };
-
   void OnEnabledChanged();
-
-  void WidgetPaintAsActiveChanged(Widget* widget, bool active);
 
   // The text shown in a tooltip.
   base::string16 tooltip_text_;
@@ -372,8 +344,6 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
   std::unique_ptr<Painter> focus_painter_;
 
-  std::unique_ptr<WidgetObserverButtonBridge> widget_observer_;
-
   // ButtonController is responsible for handling events sent to the Button and
   // related state changes from the events.
   // TODO(cyan): Make sure all state changes are handled within
@@ -383,8 +353,6 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   PropertyChangedSubscription enabled_changed_subscription_{
       AddEnabledChangedCallback(base::BindRepeating(&Button::OnEnabledChanged,
                                                     base::Unretained(this)))};
-
-  base::ObserverList<ButtonObserver> button_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(Button);
 };

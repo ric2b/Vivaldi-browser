@@ -76,7 +76,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   using GetUserDataForAllRegistrationsCallback =
       ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback;
   using GetInstalledRegistrationOriginsCallback =
-      base::OnceCallback<void(const std::set<url::Origin>& origins)>;
+      base::OnceCallback<void(const std::vector<url::Origin>& origins)>;
   using GetStorageUsageForOriginCallback =
       ServiceWorkerRegistry::GetStorageUsageForOriginCallback;
 
@@ -127,7 +127,12 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void OnRegistrationStored(int64_t registration_id,
                             const GURL& scope) override;
   void OnAllRegistrationsDeletedForOrigin(const url::Origin& origin) override;
+  void OnErrorReported(
+      int64_t version_id,
+      const GURL& scope,
+      const ServiceWorkerContextObserver::ErrorInfo& info) override;
   void OnReportConsoleMessage(int64_t version_id,
+                              const GURL& scope,
                               const ConsoleMessage& message) override;
   void OnControlleeAdded(int64_t version_id,
                          const std::string& uuid,
@@ -142,7 +147,8 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   void OnStarted(int64_t version_id,
                  const GURL& scope,
                  int process_id,
-                 const GURL& script_url) override;
+                 const GURL& script_url,
+                 const blink::ServiceWorkerToken& token) override;
   void OnStopped(int64_t version_id) override;
   void OnDeleteAndStartOver() override;
   void OnVersionStateChanged(int64_t version_id,
@@ -168,11 +174,12 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const GURL& url,
       CountExternalRequestsCallback callback) override;
   bool MaybeHasRegistrationForOrigin(const url::Origin& origin) override;
-  void WaitForRegistrationsInitializedForTest() override;
-  void AddRegistrationToRegisteredOriginsForTest(
-      const url::Origin& origin) override;
+  void GetInstalledRegistrationOrigins(
+      base::Optional<std::string> host_filter,
+      GetInstalledRegistrationOriginsCallback callback) override;
   void GetAllOriginsInfo(GetUsageInfoCallback callback) override;
-  void DeleteForOrigin(const GURL& origin, ResultCallback callback) override;
+  void DeleteForOrigin(const url::Origin& origin,
+                       ResultCallback callback) override;
   void PerformStorageCleanup(base::OnceClosure callback) override;
   void CheckHasServiceWorker(const GURL& url,
                              CheckHasServiceWorkerCallback callback) override;
@@ -312,16 +319,6 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       const std::string& key_prefix,
       StatusCallback callback);
 
-  // Returns a set of origins which have at least one stored registration.
-  // The set doesn't include installing/uninstalling/uninstalled registrations.
-  // When |host_filter| is specified the set only includes origins whose host
-  // matches |host_filter|.
-  // This function can be called from any thread and the callback is called on
-  // that thread.
-  void GetInstalledRegistrationOrigins(
-      base::Optional<std::string> host_filter,
-      GetInstalledRegistrationOriginsCallback callback);
-
   // Returns total resource size stored in the storage for |origin|.
   // This can be called from any thread and the callback is called on that
   // thread.
@@ -338,7 +335,11 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
 
   // This function can be called from any thread, but the callback will always
   // be called on the UI thread.
-  void StartServiceWorker(const GURL& scope, StatusCallback callback);
+  // Fails with kErrorNotFound if there is no active registration for the given
+  // scope. It means that there is no registration at all or that the
+  // registration doesn't have an active version yet (which is the case for
+  // installing service workers).
+  void StartActiveServiceWorker(const GURL& scope, StatusCallback callback);
 
   // These methods can be called from any thread.
   void SkipWaitingWorker(const GURL& scope);
@@ -355,6 +356,12 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // Can be null before/during init, during/after shutdown, and after
   // DeleteAndStartOver fails.
   ServiceWorkerContextCore* context();
+
+  // This method waits for service worker registrations to be initialized on the
+  // UI thread, and depends on |on_registrations_initialized_| and
+  // |registrations_initialized_| which are called in
+  // InitializeRegisteredOriginsOnUI().
+  void WaitForRegistrationsInitializedForTest();
 
   // This must be called on the core thread, and the |callback| also runs on
   // the core thread which can be called with nullptr on failure.
@@ -487,14 +494,14 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
   // These methods are used as a callback for GetRegisteredOrigins when
   // initialising on the core thread, so registered origins can be tracked
   // on the UI thread as well.
-  void DidGetRegisteredOrigins(std::vector<url::Origin> origins);
-  void InitializeRegisteredOriginsOnUI(std::vector<url::Origin> origins);
+  void DidGetRegisteredOrigins(const std::vector<url::Origin>& origins);
+  void InitializeRegisteredOriginsOnUI(const std::vector<url::Origin>& origins);
 
   static void DidGetRegisteredOriginsForGetInstalledRegistrationOrigins(
       base::Optional<std::string> host_filter,
       GetInstalledRegistrationOriginsCallback callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_callback,
-      std::vector<url::Origin> origins);
+      const std::vector<url::Origin>& origins);
 
   // Temporary for crbug.com/824858.
   void GetAllOriginsInfoOnCoreThread(
@@ -518,7 +525,7 @@ class CONTENT_EXPORT ServiceWorkerContextWrapper
       FindRegistrationCallback callback,
       scoped_refptr<base::TaskRunner> callback_runner);
   void DeleteForOriginOnCoreThread(
-      const GURL& origin,
+      const url::Origin& origin,
       ResultCallback callback,
       scoped_refptr<base::TaskRunner> callback_runner);
   void FindRegistrationForScopeOnCoreThread(

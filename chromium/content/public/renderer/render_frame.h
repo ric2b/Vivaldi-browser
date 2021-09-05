@@ -13,13 +13,14 @@
 #include "base/callback_forward.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
+#include "base/supports_user_data.h"
 #include "content/common/content_export.h"
-#include "content/public/common/previews_state.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -88,7 +89,8 @@ class AXTreeSnapshotter {
 // navigation. It provides communication with a corresponding RenderFrameHost
 // in the browser process.
 class CONTENT_EXPORT RenderFrame : public IPC::Listener,
-                                   public IPC::Sender {
+                                   public IPC::Sender,
+                                   public base::SupportsUserData {
  public:
   // These numeric values are used in UMA logs; do not change them.
   enum PeripheralContentStatus {
@@ -262,7 +264,7 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
 
   // Returns the PreviewsState of this frame, a bitmask of potentially several
   // Previews optimizations.
-  virtual PreviewsState GetPreviewsState() = 0;
+  virtual blink::PreviewsState GetPreviewsState() = 0;
 
   // Whether or not this frame is currently pasting.
   virtual bool IsPasting() = 0;

@@ -103,6 +103,8 @@ fdio_spawn_action_t FdioSpawnActionSetName(const char* name) {
 uint32_t LaunchOptions::AddHandleToTransfer(
     HandlesToTransferVector* handles_to_transfer,
     zx_handle_t handle) {
+  CHECK_LE(handles_to_transfer->size(), std::numeric_limits<uint16_t>::max())
+      << "Number of handles to transfer exceeds total allowed";
   uint32_t handle_id = PA_HND(PA_USER1, handles_to_transfer->size());
   handles_to_transfer->push_back({handle_id, handle});
   return handle_id;
@@ -151,7 +153,8 @@ Process LaunchProcess(const std::vector<std::string>& argv,
   // |clear_environment|, |environment| or |current_directory| are set then we
   // construct a new (possibly empty) environment, otherwise we let fdio_spawn()
   // clone the caller's environment into the new process.
-  uint32_t spawn_flags = FDIO_SPAWN_DEFAULT_LDSVC | options.spawn_flags;
+  uint32_t spawn_flags = FDIO_SPAWN_DEFAULT_LDSVC | FDIO_SPAWN_CLONE_UTC_CLOCK |
+                         options.spawn_flags;
 
   EnvironmentMap environ_modifications = options.environment;
   if (!options.current_directory.empty()) {

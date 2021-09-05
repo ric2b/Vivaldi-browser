@@ -15,20 +15,21 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/push_messaging_service.h"
 #include "content/public/browser/resource_context.h"
-#include "content/shell/browser/web_test/mock_client_hints_controller_delegate.h"
+#include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/web_test/web_test_background_fetch_delegate.h"
-#include "content/shell/browser/web_test/web_test_content_index_provider.h"
 #include "content/shell/browser/web_test/web_test_download_manager_delegate.h"
 #include "content/shell/browser/web_test/web_test_permission_manager.h"
 #include "content/shell/browser/web_test/web_test_push_messaging_service.h"
+#include "content/shell/browser/web_test/web_test_storage_access_manager.h"
 #include "content/test/mock_background_sync_controller.h"
+#include "content/test/mock_client_hints_controller_delegate.h"
 #include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
 
 #if defined(OS_WIN)
 #include "base/base_paths_win.h"
 #elif defined(OS_LINUX)
 #include "base/nix/xdg_util.h"
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 #include "base/base_paths_mac.h"
 #include "base/mac/foundation_util.h"
 #endif
@@ -92,17 +93,19 @@ WebTestPermissionManager* WebTestBrowserContext::GetWebTestPermissionManager() {
       GetPermissionControllerDelegate());
 }
 
-ContentIndexProvider* WebTestBrowserContext::GetContentIndexProvider() {
-  if (!content_index_provider_)
-    content_index_provider_ = std::make_unique<WebTestContentIndexProvider>();
-  return content_index_provider_.get();
+WebTestStorageAccessManager*
+WebTestBrowserContext::GetWebTestStorageAccessManager() {
+  if (!storage_access_.get())
+    storage_access_ = std::make_unique<WebTestStorageAccessManager>(this);
+  return storage_access_.get();
 }
 
 ClientHintsControllerDelegate*
 WebTestBrowserContext::GetClientHintsControllerDelegate() {
   if (!client_hints_controller_delegate_) {
     client_hints_controller_delegate_ =
-        std::make_unique<content::MockClientHintsControllerDelegate>();
+        std::make_unique<content::MockClientHintsControllerDelegate>(
+            content::GetShellUserAgentMetadata());
   }
   return client_hints_controller_delegate_.get();
 }

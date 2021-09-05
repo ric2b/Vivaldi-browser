@@ -15,6 +15,7 @@ class FileSystemGetDirectoryOptions;
 class FileSystemGetFileOptions;
 class FileSystemRemoveOptions;
 class GetSystemDirectoryOptions;
+class NativeFileSystemDirectoryIterator;
 
 class NativeFileSystemDirectoryHandle final : public NativeFileSystemHandle {
   DEFINE_WRAPPERTYPEINFO();
@@ -25,14 +26,19 @@ class NativeFileSystemDirectoryHandle final : public NativeFileSystemHandle {
       const String& name,
       mojo::PendingRemote<mojom::blink::NativeFileSystemDirectoryHandle>);
 
+  // FileSystemDirectoryHandle IDL interface:
+  NativeFileSystemDirectoryIterator* entries();
+  NativeFileSystemDirectoryIterator* keys();
+  NativeFileSystemDirectoryIterator* values();
+
   bool isDirectory() const override { return true; }
 
-  ScriptPromise getFile(ScriptState*,
-                        const String& name,
-                        const FileSystemGetFileOptions*);
-  ScriptPromise getDirectory(ScriptState*,
-                             const String& name,
-                             const FileSystemGetDirectoryOptions*);
+  ScriptPromise getFileHandle(ScriptState*,
+                              const String& name,
+                              const FileSystemGetFileOptions*);
+  ScriptPromise getDirectoryHandle(ScriptState*,
+                                   const String& name,
+                                   const FileSystemGetDirectoryOptions*);
   ScriptValue getEntries(ScriptState*);
   ScriptPromise removeEntry(ScriptState*,
                             const String& name,

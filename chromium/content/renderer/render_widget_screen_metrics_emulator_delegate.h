@@ -6,9 +6,10 @@
 #define CONTENT_RENDERER_RENDER_WIDGET_SCREEN_METRICS_EMULATOR_DELEGATE_H_
 
 #include "content/common/content_export.h"
+#include "third_party/blink/public/common/widget/screen_info.h"
 
 namespace blink {
-struct WebDeviceEmulationParams;
+struct DeviceEmulationParams;
 }
 
 namespace content {
@@ -20,10 +21,10 @@ class CONTENT_EXPORT RenderWidgetScreenMetricsEmulatorDelegate {
   // Passes device emulation parameters to the delegate.
   virtual void SetScreenMetricsEmulationParameters(
       bool enabled,
-      const blink::WebDeviceEmulationParams& params) = 0;
+      const blink::DeviceEmulationParams& params) = 0;
 
   // Passes an updated ScreenInfo and sizes to the delegate.
-  virtual void SetScreenInfoAndSize(const ScreenInfo& screen_info,
+  virtual void SetScreenInfoAndSize(const blink::ScreenInfo& screen_info,
                                     const gfx::Size& widget_size,
                                     const gfx::Size& visible_viewport_size) = 0;
 
@@ -31,6 +32,9 @@ class CONTENT_EXPORT RenderWidgetScreenMetricsEmulatorDelegate {
   // delegate.
   virtual void SetScreenRects(const gfx::Rect& view_screen_rect,
                               const gfx::Rect& window_screen_rect) = 0;
+
+  virtual void SetRootWindowSegments(
+      const std::vector<gfx::Rect>& root_window_segments) = 0;
 
  protected:
   virtual ~RenderWidgetScreenMetricsEmulatorDelegate() {}

@@ -20,8 +20,8 @@
 #include "ui/gl/gpu_switching_observer.h"
 
 namespace viz {
+struct DebugRendererSettings;
 class DisplayResourceProvider;
-class RendererSettings;
 
 // TODO(weiliangc): Eventually fold this into OverlayProcessorWin and
 // OverlayCandidate class.
@@ -74,9 +74,11 @@ typedef std::vector<DCLayerOverlay> DCLayerOverlayList;
 class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
     : public ui::GpuSwitchingObserver {
  public:
-  explicit DCLayerOverlayProcessor(const RendererSettings& settings);
-  // For testing.
-  DCLayerOverlayProcessor();
+  // When |skip_initialization_for_testing| is true, object will be isolated
+  // for unit tests.
+  explicit DCLayerOverlayProcessor(
+      const DebugRendererSettings* debug_settings,
+      bool skip_initialization_for_testing = false);
   virtual ~DCLayerOverlayProcessor();
 
   // Virtual for testing.
@@ -98,28 +100,16 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
   void UpdateHasHwOverlaySupport();
 
  private:
-  // Returns an iterator to the element after |it|.
-  QuadList::Iterator ProcessRenderPassDrawQuad(RenderPass* render_pass,
-                                               gfx::Rect* damage_rect,
-                                               QuadList::Iterator it);
-
-  void ProcessRenderPass(DisplayResourceProvider* resource_provider,
-                         const gfx::RectF& display_rect,
-                         RenderPass* render_pass,
-                         bool is_root,
-                         gfx::Rect* damage_rect,
-                         DCLayerOverlayList* dc_layer_overlays);
-
   // UpdateDCLayerOverlays() adds the quad at |it| to the overlay list
   // |dc_layer_overlays|.
   void UpdateDCLayerOverlays(const gfx::RectF& display_rect,
                              RenderPass* render_pass,
-                             bool is_root,
                              const QuadList::Iterator& it,
                              const gfx::Rect& quad_rectangle_in_target_space,
                              const gfx::Rect& occluding_damage_rect,
                              bool is_overlay,
-                             QuadList::Iterator* next_it,
+                             QuadList::Iterator* new_it,
+                             size_t* new_index,
                              gfx::Rect* this_frame_overlay_rect,
                              gfx::Rect* this_frame_underlay_rect,
                              gfx::Rect* damage_rect,
@@ -135,18 +125,19 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
                           RenderPass* render_pass,
                           const gfx::Rect& quad_rectangle,
                           const QuadList::Iterator& it,
-                          bool is_root,
                           gfx::Rect* damage_rect,
                           gfx::Rect* this_frame_underlay_rect,
                           DCLayerOverlay* dc_layer);
 
-  void InsertDebugBorderDrawQuads(const gfx::RectF& display_rect,
-                                  const gfx::Rect& overlay_rect,
-                                  RenderPass* root_render_pass,
-                                  gfx::Rect* damage_rect);
+  void InsertDebugBorderDrawQuad(const gfx::RectF& display_rect,
+                                 const gfx::Rect& overlay_rect,
+                                 SkColor border_color,
+                                 RenderPass* render_pass,
+                                 gfx::Rect* damage_rect);
 
   bool has_overlay_support_;
-  const bool show_debug_borders_;
+  // Reference to the global viz singleton.
+  const DebugRendererSettings* const debug_settings_;
 
   gfx::Rect previous_frame_underlay_rect_;
   gfx::RectF previous_display_rect_;
@@ -155,26 +146,6 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
   gfx::Rect current_frame_overlay_rect_union_;
   int previous_frame_processed_overlay_count_ = 0;
   int current_frame_processed_overlay_count_ = 0;
-
-  struct RenderPassData {
-    RenderPassData();
-    RenderPassData(const RenderPassData& other);
-    ~RenderPassData();
-
-    // Store information about clipped punch-through rects in target space for
-    // non-root render passes. These rects are used to clear the corresponding
-    // areas in parent render passes.
-    std::vector<gfx::Rect> punch_through_rects;
-
-    // Output rects of child render passes that have backdrop filters in target
-    // space. These rects are used to determine if the overlay rect could be
-    // read by backdrop filters.
-    std::vector<gfx::Rect> backdrop_filter_rects;
-
-    // Whether this render pass has backdrop filters.
-    bool has_backdrop_filters = false;
-  };
-  base::flat_map<RenderPassId, RenderPassData> render_pass_data_;
 
   scoped_refptr<base::SingleThreadTaskRunner> viz_task_runner_;
 

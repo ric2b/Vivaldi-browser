@@ -135,13 +135,13 @@ GLuint ArImageTransport::GetCameraTextureId() {
   return camera_texture_id_arcore_;
 }
 
-void ArImageTransport::ResizeSharedBuffer(vr::WebXrPresentationState* webxr,
+bool ArImageTransport::ResizeSharedBuffer(vr::WebXrPresentationState* webxr,
                                           const gfx::Size& size,
                                           vr::WebXrSharedBuffer* buffer) {
   DCHECK(IsOnGlThread());
 
   if (buffer->size == size)
-    return;
+    return false;
 
   TRACE_EVENT0("gpu", __FUNCTION__);
   // Unbind previous image (if any).
@@ -172,7 +172,8 @@ void ArImageTransport::ResizeSharedBuffer(vr::WebXrPresentationState* webxr,
   buffer->mailbox_holder = mailbox_bridge_->CreateSharedImage(
       buffer->gmb.get(), gfx::ColorSpace(), shared_image_usage);
   DVLOG(2) << ": CreateSharedImage, mailbox="
-           << buffer->mailbox_holder.mailbox.ToDebugString();
+           << buffer->mailbox_holder.mailbox.ToDebugString() << ", SyncToken="
+           << buffer->mailbox_holder.sync_token.ToDebugString();
 
   auto img = base::MakeRefCounted<gl::GLImageAHardwareBuffer>(size);
 
@@ -181,7 +182,7 @@ void ArImageTransport::ResizeSharedBuffer(vr::WebXrPresentationState* webxr,
   bool ret = img->Initialize(ahb.get(), false /* preserved */);
   if (!ret) {
     DLOG(WARNING) << __FUNCTION__ << ": ERROR: failed to initialize image!";
-    return;
+    return false;
   }
   glBindTexture(GL_TEXTURE_EXTERNAL_OES, buffer->local_texture);
   img->BindTexImage(GL_TEXTURE_EXTERNAL_OES);
@@ -191,6 +192,7 @@ void ArImageTransport::ResizeSharedBuffer(vr::WebXrPresentationState* webxr,
   DVLOG(1) << __FUNCTION__ << ": resized to " << size.width() << "x"
            << size.height();
   buffer->size = size;
+  return true;
 }
 
 std::unique_ptr<vr::WebXrSharedBuffer> ArImageTransport::CreateBuffer() {
@@ -206,16 +208,101 @@ gpu::MailboxHolder ArImageTransport::TransferFrame(
     const gfx::Size& frame_size,
     const gfx::Transform& uv_transform) {
   DCHECK(IsOnGlThread());
+  DCHECK(UseSharedBuffer());
 
   if (!webxr->GetAnimatingFrame()->shared_buffer) {
     webxr->GetAnimatingFrame()->shared_buffer = CreateBuffer();
   }
+
   vr::WebXrSharedBuffer* shared_buffer =
       webxr->GetAnimatingFrame()->shared_buffer.get();
   ResizeSharedBuffer(webxr, frame_size, shared_buffer);
+  // Sanity check that the lazily created/resized buffer looks valid.
+  DCHECK(!shared_buffer->mailbox_holder.mailbox.IsZero());
+  DCHECK(shared_buffer->local_glimage);
+  DCHECK_EQ(shared_buffer->local_glimage->GetSize(), frame_size);
 
-  mailbox_bridge_->GenSyncToken(&shared_buffer->mailbox_holder.sync_token);
+  // We don't need to create a sync token here. ResizeSharedBuffer has created
+  // one on reallocation, including initial buffer creation, and we can use
+  // that. The shared image interface internally uses its own command buffer ID
+  // and separate sync token release count namespace, and we must not overwrite
+  // that. We don't need a new sync token when reusing a correctly-sized buffer,
+  // it's only eligible for reuse after all reads from it are complete, meaning
+  // that it's transitioned through "processing" and "rendering" states back
+  // to "animating".
+  DCHECK(shared_buffer->mailbox_holder.sync_token.HasData());
+  DVLOG(2) << ": SyncToken="
+           << shared_buffer->mailbox_holder.sync_token.ToDebugString();
+
   return shared_buffer->mailbox_holder;
+}
+
+gpu::MailboxHolder ArImageTransport::TransferCameraImageFrame(
+    vr::WebXrPresentationState* webxr,
+    const gfx::Size& frame_size,
+    const gfx::Transform& uv_transform) {
+  DCHECK(IsOnGlThread());
+  DCHECK(UseSharedBuffer());
+
+  if (!webxr->GetAnimatingFrame()->camera_image_shared_buffer) {
+    webxr->GetAnimatingFrame()->camera_image_shared_buffer = CreateBuffer();
+  }
+
+  vr::WebXrSharedBuffer* camera_image_shared_buffer =
+      webxr->GetAnimatingFrame()->camera_image_shared_buffer.get();
+  bool was_resized =
+      ResizeSharedBuffer(webxr, frame_size, camera_image_shared_buffer);
+  if (was_resized) {
+    // Ensure that the following GPU command buffer actions are sequenced after
+    // the shared buffer operations. The shared image interface uses a separate
+    // command buffer stream.
+    DCHECK(camera_image_shared_buffer->mailbox_holder.sync_token.HasData());
+    WaitSyncToken(camera_image_shared_buffer->mailbox_holder.sync_token);
+    DVLOG(3) << __func__
+             << ": "
+                "camera_image_shared_buffer->mailbox_holder.sync_"
+                "token="
+             << camera_image_shared_buffer->mailbox_holder.sync_token
+                    .ToDebugString();
+  }
+  // Sanity checks for the camera image buffer.
+  DCHECK(!camera_image_shared_buffer->mailbox_holder.mailbox.IsZero());
+  DCHECK(camera_image_shared_buffer->local_glimage);
+  DCHECK_EQ(camera_image_shared_buffer->local_glimage->GetSize(), frame_size);
+
+  // Temporarily change drawing buffer to the camera image buffer.
+  if (!camera_image_fbo_) {
+    glGenFramebuffersEXT(1, &camera_image_fbo_);
+  }
+  glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, camera_image_fbo_);
+  glFramebufferTexture2DEXT(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                            GL_TEXTURE_EXTERNAL_OES,
+                            camera_image_shared_buffer->local_texture, 0);
+
+  CopyCameraImageToFramebuffer(frame_size, uv_transform);
+
+#if DCHECK_IS_ON()
+  if (!framebuffer_complete_checked_for_camera_buffer_) {
+    auto status = glCheckFramebufferStatusEXT(GL_DRAW_FRAMEBUFFER);
+    DVLOG(1) << __func__ << ": framebuffer status=" << std::hex << status;
+    DCHECK(status == GL_FRAMEBUFFER_COMPLETE);
+    framebuffer_complete_checked_for_camera_buffer_ = true;
+  }
+#endif
+
+  // Restore default drawing buffer.
+  glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, 0);
+
+  std::unique_ptr<gl::GLFence> gl_fence = gl::GLFence::CreateForGpuFence();
+  std::unique_ptr<gfx::GpuFence> gpu_fence = gl_fence->GetGpuFence();
+  mailbox_bridge_->WaitForClientGpuFence(gpu_fence.release());
+
+  mailbox_bridge_->GenSyncToken(
+      &camera_image_shared_buffer->mailbox_holder.sync_token);
+  DVLOG(3)
+      << __func__ << ": camera_image_shared_buffer->mailbox_holder.sync_token="
+      << camera_image_shared_buffer->mailbox_holder.sync_token.ToDebugString();
+  return camera_image_shared_buffer->mailbox_holder;
 }
 
 void ArImageTransport::CreateGpuFenceForSyncToken(

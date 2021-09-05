@@ -4,19 +4,19 @@
 
 #include "ash/assistant/assistant_alarm_timer_controller_impl.h"
 
-#include <map>
-#include <string>
+#include <cmath>
 #include <utility>
 
 #include "ash/assistant/assistant_controller_impl.h"
-#include "ash/assistant/assistant_notification_controller.h"
+#include "ash/assistant/assistant_notification_controller_impl.h"
 #include "ash/assistant/util/deep_link_util.h"
-#include "ash/public/mojom/assistant_controller.mojom.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/i18n/message_formatter.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "chromeos/services/assistant/public/cpp/assistant_notification.h"
 #include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -32,19 +32,14 @@ namespace ash {
 namespace {
 
 using assistant::util::AlarmTimerAction;
+using chromeos::assistant::AssistantNotification;
+using chromeos::assistant::AssistantNotificationButton;
+using chromeos::assistant::AssistantNotificationPriority;
 using chromeos::assistant::features::IsTimersV2Enabled;
-using chromeos::assistant::mojom::AssistantNotification;
-using chromeos::assistant::mojom::AssistantNotificationButton;
-using chromeos::assistant::mojom::AssistantNotificationButtonPtr;
-using chromeos::assistant::mojom::AssistantNotificationPriority;
-using chromeos::assistant::mojom::AssistantNotificationPtr;
 
 // Grouping key and ID prefix for timer notifications.
 constexpr char kTimerNotificationGroupingKey[] = "assistant/timer";
 constexpr char kTimerNotificationIdPrefix[] = "assistant/timer";
-
-// Interval at which alarms/timers are ticked.
-constexpr base::TimeDelta kTickInterval = base::TimeDelta::FromSeconds(1);
 
 // Helpers ---------------------------------------------------------------------
 
@@ -57,8 +52,13 @@ std::string ToFormattedTimeString(base::TimeDelta time,
   const auto createMinute = icu::MeasureUnit::createMinute;
   const auto createSecond = icu::MeasureUnit::createSecond;
 
+  // We round |total_seconds| to the nearest full second since we don't display
+  // our time string w/ millisecond granularity and because this method is
+  // called very near to full second boundaries. Otherwise, values like 4.99 sec
+  // would be displayed to the user as "0:04" instead of the expected "0:05".
+  const int64_t total_seconds = std::abs(std::round(time.InSecondsF()));
+
   // Calculate time in hours/minutes/seconds.
-  const int64_t total_seconds = std::abs(time.InSeconds());
   const int32_t hours = total_seconds / 3600;
   const int32_t minutes = (total_seconds - hours * 3600) / 60;
   const int32_t seconds = total_seconds % 60;
@@ -173,28 +173,27 @@ GURL CreateTimerNotificationActionUrl(const AssistantTimer& timer) {
 }
 
 // Creates notification buttons for the given |timer|.
-std::vector<AssistantNotificationButtonPtr> CreateTimerNotificationButtons(
+std::vector<AssistantNotificationButton> CreateTimerNotificationButtons(
     const AssistantTimer& timer) {
-  std::vector<AssistantNotificationButtonPtr> buttons;
+  std::vector<AssistantNotificationButton> buttons;
 
   if (!IsTimersV2Enabled()) {
     // "STOP" button.
-    buttons.push_back(AssistantNotificationButton::New(
-        l10n_util::GetStringUTF8(IDS_ASSISTANT_TIMER_NOTIFICATION_STOP_BUTTON),
-        assistant::util::CreateAlarmTimerDeepLink(
-            AlarmTimerAction::kRemoveAlarmOrTimer, timer.id)
-            .value(),
-        /*remove_notification_on_click=*/true));
+    buttons.push_back(
+        {l10n_util::GetStringUTF8(IDS_ASSISTANT_TIMER_NOTIFICATION_STOP_BUTTON),
+         assistant::util::CreateAlarmTimerDeepLink(
+             AlarmTimerAction::kRemoveAlarmOrTimer, timer.id)
+             .value(),
+         /*remove_notification_on_click=*/true});
 
     // "ADD 1 MIN" button.
-    buttons.push_back(AssistantNotificationButton::New(
-        l10n_util::GetStringUTF8(
-            IDS_ASSISTANT_TIMER_NOTIFICATION_ADD_1_MIN_BUTTON),
-        assistant::util::CreateAlarmTimerDeepLink(
-            AlarmTimerAction::kAddTimeToTimer, timer.id,
-            base::TimeDelta::FromMinutes(1))
-            .value(),
-        /*remove_notification_on_click=*/true));
+    buttons.push_back({l10n_util::GetStringUTF8(
+                           IDS_ASSISTANT_TIMER_NOTIFICATION_ADD_1_MIN_BUTTON),
+                       assistant::util::CreateAlarmTimerDeepLink(
+                           AlarmTimerAction::kAddTimeToTimer, timer.id,
+                           base::TimeDelta::FromMinutes(1))
+                           .value(),
+                       /*remove_notification_on_click=*/true});
 
     return buttons;
   }
@@ -204,43 +203,48 @@ std::vector<AssistantNotificationButtonPtr> CreateTimerNotificationButtons(
   if (timer.state != AssistantTimerState::kFired) {
     if (timer.state == AssistantTimerState::kPaused) {
       // "RESUME" button.
-      buttons.push_back(AssistantNotificationButton::New(
-          l10n_util::GetStringUTF8(
-              IDS_ASSISTANT_TIMER_NOTIFICATION_RESUME_BUTTON),
-          assistant::util::CreateAlarmTimerDeepLink(
-              AlarmTimerAction::kResumeTimer, timer.id)
-              .value(),
-          /*remove_notification_on_click=*/false));
+      buttons.push_back({l10n_util::GetStringUTF8(
+                             IDS_ASSISTANT_TIMER_NOTIFICATION_RESUME_BUTTON),
+                         assistant::util::CreateAlarmTimerDeepLink(
+                             AlarmTimerAction::kResumeTimer, timer.id)
+                             .value(),
+                         /*remove_notification_on_click=*/false});
     } else {
       // "PAUSE" button.
-      buttons.push_back(AssistantNotificationButton::New(
-          l10n_util::GetStringUTF8(
-              IDS_ASSISTANT_TIMER_NOTIFICATION_PAUSE_BUTTON),
-          assistant::util::CreateAlarmTimerDeepLink(
-              AlarmTimerAction::kPauseTimer, timer.id)
-              .value(),
-          /*remove_notification_on_click=*/false));
+      buttons.push_back({l10n_util::GetStringUTF8(
+                             IDS_ASSISTANT_TIMER_NOTIFICATION_PAUSE_BUTTON),
+                         assistant::util::CreateAlarmTimerDeepLink(
+                             AlarmTimerAction::kPauseTimer, timer.id)
+                             .value(),
+                         /*remove_notification_on_click=*/false});
     }
   }
 
-  // "CANCEL" button.
-  buttons.push_back(AssistantNotificationButton::New(
-      l10n_util::GetStringUTF8(IDS_ASSISTANT_TIMER_NOTIFICATION_CANCEL_BUTTON),
-      assistant::util::CreateAlarmTimerDeepLink(
-          AlarmTimerAction::kRemoveAlarmOrTimer, timer.id)
-          .value(),
-      /*remove_notification_on_click=*/true));
-
   if (timer.state == AssistantTimerState::kFired) {
+    // "STOP" button.
+    buttons.push_back(
+        {l10n_util::GetStringUTF8(IDS_ASSISTANT_TIMER_NOTIFICATION_STOP_BUTTON),
+         assistant::util::CreateAlarmTimerDeepLink(
+             AlarmTimerAction::kRemoveAlarmOrTimer, timer.id)
+             .value(),
+         /*remove_notification_on_click=*/true});
+
     // "ADD 1 MIN" button.
-    buttons.push_back(AssistantNotificationButton::New(
-        l10n_util::GetStringUTF8(
-            IDS_ASSISTANT_TIMER_NOTIFICATION_ADD_1_MIN_BUTTON),
-        assistant::util::CreateAlarmTimerDeepLink(
-            AlarmTimerAction::kAddTimeToTimer, timer.id,
-            base::TimeDelta::FromMinutes(1))
-            .value(),
-        /*remove_notification_on_click=*/false));
+    buttons.push_back({l10n_util::GetStringUTF8(
+                           IDS_ASSISTANT_TIMER_NOTIFICATION_ADD_1_MIN_BUTTON),
+                       assistant::util::CreateAlarmTimerDeepLink(
+                           AlarmTimerAction::kAddTimeToTimer, timer.id,
+                           base::TimeDelta::FromMinutes(1))
+                           .value(),
+                       /*remove_notification_on_click=*/false});
+  } else {
+    // "CANCEL" button.
+    buttons.push_back({l10n_util::GetStringUTF8(
+                           IDS_ASSISTANT_TIMER_NOTIFICATION_CANCEL_BUTTON),
+                       assistant::util::CreateAlarmTimerDeepLink(
+                           AlarmTimerAction::kRemoveAlarmOrTimer, timer.id)
+                           .value(),
+                       /*remove_notification_on_click=*/true});
   }
 
   return buttons;
@@ -273,18 +277,52 @@ AssistantNotificationPriority CreateTimerNotificationPriority(
 }
 
 // Creates a notification for the given |timer|.
-AssistantNotificationPtr CreateTimerNotification(const AssistantTimer& timer) {
-  AssistantNotificationPtr notification = AssistantNotification::New();
-  notification->title = CreateTimerNotificationTitle(timer);
-  notification->message = CreateTimerNotificationMessage(timer);
-  notification->action_url = CreateTimerNotificationActionUrl(timer);
-  notification->buttons = CreateTimerNotificationButtons(timer);
-  notification->client_id = CreateTimerNotificationId(timer);
-  notification->grouping_key = kTimerNotificationGroupingKey;
-  notification->priority = CreateTimerNotificationPriority(timer);
-  notification->remove_on_click = !IsTimersV2Enabled();
-  notification->is_pinned = IsTimersV2Enabled();
+AssistantNotification CreateTimerNotification(
+    const AssistantTimer& timer,
+    const AssistantNotification* existing_notification = nullptr) {
+  AssistantNotification notification;
+  notification.title = CreateTimerNotificationTitle(timer);
+  notification.message = CreateTimerNotificationMessage(timer);
+  notification.action_url = CreateTimerNotificationActionUrl(timer);
+  notification.buttons = CreateTimerNotificationButtons(timer);
+  notification.client_id = CreateTimerNotificationId(timer);
+  notification.grouping_key = kTimerNotificationGroupingKey;
+  notification.priority = CreateTimerNotificationPriority(timer);
+  notification.remove_on_click = !IsTimersV2Enabled();
+  notification.is_pinned = IsTimersV2Enabled();
+
+  // If we are creating a notification to replace an |existing_notification| and
+  // our new notification has higher priority, we want the system to "renotify"
+  // the user of the notification change. This will cause the new notification
+  // to popup to the user even if it was previously marked as read.
+  if (existing_notification &&
+      notification.priority > existing_notification->priority) {
+    notification.renotify = true;
+  }
+
   return notification;
+}
+
+// Returns whether an |update| from LibAssistant to the specified |original|
+// timer is allowed. Updates are always allowed in v1, only conditionally in v2.
+bool ShouldAllowUpdateFromLibAssistant(const AssistantTimer& original,
+                                       const AssistantTimer& update) {
+  // If |id| is not equal, then |update| does refer to the |original| timer.
+  DCHECK_EQ(original.id, update.id);
+
+  // In v1, LibAssistant updates are always allowed since we only ever manage a
+  // single timer at a time and only as it transitions from firing to removal.
+  if (!IsTimersV2Enabled())
+    return true;
+
+  // In v2, updates are only allowed from LibAssistant if they are significant.
+  // We may receive an update due to a state change in another timer, and we'd
+  // want to discard the update to this timer to avoid introducing UI jank by
+  // updating its notification outside of its regular tick interval. In v2, we
+  // also update timer state from |kScheduled| to |kFired| ourselves to work
+  // around latency in receiving the event from LibAssistant. When we do so, we
+  // expect to later receive the state change from LibAssistant but discard it.
+  return !original.IsEqualInLibAssistantTo(update);
 }
 
 }  // namespace
@@ -324,9 +362,15 @@ void AssistantAlarmTimerControllerImpl::OnTimerStateChanged(
     }
   }
 
-  // Then we add any new timers and update existing ones.
-  for (auto& new_or_updated_timer : new_or_updated_timers)
-    model_.AddOrUpdateTimer(std::move(new_or_updated_timer));
+  // Then we add any new timers and update existing ones (if allowed).
+  for (auto& new_or_updated_timer : new_or_updated_timers) {
+    const auto* original_timer = model_.GetTimerById(new_or_updated_timer->id);
+    const bool is_new_timer = original_timer == nullptr;
+    if (is_new_timer || ShouldAllowUpdateFromLibAssistant(
+                            *original_timer, *new_or_updated_timer)) {
+      model_.AddOrUpdateTimer(std::move(new_or_updated_timer));
+    }
+  }
 }
 
 void AssistantAlarmTimerControllerImpl::OnAssistantControllerConstructed() {
@@ -374,11 +418,8 @@ void AssistantAlarmTimerControllerImpl::OnAssistantStatusChanged(
 
 void AssistantAlarmTimerControllerImpl::OnTimerAdded(
     const AssistantTimer& timer) {
-  // Schedule a repeating timer to tick the tracked timers.
-  if (!ticker_.IsRunning()) {
-    ticker_.Start(FROM_HERE, kTickInterval, &model_,
-                  &AssistantAlarmTimerModel::Tick);
-  }
+  // Schedule the next tick of |timer|.
+  ScheduleNextTick(timer);
 
   // Create a notification for the added alarm/timer.
   assistant_controller_->notification_controller()->AddOrUpdateNotification(
@@ -387,22 +428,27 @@ void AssistantAlarmTimerControllerImpl::OnTimerAdded(
 
 void AssistantAlarmTimerControllerImpl::OnTimerUpdated(
     const AssistantTimer& timer) {
-  // When a |timer| is updated we need to update the corresponding notification
-  // unless it has already been dismissed by the user.
+  // Schedule the next tick of |timer|.
+  ScheduleNextTick(timer);
+
   auto* notification_controller =
       assistant_controller_->notification_controller();
-  if (notification_controller->model()->HasNotificationForId(
-          CreateTimerNotificationId(timer))) {
+  const auto* existing_notification =
+      notification_controller->model()->GetNotificationById(
+          CreateTimerNotificationId(timer));
+
+  // When a |timer| is updated we need to update the corresponding notification
+  // unless it has already been dismissed by the user.
+  if (existing_notification) {
     notification_controller->AddOrUpdateNotification(
-        CreateTimerNotification(timer));
+        CreateTimerNotification(timer, existing_notification));
   }
 }
 
 void AssistantAlarmTimerControllerImpl::OnTimerRemoved(
     const AssistantTimer& timer) {
-  // If our model is empty, we no longer need tick updates.
-  if (model_.empty())
-    ticker_.Stop();
+  // Clean up the ticker for |timer|, if one exists.
+  tickers_.erase(timer.id);
 
   // Remove any notification associated w/ |timer|.
   assistant_controller_->notification_controller()->RemoveNotificationById(
@@ -436,6 +482,63 @@ void AssistantAlarmTimerControllerImpl::PerformAlarmTimerAction(
       assistant_->ResumeTimer(alarm_timer_id);
       break;
   }
+}
+
+void AssistantAlarmTimerControllerImpl::ScheduleNextTick(
+    const AssistantTimer& timer) {
+  auto& ticker = tickers_[timer.id];
+  if (ticker.IsRunning())
+    return;
+
+  // The next tick of |timer| should occur at its next full second of remaining
+  // time. Here we are calculating the number of milliseconds to that next full
+  // second.
+  int millis_to_next_full_sec = timer.remaining_time.InMilliseconds() % 1000;
+
+  // If |timer| has already fired, |millis_to_next_full_sec| will be negative.
+  // In this case, we take the inverse of the value to get the correct number of
+  // milliseconds to the next full second of remaining time.
+  if (millis_to_next_full_sec < 0)
+    millis_to_next_full_sec = 1000 + millis_to_next_full_sec;
+
+  // If we are exactly at the boundary of a full second, we want to make sure
+  // we wait until the next second to perform the next tick. Otherwise we'll end
+  // up w/ a superfluous tick that is unnecessary.
+  if (millis_to_next_full_sec == 0)
+    millis_to_next_full_sec = 1000;
+
+  // NOTE: We pass a copy of |timer.id| here as |timer| may no longer exist
+  // when Tick() is called due to the possibility of the |model_| being updated
+  // via a call to OnTimerStateChanged(), such as might happen if a timer is
+  // created, paused, resumed, or removed by LibAssistant.
+  ticker.Start(FROM_HERE,
+               base::TimeDelta::FromMilliseconds(millis_to_next_full_sec),
+               base::BindOnce(&AssistantAlarmTimerControllerImpl::Tick,
+                              base::Unretained(this), timer.id));
+}
+
+void AssistantAlarmTimerControllerImpl::Tick(const std::string& timer_id) {
+  const auto* timer = model_.GetTimerById(timer_id);
+  DCHECK(timer);
+
+  // We don't tick paused timers. Once the |timer| resumes, ticking will resume.
+  if (timer->state == AssistantTimerState::kPaused)
+    return;
+
+  // Update |timer| to reflect the new amount of |remaining_time|.
+  AssistantTimerPtr updated_timer = std::make_unique<AssistantTimer>(*timer);
+  updated_timer->remaining_time = updated_timer->fire_time - base::Time::Now();
+
+  // If there is no remaining time left on the timer, we ensure that our timer
+  // is marked as |kFired|. Since LibAssistant may be a bit slow to notify us of
+  // the change in state, we set the value ourselves to eliminate UI jank.
+  // NOTE: We use the rounded value of |remaining_time| since that's what we are
+  // displaying to the user and otherwise would be out of sync for ticks
+  // occurring at full second boundary values.
+  if (std::round(updated_timer->remaining_time.InSecondsF()) <= 0.f)
+    updated_timer->state = AssistantTimerState::kFired;
+
+  model_.AddOrUpdateTimer(std::move(updated_timer));
 }
 
 }  // namespace ash

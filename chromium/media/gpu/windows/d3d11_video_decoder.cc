@@ -217,15 +217,18 @@ D3D11VideoDecoder::CreateD3D11Decoder() {
                         : TextureSelector::HDRMode::kSDROnly,
       &format_checker, media_log_.get());
   if (!texture_selector_)
-    return StatusCode::kCannotCreateTextureSelector;
+    return StatusCode::kCreateTextureSelectorFailed;
 
   UINT config_count = 0;
   hr = video_device_->GetVideoDecoderConfigCount(
       decoder_configurator_->DecoderDescriptor(), &config_count);
-  if (FAILED(hr) || config_count == 0) {
-    return Status(StatusCode::kCannotGetDecoderConfigCount)
+  if (FAILED(hr)) {
+    return Status(StatusCode::kGetDecoderConfigCountFailed)
         .AddCause(HresultToStatus(hr));
   }
+
+  if (config_count == 0)
+    return Status(StatusCode::kGetDecoderConfigCountFailed);
 
   D3D11_VIDEO_DECODER_CONFIG dec_config = {};
   bool found = false;
@@ -234,7 +237,7 @@ D3D11VideoDecoder::CreateD3D11Decoder() {
     hr = video_device_->GetVideoDecoderConfig(
         decoder_configurator_->DecoderDescriptor(), i, &dec_config);
     if (FAILED(hr)) {
-      return Status(StatusCode::kCannotGetDecoderConfig)
+      return Status(StatusCode::kGetDecoderConfigFailed)
           .AddCause(HresultToStatus(hr));
     }
 
@@ -258,13 +261,17 @@ D3D11VideoDecoder::CreateD3D11Decoder() {
   // 14 is clear, then it's the former, else it's the latter.
   //
   // Let the workaround override array texture mode, if enabled.
+  // TODO(crbug.com/971952): Ignore |use_single_video_decoder_texture_| here,
+  // since it might be the case that it's not actually the right fix.  Instead,
+  // We use this workaround to force a copy later.  The workaround will be
+  // renamed if this turns out to fix the issue, but we might need to merge back
+  // and smaller changes are better.
   //
   // For more information, please see:
   // https://download.microsoft.com/download/9/2/A/92A4E198-67E0-4ABD-9DB7-635D711C2752/DXVA_VPx.pdf
   // https://download.microsoft.com/download/5/f/c/5fc4ec5c-bd8c-4624-8034-319c1bab7671/DXVA_H264.pdf
   use_single_video_decoder_texture_ =
-      !!(dec_config.ConfigDecoderSpecific & (1 << 14)) ||
-      gpu_workarounds_.use_single_video_decoder_texture;
+      !!(dec_config.ConfigDecoderSpecific & (1 << 14));
   if (use_single_video_decoder_texture_)
     MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using single textures";
   else
@@ -273,8 +280,12 @@ D3D11VideoDecoder::CreateD3D11Decoder() {
   Microsoft::WRL::ComPtr<ID3D11VideoDecoder> video_decoder;
   hr = video_device_->CreateVideoDecoder(
       decoder_configurator_->DecoderDescriptor(), &dec_config, &video_decoder);
-  if (!video_decoder.Get() || FAILED(hr)) {
-    return Status(StatusCode::kDecoderFailedCreation)
+
+  if (!video_decoder.Get())
+    return Status(StatusCode::kDecoderCreationFailed);
+
+  if (FAILED(hr)) {
+    return Status(StatusCode::kDecoderCreationFailed)
         .AddCause(HresultToStatus(hr));
   }
 
@@ -364,8 +375,8 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
   if (!base::FeatureList::IsEnabled(kD3D11VideoDecoderSkipMultithreaded)) {
     ComD3D11Multithread multi_threaded;
     hr = device_->QueryInterface(IID_PPV_ARGS(&multi_threaded));
-    if (!SUCCEEDED(hr)) {
-      NotifyError(Status(StatusCode::kCannotQueryID3D11Multithread)
+    if (FAILED(hr)) {
+      NotifyError(Status(StatusCode::kQueryID3D11MultithreadFailed)
                       .AddCause(HresultToStatus(hr)));
       return;
     }
@@ -701,22 +712,25 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
   for (size_t i = 0; i < D3D11DecoderConfigurator::BUFFER_COUNT; i++) {
     // Create an input texture / texture array if we haven't already.
     if (!in_texture) {
-      in_texture = decoder_configurator_->CreateOutputTexture(
+      auto result = decoder_configurator_->CreateOutputTexture(
           device_, size,
           use_single_video_decoder_texture_
               ? 1
               : D3D11DecoderConfigurator::BUFFER_COUNT);
+      if (result.has_value()) {
+        in_texture = std::move(result.value());
+      } else {
+        NotifyError(std::move(result.error()).AddHere());
+        return;
+      }
     }
 
-    if (!in_texture) {
-      NotifyError("Failed to create a Texture2D for PictureBuffers");
-      return;
-    }
+    DCHECK(!!in_texture);
 
     auto tex_wrapper = texture_selector_->CreateTextureWrapper(
         device_, video_device_, device_context_, size);
     if (!tex_wrapper) {
-      NotifyError("Unable to allocate a texture for a CopyingTexture2DWrapper");
+      NotifyError(StatusCode::kAllocateTextureForCopyingWrapperFailed);
       return;
     }
 
@@ -724,10 +738,11 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
     picture_buffers_.push_back(
         new D3D11PictureBuffer(decoder_task_runner_, in_texture, array_slice,
                                std::move(tex_wrapper), size, i /* level */));
-    if (!picture_buffers_[i]->Init(
-            gpu_task_runner_, get_helper_cb_, video_device_,
-            decoder_configurator_->DecoderGuid(), media_log_->Clone())) {
-      NotifyError("Unable to allocate PictureBuffer");
+    Status result = picture_buffers_[i]->Init(
+        gpu_task_runner_, get_helper_cb_, video_device_,
+        decoder_configurator_->DecoderGuid(), media_log_->Clone());
+    if (!result.is_ok()) {
+      NotifyError(std::move(result).AddHere());
       return;
     }
 
@@ -786,10 +801,11 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
 
   MailboxHolderArray mailbox_holders;
   gfx::ColorSpace output_color_space;
-  if (!picture_buffer->ProcessTexture(
-          picture->get_colorspace().ToGfxColorSpace(), &mailbox_holders,
-          &output_color_space)) {
-    NotifyError("Unable to process texture");
+  Status result = picture_buffer->ProcessTexture(
+      picture->get_colorspace().ToGfxColorSpace(), &mailbox_holders,
+      &output_color_space);
+  if (!result.is_ok()) {
+    NotifyError(std::move(result).AddHere());
     return false;
   }
 
@@ -801,7 +817,7 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   if (!frame) {
     // This can happen if, somehow, we get an unsupported combination of
     // pixel format, etc.
-    NotifyError("Failed to construct video frame");
+    NotifyError(StatusCode::kDecoderVideoFrameConstructionFailed);
     return false;
   }
 

@@ -33,6 +33,7 @@
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/mock_render_widget_host_delegate.h"
+#include "content/test/mock_widget.h"
 #include "content/test/test_render_view_host.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -62,14 +63,12 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
     last_surface_info_ = surface_info;
   }
 
-  void SetViewportIntersection(
-      const blink::WebRect& viewport_intersection,
-      const blink::WebRect& main_frame_document_intersection,
-      const blink::WebRect& compositor_visible_rect,
-      blink::FrameOcclusionState occlusion_state) {
+  void SetViewportIntersection(const blink::WebRect& viewport_intersection,
+                               const blink::WebRect& main_frame_intersection,
+                               const blink::WebRect& compositor_visible_rect,
+                               blink::FrameOcclusionState occlusion_state) {
     intersection_state_.viewport_intersection = viewport_intersection;
-    intersection_state_.main_frame_document_intersection =
-        main_frame_document_intersection;
+    intersection_state_.main_frame_intersection = main_frame_intersection;
     intersection_state_.compositor_visible_rect = compositor_visible_rect;
     intersection_state_.occlusion_state = occlusion_state;
   }
@@ -127,12 +126,9 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
         /*hidden=*/false, std::make_unique<FrameTokenMessageQueue>());
 
     mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
-    mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
-    auto blink_widget_receiver =
-        blink_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
     widget_host_->BindWidgetInterfaces(
         blink_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
-        blink_widget.Unbind());
+        widget_.GetNewRemote());
 
     mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
     mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
@@ -142,7 +138,13 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
         frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
         frame_widget.Unbind());
 
-    view_ = RenderWidgetHostViewChildFrame::Create(widget_host_);
+    blink::ScreenInfo screen_info;
+    screen_info.rect = gfx::Rect(1, 2, 3, 4);
+    view_ = RenderWidgetHostViewChildFrame::Create(widget_host_, screen_info);
+    // Test we get the expected ScreenInfo before the FrameDelegate is set.
+    blink::ScreenInfo actual_screen_info;
+    view_->GetScreenInfo(&actual_screen_info);
+    EXPECT_EQ(screen_info, actual_screen_info);
 
     test_frame_connector_ =
         new MockFrameConnectorDelegate(use_zoom_for_device_scale_factor);
@@ -181,6 +183,7 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
   std::unique_ptr<BrowserContext> browser_context_;
   IPC::TestSink* sink_ = nullptr;
   MockRenderWidgetHostDelegate delegate_;
+  MockWidget widget_;
 
   // Tests should set these to NULL if they've already triggered their
   // destruction.
@@ -207,11 +210,11 @@ TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
 // whenever screen rects are updated.
 TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
   blink::WebRect intersection_rect(5, 5, 100, 80);
-  blink::WebRect main_frame_document_intersection(5, 10, 200, 200);
+  blink::WebRect main_frame_intersection(5, 10, 200, 200);
   blink::FrameOcclusionState occlusion_state =
       blink::FrameOcclusionState::kPossiblyOccluded;
   test_frame_connector_->SetViewportIntersection(
-      intersection_rect, main_frame_document_intersection, intersection_rect,
+      intersection_rect, main_frame_intersection, intersection_rect,
       occlusion_state);
 
   MockRenderProcessHost* process =
@@ -230,8 +233,8 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
                                           &intersection_state);
   EXPECT_EQ(intersection_rect,
             std::get<0>(intersection_state).viewport_intersection);
-  EXPECT_EQ(main_frame_document_intersection,
-            std::get<0>(intersection_state).main_frame_document_intersection);
+  EXPECT_EQ(main_frame_intersection,
+            std::get<0>(intersection_state).main_frame_intersection);
   EXPECT_EQ(intersection_rect,
             std::get<0>(intersection_state).compositor_visible_rect);
   EXPECT_EQ(occlusion_state, std::get<0>(intersection_state).occlusion_state);
@@ -253,7 +256,7 @@ class RenderWidgetHostViewChildFrameZoomForDSFTest
 // Tests that moving the child around does not affect the physical backing size.
 TEST_F(RenderWidgetHostViewChildFrameZoomForDSFTest,
        CompositorViewportPixelSize) {
-  ScreenInfo screen_info;
+  blink::ScreenInfo screen_info;
   screen_info.device_scale_factor = 2.0f;
   test_frame_connector_->SetScreenInfoForTesting(screen_info);
 
@@ -296,18 +299,17 @@ TEST_F(RenderWidgetHostViewChildFrameTest,
   visual_properties.local_surface_id_allocation = local_surface_id_allocation;
   visual_properties.root_widget_window_segments.emplace_back(1, 2, 3, 4);
 
-  sink_->ClearMessages();
+  base::RunLoop().RunUntilIdle();
+  widget_.ClearVisualProperties();
   test_frame_connector_->SynchronizeVisualProperties(frame_sink_id,
                                                      visual_properties);
 
   // Update to the renderer.
-  ASSERT_EQ(1u, sink_->message_count());
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(1u, widget_.ReceivedVisualProperties().size());
   {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    ASSERT_EQ(WidgetMsg_UpdateVisualProperties::ID, msg->type());
-    WidgetMsg_UpdateVisualProperties::Param params;
-    WidgetMsg_UpdateVisualProperties::Read(msg, &params);
-    VisualProperties sent_visual_properties = std::get<0>(params);
+    blink::VisualProperties sent_visual_properties =
+        widget_.ReceivedVisualProperties().at(0);
 
     EXPECT_EQ(compositor_viewport_pixel_rect,
               sent_visual_properties.compositor_viewport_pixel_rect);

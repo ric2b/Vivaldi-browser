@@ -14,6 +14,8 @@
 
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/cpu.h"
+#include "base/no_destructor.h"
 #include "base/stl_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/user_activity/user_activity_detector.h"
@@ -96,9 +98,16 @@ gfx::DisplayColorSpaces FillDisplayColorSpaces(
   gfx::DisplayColorSpaces display_color_spaces(
       gfx::ColorSpace::CreateSRGB(), DisplaySnapshot::PrimaryFormat());
 
-  if (allow_high_bit_depth) {
-    constexpr float kSDRJoint = 0.5;
-    constexpr float kHDRLevel = 3.0;
+  // AMD Chromebooks have issues playing back and scanning out high bit depth
+  // content. TODO(b/169576243, b/165825264): remove this provision when fixed.
+  static const base::NoDestructor<base::CPU> cpuid;
+  static const bool is_amd = cpuid->vendor_name() == "AuthenticAMD";
+  if (is_amd)
+    return display_color_spaces;
+
+  if (allow_high_bit_depth && snapshot_color_space.IsHDR()) {
+    constexpr float kSDRJoint = 0.75;
+    constexpr float kHDRLevel = 4.0;
     const auto primary_id = snapshot_color_space.GetPrimaryID();
     gfx::ColorSpace hdr_color_space;
     if (primary_id == gfx::ColorSpace::PrimaryID::CUSTOM) {
@@ -350,11 +359,11 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
   new_info.set_from_native_platform(true);
 
   float device_scale_factor = 1.0f;
-  // Sets dpi only if the screen size is not blacklisted.
-  const float dpi = IsDisplaySizeBlackListed(snapshot->physical_size())
-                        ? 0
-                        : kInchInMm * mode_info->size().width() /
-                              snapshot->physical_size().width();
+  // Sets dpi only if the screen size is valid.
+  const float dpi = IsDisplaySizeValid(snapshot->physical_size())
+                        ? kInchInMm * mode_info->size().width() /
+                              snapshot->physical_size().width()
+                        : 0;
   constexpr gfx::Size k225DisplaySizeHack(3000, 2000);
 
   if (snapshot->type() == DISPLAY_CONNECTION_TYPE_INTERNAL) {

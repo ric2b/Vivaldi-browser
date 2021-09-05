@@ -55,7 +55,7 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
 
 void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
   vivaldi::NoteNode* parent = menumodel_to_note_map_[menu_model];
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   bool underline_letter = false;
 #else
   Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());

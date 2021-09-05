@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
+// #import {AmbientModeTopicSource, AmbientModeTemperatureUnit, AmbientModeSettings} from './constants.m.js';
+// clang-format on
+
 /**
  * @fileoverview A helper object used from the ambient mode section to interact
  * with the browser.
@@ -9,56 +14,55 @@
 
 cr.define('settings', function() {
   /** @interface */
-  class AmbientModeBrowserProxy {
+  /* #export */ class AmbientModeBrowserProxy {
     /**
-     * Retrieves the initial settings from server, such as topic source. As a
-     * response, the C++ sends the 'topic-source-changed' WebUIListener event.
+     * Retrieves the AmbientModeTopicSource and AmbientModeTemperatureUnit from
+     * server. As a response, the C++ sends the 'topic-source-changed' and
+     * 'temperature-unit-changed' events.
      */
-    onAmbientModePageReady() {}
+    requestSettings() {}
 
     /**
-     * Updates the selected topic source to server.
-     * @param {!AmbientModeTopicSource} topicSource the selected topic source.
-     */
-    setSelectedTopicSource(topicSource) {}
-
-    /**
-     * Retrieves the personal album and art categories from server. As a
-     * response, the C++ sends the 'photos-containers-changed' WebUIListener
-     * event.
+     * Retrieves the albums from server. As a response, the C++ sends either the
+     * 'albums-changed' WebUIListener event.
      * @param {!AmbientModeTopicSource} topicSource the topic source for which
-     *     the containers requested
-     * for.
+     *     the albums requested.
      */
-    requestPhotosContainers(topicSource) {}
+    requestAlbums(topicSource) {}
 
     /**
-     * Updates the selected personal albums or art categories to server.
-     * @param {!Array<string>} containers the selected albums or categeries.
+     * Updates the selected temperature unit to server.
+     * @param {!AmbientModeTemperatureUnit} temperatureUnit
      */
-    setSelectedPhotosContainers(containers) {}
+    setSelectedTemperatureUnit(temperatureUnit) {}
+
+    /**
+     * Updates the selected albums of Google Photos or art categories to server.
+     * @param {!AmbientModeSettings} settings the selected albums or categeries.
+     */
+    setSelectedAlbums(settings) {}
   }
 
   /** @implements {settings.AmbientModeBrowserProxy} */
-  class AmbientModeBrowserProxyImpl {
+  /* #export */ class AmbientModeBrowserProxyImpl {
     /** @override */
-    onAmbientModePageReady() {
-      chrome.send('onAmbientModePageReady');
+    requestSettings() {
+      chrome.send('requestSettings');
     }
 
     /** @override */
-    setSelectedTopicSource(topicSource) {
-      chrome.send('setSelectedTopicSource', [topicSource]);
+    requestAlbums(topicSource) {
+      chrome.send('requestAlbums', [topicSource]);
     }
 
     /** @override */
-    requestPhotosContainers(topicSource) {
-      chrome.send('requestPhotosContainers', [topicSource]);
+    setSelectedTemperatureUnit(temperatureUnit) {
+      chrome.send('setSelectedTemperatureUnit', [temperatureUnit]);
     }
 
     /** @override */
-    setSelectedPhotosContainers(containers) {
-      chrome.send('setSelectedPhotosContainers', containers);
+    setSelectedAlbums(settings) {
+      chrome.send('setSelectedAlbums', [settings]);
     }
   }
 

@@ -12,6 +12,7 @@
 
 from __future__ import print_function
 
+import argparse
 import errno
 import json
 import os
@@ -69,7 +70,7 @@ def _ExtractImportantEnvironment(output_of_set):
   return env
 
 
-def _DetectVisualStudioPath():
+def _DetectVisualStudioPath(options):
   """Return path to the installed Visual Studio.
   """
 
@@ -77,7 +78,7 @@ def _DetectVisualStudioPath():
   chromium_dir = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..', '..'))
   sys.path.append(os.path.join(chromium_dir, 'build'))
   import vs_toolchain
-  return vs_toolchain.DetectVisualStudioPath()
+  return vs_toolchain.DetectVisualStudioPath(options=options)
 
 
 def _LoadEnvFromBat(args):
@@ -92,14 +93,14 @@ def _LoadEnvFromBat(args):
   return variables.decode(errors='ignore')
 
 
-def _LoadToolchainEnv(cpu, sdk_dir, target_store):
+def _LoadToolchainEnv(cpu, sdk_dir, target_store, options):
   """Returns a dictionary with environment variables that must be set while
   running binaries from the toolchain (e.g. INCLUDE and PATH for cl.exe)."""
   # Check if we are running in the SDK command line environment and use
   # the setup script from the SDK if so. |cpu| should be either
   # 'x86' or 'x64' or 'arm' or 'arm64'.
   assert cpu in ('x86', 'x64', 'arm', 'arm64')
-  if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))) and sdk_dir:
+  if options.use_managed_toolchain and sdk_dir:
     # Load environment from json file.
     env = os.path.normpath(os.path.join(sdk_dir, 'bin/SetEnv.%s.json' % cpu))
     env = json.load(open(env))['env']
@@ -132,7 +133,7 @@ def _LoadToolchainEnv(cpu, sdk_dir, target_store):
       assert _LowercaseDict(json_env) == _LowercaseDict(cmd_env)
   else:
     if 'GYP_MSVS_OVERRIDE_PATH' not in os.environ:
-      os.environ['GYP_MSVS_OVERRIDE_PATH'] = _DetectVisualStudioPath()
+      os.environ['GYP_MSVS_OVERRIDE_PATH'] = _DetectVisualStudioPath(options)
     # We only support x64-hosted tools.
     script_path = os.path.normpath(os.path.join(
                                        os.environ['GYP_MSVS_OVERRIDE_PATH'],
@@ -140,9 +141,16 @@ def _LoadToolchainEnv(cpu, sdk_dir, target_store):
     if not os.path.exists(script_path):
       # vcvarsall.bat for VS 2017 fails if run after running vcvarsall.bat from
       # VS 2013 or VS 2015. Fix this by clearing the vsinstalldir environment
-      # variable.
+      # variable. Since vcvarsall.bat appends to the INCLUDE, LIB, and LIBPATH
+      # environment variables we need to clear those to avoid getting double
+      # entries when vcvarsall.bat has been run before gn gen. vcvarsall.bat
+      # also adds to PATH, but there is no clean way of clearing that and it
+      # doesn't seem to cause problems.
       if 'VSINSTALLDIR' in os.environ:
         del os.environ['VSINSTALLDIR']
+        del os.environ['INCLUDE']
+        del os.environ['LIB']
+        del os.environ['LIBPATH']
       other_path = os.path.normpath(os.path.join(
                                         os.environ['GYP_MSVS_OVERRIDE_PATH'],
                                         'VC/Auxiliary/Build/vcvarsall.bat'))
@@ -201,17 +209,39 @@ def FindFileInEnvList(env, env_name, separator, file_name, optional=False):
 
 
 def main():
-  if len(sys.argv) != 7:
-    print('Usage setup_toolchain.py '
-          '<visual studio path> <win sdk path> '
-          '<runtime dirs> <target_os> <target_cpu> '
-          '<environment block name|none>')
-    sys.exit(2)
-  win_sdk_path = sys.argv[2]
-  runtime_dirs = sys.argv[3]
-  target_os = sys.argv[4]
-  target_cpu = sys.argv[5]
-  environment_block_name = sys.argv[6]
+  parser = argparse.ArgumentParser("Visual Studio Toolchain setup")
+  parser.add_argument("--toolchain-json",
+                      type=argparse.FileType("r"),
+                      help="Path to JSON file specifying the hash and URL of "
+                           "the managed toolchain to use")
+
+  parser.add_argument("visual_studio_path", help="Path to Visual Studio")
+  parser.add_argument("win_sdk_path", help="Path to Windows SDK")
+  parser.add_argument("runtime_dirs", help="Path to exectuables")
+  parser.add_argument("target_os", help="Target OS")
+  parser.add_argument("target_cpu", help="Target CPU")
+  parser.add_argument("environment_block_name",
+                     help="Name of environment file, or 'none'")
+
+  options = parser.parse_args()
+  options.toolchain_hash = None
+  options.toolchain_url = None
+
+  if options.toolchain_json:
+    toolchain_data = json.load(options.toolchain_json)
+    options.toolchain_hash = toolchain_data.get("hash", None)
+    options.toolchain_url = toolchain_data.get("url", None)
+    assert (options.toolchain_hash and options.toolchain_url), \
+            "Managed toolchain hash name and/or URL missing"
+
+  options.use_managed_toolchain = (options.toolchain_hash or
+                    bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', 1))))
+
+  win_sdk_path = options.win_sdk_path
+  runtime_dirs = options.runtime_dirs
+  target_os = options.target_os
+  target_cpu = options.target_cpu
+  environment_block_name = options.environment_block_name
   if (environment_block_name == 'none'):
     environment_block_name = ''
 
@@ -235,7 +265,7 @@ def main():
   for cpu in cpus:
     if cpu == target_cpu:
       # Extract environment variables for subprocesses.
-      env = _LoadToolchainEnv(cpu, win_sdk_path, target_store)
+      env = _LoadToolchainEnv(cpu, win_sdk_path, target_store, options)
       env['PATH'] = runtime_dirs + os.pathsep + env['PATH']
 
       vc_bin_dir = FindFileInEnvList(env, 'PATH', os.pathsep, 'cl.exe')
@@ -266,6 +296,13 @@ def main():
       include_I = ' '.join([q('/I' + i) for i in include])
       include_imsvc = ' '.join([q('-imsvc' + i) for i in include])
       libpath_flags = ' '.join([q('-libpath:' + i) for i in lib])
+
+      if options.toolchain_hash:
+        # Cross-compiling Goma workers don't work well with backslash paths,
+        # so fix them by changing them to forward slashes in toolchain mode.
+        include_I = include_I.replace("\\", "/")
+        include_imsvc = include_imsvc.replace("\\", "/")
+        libpath_flags = libpath_flags.replace("\\", "/")
 
       if (environment_block_name != ''):
         env_block = _FormatAsEnvironmentBlock(env)

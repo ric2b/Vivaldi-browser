@@ -157,7 +157,7 @@ void ObliterateOneDirectory(const base::FilePath& current_dir,
 
     switch (action) {
       case kDelete:
-        base::DeleteFileRecursively(to_delete);
+        base::DeletePathRecursively(to_delete);
         break;
 
       case kEnqueue:
@@ -207,7 +207,7 @@ void BlockingObliteratePath(
   // root and be done with it.  Otherwise, signal garbage collection and do
   // a best-effort delete of the on-disk structures.
   if (valid_paths_to_keep.empty()) {
-    base::DeleteFileRecursively(root);
+    base::DeletePathRecursively(root);
     return;
   }
   closure_runner->PostTask(FROM_HERE, std::move(on_gc_required));
@@ -446,10 +446,20 @@ void StoragePartitionImplMap::PostCreateInitialization(
     InitializeResourceContext(browser_context_);
   }
 
-  partition->GetAppCacheService()->Initialize(
-      in_memory ? base::FilePath()
-                : partition->GetPath().Append(kAppCacheDirname),
-      browser_context_, browser_context_->GetSpecialStoragePolicy());
+  if (StoragePartition::IsAppCacheEnabled()) {
+    partition->GetAppCacheService()->Initialize(
+        in_memory ? base::FilePath()
+                  : partition->GetPath().Append(kAppCacheDirname),
+        browser_context_, browser_context_->GetSpecialStoragePolicy());
+  } else if (!in_memory) {
+    // If AppCache is not enabled, clean up any on disk storage.  This is the
+    // path that will execute once AppCache has been fully removed from Chrome.
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+        base::BindOnce(
+            [](const base::FilePath& dir) { base::DeletePathRecursively(dir); },
+            partition->GetPath().Append(kAppCacheDirname)));
+  }
 
   // Check first to avoid memory leak in unittests.
   if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {

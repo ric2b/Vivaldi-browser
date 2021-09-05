@@ -6,10 +6,12 @@
 
 #include "base/feature_list.h"
 #import "base/ios/ns_error_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/timer/timer.h"
 #import "ios/net/http_response_headers_util.h"
+#import "ios/net/protocol_handler_util.h"
 #include "ios/web/common/features.h"
 #import "ios/web/common/url_scheme_util.h"
 #import "ios/web/js_messaging/crw_js_injector.h"
@@ -22,6 +24,7 @@
 #import "ios/web/navigation/navigation_context_impl.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/navigation/navigation_manager_util.h"
+#import "ios/web/navigation/text_fragment_utils.h"
 #import "ios/web/navigation/web_kit_constants.h"
 #import "ios/web/navigation/wk_back_forward_list_item_holder.h"
 #import "ios/web/navigation/wk_navigation_action_policy_util.h"
@@ -39,6 +42,7 @@
 #import "ios/web/web_view/error_translation_util.h"
 #import "ios/web/web_view/wk_web_view_util.h"
 #import "net/base/mac/url_conversions.h"
+#include "net/base/net_errors.h"
 #include "net/cert/x509_util_ios.h"
 #include "url/gurl.h"
 
@@ -1022,6 +1026,14 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     didFinishNavigation:(WKNavigation*)navigation {
   [self didReceiveWKNavigationDelegateCallback];
 
+  NSUInteger forwardItemCount = webView.backForwardList.forwardList.count;
+  base::UmaHistogramBoolean("Session.WebStates.HasForwardItemsAfterNavigation",
+                            forwardItemCount > 0);
+  if (forwardItemCount > 0) {
+    base::UmaHistogramCounts100(
+        "Session.WebStates.ForwardItemsCountAfterNavigation", forwardItemCount);
+  }
+
   // Sometimes |webView:didFinishNavigation| arrives before
   // |webView:didCommitNavigation|. Explicitly trigger post-commit processing.
   bool navigationCommitted =
@@ -1139,6 +1151,10 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     }
   }
 
+  if (context && web::AreTextFragmentsAllowed(context)) {
+    web::HandleTextFragments(self.webStateImpl);
+  }
+
   [self.navigationStates setState:web::WKNavigationState::FINISHED
                     forNavigation:navigation];
 
@@ -1214,6 +1230,40 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
              }];
 }
 
+- (void)webView:(WKWebView*)webView
+     authenticationChallenge:(NSURLAuthenticationChallenge*)challenge
+    shouldAllowDeprecatedTLS:(void (^)(BOOL))decisionHandler
+    API_AVAILABLE(ios(14)) {
+  [self didReceiveWKNavigationDelegateCallback];
+  DCHECK(challenge);
+  DCHECK(decisionHandler);
+
+  // If the legacy TLS interstitial is not enabled, don't cause errors. The
+  // interstitial is also dependent on committed interstitials being enabled.
+  if (!base::FeatureList::IsEnabled(
+          web::features::kSSLCommittedInterstitials) ||
+      !base::FeatureList::IsEnabled(web::features::kIOSLegacyTLSInterstitial)) {
+    decisionHandler(YES);
+    return;
+  }
+
+  if (web::GetWebClient()->IsLegacyTLSAllowedForHost(
+          self.webStateImpl,
+          base::SysNSStringToUTF8(challenge.protectionSpace.host))) {
+    decisionHandler(YES);
+    return;
+  }
+
+  if (self.pendingNavigationInfo) {
+    self.pendingNavigationInfo.cancelled = YES;
+    self.pendingNavigationInfo.cancellationError =
+        [NSError errorWithDomain:net::kNSErrorDomain
+                            code:net::ERR_SSL_OBSOLETE_VERSION
+                        userInfo:nil];
+  }
+  decisionHandler(NO);
+}
+
 - (void)webViewWebContentProcessDidTerminate:(WKWebView*)webView {
   [self didReceiveWKNavigationDelegateCallback];
 
@@ -1239,8 +1289,12 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     item = [[CRWNavigationItemHolder
         holderForBackForwardListItem:webView.backForwardList.currentItem]
         navigationItem];
-    userAgentType = item->GetUserAgentType();
-  } else {
+    // In some cases, the associated item isn't found. In that case, follow the
+    // code path for the non-backforward navigations. See crbug.com/1121950.
+    if (item)
+      userAgentType = item->GetUserAgentType();
+  }
+  if (!item) {
     // Get the visible item. There is no guarantee that the pending item belongs
     // to this navigation but it is very likely that it is the case. If there is
     // no pending item, it is probably a render initiated navigation. Use the
@@ -1252,8 +1306,15 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     if (!item)
       item = self.navigationManagerImpl->GetVisibleItem();
 
-    userAgentType = self.webStateImpl->GetUserAgentForNextNavigation(
-        net::GURLWithNSURL(navigationAction.request.URL));
+    if (item && item->GetTransitionType() & ui::PAGE_TRANSITION_FORWARD_BACK) {
+      // When navigating forward to a restored page, the WKNavigationAction is
+      // of type reload and not BackForward. The item is correctly set a
+      // back/forward, so it is possible to use it.
+      userAgentType = item->GetUserAgentType();
+    } else {
+      userAgentType = self.webStateImpl->GetUserAgentForNextNavigation(
+          net::GURLWithNSURL(navigationAction.request.URL));
+    }
   }
 
   if (item && web::GetWebClient()->IsAppSpecificURL(item->GetVirtualURL())) {

@@ -110,7 +110,7 @@ IN_PROC_BROWSER_TEST_F(SignInViewControllerBrowserTest, Accelerators) {
 
   ui_test_utils::TabAddedWaiter wait_for_new_tab(browser());
 // Press Ctrl/Cmd+T, which will open a new tab.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(
       browser(), ui::VKEY_T, /*control=*/false, /*shift=*/false, /*alt=*/false,
       /*command=*/true));
@@ -198,36 +198,5 @@ IN_PROC_BROWSER_TEST_F(SignInViewControllerBrowserTest,
                                               /*command=*/false));
   // Default action simply closes the dialog.
   dialog_observer.WaitForDialogClosed();
-  EXPECT_FALSE(browser()->signin_view_controller()->ShowsModalDialog());
-}
-
-// Tests that the confirm button is focused by default in the reauth dialog.
-IN_PROC_BROWSER_TEST_F(SignInViewControllerBrowserTest, ReauthDefaultFocus) {
-  const auto kAccessPoint =
-      signin_metrics::ReauthAccessPoint::kAutofillDropdown;
-  content::TestNavigationObserver content_observer(
-      signin::GetReauthConfirmationURL(kAccessPoint));
-  content_observer.StartWatchingNewWebContents();
-  CoreAccountId account_id = signin::SetUnconsentedPrimaryAccount(
-                                 GetIdentityManager(), "alice@gmail.com")
-                                 .account_id;
-
-  signin::ReauthResult reauth_result;
-  base::RunLoop run_loop;
-  std::unique_ptr<SigninViewController::ReauthAbortHandle> abort_handle =
-      browser()->signin_view_controller()->ShowReauthPrompt(
-          account_id, kAccessPoint,
-          base::BindLambdaForTesting([&](signin::ReauthResult result) {
-            reauth_result = result;
-            run_loop.Quit();
-          }));
-  EXPECT_TRUE(browser()->signin_view_controller()->ShowsModalDialog());
-  content_observer.Wait();
-  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_RETURN,
-                                              /*control=*/false,
-                                              /*shift=*/false, /*alt=*/false,
-                                              /*command=*/false));
-  run_loop.Run();
-  EXPECT_EQ(reauth_result, signin::ReauthResult::kSuccess);
   EXPECT_FALSE(browser()->signin_view_controller()->ShowsModalDialog());
 }

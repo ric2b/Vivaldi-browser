@@ -21,7 +21,7 @@ if (is_android) {
   }
 }
 
-if (!is_android) {
+if (vivaldi_build_tests) {
   update_template_instance("//components:components_unittests") {
     deps += [
       "//vivaldi/notes:unit_tests",

@@ -27,10 +27,19 @@ import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeBaseAppCompatActivity;
+import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.password_check.PasswordCheckComponentUiFactory;
+import org.chromium.chrome.browser.password_check.PasswordCheckEditFragmentView;
+import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
+import org.chromium.chrome.browser.password_check.PasswordCheckFragmentView;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
+import org.chromium.chrome.browser.safety_check.SafetyCheckCoordinator;
+import org.chromium.chrome.browser.safety_check.SafetyCheckSettingsFragment;
+import org.chromium.chrome.browser.safety_check.SafetyCheckUpdatesDelegateImpl;
+import org.chromium.chrome.browser.signin.SigninActivityLauncherImpl;
 import org.chromium.chrome.browser.site_settings.ChromeSiteSettingsClient;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsPreferenceFragment;
@@ -76,6 +85,9 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     private boolean mIsNewlyCreated;
 
     private static boolean sActivityNotExportedChecked;
+
+    /** An instance of settings launcher that can be injected into a fragment */
+    private SettingsLauncher mSettingsLauncher = new SettingsLauncherImpl();
 
     @SuppressLint("InlinedApi")
     @Override
@@ -266,7 +278,29 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     public void onAttachFragment(Fragment fragment) {
         if (fragment instanceof SiteSettingsPreferenceFragment) {
             ((SiteSettingsPreferenceFragment) fragment)
-                    .setSiteSettingsClient(new ChromeSiteSettingsClient(this));
+                    .setSiteSettingsClient(new ChromeSiteSettingsClient(
+                            this, Profile.getLastUsedRegularProfile()));
+        }
+        if (fragment instanceof FragmentSettingsLauncher) {
+            FragmentSettingsLauncher fragmentSettingsLauncher = (FragmentSettingsLauncher) fragment;
+            fragmentSettingsLauncher.setSettingsLauncher(mSettingsLauncher);
+        }
+        if (fragment instanceof FragmentHelpAndFeedbackLauncher) {
+            FragmentHelpAndFeedbackLauncher fragmentHelpAndFeedbackLauncher =
+                    (FragmentHelpAndFeedbackLauncher) fragment;
+            fragmentHelpAndFeedbackLauncher.setHelpAndFeedbackLauncher(
+                    HelpAndFeedback.getInstance());
+        }
+        if (fragment instanceof SafetyCheckSettingsFragment) {
+            SafetyCheckCoordinator.create((SafetyCheckSettingsFragment) fragment,
+                    new SafetyCheckUpdatesDelegateImpl(this), new SettingsLauncherImpl(),
+                    SigninActivityLauncherImpl.get());
+        }
+        if (fragment instanceof PasswordCheckFragmentView) {
+            PasswordCheckComponentUiFactory.create((PasswordCheckFragmentView) fragment);
+        } else if (fragment instanceof PasswordCheckEditFragmentView) {
+            PasswordCheckEditFragmentView editFragment = (PasswordCheckEditFragmentView) fragment;
+            editFragment.setCheckProvider(PasswordCheckFactory::getOrCreate);
         }
     }
 

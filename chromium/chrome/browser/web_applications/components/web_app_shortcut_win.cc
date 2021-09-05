@@ -163,14 +163,15 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
   // fact.
   base::string16 wide_switches(cmd_line.GetCommandLineString());
 
-  // Sanitize description
+  // Sanitize description.
   base::string16 description = shortcut_info.description;
   if (description.length() >= MAX_PATH)
     description.resize(MAX_PATH - 1);
 
-  // Generates app id from web app url and profile path.
+  // Generates app id from the browser's appid, and the app's extension_id or
+  // web app url, and the profile path.
   std::string app_name(web_app::GenerateApplicationNameFromInfo(shortcut_info));
-  base::string16 app_id(shell_integration::win::GetAppModelIdForProfile(
+  base::string16 app_id(shell_integration::win::GetAppUserModelIdForApp(
       base::UTF8ToUTF16(app_name), shortcut_info.profile_path));
 
   bool success = true;
@@ -234,12 +235,14 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
 // for this app were found (and deleted). This will delete duplicate shortcuts,
 // but only return each path once, even if it contained multiple deleted
 // shortcuts. Both of these may be NULL.
-void GetShortcutLocationsAndDeleteShortcuts(
+bool GetShortcutLocationsAndDeleteShortcuts(
     const base::FilePath& web_app_path,
     const base::FilePath& profile_path,
     const base::string16& title,
     bool* was_pinned_to_taskbar,
     std::vector<base::FilePath>* shortcut_paths) {
+  bool result = true;
+
   // Get all possible locations for shortcuts.
   web_app::ShortcutLocations all_shortcut_locations;
   all_shortcut_locations.in_quick_launch_bar = true;
@@ -280,9 +283,11 @@ void GetShortcutLocationsAndDeleteShortcuts(
       // Any shortcut could have been pinned, either by chrome or the user, so
       // they are all unpinned.
       base::win::UnpinShortcutFromTaskbar(*j);
-      base::DeleteFile(*j, false);
+      if (base::DeleteFile(*j))
+        result = false;
     }
   }
+  return result;
 }
 
 void CreateIconAndSetRelaunchDetails(
@@ -477,11 +482,11 @@ void UpdatePlatformShortcuts(const base::FilePath& web_app_path,
   CheckAndSaveIcon(icon_file, shortcut_info.favicon, true);
 }
 
-void DeletePlatformShortcuts(const base::FilePath& web_app_path,
+bool DeletePlatformShortcuts(const base::FilePath& web_app_path,
                              const ShortcutInfo& shortcut_info) {
-  GetShortcutLocationsAndDeleteShortcuts(web_app_path,
-                                         shortcut_info.profile_path,
-                                         shortcut_info.title, NULL, NULL);
+  bool result = GetShortcutLocationsAndDeleteShortcuts(
+      web_app_path, shortcut_info.profile_path, shortcut_info.title, nullptr,
+      nullptr);
 
   // If there are no more shortcuts in the Chrome Apps subdirectory, remove it.
   base::FilePath chrome_apps_dir;
@@ -489,11 +494,13 @@ void DeletePlatformShortcuts(const base::FilePath& web_app_path,
           ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_APPS_DIR,
           ShellUtil::CURRENT_USER, &chrome_apps_dir)) {
     if (base::IsDirectoryEmpty(chrome_apps_dir))
-      base::DeleteFile(chrome_apps_dir, false);
+      base::DeleteFile(chrome_apps_dir);
   }
 
   // Delete downloaded shortcut icons for the web app.
-  web_app::internals::DeleteShortcutsMenuIcons(web_app_path);
+  if (!web_app::internals::DeleteShortcutsMenuIcons(web_app_path))
+    result = false;
+  return result;
 }
 
 void DeleteAllShortcutsForProfile(const base::FilePath& profile_path) {
@@ -508,7 +515,7 @@ void DeleteAllShortcutsForProfile(const base::FilePath& profile_path) {
           ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_APPS_DIR,
           ShellUtil::CURRENT_USER, &chrome_apps_dir)) {
     if (base::IsDirectoryEmpty(chrome_apps_dir))
-      base::DeleteFile(chrome_apps_dir, false);
+      base::DeleteFile(chrome_apps_dir);
   }
 }
 

@@ -11,6 +11,7 @@
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/assistant/assistant_state_base.h"
 #include "ash/public/cpp/assistant/controller/assistant_alarm_timer_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_notification_controller.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
@@ -25,7 +26,6 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "chromeos/assistant/internal/internal_constants.h"
-#include "chromeos/assistant/internal/proto/google3/assistant/api/client_input/warmer_welcome_input.pb.h"
 #include "chromeos/assistant/internal/proto/google3/assistant/api/client_op/device_args.pb.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -37,6 +37,7 @@
 #include "chromeos/services/assistant/public/cpp/assistant_client.h"
 #include "chromeos/services/assistant/public/cpp/device_actions.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
+#include "chromeos/services/assistant/public/shared/utils.h"
 #include "chromeos/services/assistant/service_context.h"
 #include "chromeos/services/assistant/utils.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
@@ -96,21 +97,6 @@ constexpr char kStopTrackClientOp[] = "media.STOP";
 
 constexpr char kAndroidSettingsAppPackage[] = "com.android.settings";
 
-action::AppStatus GetActionAppStatus(AppStatus status) {
-  switch (status) {
-    case AppStatus::UNKNOWN:
-      return action::UNKNOWN;
-    case AppStatus::AVAILABLE:
-      return action::AVAILABLE;
-    case AppStatus::UNAVAILABLE:
-      return action::UNAVAILABLE;
-    case AppStatus::VERSION_MISMATCH:
-      return action::VERSION_MISMATCH;
-    case AppStatus::DISABLED:
-      return action::DISABLED;
-  }
-}
-
 ash::AssistantTimerState GetTimerState(assistant_client::Timer::State state) {
   switch (state) {
     case assistant_client::Timer::State::UNKNOWN:
@@ -160,6 +146,33 @@ void UpdateInternalOptions(
   assistant_manager_internal->SetOptions(*internal_options, [](bool success) {
     DVLOG(2) << "set options: " << success;
   });
+}
+
+const char* ToTriggerSource(AssistantEntryPoint entry_point) {
+  switch (entry_point) {
+    case AssistantEntryPoint::kUnspecified:
+      return kEntryPointUnspecified;
+    case AssistantEntryPoint::kDeepLink:
+      return kEntryPointDeepLink;
+    case AssistantEntryPoint::kHotkey:
+      return kEntryPointHotkey;
+    case AssistantEntryPoint::kHotword:
+      return kEntryPointHotword;
+    case AssistantEntryPoint::kLongPressLauncher:
+      return kEntryPointLongPressLauncher;
+    case AssistantEntryPoint::kSetup:
+      return kEntryPointSetup;
+    case AssistantEntryPoint::kStylus:
+      return kEntryPointStylus;
+    case AssistantEntryPoint::kLauncherSearchResult:
+      return kEntryPointLauncherSearchResult;
+    case AssistantEntryPoint::kLauncherSearchBoxIcon:
+      return kEntryPointLauncherSearchBoxIcon;
+    case AssistantEntryPoint::kProactiveSuggestions:
+      return kEntryPointProactiveSuggestions;
+    case AssistantEntryPoint::kLauncherChip:
+      return kEntryPointLauncherChip;
+  }
 }
 
 }  // namespace
@@ -453,6 +466,7 @@ void AssistantManagerServiceImpl::UpdateInternalMediaPlayerStatus(
 
 void AssistantManagerServiceImpl::StartVoiceInteraction() {
   DCHECK(assistant_manager_);
+  DVLOG(1) << __func__;
 
   platform_api_->SetMicState(true);
   assistant_manager_->StartAssistantInteraction();
@@ -460,6 +474,7 @@ void AssistantManagerServiceImpl::StartVoiceInteraction() {
 
 void AssistantManagerServiceImpl::StopActiveInteraction(
     bool cancel_conversation) {
+  DVLOG(1) << __func__;
   platform_api_->SetMicState(false);
 
   if (!assistant_manager_internal_) {
@@ -468,31 +483,6 @@ void AssistantManagerServiceImpl::StopActiveInteraction(
   }
   assistant_manager_internal_->StopAssistantInteractionInternal(
       cancel_conversation);
-}
-
-void AssistantManagerServiceImpl::StartWarmerWelcomeInteraction(
-    int num_warmer_welcome_triggered,
-    bool allow_tts) {
-  DCHECK(assistant_manager_internal_);
-
-  const std::string interaction =
-      CreateWarmerWelcomeInteraction(num_warmer_welcome_triggered);
-
-  assistant_client::VoicelessOptions options;
-  options.is_user_initiated = true;
-  options.modality =
-      allow_tts ? assistant_client::VoicelessOptions::Modality::VOICE_MODALITY
-                : assistant_client::VoicelessOptions::Modality::TYPING_MODALITY;
-
-  auto interaction_type = allow_tts ? AssistantInteractionType::kVoice
-                                    : AssistantInteractionType::kText;
-  options.conversation_turn_id = NewPendingInteraction(
-      interaction_type, AssistantQuerySource::kWarmerWelcome,
-      /*query=*/std::string());
-
-  assistant_manager_internal_->SendVoicelessInteraction(
-      interaction, /*description=*/"warmer_welcome_trigger", options,
-      [](auto) {});
 }
 
 void AssistantManagerServiceImpl::StartEditReminderInteraction(
@@ -532,6 +522,7 @@ void AssistantManagerServiceImpl::StartTextInteraction(
     const std::string& query,
     AssistantQuerySource source,
     bool allow_tts) {
+  DVLOG(1) << __func__;
   assistant_client::VoicelessOptions options;
   options.is_user_initiated = true;
   options.enable_on_device_assistant_for_voiceless =
@@ -563,7 +554,7 @@ void AssistantManagerServiceImpl::RemoveAssistantInteractionSubscriber(
 }
 
 void AssistantManagerServiceImpl::RetrieveNotification(
-    const mojom::AssistantNotification& notification,
+    const AssistantNotification& notification,
     int action_index) {
   const std::string& notification_id = notification.server_id;
   const std::string& consistency_token = notification.consistency_token;
@@ -579,7 +570,7 @@ void AssistantManagerServiceImpl::RetrieveNotification(
 }
 
 void AssistantManagerServiceImpl::DismissNotification(
-    const mojom::AssistantNotification& notification) {
+    const AssistantNotification& notification) {
   // |assistant_manager_internal_| may not exist if we are dismissing
   // notifications as part of a shutdown sequence.
   if (!assistant_manager_internal_)
@@ -774,76 +765,71 @@ void AssistantManagerServiceImpl::OnShowNotification(
   ENSURE_MAIN_THREAD(&AssistantManagerServiceImpl::OnShowNotification,
                      notification);
 
-  mojom::AssistantNotificationPtr notification_ptr =
-      mojom::AssistantNotification::New();
-  notification_ptr->title = notification.title;
-  notification_ptr->message = notification.text;
-  notification_ptr->action_url = GURL(notification.action_url);
-  notification_ptr->client_id = notification.notification_id;
-  notification_ptr->server_id = notification.notification_id;
-  notification_ptr->consistency_token = notification.consistency_token;
-  notification_ptr->opaque_token = notification.opaque_token;
-  notification_ptr->grouping_key = notification.grouping_key;
-  notification_ptr->obfuscated_gaia_id = notification.obfuscated_gaia_id;
-  notification_ptr->from_server = true;
+  AssistantNotification assistant_notification;
+  assistant_notification.title = notification.title;
+  assistant_notification.message = notification.text;
+  assistant_notification.action_url = GURL(notification.action_url);
+  assistant_notification.client_id = notification.notification_id;
+  assistant_notification.server_id = notification.notification_id;
+  assistant_notification.consistency_token = notification.consistency_token;
+  assistant_notification.opaque_token = notification.opaque_token;
+  assistant_notification.grouping_key = notification.grouping_key;
+  assistant_notification.obfuscated_gaia_id = notification.obfuscated_gaia_id;
+  assistant_notification.from_server = true;
 
   if (notification.expiry_timestamp_ms) {
-    notification_ptr->expiry_time =
+    assistant_notification.expiry_time =
         base::Time::FromJavaTime(notification.expiry_timestamp_ms);
   }
 
   // The server sometimes sends an empty |notification_id|, but our client
   // requires a non-empty |client_id| for notifications. Known instances in
   // which the server sends an empty |notification_id| are for Reminders.
-  if (notification_ptr->client_id.empty())
-    notification_ptr->client_id = base::UnguessableToken::Create().ToString();
+  if (assistant_notification.client_id.empty()) {
+    assistant_notification.client_id =
+        base::UnguessableToken::Create().ToString();
+  }
 
   for (const auto& button : notification.buttons) {
-    notification_ptr->buttons.push_back(mojom::AssistantNotificationButton::New(
-        button.label, GURL(button.action_url),
-        /*remove_notification_on_click=*/true));
+    assistant_notification.buttons.push_back(
+        {button.label, GURL(button.action_url),
+         /*remove_notification_on_click=*/true});
   }
 
   assistant_notification_controller()->AddOrUpdateNotification(
-      notification_ptr.Clone());
+      std::move(assistant_notification));
 }
 
 void AssistantManagerServiceImpl::OnOpenAndroidApp(
-    const action::AndroidAppInfo& action_app_info,
-    const action::InteractionInfo& interaction) {
-  ENSURE_MAIN_THREAD(&AssistantManagerServiceImpl::OnOpenAndroidApp,
-                     action_app_info, interaction);
-  AndroidAppInfo app_info;
-  app_info.package_name = action_app_info.package_name;
-  for (auto& it : interaction_subscribers_) {
-    bool success = it.OnOpenAppResponse(app_info);
+    const AndroidAppInfo& app_info,
+    const InteractionInfo& interaction) {
+  ENSURE_MAIN_THREAD(&AssistantManagerServiceImpl::OnOpenAndroidApp, app_info,
+                     interaction);
+  bool success = false;
+  for (auto& it : interaction_subscribers_)
+    success |= it.OnOpenAppResponse(app_info);
 
-    std::string interaction_proto = CreateOpenProviderResponseInteraction(
-        interaction.interaction_id, success);
-    assistant_client::VoicelessOptions options;
-    options.obfuscated_gaia_id = interaction.user_id;
+  std::string interaction_proto = CreateOpenProviderResponseInteraction(
+      interaction.interaction_id, success);
+  assistant_client::VoicelessOptions options;
+  options.obfuscated_gaia_id = interaction.user_id;
 
-    // TODO(xiaohuic): figure out if we can move this out of the loop.
-    assistant_manager_internal_->SendVoicelessInteraction(
-        interaction_proto, /*description=*/"open_provider_response", options,
-        [](auto) {});
-  }
+  assistant_manager_internal_->SendVoicelessInteraction(
+      interaction_proto, /*description=*/"open_provider_response", options,
+      [](auto) {});
 }
 
 void AssistantManagerServiceImpl::OnVerifyAndroidApp(
-    const std::vector<action::AndroidAppInfo>& action_apps_info,
-    const action::InteractionInfo& interaction) {
+    const std::vector<AndroidAppInfo>& apps_info,
+    const InteractionInfo& interaction) {
   ENSURE_MAIN_THREAD(&AssistantManagerServiceImpl::OnVerifyAndroidApp,
-                     action_apps_info, interaction);
-  std::vector<action::AndroidAppInfo> result_apps_info;
-  for (auto& action_app_info : action_apps_info) {
-    AndroidAppInfo android_app_info;
-    android_app_info.package_name = action_app_info.package_name;
-    AppStatus status = device_actions()->GetAndroidAppStatus(android_app_info);
-    result_apps_info.emplace_back(
-        action_app_info.package_name, action_app_info.version,
-        action_app_info.localized_app_name, action_app_info.intent,
-        GetActionAppStatus(status));
+                     apps_info, interaction);
+  std::vector<AndroidAppInfo> result_apps_info;
+  for (auto& app_info : apps_info) {
+    AndroidAppInfo result_app_info(app_info);
+    AppStatus status = device_actions()->GetAndroidAppStatus(app_info);
+    result_app_info.status = status;
+    result_apps_info.emplace_back(result_app_info);
   }
   std::string interaction_proto = CreateVerifyProviderResponseInteraction(
       interaction.interaction_id, result_apps_info);
@@ -860,37 +846,32 @@ void AssistantManagerServiceImpl::OnVerifyAndroidApp(
 }
 
 void AssistantManagerServiceImpl::OnOpenMediaAndroidIntent(
-    const std::string play_media_args_proto,
-    action::AndroidAppInfo* action_app_info) {
+    const std::string& play_media_args_proto,
+    AndroidAppInfo* app_info) {
   DCHECK(main_task_runner()->RunsTasksInCurrentSequence());
 
   // Handle android media playback intent.
-  AndroidAppInfo app_info;
-  app_info.package_name = action_app_info->package_name;
-  app_info.action = kIntentActionView;
-  if (!action_app_info->intent.empty()) {
-    app_info.intent = action_app_info->intent;
-  } else {
+  app_info->action = kIntentActionView;
+  if (app_info->intent.empty()) {
     std::string url = GetAndroidIntentUrlFromMediaArgs(play_media_args_proto);
-    if (!url.empty()) {
-      app_info.intent = url;
-    }
+    if (!url.empty())
+      app_info->intent = url;
   }
   for (auto& it : interaction_subscribers_) {
-    bool success = it.OnOpenAppResponse(app_info);
+    bool success = it.OnOpenAppResponse(*app_info);
     HandleLaunchMediaIntentResponse(success);
   }
 }
 
 void AssistantManagerServiceImpl::OnPlayMedia(
-    const std::string play_media_args_proto) {
+    const std::string& play_media_args_proto) {
   ENSURE_MAIN_THREAD(&AssistantManagerServiceImpl::OnPlayMedia,
                      play_media_args_proto);
 
-  std::unique_ptr<action::AndroidAppInfo> action_app_info =
-      GetAndroidAppInfoFromMediaArgs(play_media_args_proto);
-  if (action_app_info) {
-    OnOpenMediaAndroidIntent(play_media_args_proto, action_app_info.get());
+  std::unique_ptr<AndroidAppInfo> app_info =
+      GetAppInfoFromMediaArgs(play_media_args_proto);
+  if (app_info) {
+    OnOpenMediaAndroidIntent(play_media_args_proto, app_info.get());
   } else {
     std::string url = GetWebUrlFromMediaArgs(play_media_args_proto);
     // Fallack to web URL.
@@ -1117,8 +1098,9 @@ void AssistantManagerServiceImpl::PostInitAssistant() {
 
   assistant_settings_->UpdateServerDeviceSettings();
 
-  if (base::FeatureList::IsEnabled(assistant::features::kAssistantAppSupport)) {
-    scoped_app_list_event_subscriber.Add(device_actions());
+  if (base::FeatureList::IsEnabled(assistant::features::kAssistantAppSupport) &&
+      !scoped_app_list_event_subscriber_.IsObservingSources()) {
+    scoped_app_list_event_subscriber_.Add(device_actions());
   }
 }
 
@@ -1170,16 +1152,15 @@ void AssistantManagerServiceImpl::OnStartFinished() {
 
 void AssistantManagerServiceImpl::OnAndroidAppListRefreshed(
     const std::vector<AndroidAppInfo>& apps_info) {
-  std::vector<action::AndroidAppInfo> action_apps_info;
+  std::vector<AndroidAppInfo> filtered_apps_info;
   for (const auto& app_info : apps_info) {
     // TODO(b/146355799): Remove the special handling for Android settings app.
     if (app_info.package_name == kAndroidSettingsAppPackage)
       continue;
 
-    action_apps_info.emplace_back(app_info.package_name, app_info.version,
-                                  app_info.localized_app_name, app_info.intent);
+    filtered_apps_info.emplace_back(app_info);
   }
-  display_connection_->OnAndroidAppListRefreshed(action_apps_info);
+  display_connection_->OnAndroidAppListRefreshed(filtered_apps_info);
 }
 
 void AssistantManagerServiceImpl::OnPlaybackStateChange(
@@ -1311,7 +1292,7 @@ void AssistantManagerServiceImpl::ResumeTimer(const std::string& id) {
 void AssistantManagerServiceImpl::NotifyEntryIntoAssistantUi(
     AssistantEntryPoint entry_point) {
   base::AutoLock lock(last_trigger_source_lock_);
-  last_trigger_source_ = ToTriggerSource(static_cast<int>(entry_point));
+  last_trigger_source_ = ToTriggerSource(entry_point);
 }
 
 std::string AssistantManagerServiceImpl::ConsumeLastTriggerSource() {
@@ -1467,7 +1448,7 @@ AssistantManagerServiceImpl::assistant_alarm_timer_controller() {
   return context_->assistant_alarm_timer_controller();
 }
 
-ash::mojom::AssistantNotificationController*
+ash::AssistantNotificationController*
 AssistantManagerServiceImpl::assistant_notification_controller() {
   return context_->assistant_notification_controller();
 }

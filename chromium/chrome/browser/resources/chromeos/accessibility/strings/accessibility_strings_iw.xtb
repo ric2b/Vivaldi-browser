@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">פריט רשימה</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">החלקה ימינה עם שתי אצבעות</translation>
+<translation id="1016393160682012902">‏ניתן ללחוץ על מקש במקלדת QWERTY, על מקש בצג ברייל או על תנועת מגע כדי להבין מה תפקידם. אפשר ללחוץ על Control ו-W או על Escape כדי לצאת.</translation>
 <translation id="1022586497894531524">‏האם זה השימוש הראשון שלך בקורא המסך הקולי ChromeVox? המדריך הקצר הזה מסביר את עקרונות הבסיס של ChromeVox למתחילים.</translation>
 <translation id="1025074108959230262">מצב אתר דביק מושבת</translation>
 <translation id="1031961866430398710">לאחר מכן</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">קישור פנימי</translation>
 <translation id="4909019435900810068">העברת הסמן למילה הקודמת</translation>
 <translation id="4911349081560453449">אין תיבת סימון קודמת</translation>
-<translation id="4915087353619183190">‏הפעלה של מצב למידה. הקשה על מקש במקלדת qwerty, מקש ברייל בתצוגה הניתנת לרענון או ביצוע תנועת מגע יציגו את הפעולה המבוצעת. כדי לצאת יש להקיש על Control יחד עם W, או על מקש Esc.</translation>
 <translation id="492295894462528572">פתח דבר</translation>
 <translation id="495046168593986294">גלילה למעלה</translation>
 <translation id="495170559598752135">פעולות</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">ירוק</translation>
 <translation id="602001110135236999">גלילה שמאלה</translation>
 <translation id="6034000775414344507">אפור בהיר</translation>
+<translation id="6036135911048686884">עיון במגע</translation>
 <translation id="6037602951055904232">הזז קדימה</translation>
 <translation id="6044160928851315051">החשך את המסך</translation>
 <translation id="6082768461603900813">ניווט בסיסי</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{סולמית}two{# סימני סולמית}many{# סימני סולמית}other{# סימני סולמית}}</translation>
 <translation id="8378855320830505539">אזור</translation>
 <translation id="8382679411218029383">השלמה אוטומטית מוטבעת ורשימה</translation>
+<translation id="8394908167088220973">הפעלה/השהיה של המדיה</translation>
 <translation id="8428213095426709021">הגדרות</translation>
 <translation id="8428603554127842284">רמה <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">צא מתוכן מובנה, כמו טבלאות</translation>
 <translation id="8779057862865475116">אין קישור קודם</translation>
 <translation id="8796411681063377102">הכותרת הבאה של רמה 3</translation>
+<translation id="8823311177246872527">דף <ph name="CURRENTPAGE" /> מתוך <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">כותרת שורה</translation>

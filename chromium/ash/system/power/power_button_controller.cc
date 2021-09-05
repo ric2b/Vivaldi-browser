@@ -115,17 +115,21 @@ PowerButtonController::PowerButtonController(
   power_manager_client->GetSwitchStates(base::BindOnce(
       &PowerButtonController::OnGetSwitchStates, weak_factory_.GetWeakPtr()));
   AccelerometerReader::GetInstance()->AddObserver(this);
-  Shell::Get()->display_configurator()->AddObserver(this);
+  auto* shell = Shell::Get();
+  shell->display_configurator()->AddObserver(this);
   backlights_forced_off_observer_.Add(backlights_forced_off_setter);
-  Shell::Get()->tablet_mode_controller()->AddObserver(this);
-  Shell::Get()->lock_state_controller()->AddObserver(this);
+  shell->tablet_mode_controller()->AddObserver(this);
+  shell->lock_state_controller()->AddObserver(this);
+  shell->session_controller()->AddObserver(this);
 }
 
 PowerButtonController::~PowerButtonController() {
-  Shell::Get()->lock_state_controller()->RemoveObserver(this);
-  if (Shell::Get()->tablet_mode_controller())
-    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
-  Shell::Get()->display_configurator()->RemoveObserver(this);
+  auto* shell = Shell::Get();
+  shell->session_controller()->RemoveObserver(this);
+  shell->lock_state_controller()->RemoveObserver(this);
+  if (shell->tablet_mode_controller())
+    shell->tablet_mode_controller()->RemoveObserver(this);
+  shell->display_configurator()->RemoveObserver(this);
   AccelerometerReader::GetInstance()->RemoveObserver(this);
   chromeos::PowerManagerClient::Get()->RemoveObserver(this);
 }
@@ -298,8 +302,11 @@ bool PowerButtonController::IsMenuOpened() const {
 }
 
 void PowerButtonController::DismissMenu() {
-  if (IsMenuOpened())
+  if (IsMenuOpened()) {
+    static_cast<PowerButtonMenuScreenView*>(menu_widget_->GetContentsView())
+        ->ResetOpacity();
     menu_widget_->Hide();
+  }
 
   show_menu_animation_done_ = false;
   active_window_paint_as_active_lock_.reset();
@@ -359,6 +366,12 @@ void PowerButtonController::SuspendImminent(
 
 void PowerButtonController::SuspendDone(const base::TimeDelta& sleep_duration) {
   last_resume_time_ = tick_clock_->NowTicks();
+}
+
+void PowerButtonController::OnLoginStatusChanged(LoginStatus status) {
+  // Destroy |menu_widget_| on login status change to reset the content of the
+  // menu since the menu items change if login stauts changed.
+  menu_widget_.reset();
 }
 
 void PowerButtonController::OnGetSwitchStates(
@@ -437,12 +450,17 @@ void PowerButtonController::StartPowerMenuAnimation() {
       active_toplevel_widget ? active_toplevel_widget->LockPaintAsActive()
                              : nullptr;
 
-  if (!menu_widget_)
+  if (!menu_widget_) {
     menu_widget_ = CreateMenuWidget();
-  menu_widget_->SetContentsView(std::make_unique<PowerButtonMenuScreenView>(
-      power_button_position_, power_button_offset_percentage_,
-      base::BindRepeating(&PowerButtonController::SetShowMenuAnimationDone,
-                          base::Unretained(this))));
+    menu_widget_->SetContentsView(std::make_unique<PowerButtonMenuScreenView>(
+        power_button_position_, power_button_offset_percentage_,
+        base::BindRepeating(&PowerButtonController::SetShowMenuAnimationDone,
+                            base::Unretained(this))));
+  }
+  auto* contents_view =
+      static_cast<PowerButtonMenuScreenView*>(menu_widget_->GetContentsView());
+  contents_view->OnWidgetShown(power_button_position_,
+                               power_button_offset_percentage_);
   menu_widget_->Show();
 
   // Hide cursor, but let it reappear if the mouse moves.
@@ -450,8 +468,7 @@ void PowerButtonController::StartPowerMenuAnimation() {
   if (shell->cursor_manager())
     shell->cursor_manager()->HideCursor();
 
-  static_cast<PowerButtonMenuScreenView*>(menu_widget_->GetContentsView())
-      ->ScheduleShowHideAnimation(true);
+  contents_view->ScheduleShowHideAnimation(true);
 }
 
 void PowerButtonController::ProcessCommandLine() {

@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Ro‘yxat obyekti</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Ikkita barmoq bilan o‘ngga suring</translation>
+<translation id="1016393160682012902">Oddiy klaviatura (Qwerty tartibidagi) tugmalarini yoki yangilanuvchan brayl tugmalarini yoki funksiyasini tushunish uchun imo-ishora ustiga bosing. Chiqish uchun Ctrl +w tugmalarini bosing.</translation>
 <translation id="1022586497894531524">ChromeVox ovozli ta’rif funksiyasidan birinchi marta foydalanyapsizmi? Ushbu qo‘llanma sizni ChromeVox asoslari bilan tanishtiradi.</translation>
 <translation id="1025074108959230262">Yopishqoq rejim yoqilmagan</translation>
 <translation id="1031961866430398710">keyin</translation>
@@ -503,7 +504,6 @@
 <translation id="489907760999452556">Ichki havola</translation>
 <translation id="4909019435900810068">Bitta oldingi soʻzga oʻtish</translation>
 <translation id="4911349081560453449">Bundan oldin boshqa belgilash katakchasi mavjud emas</translation>
-<translation id="4915087353619183190">Oʻrganish rejimi ishga tushmoqda. Oddiy klaviatura (Qwerty tartibidagi) tugmalarini yoki yangilanuvchan brayl tugmalarini yoki funksiyasini tushunish uchun imo-ishora ustiga bosing. Chiqish uchun Ctrl +w tugmalarini yoki “Escape” tugmasini bosing.</translation>
 <translation id="492295894462528572">Taqriz</translation>
 <translation id="495046168593986294">Tepaga chiqish</translation>
 <translation id="495170559598752135">Harakatlar</translation>
@@ -646,6 +646,7 @@
 <translation id="6017514345406065928">Yashil</translation>
 <translation id="602001110135236999">Chapga aylantirish</translation>
 <translation id="6034000775414344507">Och kulrang</translation>
+<translation id="6036135911048686884">Sensorli tanishuv</translation>
 <translation id="6037602951055904232">Oldinga o‘tish</translation>
 <translation id="6044160928851315051">Ekranni xiralashtirish</translation>
 <translation id="6082768461603900813">Asosiy navigatsiya</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{funt}other{# ta funt belgisi}}</translation>
 <translation id="8378855320830505539">Hudud</translation>
 <translation id="8382679411218029383">Avto-to‘ldirish qatori va ro‘yxati</translation>
+<translation id="8394908167088220973">Ijro/pauza</translation>
 <translation id="8428213095426709021">Sozlamalar</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" />inchi daraja</translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">jadval kabi tartiblangan kontent kiritishni yakunlash</translation>
 <translation id="8779057862865475116">Avvalgi havola mavjud emas</translation>
 <translation id="8796411681063377102">Keyingi 3-chi darajali sarlavha</translation>
+<translation id="8823311177246872527">Sahifa: <ph name="CURRENTPAGE" /> / <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Satr sarlavhasi</translation>

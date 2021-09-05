@@ -87,6 +87,7 @@
 #     # files.
 #   }
 import("//build/config/chrome_build.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/compute_inputs_for_analyze.gni")
 import("//build/config/crypto.gni")
@@ -104,7 +105,7 @@ if (enable_resource_whitelist_generation) {
 
 grit_defines = []
 
-if (is_mac || is_win || is_linux || is_ios) {
+if (is_mac || is_win || is_linux || is_chromeos || is_ios) {
   grit_defines += [
     "-D",
     "scale_factors=2x",
@@ -112,7 +113,7 @@ if (is_mac || is_win || is_linux || is_ios) {
 }
 
 # Mac and iOS want Title Case strings.
-use_titlecase_in_grd_files = is_mac || is_ios
+use_titlecase_in_grd_files = is_apple
 if (use_titlecase_in_grd_files) {
   grit_defines += [
     "-D",
@@ -140,6 +141,13 @@ if (is_chromeos) {
   grit_defines += [
     "-D",
     "chromeos",
+  ]
+}
+
+if (chromeos_is_browser_only) {
+  grit_defines += [
+    "-D",
+    "lacros",
   ]
 }
 
@@ -199,7 +207,7 @@ if (current_toolchain != host_toolchain) {
       "ios",
     ]
   }
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     grit_defines += [
       "-t",
       "linux2",

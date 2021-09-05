@@ -22,8 +22,8 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.TabbedModeTabDelegateFactory;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -75,7 +75,10 @@ public class TabUmaTest {
         BrowserControlsVisibilityDelegate visibilityDelegate =
                 new BrowserControlsVisibilityDelegate(BrowserControlsState.BOTH) {};
         return new TabbedModeTabDelegateFactory(mActivityTestRule.getActivity(), visibilityDelegate,
-                new ObservableSupplierImpl<ShareDelegate>(), null);
+                new ObservableSupplierImpl<ShareDelegate>(), null,
+                mActivityTestRule.getActivity()
+                        .getRootUiCoordinatorForTesting()
+                        .getBottomSheetController());
     }
 
     private Tab createLazilyLoadedTab(boolean show) throws ExecutionException {

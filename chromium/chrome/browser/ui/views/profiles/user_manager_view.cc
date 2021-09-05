@@ -24,6 +24,8 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/profile_picker.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -50,7 +52,7 @@
 #include "ui/views/win/hwnd_util.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/app_controller_mac.h"
 #endif
 
@@ -167,12 +169,24 @@ void UserManager::Show(
     profiles::UserManagerAction user_manager_action) {
   DCHECK(profile_path_to_focus != ProfileManager::GetGuestProfilePath());
 
+  if (!signin_util::IsForceSigninEnabled() &&
+      (user_manager_action == profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION ||
+       user_manager_action == profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE) &&
+      base::FeatureList::IsEnabled(features::kNewProfilePicker)) {
+    // Use the new profile picker instead.
+    ProfilePicker::Show(
+        user_manager_action == profiles::USER_MANAGER_OPEN_CREATE_USER_PAGE
+            ? ProfilePicker::EntryPoint::kProfileMenuAddNewProfile
+            : ProfilePicker::EntryPoint::kProfileMenuManageProfiles);
+    return;
+  }
+
   if (g_user_manager_view) {
     // If we are showing the User Manager after locking a profile, change the
     // active profile to Guest.
     profiles::SetActiveProfileToGuestIfLocked();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     app_controller_mac::CreateGuestProfileIfNeeded();
 #endif
 
@@ -205,13 +219,16 @@ void UserManager::Show(
 
 // static
 void UserManager::Hide() {
+  // Hide the profile picker, in case it was opened by UserManager::Show().
+  ProfilePicker::Hide();
+
   if (g_user_manager_view)
     g_user_manager_view->GetWidget()->Close();
 }
 
 // static
 bool UserManager::IsShowing() {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Widget activation works differently on Mac: the UserManager is a child
   // widget, so it is not active in the IsActive() sense even when showing
   // and interactable. Test for IsVisible instead - this is what the Cocoa
@@ -346,7 +363,7 @@ void UserManagerView::OnSystemProfileCreated(
   // active profile to Guest.
   profiles::SetActiveProfileToGuestIfLocked();
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   app_controller_mac::CreateGuestProfileIfNeeded();
 #endif
 
@@ -429,7 +446,7 @@ void UserManagerView::Init(Profile* system_profile, const GURL& url) {
 #if defined(OS_WIN)
   // Set the app id for the user manager to the app id of its parent.
   ui::win::SetAppIdForWindow(
-      shell_integration::win::GetChromiumModelIdForProfile(
+      shell_integration::win::GetAppUserModelIdForBrowser(
           system_profile->GetPath()),
       views::HWNDForWidget(GetWidget()));
 #endif

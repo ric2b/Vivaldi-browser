@@ -102,12 +102,14 @@ void VivaldiNativeAppWindowViewsAura::OnBeforeWidgetInit(
 #endif
 }
 
-  views::NonClientFrameView* VivaldiNativeAppWindowViewsAura::CreateNonClientFrameView(
+std::unique_ptr<views::NonClientFrameView>
+VivaldiNativeAppWindowViewsAura::CreateNonClientFrameView(
       views::Widget* widget) {
   if (!is_frameless())
     return views::WidgetDelegateView::CreateNonClientFrameView(widget);
 
-  VivaldiWindowFrameViewAura* frame = new VivaldiWindowFrameViewAura(this);
+  std::unique_ptr <VivaldiWindowFrameViewAura> frame =
+      std::make_unique<VivaldiWindowFrameViewAura>(this);
 
   // Install an easy resize window targeter, which ensures that the root window
   // (not the app) receives mouse events on the edges.

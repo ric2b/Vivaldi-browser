@@ -59,9 +59,9 @@
 #include "ui/base/ui_base_features.h"
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 using content::BrowserThread;
 
@@ -172,7 +172,7 @@ void DesktopCaptureAccessHandler::ProcessScreenCaptureAccessRequest(
           switches::kEnableUserMediaScreenCapturing) ||
       MediaCaptureDevicesDispatcher::IsOriginForCasting(
           request.security_origin) ||
-      IsExtensionWhitelistedForScreenCapture(extension) ||
+      IsExtensionAllowedForScreenCapture(extension) ||
       IsBuiltInExtension(request.security_origin);
 
   const bool origin_is_secure =
@@ -272,7 +272,7 @@ bool DesktopCaptureAccessHandler::IsDefaultApproved(
   return extension &&
          (extension->location() == extensions::Manifest::COMPONENT ||
           extension->location() == extensions::Manifest::EXTERNAL_COMPONENT ||
-          IsExtensionWhitelistedForScreenCapture(extension));
+          IsExtensionAllowedForScreenCapture(extension));
 }
 
 bool DesktopCaptureAccessHandler::SupportsStreamType(
@@ -326,7 +326,7 @@ void DesktopCaptureAccessHandler::HandleRequest(
   // If the device id wasn't specified then this is a screen capture request
   // (i.e. chooseDesktopMedia() API wasn't used to generate device id).
   if (request.requested_video_device_id.empty()) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     if (system_media_permissions::CheckSystemScreenCapturePermission() !=
         system_media_permissions::SystemPermission::kAllowed) {
       std::move(callback).Run(
@@ -368,7 +368,7 @@ void DesktopCaptureAccessHandler::HandleRequest(
         std::move(ui));
     return;
   }
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (media_id.type != content::DesktopMediaID::TYPE_WEB_CONTENTS &&
       system_media_permissions::CheckSystemScreenCapturePermission() !=
           system_media_permissions::SystemPermission::kAllowed) {

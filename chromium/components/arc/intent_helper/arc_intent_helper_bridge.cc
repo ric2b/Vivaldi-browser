@@ -170,11 +170,10 @@ void ArcIntentHelperBridge::OnOpenCustomTab(const std::string& url,
   const GURL gurl(url_formatter::FixupURL(url, /*desired_tld=*/std::string()));
   if (!gurl.is_valid() ||
       allowed_arc_schemes_.find(gurl.scheme()) == allowed_arc_schemes_.end()) {
-    std::move(callback).Run(nullptr);
+    std::move(callback).Run(mojo::NullRemote());
     return;
   }
-  g_open_url_delegate->OpenArcCustomTab(gurl, task_id, surface_id, top_margin,
-                                        std::move(callback));
+  g_open_url_delegate->OpenArcCustomTab(gurl, task_id, std::move(callback));
 }
 
 void ArcIntentHelperBridge::OnOpenChromePage(mojom::ChromePage page) {
@@ -317,6 +316,11 @@ bool ArcIntentHelperBridge::ShouldChromeHandleUrl(const GURL& url) {
 
   // Didn't find any matches for Android so let Chrome handle it.
   return true;
+}
+
+void ArcIntentHelperBridge::SetAdaptiveIconDelegate(
+    AdaptiveIconDelegate* delegate) {
+  icon_loader_.SetAdaptiveIconDelegate(delegate);
 }
 
 void ArcIntentHelperBridge::AddObserver(ArcIntentHelperObserver* observer) {

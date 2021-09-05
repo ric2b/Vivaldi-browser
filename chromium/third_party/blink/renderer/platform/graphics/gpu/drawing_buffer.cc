@@ -493,7 +493,7 @@ bool DrawingBuffer::FinishPrepareTransferableResourceGpu(
     // there are implicit flushes between contexts at the lowest level.
     gl_->GenUnverifiedSyncTokenCHROMIUM(
         color_buffer_for_mailbox->produce_sync_token.GetData());
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_MAC) || defined(OS_ANDROID)
     // Needed for GPU back-pressure on macOS and Android. Used to be in the
     // middle of the commands above; try to move it to the bottom to allow them
     // to be treated atomically.
@@ -791,7 +791,7 @@ bool DrawingBuffer::Initialize(const IntSize& size, bool use_multisampling) {
 
   texture_target_ = GL_TEXTURE_2D;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (ShouldUseChromiumImage()) {
     // A CHROMIUM_image backed texture requires a specialized set of parameters
     // on OSX.
@@ -807,6 +807,9 @@ bool DrawingBuffer::Initialize(const IntSize& size, bool use_multisampling) {
   } else {
     allocate_alpha_channel_ = false;
     have_alpha_channel_ = false;
+    // The following workarounds are used in order of importance; the
+    // first is a correctness issue, the second a major performance
+    // issue, and the third a minor performance issue.
     if (ContextProvider()->GetGpuFeatureInfo().IsWorkaroundEnabled(
             gpu::DISABLE_GL_RGB_FORMAT)) {
       // This configuration will
@@ -815,18 +818,17 @@ bool DrawingBuffer::Initialize(const IntSize& size, bool use_multisampling) {
       // https://crbug.com/776269
       allocate_alpha_channel_ = true;
       have_alpha_channel_ = true;
-    }
-    if (WantExplicitResolve() &&
-        ContextProvider()->GetGpuFeatureInfo().IsWorkaroundEnabled(
-            gpu::DISABLE_WEBGL_RGB_MULTISAMPLING_USAGE)) {
+    } else if (WantExplicitResolve() &&
+               ContextProvider()->GetGpuFeatureInfo().IsWorkaroundEnabled(
+                   gpu::DISABLE_WEBGL_RGB_MULTISAMPLING_USAGE)) {
       // This configuration avoids the above issues because
       //  - CopyTexImage is invalid from multisample renderbuffers
       //  - FramebufferBlit is invalid to multisample renderbuffers
       allocate_alpha_channel_ = true;
       have_alpha_channel_ = true;
-    }
-    if (ShouldUseChromiumImage() &&
-        ContextProvider()->GetCapabilities().chromium_image_rgb_emulation) {
+    } else if (ShouldUseChromiumImage() && ContextProvider()
+                                               ->GetCapabilities()
+                                               .chromium_image_rgb_emulation) {
       // This configuration avoids the above issues by
       //  - extra command buffer validation for CopyTexImage
       //  - explicity re-binding as RGB for FramebufferBlit
@@ -1097,9 +1099,11 @@ bool DrawingBuffer::ResizeDefaultFramebuffer(const IntSize& size) {
       format = viz::RGBA_8888;
     premultiplied_alpha_false_mailbox_ = sii->CreateSharedImage(
         format, static_cast<gfx::Size>(size), storage_color_space_,
+        kTopLeft_GrSurfaceOrigin, kUnpremul_SkAlphaType,
         gpu::SHARED_IMAGE_USAGE_GLES2 |
             gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
-            gpu::SHARED_IMAGE_USAGE_RASTER);
+            gpu::SHARED_IMAGE_USAGE_RASTER,
+        gpu::kNullSurfaceHandle);
     gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
     gl_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
     premultiplied_alpha_false_texture_ =
@@ -1617,7 +1621,8 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
   if (UsingSwapChain()) {
     gpu::SharedImageInterface::SwapChainMailboxes mailboxes =
         sii->CreateSwapChain(format, static_cast<gfx::Size>(size),
-                             storage_color_space_,
+                             storage_color_space_, kTopLeft_GrSurfaceOrigin,
+                             kPremul_SkAlphaType,
                              usage | gpu::SHARED_IMAGE_USAGE_SCANOUT);
     back_buffer_mailbox = mailboxes.back_buffer;
     front_buffer_mailbox = mailboxes.front_buffer;
@@ -1647,7 +1652,8 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
       if (gpu_memory_buffer) {
         back_buffer_mailbox = sii->CreateSharedImage(
             gpu_memory_buffer.get(), gpu_memory_buffer_manager,
-            storage_color_space_, usage | gpu::SHARED_IMAGE_USAGE_SCANOUT);
+            storage_color_space_, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
+            usage | gpu::SHARED_IMAGE_USAGE_SCANOUT);
       }
     }
 
@@ -1655,7 +1661,9 @@ scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
     // allocation above failed.
     if (!gpu_memory_buffer) {
       back_buffer_mailbox = sii->CreateSharedImage(
-          format, static_cast<gfx::Size>(size), storage_color_space_, usage);
+          format, static_cast<gfx::Size>(size), storage_color_space_,
+          kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+          gpu::kNullSurfaceHandle);
     }
   }
 

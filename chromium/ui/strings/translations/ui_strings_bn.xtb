@@ -37,9 +37,11 @@
 <translation id="1842960171412779397">বেছে নিন</translation>
 <translation id="1859234291848436338">লিখন নির্দেশনা</translation>
 <translation id="1860796786778352021">বিজ্ঞপ্তি বন্ধ করা হয়েছে</translation>
+<translation id="186476001994626254">ওয়েব স্মার্ট পেস্ট কন্টেন্ট</translation>
 <translation id="1871244248791675517">Ins</translation>
 <translation id="1884435127456172652"><ph name="NUMBER" /> %</translation>
 <translation id="1901303067676059328">&amp;সকল বেছে নিন</translation>
+<translation id="19085484004813472">এটি একটি নতুন ফিচার</translation>
 <translation id="2006524834898217237">এই ডিভাইস ইন্টারনেটে কানেক্ট করা আছে কিনা দেখে নিন।</translation>
 <translation id="208586643495776849">আবার চেষ্টা করুন</translation>
 <translation id="2090963878406559571"><ph name="ORIGIN" /> থেকে আপনার Android ফোনে কোনও নম্বর পাঠাতে, সেটিংসে গিয়ে দুটি ডিভাইসের জন্য <ph name="TROUBLESHOOT_LINK" />।</translation>
@@ -67,6 +69,7 @@
 <translation id="2570734079541893434">সেটিংস ম্যানেজ করুন</translation>
 <translation id="2573731672208488250">{HOURS,plural, =1{১ ঘণ্টার মধ্যে}one{# ঘণ্টার মধ্যে}other{# ঘণ্টার মধ্যে}}</translation>
 <translation id="2583543531130364912">আপনার টাচস্ক্রীন ক্যালিব্রেট করুন</translation>
+<translation id="2586657967955657006">ক্লিপবোর্ড</translation>
 <translation id="2666092431469916601">শীর্ষ</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> থেকে শেয়ার করা হয়েছে</translation>
 <translation id="271033894570825754">নতুন</translation>
@@ -74,6 +77,7 @@
 <translation id="2749082172777216925"><ph name="APP_NAME_INFO" />, <ph name="PRICE" /></translation>
 <translation id="2803313416453193357">ফোল্ডার খুলুন</translation>
 <translation id="2824719307700604149">{YEARS,plural, =1{১ বছর আগে}one{# বছর আগে}other{# বছর আগে}}</translation>
+<translation id="2878511608894704031">সব মুছুন</translation>
 <translation id="2907671656515444832">{DAYS,plural, =1{১ দিনের মধ্যে}one{# দিনের মধ্যে}other{# দিনের মধ্যে}}</translation>
 <translation id="2931838996092594335">ক্লিক করুন</translation>
 <translation id="2981684127883932071">সাজেশন দেখানো হচ্ছে</translation>
@@ -114,6 +118,7 @@
 <translation id="4289300219472526559">কথা বলা শুরু করুন</translation>
 <translation id="430191667033048642"><ph name="MOVED_APP_NAME" /> অ্যাপ <ph name="FOLDER_NAME" /> ফোল্ডারে সরানো হয়েছে।</translation>
 <translation id="4316910396681052118">সব অ্যাপ</translation>
+<translation id="4491109536499578614">ছবি</translation>
 <translation id="4588090240171750605">ডান দিকে স্ক্রল করুন</translation>
 <translation id="4631891353005174729"><ph name="APP_NAME_TYPE" />, <ph name="RATING_SCORE" /> স্টার রেটিং</translation>
 <translation id="4648249871170053485"><ph name="APP_NAME" />, অ্যাপের সাজেশন</translation>
@@ -147,6 +152,7 @@
 <translation id="5768079895599174203">{DAYS,plural, =1{১ দিন এবং }one{# দিন এবং }other{# দিন এবং }}</translation>
 <translation id="5789643057113097023">.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{১ বছরের মধ্যে}one{# বছরের মধ্যে}other{# বছরের মধ্যে}}</translation>
+<translation id="588258955323874662">সম্পূর্নস্ক্রীণ</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{১ সেকেন্ড বাকি}one{# সেকেন্ড বাকি}other{# সেকেন্ড বাকি}}</translation>
 <translation id="5941711191222866238">ছোট করুন</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{১ ঘণ্টা}one{# ঘণ্টা}other{# ঘণ্টা}}</translation>
@@ -170,6 +176,7 @@
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6430678249303439055">এই অ্যাপ থেকে সমস্ত বিজ্ঞপ্তি ব্লক করুন</translation>
 <translation id="6483402905448010557">{SECONDS,plural, =1{১ সেকেন্ড আগে}one{# সেকেন্ড আগে}other{# সেকেন্ড আগে}}</translation>
+<translation id="6503257047630241175">RTF কন্টেন্ট</translation>
 <translation id="6539092367496845964">কোনও সমস্যা হয়েছে। পরে আবার চেষ্টা করুন।</translation>
 <translation id="654149438358937226">সমস্ত বিজ্ঞপ্তি ব্লক করুন</translation>
 <translation id="6567071839949112727">এটি সম্পর্কিত একটি পুরানো আইটেমে ক্লিক করুন</translation>
@@ -178,7 +185,7 @@
 <translation id="6620110761915583480">ফাইল সেভ করুন</translation>
 <translation id="6656912866303152668"><ph name="TARGET_DEVICE_NAME" /> Chrome-এ সিঙ্ক করার ফিচার চালু করে রেখেছে কিনা দেখে নিন।</translation>
 <translation id="6699343763173986273">মিডিয়া পরবর্তী ট্র্যাক</translation>
-<translation id="6710213216561001401">পূর্ববর্তী</translation>
+<translation id="6710213216561001401">আগের</translation>
 <translation id="6779314412797872738">এখান থেকে আপনার Android ফোনে কোনও নম্বর পাঠাতে, সেটিংসে গিয়ে দুটি ডিভাইসের জন্য <ph name="TROUBLESHOOT_LINK" />।</translation>
 <translation id="6786750046913594791">ফোল্ডার বন্ধ করুন</translation>
 <translation id="6808150112686056157">মিডিয়া থামান</translation>

@@ -273,3 +273,11 @@ sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithID(
   Browser* browser = chrome::FindBrowserWithID(desired_id);
   return browser ? browser->live_tab_context() : nullptr;
 }
+
+// static
+sessions::LiveTabContext* BrowserLiveTabContext::FindContextWithGroup(
+    tab_groups::TabGroupId group,
+    Profile* profile) {
+  Browser* browser = chrome::FindBrowserWithGroup(group, profile);
+  return browser ? browser->live_tab_context() : nullptr;
+}

@@ -64,7 +64,8 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #endif
 
-#if BUILDFLAG(ENABLE_DESKTOP_AURA) && defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA) && \
+    (defined(OS_LINUX) || defined(OS_CHROMEOS))
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 #endif
@@ -269,7 +270,8 @@ void NativeWidgetAura::InitNativeWidget(Widget::InitParams params) {
 
 void NativeWidgetAura::OnWidgetInitDone() {}
 
-NonClientFrameView* NativeWidgetAura::CreateNonClientFrameView() {
+std::unique_ptr<NonClientFrameView>
+NativeWidgetAura::CreateNonClientFrameView() {
   return nullptr;
 }
 
@@ -699,7 +701,7 @@ void NativeWidgetAura::RunShellDrag(View* view,
                                     std::unique_ptr<ui::OSExchangeData> data,
                                     const gfx::Point& location,
                                     int operation,
-                                    ui::DragDropTypes::DragEventSource source) {
+                                    ui::mojom::DragEventSource source) {
   if (window_)
     views::RunShellDrag(window_, std::move(data), location, operation, source);
 }
@@ -1072,7 +1074,8 @@ void NativeWidgetAura::SetInitialFocus(ui::WindowShowState show_state) {
 // Widget, public:
 
 namespace {
-#if BUILDFLAG(ENABLE_DESKTOP_AURA) && (defined(OS_WIN) || defined(OS_LINUX))
+#if BUILDFLAG(ENABLE_DESKTOP_AURA) && \
+    (defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS))
 void CloseWindow(aura::Window* window) {
   if (window) {
     Widget* widget = Widget::GetWidgetForNativeView(window);
@@ -1102,13 +1105,15 @@ void Widget::CloseAllSecondaryWidgets() {
   EnumThreadWindows(GetCurrentThreadId(), WindowCallbackProc, 0);
 #endif
 
-#if BUILDFLAG(ENABLE_DESKTOP_AURA) && defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA) && \
+    (defined(OS_LINUX) || defined(OS_CHROMEOS))
   DesktopWindowTreeHostLinux::CleanUpWindowList(CloseWindow);
 #endif
 }
 
 const ui::NativeTheme* Widget::GetNativeTheme() const {
-#if BUILDFLAG(ENABLE_DESKTOP_AURA) && defined(OS_LINUX)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA) && \
+    (defined(OS_LINUX) || defined(OS_CHROMEOS))
   const LinuxUI* linux_ui = LinuxUI::instance();
   if (linux_ui) {
     ui::NativeTheme* native_theme =

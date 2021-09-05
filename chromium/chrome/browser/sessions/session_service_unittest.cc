@@ -1117,8 +1117,8 @@ TEST_F(SessionServiceTest, RestoreActivation2) {
   EXPECT_EQ(window2_id, active_window_id);
 }
 
-// Makes sure we don't track blacklisted URLs.
-TEST_F(SessionServiceTest, IgnoreBlacklistedUrls) {
+// Makes sure sessions doesn't track certain urls.
+TEST_F(SessionServiceTest, IgnoreBlockedUrls) {
   SessionID tab_id = SessionID::NewUnique();
 
   SerializedNavigationEntry nav1 =
@@ -1264,13 +1264,11 @@ void SimulateWaitForTesting(const base::AtomicFlag* flag) {
 // SessionService was destroyed before SessionService could process the results.
 TEST_F(SessionServiceTest, GetSessionsAndDestroy) {
   base::AtomicFlag flag;
-  base::CancelableTaskTracker cancelable_task_tracker;
   base::RunLoop run_loop;
   helper_.RunTaskOnBackendThread(
       FROM_HERE,
       base::BindOnce(&SimulateWaitForTesting, base::Unretained(&flag)));
-  service()->GetLastSession(base::BindOnce(&OnGotPreviousSession),
-                            &cancelable_task_tracker);
+  service()->GetLastSession(base::BindOnce(&OnGotPreviousSession));
   helper_.RunTaskOnBackendThread(FROM_HERE, run_loop.QuitClosure());
   delete helper_.ReleaseService();
   flag.Set();

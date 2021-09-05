@@ -14,7 +14,9 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -54,9 +56,16 @@
 #include "ui/display/display.h"
 #include "url/origin.h"
 
+#if defined(OS_MAC)
+#include "base/mac/mac_util.h"
+#include "ui/base/cocoa/permissions_utils.h"
+#endif
+
 namespace media_router {
 
 namespace {
+
+constexpr char kLoggerComponent[] = "MediaRouterViewsUI";
 
 // Returns true if |issue| is associated with |ui_sink|.
 bool IssueMatches(const Issue& issue, const UIMediaSink& ui_sink) {
@@ -101,6 +110,13 @@ void RunRouteResponseCallbacks(
   for (auto& callback : route_result_callbacks)
     std::move(callback).Run(result);
 }
+
+#if defined(OS_MAC)
+bool RequiresScreenCapturePermission(MediaCastMode cast_mode) {
+  return base::mac::IsAtLeastOS10_15() &&
+         cast_mode == MediaCastMode::DESKTOP_MIRROR;
+}
+#endif
 
 // Observes a WebContents following a call to MediaRouterViewsUI::CreateRoute()
 // and calls MediaRoute::CreateRoute() only after naviation is complete.
@@ -248,7 +264,8 @@ class MediaRouterViewsUI::WebContentsFullscreenOnLoadedObserver final
 
 MediaRouterViewsUI::MediaRouterViewsUI(content::WebContents* initiator)
     : presentation_manager_(WebContentsPresentationManager::Get(initiator)),
-      initiator_(initiator) {
+      initiator_(initiator),
+      logger_(GetMediaRouter()->GetLogger()) {
   CHECK(initiator_);
   if (presentation_manager_)
     presentation_manager_->AddObserver(this);
@@ -350,6 +367,22 @@ void MediaRouterViewsUI::InitWithStartPresentationContext(
 
 bool MediaRouterViewsUI::CreateRoute(const MediaSink::Id& sink_id,
                                      MediaCastMode cast_mode) {
+  logger_->LogInfo(mojom::LogCategory::kUi, kLoggerComponent,
+                   "CreateRoute requested by MediaRouterViewsUI.", sink_id, "",
+                   "");
+#if defined(OS_MAC)
+  if (RequiresScreenCapturePermission(cast_mode)) {
+    const bool screen_capture_allowed =
+        screen_capture_allowed_for_testing_.has_value()
+            ? *screen_capture_allowed_for_testing_
+            : ui::IsScreenCaptureAllowed();
+    if (!screen_capture_allowed) {
+      SendIssueForScreenPermission(sink_id);
+      return false;
+    }
+  }
+#endif
+
   // Default the tab casting the content to the initiator, and change if
   // necessary.
   content::WebContents* tab_contents = initiator_;
@@ -397,6 +430,9 @@ bool MediaRouterViewsUI::CreateRoute(const MediaSink::Id& sink_id,
 }
 
 void MediaRouterViewsUI::TerminateRoute(const MediaRoute::Id& route_id) {
+  logger_->LogInfo(mojom::LogCategory::kUi, kLoggerComponent,
+                   "TerminateRoute requested by MediaRouterViewsUI.", "", "",
+                   MediaRoute::GetPresentationIdFromMediaRouteId(route_id));
   GetMediaRouter()->TerminateRoute(route_id);
 }
 
@@ -455,6 +491,22 @@ base::string16 MediaRouterViewsUI::GetPresentationRequestSourceName() const {
 
 void MediaRouterViewsUI::AddIssue(const IssueInfo& issue) {
   GetIssueManager()->AddIssue(issue);
+  switch (issue.severity) {
+    case IssueInfo::Severity::NOTIFICATION:
+      logger_->LogInfo(
+          mojom::LogCategory::kUi, kLoggerComponent, issue.message,
+          issue.sink_id,
+          MediaRoute::GetPresentationIdFromMediaRouteId(issue.route_id),
+          MediaRoute::GetMediaSourceIdFromMediaRouteId(issue.route_id));
+      break;
+    default:
+      logger_->LogError(
+          mojom::LogCategory::kUi, kLoggerComponent, issue.message,
+          issue.sink_id,
+          MediaRoute::GetMediaSourceIdFromMediaRouteId(issue.route_id),
+          MediaRoute::GetPresentationIdFromMediaRouteId(issue.route_id));
+      break;
+  }
 }
 
 void MediaRouterViewsUI::RemoveIssue(const Issue::Id& issue_id) {
@@ -468,6 +520,24 @@ void MediaRouterViewsUI::OpenFileDialog() {
   }
 
   media_router_file_dialog_->OpenFileDialog(GetBrowser());
+}
+
+void MediaRouterViewsUI::LogMediaSinkStatus() {
+  std::vector<std::string> sink_ids;
+  for (const auto& sink : GetEnabledSinks()) {
+    if (sink.sink.id().length() <= 4) {
+      sink_ids.push_back(sink.sink.id());
+    } else {
+      sink_ids.push_back(sink.sink.id().substr(sink.sink.id().length() - 4));
+    }
+  }
+  logger_->LogInfo(
+      mojom::LogCategory::kUi, kLoggerComponent,
+      base::StrCat(
+          {base::StringPrintf("%zu sinks available on CastDialogView closed: ",
+                              sink_ids.size()),
+           base::JoinString(sink_ids, ",")}),
+      "", "", "");
 }
 
 MediaRouterViewsUI::RouteRequest::RouteRequest(const MediaSink::Id& sink_id)
@@ -643,23 +713,27 @@ base::Optional<RouteParameters> MediaRouterViewsUI::GetRouteParameters(
       query_result_manager_->GetSourceForCastModeAndSink(cast_mode, sink_id);
 
   if (!source) {
-    LOG(ERROR) << "No corresponding MediaSource for cast mode "
-               << static_cast<int>(cast_mode) << " and sink " << sink_id;
+    logger_->LogError(
+        mojom::LogCategory::kUi, kLoggerComponent,
+        base::StringPrintf("No corresponding MediaSource for cast mode %d.",
+                           static_cast<int>(cast_mode)),
+        sink_id, "", "");
     return base::nullopt;
   }
   params.source_id = source->id();
 
   bool for_presentation_source = cast_mode == MediaCastMode::PRESENTATION;
   if (for_presentation_source && !presentation_request_) {
-    DLOG(ERROR) << "Requested to create a route for presentation, but "
-                << "presentation request is missing.";
+    logger_->LogError(mojom::LogCategory::kUi, kLoggerComponent,
+                      "Requested to create a route for presentation, but "
+                      "presentation request is missing.",
+                      sink_id, source->id(), "");
     return base::nullopt;
   }
 
   current_route_request_ = base::make_optional<RouteRequest>(sink_id);
   params.origin = for_presentation_source ? presentation_request_->frame_origin
                                           : url::Origin::Create(GURL());
-  DVLOG(1) << "DoCreateRoute: origin: " << params.origin;
 
   // This callback must be invoked before
   // HandleCreateSessionRequestRouteResponse(), which closes the dialog and
@@ -744,6 +818,18 @@ void MediaRouterViewsUI::SendIssueForRouteTimeout(
   issue_info.sink_id = sink_id;
   AddIssue(issue_info);
 }
+
+#if defined(OS_MAC)
+void MediaRouterViewsUI::SendIssueForScreenPermission(
+    const MediaSink::Id& sink_id) {
+  std::string issue_title = l10n_util::GetStringUTF8(
+      IDS_MEDIA_ROUTER_ISSUE_MAC_SCREEN_CAPTURE_PERMISSION_ERROR);
+  IssueInfo issue_info(issue_title, IssueInfo::Action::DISMISS,
+                       IssueInfo::Severity::WARNING);
+  issue_info.sink_id = sink_id;
+  AddIssue(issue_info);
+}
+#endif
 
 void MediaRouterViewsUI::SendIssueForUnableToCast(
     MediaCastMode cast_mode,
@@ -841,7 +927,6 @@ void MediaRouterViewsUI::OnRouteResponseReceived(
     MediaCastMode cast_mode,
     const base::string16& presentation_request_source_name,
     const RouteRequestResult& result) {
-  DVLOG(1) << "OnRouteResponseReceived";
   // If we receive a new route that we aren't expecting, do nothing.
   if (!current_route_request_ || route_request_id != current_route_request_->id)
     return;
@@ -849,7 +934,9 @@ void MediaRouterViewsUI::OnRouteResponseReceived(
   const MediaRoute* route = result.route();
   if (!route) {
     // The provider will handle sending an issue for a failed route request.
-    DVLOG(1) << "MediaRouteResponse returned error: " << result.error();
+    logger_->LogError(mojom::LogCategory::kUi, kLoggerComponent,
+                      "MediaRouteResponse returned error: " + result.error(),
+                      sink_id, "", "");
   }
 
   current_route_request_.reset();

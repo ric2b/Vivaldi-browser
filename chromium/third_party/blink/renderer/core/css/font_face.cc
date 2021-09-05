@@ -63,6 +63,7 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/font_family_names.h"
+#include "third_party/blink/renderer/platform/fonts/font_metrics_override.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -76,10 +77,10 @@ namespace {
 const CSSValue* ParseCSSValue(const ExecutionContext* context,
                               const String& value,
                               AtRuleDescriptorID descriptor_id) {
+  auto* window = DynamicTo<LocalDOMWindow>(context);
   CSSParserContext* parser_context =
-      context->IsDocument() ? MakeGarbageCollected<CSSParserContext>(
-                                  *To<LocalDOMWindow>(context)->document())
-                            : MakeGarbageCollected<CSSParserContext>(*context);
+      window ? MakeGarbageCollected<CSSParserContext>(*window->document())
+             : MakeGarbageCollected<CSSParserContext>(*context);
   return AtRuleDescriptorParser::ParseFontFaceDescriptor(descriptor_id, value,
                                                          *parser_context);
 }
@@ -190,6 +191,14 @@ FontFace* FontFace::Create(Document* document,
           properties, AtRuleDescriptorID::FontFeatureSettings) &&
       font_face->SetPropertyFromStyle(properties,
                                       AtRuleDescriptorID::FontDisplay) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::AscentOverride) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::DescentOverride) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::LineGapOverride) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::AdvanceOverride) &&
       font_face->GetFontSelectionCapabilities().IsValid() &&
       !font_face->family().IsEmpty()) {
     font_face->InitCSSFontFace(document->GetExecutionContext(), *src);
@@ -219,6 +228,7 @@ FontFace::FontFace(ExecutionContext* context,
                         AtRuleDescriptorID::FontFeatureSettings);
   SetPropertyFromString(context, descriptors->display(),
                         AtRuleDescriptorID::FontDisplay);
+  // TODO(xiaochengh): Add override descriptors to FontFaceDescriptors
 }
 
 FontFace::~FontFace() = default;
@@ -350,6 +360,18 @@ bool FontFace::SetPropertyValue(const CSSValue* value,
       display_ = value;
       if (css_font_face_)
         css_font_face_->SetDisplay(CSSValueToFontDisplay(display_.Get()));
+      break;
+    case AtRuleDescriptorID::AscentOverride:
+      ascent_override_ = value;
+      break;
+    case AtRuleDescriptorID::DescentOverride:
+      descent_override_ = value;
+      break;
+    case AtRuleDescriptorID::LineGapOverride:
+      line_gap_override_ = value;
+      break;
+    case AtRuleDescriptorID::AdvanceOverride:
+      advance_override_ = value;
       break;
     default:
       NOTREACHED();
@@ -773,8 +795,8 @@ void FontFace::InitCSSFontFace(const unsigned char* data, size_t size) {
 
   scoped_refptr<SharedBuffer> buffer = SharedBuffer::Create(data, size);
   BinaryDataFontFaceSource* source =
-      MakeGarbageCollected<BinaryDataFontFaceSource>(buffer.get(),
-                                                     ots_parse_message_);
+      MakeGarbageCollected<BinaryDataFontFaceSource>(
+          css_font_face_, buffer.get(), ots_parse_message_);
   if (source->IsValid()) {
     SetLoadStatus(kLoaded);
   } else {
@@ -792,6 +814,10 @@ void FontFace::Trace(Visitor* visitor) const {
   visitor->Trace(variant_);
   visitor->Trace(feature_settings_);
   visitor->Trace(display_);
+  visitor->Trace(ascent_override_);
+  visitor->Trace(descent_override_);
+  visitor->Trace(line_gap_override_);
+  visitor->Trace(advance_override_);
   visitor->Trace(error_);
   visitor->Trace(loaded_property_);
   visitor->Trace(css_font_face_);
@@ -817,6 +843,27 @@ void FontFace::DidBeginImperativeLoad() {
     return;
   DomWindow()->document()->GetFontPreloadManager().ImperativeFontLoadingStarted(
       this);
+}
+
+FontMetricsOverride FontFace::GetFontMetricsOverride() const {
+  FontMetricsOverride result;
+  if (ascent_override_) {
+    result.ascent_override =
+        To<CSSPrimitiveValue>(*ascent_override_).GetFloatValue() / 100;
+  }
+  if (descent_override_) {
+    result.descent_override =
+        To<CSSPrimitiveValue>(*descent_override_).GetFloatValue() / 100;
+  }
+  if (line_gap_override_) {
+    result.line_gap_override =
+        To<CSSPrimitiveValue>(*line_gap_override_).GetFloatValue() / 100;
+  }
+  if (advance_override_) {
+    result.advance_override =
+        To<CSSPrimitiveValue>(*advance_override_).GetFloatValue();
+  }
+  return result;
 }
 
 }  // namespace blink

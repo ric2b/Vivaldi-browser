@@ -16,6 +16,7 @@
 <translation id="1335095011850992622">créditos</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="1480676835519562650">vários selecionáveis, <ph name="SELECTED" /> de <ph name="COUNT" /> selecionados.</translation>
 <translation id="1589122976691792535">região</translation>
 <translation id="1591562245178063882">Este mês</translation>
 <translation id="1637811476055996098">Escolher Ficheiros</translation>
@@ -51,6 +52,7 @@
 <translation id="248395913932153421">Dia</translation>
 <translation id="2507943997699731163">Preencha este campo.</translation>
 <translation id="2508569020611168319">lista de separadores</translation>
+<translation id="2530182415807757784">vários selecionáveis, nenhum selecionado.</translation>
 <translation id="2561842179657104141">mostrar mais controlos de multimédia</translation>
 <translation id="2572483411312390101">reproduzir</translation>
 <translation id="2613802280814924224">Introduza um valor válido. O valor válido mais próximo é <ph name="VALID_VALUE" />.</translation>
@@ -102,7 +104,6 @@
 <translation id="4248100235867064564">barra de menu</translation>
 <translation id="4360991593054037559">Introduza um valor válido. Os dois valores válidos mais próximos são <ph name="VALID_VALUE_LOW" /> e <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Perg e Resp</translation>
-<translation id="4413860115965805769">botão de menu</translation>
 <translation id="4444765639179266822">Parece indicar: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">referência do glossário</translation>
 <translation id="4522570452068850558">Detalhes</translation>

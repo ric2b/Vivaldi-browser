@@ -4,6 +4,10 @@
 
 #include "components/viz/service/display/software_renderer.h"
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "base/process/memory.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
@@ -71,10 +75,12 @@ class AnimatedImagesProvider : public cc::ImageProvider {
 }  // namespace
 
 SoftwareRenderer::SoftwareRenderer(const RendererSettings* settings,
+                                   const DebugRendererSettings* debug_settings,
                                    OutputSurface* output_surface,
                                    DisplayResourceProvider* resource_provider,
                                    OverlayProcessorInterface* overlay_processor)
     : DirectRenderer(settings,
+                     debug_settings,
                      output_surface,
                      resource_provider,
                      overlay_processor),
@@ -654,12 +660,6 @@ void SoftwareRenderer::CopyDrawnRenderPass(
       result_format, geometry.result_selection, bitmap));
 }
 
-#if defined(OS_WIN)
-void SoftwareRenderer::SetEnableDCLayers(bool enable) {
-  NOTIMPLEMENTED();
-}
-#endif
-
 void SoftwareRenderer::DidChangeVisibility() {
   if (visible_)
     output_surface_->EnsureBackbuffer();
@@ -832,7 +832,8 @@ sk_sp<SkShader> SoftwareRenderer::GetBackdropFilterShader(
       return nullptr;
     // Crop the source image to the backdrop_filter_bounds.
     sk_sp<SkImage> cropped_image = SkImage::MakeFromBitmap(backdrop_bitmap);
-    cropped_image = cropped_image->makeSubset(RectToSkIRect(filter_clip));
+    cropped_image =
+        cropped_image->makeSubset(RectToSkIRect(filter_clip), nullptr);
     cropped_image->asLegacyBitmap(&backdrop_bitmap);
     image_offset = filter_clip.origin();
   }

@@ -34,8 +34,11 @@ void CopyArchivedBinaries(
   int limit = FileTypePolicies::GetInstance()->GetMaxArchivedBinariesToReport();
 
   dest_binaries->Clear();
-  for (int i = 0; i < limit && i < src_binaries.size(); i++) {
-    *dest_binaries->Add() = src_binaries[i];
+  for (int i = 0; dest_binaries->size() < limit && i < src_binaries.size();
+       i++) {
+    if (src_binaries[i].is_executable() || src_binaries[i].is_archive()) {
+      *dest_binaries->Add() = src_binaries[i];
+    }
   }
 }
 
@@ -88,12 +91,12 @@ void FileAnalyzer::Start(const base::FilePath& target_path,
     StartExtractZipFeatures();
   } else if (inspection_type == DownloadFileType::RAR) {
     StartExtractRarFeatures();
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   } else if (inspection_type == DownloadFileType::DMG) {
     StartExtractDmgFeatures();
 #endif
   } else {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     // Checks for existence of "koly" signature even if file doesn't have
     // archive-type extension, then calls ExtractFileOrDmgFeatures() with
     // result.
@@ -230,7 +233,7 @@ void FileAnalyzer::OnRarAnalysisFinished(
   std::move(callback_).Run(std::move(results_));
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // This is called for .DMGs and other files that can be parsed by
 // SandboxedDMGAnalyzer.
 void FileAnalyzer::StartExtractDmgFeatures() {
@@ -295,6 +298,6 @@ void FileAnalyzer::OnDmgAnalysisFinished(
 
   std::move(callback_).Run(std::move(results_));
 }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 }  // namespace safe_browsing

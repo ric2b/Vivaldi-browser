@@ -16,7 +16,7 @@
 #include "content/public/test/browser_test.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "net/cookies/cookie_inclusion_status.h"
+#include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_util.h"
 #include "net/extras/sqlite/cookie_crypto_delegate.h"
 #include "services/network/public/cpp/features.h"
@@ -54,7 +54,7 @@ void SetCookie(
       cookie, net::cookie_util::SimulatedCookieSource(cookie, "https"),
       net::CookieOptions(),
       base::BindLambdaForTesting(
-          [&](net::CookieInclusionStatus status) { run_loop.Quit(); }));
+          [&](net::CookieAccessResult result) { run_loop.Quit(); }));
   run_loop.Run();
 }
 
@@ -120,7 +120,7 @@ IN_PROC_BROWSER_TEST_P(ChromeNetworkServiceBrowserTest, PRE_EncryptedCookies) {
 }
 
 // This flakes on Mac10.12 and Windows: http://crbug.com/868667
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_MAC) || defined(OS_WIN)
 #define MAYBE_EncryptedCookies DISABLED_EncryptedCookies
 #else
 #define MAYBE_EncryptedCookies EncryptedCookies

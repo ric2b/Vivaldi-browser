@@ -87,10 +87,12 @@ class OriginTrialContextTest : public testing::Test {
  protected:
   OriginTrialContextTest()
       : token_validator_(new MockTokenValidator),
-        execution_context_(MakeGarbageCollected<NullExecutionContext>(
-            MakeGarbageCollected<OriginTrialContext>(
-                std::unique_ptr<MockTokenValidator>(token_validator_)))),
-        histogram_tester_(new HistogramTester()) {}
+        execution_context_(MakeGarbageCollected<NullExecutionContext>()),
+        histogram_tester_(new HistogramTester()) {
+    execution_context_->GetOriginTrialContext()
+        ->SetTrialTokenValidatorForTesting(
+            std::unique_ptr<MockTokenValidator>(token_validator_));
+  }
 
   MockTokenValidator* TokenValidator() { return token_validator_; }
 
@@ -99,10 +101,6 @@ class OriginTrialContextTest : public testing::Test {
     scoped_refptr<SecurityOrigin> page_origin =
         SecurityOrigin::Create(page_url);
     execution_context_->GetSecurityContext().SetSecurityOrigin(page_origin);
-    execution_context_->GetSecurityContext().SetSecureContextModeForTesting(
-        SecurityOrigin::IsSecure(page_url)
-            ? SecureContextMode::kSecureContext
-            : SecureContextMode::kInsecureContext);
   }
 
   bool IsFeatureEnabled(const String& origin, OriginTrialFeature feature) {
@@ -428,8 +426,8 @@ TEST_F(OriginTrialContextTest, FeaturePolicy) {
 
   PolicyParserMessageBuffer logger;
   ParsedFeaturePolicy result;
-  result = FeaturePolicyParser::Parse("frobulate", security_origin, nullptr,
-                                      logger, feature_map, window);
+  result = FeaturePolicyParser::ParseFeaturePolicyForTest(
+      "frobulate", security_origin, nullptr, logger, feature_map, window);
   EXPECT_TRUE(logger.GetMessages().IsEmpty());
   ASSERT_EQ(1u, result.size());
   EXPECT_EQ(mojom::blink::FeaturePolicyFeature::kFrobulate, result[0].feature);

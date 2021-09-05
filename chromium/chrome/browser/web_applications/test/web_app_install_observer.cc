@@ -4,6 +4,8 @@
 
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
 
+#include "base/run_loop.h"
+#include "base/test/bind_test_util.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 
 namespace web_app {
@@ -11,27 +13,84 @@ namespace web_app {
 WebAppInstallObserver::WebAppInstallObserver(AppRegistrar* registrar) {
   observer_.Add(registrar);
 }
-WebAppInstallObserver::WebAppInstallObserver(AppRegistrar* registrar,
-                                             const AppId& listening_for_id)
-    : listening_for_app_id_(listening_for_id) {
+WebAppInstallObserver::WebAppInstallObserver(
+    AppRegistrar* registrar,
+    const std::set<AppId>& listening_for_install_app_ids,
+    const std::set<AppId>& listening_for_uninstall_app_ids)
+    : listening_for_install_app_ids_(listening_for_install_app_ids),
+      listening_for_uninstall_app_ids_(listening_for_uninstall_app_ids) {
   observer_.Add(registrar);
+#if DCHECK_IS_ON()
+  DCHECK(!listening_for_install_app_ids_.empty() ||
+         !listening_for_uninstall_app_ids_.empty());
+  for (const AppId& id : listening_for_install_app_ids_) {
+    DCHECK(!id.empty()) << "Cannot listen for empty ids.";
+  }
+  for (const AppId& id : listening_for_uninstall_app_ids_) {
+    DCHECK(!id.empty()) << "Cannot listen for empty ids.";
+  }
+#endif
 }
 
 WebAppInstallObserver::WebAppInstallObserver(Profile* profile)
     : WebAppInstallObserver(
           &WebAppProviderBase::GetProviderBase(profile)->registrar()) {}
 
-WebAppInstallObserver::WebAppInstallObserver(Profile* profile,
-                                             const AppId& listening_for_id)
+WebAppInstallObserver::WebAppInstallObserver(
+    Profile* profile,
+    const std::set<AppId>& listening_for_install_app_ids,
+    const std::set<AppId>& listening_for_uninstall_app_id)
     : WebAppInstallObserver(
           &WebAppProviderBase::GetProviderBase(profile)->registrar(),
-          listening_for_id) {}
+          listening_for_install_app_ids,
+          listening_for_uninstall_app_id) {}
 
 WebAppInstallObserver::~WebAppInstallObserver() = default;
 
+// static
+std::unique_ptr<WebAppInstallObserver>
+WebAppInstallObserver::CreateInstallListener(
+    Profile* registrar,
+    const std::set<AppId>& listening_for_install_app_ids) {
+  return base::WrapUnique(
+      new WebAppInstallObserver(registrar, listening_for_install_app_ids, {}));
+}
+
+// static
+std::unique_ptr<WebAppInstallObserver>
+WebAppInstallObserver::CreateUninstallListener(
+    Profile* registrar,
+    const std::set<AppId>& listening_for_uninstall_app_ids) {
+  return base::WrapUnique(new WebAppInstallObserver(
+      registrar, {}, listening_for_uninstall_app_ids));
+}
+
 AppId WebAppInstallObserver::AwaitNextInstall() {
-  run_loop_.Run();
-  return std::move(app_id_);
+  base::RunLoop loop;
+  AppId id;
+  DCHECK(app_installed_delegate_.is_null());
+  SetWebAppInstalledDelegate(
+      base::BindLambdaForTesting([&](const AppId& app_id) {
+        id = app_id;
+        loop.Quit();
+      }));
+  loop.Run();
+  return id;
+}
+
+// static
+AppId WebAppInstallObserver::AwaitNextUninstall(
+    WebAppInstallObserver* install_observer) {
+  base::RunLoop loop;
+  AppId id;
+  DCHECK(install_observer->app_uninstalled_delegate_.is_null());
+  install_observer->SetWebAppUninstalledDelegate(
+      base::BindLambdaForTesting([&](const AppId& app_id) {
+        id = app_id;
+        loop.Quit();
+      }));
+  loop.Run();
+  return id;
 }
 
 void WebAppInstallObserver::SetWebAppInstalledDelegate(
@@ -55,14 +114,12 @@ void WebAppInstallObserver::SetWebAppWillBeUpdatedFromSyncDelegate(
 }
 
 void WebAppInstallObserver::OnWebAppInstalled(const AppId& app_id) {
-  if (!listening_for_app_id_.empty() && app_id != listening_for_app_id_)
+  listening_for_install_app_ids_.erase(app_id);
+  if (!listening_for_install_app_ids_.empty())
     return;
 
   if (app_installed_delegate_)
     app_installed_delegate_.Run(app_id);
-
-  app_id_ = app_id;
-  run_loop_.Quit();
 }
 
 void WebAppInstallObserver::OnWebAppsWillBeUpdatedFromSync(
@@ -72,7 +129,8 @@ void WebAppInstallObserver::OnWebAppsWillBeUpdatedFromSync(
 }
 
 void WebAppInstallObserver::OnWebAppUninstalled(const AppId& app_id) {
-  if (!listening_for_app_id_.empty() && app_id != listening_for_app_id_)
+  listening_for_uninstall_app_ids_.erase(app_id);
+  if (!listening_for_uninstall_app_ids_.empty())
     return;
 
   if (app_uninstalled_delegate_)
@@ -80,9 +138,6 @@ void WebAppInstallObserver::OnWebAppUninstalled(const AppId& app_id) {
 }
 
 void WebAppInstallObserver::OnWebAppProfileWillBeDeleted(const AppId& app_id) {
-  if (!listening_for_app_id_.empty() && app_id != listening_for_app_id_)
-    return;
-
   if (app_profile_will_be_deleted_delegate_)
     app_profile_will_be_deleted_delegate_.Run(app_id);
 }

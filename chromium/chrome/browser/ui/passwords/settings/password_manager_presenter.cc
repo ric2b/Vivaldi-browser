@@ -22,7 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/password_manager/account_storage/account_password_store_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_utils.h"
 #include "chrome/browser/profiles/profile.h"
@@ -321,48 +321,35 @@ const autofill::PasswordForm* PasswordManagerPresenter::GetPasswordException(
   return TryGetPasswordForm(exception_map_, index);
 }
 
-void PasswordManagerPresenter::ChangeSavedPassword(
-    const std::string& sort_key,
-    const base::string16& new_username,
-    const base::Optional<base::string16>& new_password) {
-  // Find the equivalence class that needs to be updated.
-  auto it = password_map_.find(sort_key);
-  if (it == password_map_.end())
-    return;
-
-  const FormVector& old_forms = it->second;
-
-  // If a password was provided, make sure it is not empty.
-  if (new_password && new_password->empty()) {
+bool PasswordManagerPresenter::ChangeSavedPassword(
+    const std::vector<std::string>& sort_keys,
+    base::string16 new_password) {
+  // Make sure new_password is not empty.
+  if (new_password.empty()) {
     DLOG(ERROR) << "The password is empty.";
-    return;
+    return false;
   }
+  DCHECK(!sort_keys.empty());
 
-  const std::string& signon_realm = old_forms[0]->signon_realm;
-  const base::string16& old_username = old_forms[0]->username_value;
-
-  // TODO(crbug.com/377410): Clean up this check for duplicates because a
-  // very similar one is in password_store_utils in EditSavedPasswords already.
-
-  // In case the username
-  // changed, make sure that there exists no other credential with the same
-  // signon_realm and username.
-  const bool username_changed = old_username != new_username;
-  if (username_changed) {
-    for (const auto& sort_key_passwords_pair : password_map_) {
-      for (const auto& password : sort_key_passwords_pair.second) {
-        if (password->signon_realm == signon_realm &&
-            password->username_value == new_username) {
-          DLOG(ERROR) << "A credential with the same signon_realm and username "
-                         "already exists.";
-          return;
-        }
-      }
+  std::vector<base::span<const FormVector::value_type>> old_forms_for_sort_keys;
+  for (const auto& sort_key : sort_keys) {
+    // Find the equivalence class that needs to be updated.
+    auto it = password_map_.find(sort_key);
+    if (it == password_map_.end()) {
+      return false;
+    } else {
+      DCHECK(!it->second.empty());
+      old_forms_for_sort_keys.push_back(it->second);
     }
   }
 
-  EditSavedPasswords(password_view_->GetProfile(), old_forms, new_username,
-                     new_password);
+  for (const auto& old_forms : old_forms_for_sort_keys) {
+    const base::string16& username = old_forms[0]->username_value;
+    EditSavedPasswords(password_view_->GetProfile(), old_forms, username,
+                       new_password);
+  }
+
+  return true;
 }
 
 void PasswordManagerPresenter::RemoveSavedPassword(size_t index) {
@@ -560,7 +547,7 @@ bool PasswordManagerPresenter::TryRemovePasswordEntries(
 
 void PasswordManagerPresenter::OnGetPasswordStoreResults(FormVector results) {
   for (auto& form : results) {
-    auto& form_map = form->blacklisted_by_user ? exception_map_ : password_map_;
+    auto& form_map = form->blocked_by_user ? exception_map_ : password_map_;
     form_map[password_manager::CreateSortKey(*form)].push_back(std::move(form));
   }
 

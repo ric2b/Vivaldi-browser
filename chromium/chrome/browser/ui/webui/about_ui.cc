@@ -545,14 +545,28 @@ std::string ChromeURLs() {
   std::string html;
   AppendHeader(&html, 0, "Vivaldi URLs");
   AppendBody(&html);
+
   html += "<h2>List of Vivaldi URLs</h2>\n<ul>\n";
   std::vector<std::string> hosts(
       chrome::kChromeHostURLs,
       chrome::kChromeHostURLs + chrome::kNumberOfChromeHostURLs);
   std::sort(hosts.begin(), hosts.end());
-  for (std::vector<std::string>::const_iterator i = hosts.begin();
-       i != hosts.end(); ++i)
-    html += "<li><a href='vivaldi://" + *i + "/'>vivaldi://" + *i + "</a></li>\n";
+  for (const std::string& host : hosts) {
+    html +=
+        "<li><a href='vivaldi://" + host + "/'>vivaldi://" + host + "</a></li>\n";
+  }
+
+  html += "</ul><h2>List of vivaldi://internals pages</h2>\n<ul>\n";
+  std::vector<std::string> internals_paths(
+      chrome::kChromeInternalsPathURLs,
+      chrome::kChromeInternalsPathURLs +
+          chrome::kNumberOfChromeInternalsPathURLs);
+  std::sort(internals_paths.begin(), internals_paths.end());
+  for (const std::string& path : internals_paths) {
+    html += "<li><a href='vivaldi://internals/" + path +
+            "'>vivaldi://internals/" + path + "</a></li>\n";
+  }
+
   html += "</ul>\n<h2>For Debug</h2>\n"
       "<p>The following pages are for debugging purposes only. Because they "
       "crash or hang the renderer, they're not linked directly; you can type "
@@ -560,11 +574,12 @@ std::string ChromeURLs() {
   for (size_t i = 0; i < chrome::kNumberOfChromeDebugURLs; i++)
     html += "<li>vivaldi" + std::string(chrome::kChromeDebugURLs[i]).substr(6) + "</li>\n";
   html += "</ul>\n";
+
   AppendFooter(&html);
   return html;
 }
 
-#if defined(OS_LINUX) || defined(OS_OPENBSD)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
 std::string AboutLinuxProxyConfig() {
   std::string data;
   AppendHeader(&data, 0,
@@ -620,7 +635,7 @@ void AboutUIHTMLSource::StartDataRequest(
       response =
           ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(idr);
     }
-#if defined(OS_LINUX) || defined(OS_OPENBSD)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
   } else if (source_name_ == chrome::kChromeUILinuxProxyConfigHost) {
     response = AboutLinuxProxyConfig();
 #endif
@@ -676,6 +691,15 @@ bool AboutUIHTMLSource::ShouldAddContentSecurityPolicy() {
   }
 #endif
   return content::URLDataSource::ShouldAddContentSecurityPolicy();
+}
+
+std::string AboutUIHTMLSource::GetContentSecurityPolicy(
+    network::mojom::CSPDirectiveName directive) {
+  if (source_name_ == chrome::kChromeUICreditsHost &&
+      directive == network::mojom::CSPDirectiveName::TrustedTypes) {
+    return "trusted-types credits-static;";
+  }
+  return content::URLDataSource::GetContentSecurityPolicy(directive);
 }
 
 std::string AboutUIHTMLSource::GetAccessControlAllowOriginForOrigin(

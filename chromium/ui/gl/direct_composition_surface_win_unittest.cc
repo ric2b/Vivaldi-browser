@@ -46,6 +46,7 @@ class TestPlatformDelegate : public ui::PlatformWindowDelegate {
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override {}
   void OnLostCapture() override {}
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) override {}
+  void OnWillDestroyAcceleratedWidget() override {}
   void OnAcceleratedWidgetDestroyed() override {}
   void OnActivationChanged(bool active) override {}
   void OnMouseEnter() override {}
@@ -140,8 +141,7 @@ class DirectCompositionSurfaceTest : public testing::Test {
     DirectCompositionSurfaceWin::Settings settings;
     scoped_refptr<DirectCompositionSurfaceWin> surface =
         base::MakeRefCounted<DirectCompositionSurfaceWin>(
-            /*vsync_provider=*/nullptr,
-            DirectCompositionSurfaceWin::VSyncCallback(), parent_window_,
+            parent_window_, DirectCompositionSurfaceWin::VSyncCallback(),
             settings);
     EXPECT_TRUE(surface->Initialize(GLSurfaceFormat()));
 

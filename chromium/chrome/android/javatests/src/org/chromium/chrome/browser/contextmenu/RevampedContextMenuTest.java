@@ -13,6 +13,7 @@ import android.view.KeyEvent;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -31,9 +32,11 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.contextmenu.RevampedContextMenuUtils;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -122,7 +125,10 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
                     public void onNewTabCreated(Tab tab, @TabCreationState int creationState) {
                         super.onNewTabCreated(tab, creationState);
 
-                        if (tab.getParentId() != activityTab.getId()) return;
+                        if (CriticalPersistedTabData.from(tab).getParentId()
+                                != activityTab.getId()) {
+                            return;
+                        }
                         newTab.set(tab);
                         newTabCallback.notifyCalled();
 
@@ -146,7 +152,9 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
         final String expectedUrl =
                 mTestServer.getURL("/chrome/test/data/android/contextmenu/test_image.png");
         CriteriaHelper.pollUiThread(
-                Criteria.equals(expectedUrl, () -> newTab.get().getUrlString()));
+                ()
+                        -> Criteria.checkThat(ChromeTabUtils.getUrlStringOnUiThread(newTab.get()),
+                                Matchers.is(expectedUrl)));
     }
 
     @Test
@@ -156,20 +164,14 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
         RevampedContextMenuCoordinator menuCoordinator =
                 RevampedContextMenuUtils.openContextMenu(tab, "testImage");
         Assert.assertNotNull("Context menu was not properly created", menuCoordinator);
-        CriteriaHelper.pollUiThread(new Criteria("Context menu did not have window focus") {
-            @Override
-            public boolean isSatisfied() {
-                return !mDownloadTestRule.getActivity().hasWindowFocus();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> {
+            return !mDownloadTestRule.getActivity().hasWindowFocus();
+        }, "Context menu did not have window focus");
 
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
-        CriteriaHelper.pollUiThread(new Criteria("Activity did not regain focus.") {
-            @Override
-            public boolean isSatisfied() {
-                return mDownloadTestRule.getActivity().hasWindowFocus();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> {
+            return mDownloadTestRule.getActivity().hasWindowFocus();
+        }, "Activity did not regain focus.");
     }
 
     @Test
@@ -179,22 +181,16 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
         RevampedContextMenuCoordinator menuCoordinator =
                 RevampedContextMenuUtils.openContextMenu(tab, "testImage");
         Assert.assertNotNull("Context menu was not properly created", menuCoordinator);
-        CriteriaHelper.pollUiThread(new Criteria("Context menu did not have window focus") {
-            @Override
-            public boolean isSatisfied() {
-                return !mDownloadTestRule.getActivity().hasWindowFocus();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> {
+            return !mDownloadTestRule.getActivity().hasWindowFocus();
+        }, "Context menu did not have window focus");
 
         TestTouchUtils.singleClickView(InstrumentationRegistry.getInstrumentation(), tab.getView(),
                 tab.getView().getWidth() - 5, tab.getView().getHeight() - 5);
 
-        CriteriaHelper.pollUiThread(new Criteria("Activity did not regain focus.") {
-            @Override
-            public boolean isSatisfied() {
-                return mDownloadTestRule.getActivity().hasWindowFocus();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> {
+            return mDownloadTestRule.getActivity().hasWindowFocus();
+        }, "Activity did not regain focus.");
     }
 
     @Test
@@ -272,12 +268,9 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
         // Wait for any new tab animation to finish if we're being driven by the compositor.
         final LayoutManager layoutDriver =
                 mDownloadTestRule.getActivity().getCompositorViewHolder().getLayoutManager();
-        CriteriaHelper.pollUiThread(new Criteria("Background tab animation not finished.") {
-            @Override
-            public boolean isSatisfied() {
-                return layoutDriver.getActiveLayout().shouldDisplayContentOverlay();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> {
+            return layoutDriver.getActiveLayout().shouldDisplayContentOverlay();
+        }, "Background tab animation not finished.");
 
         RevampedContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
                 mDownloadTestRule.getActivity(), tab, "testLink2",
@@ -289,17 +282,20 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
                 "Number of open tabs does not match", numOpenedTabs, tabModel.getCount());
 
         // Verify the Url is still the same of Parent page.
-        Assert.assertEquals(
-                mTestUrl, mDownloadTestRule.getActivity().getActivityTab().getUrlString());
+        Assert.assertEquals(mTestUrl,
+                ChromeTabUtils.getUrlStringOnUiThread(
+                        mDownloadTestRule.getActivity().getActivityTab()));
 
         // Verify that the background tabs were opened in the expected order.
         String newTabUrl =
                 mTestServer.getURL("/chrome/test/data/android/contextmenu/test_link.html");
-        Assert.assertEquals(newTabUrl, tabModel.getTabAt(indexOfLinkPage).getUrlString());
+        Assert.assertEquals(newTabUrl,
+                ChromeTabUtils.getUrlStringOnUiThread(tabModel.getTabAt(indexOfLinkPage)));
 
         String imageUrl =
                 mTestServer.getURL("/chrome/test/data/android/contextmenu/test_link2.html");
-        Assert.assertEquals(imageUrl, tabModel.getTabAt(indexOfLinkPage2).getUrlString());
+        Assert.assertEquals(imageUrl,
+                ChromeTabUtils.getUrlStringOnUiThread(tabModel.getTabAt(indexOfLinkPage2)));
     }
 
     private void saveMediaFromContextMenu(String mediaDOMElement, int saveMenuID,

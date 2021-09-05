@@ -10,17 +10,21 @@ Bəzi funksiyalar əlçatmaz ola bilər ki, nəticədə tərcihlərə edilən d�
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> əvvəl Chrome istifadə edirdi</translation>
 <translation id="1097330777386562916">Chrome'dan çıxdıqda kuki və sayt datasını silin</translation>
 <translation id="110877069173485804">Bu, Sizin Chrome'dur</translation>
+<translation id="1125124144982679672">Chrome'u kim istifadə edir?</translation>
 <translation id="1142745911746664600">Chrome'u güncəlləmək alınmadı</translation>
 <translation id="1154147086299354128">&amp;Chrome'da açın</translation>
 <translation id="123620459398936149">Chrome OS datanızı sinxronizasiya edə bilmədi. Lütfən, Sinxronizasiya parolünü güncəlləşdirin.</translation>
 <translation id="1302523850133262269">Chrome'un ən son sistem güncəlləşmələrini quraşdırmasını gözləyin.</translation>
+<translation id="1355000804395496115">İş və şəxsi baxışı ayırmaq və ya bu cihazı istifadə edən fərqli insanlar üçün Chrome'da fərqli profillər istifadə edin</translation>
 <translation id="137466361146087520">Google Chrome Beta</translation>
 <translation id="1399397803214730675">Kompüterdə daha yeni Google Chrome versiyası var. Əgər proqram təminatı işləmirsə, lütfən, Google Chrome'u sistemdən silin və yenidən cəhd edin.</translation>
 <translation id="1434626383986940139">Chrome Canary Tətbiqləri</translation>
+<translation id="1513277449617685876">Şəxsi və <ph name="NEW_USER" /> baxışını ayırmaq üçün Chrome'da yeni profil yaradın</translation>
 <translation id="1553358976309200471">Chrome'u güncəlləşdirin</translation>
 <translation id="1587223624401073077">Google Chrome kameranızı istifadə edir.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> təhlükəli olduğu üçün Chrome onu blok etdi.</translation>
 <translation id="1619887657840448962">Chrome'u təhlükəsiz etmək üçün, <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> siyahısında olmayan və xəbəriniz olmadan əlavə edilən artırmanı deaktiv etdik.</translation>
+<translation id="162448658176061655">Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: 1 saniyə əvvəl.</translation>
 <translation id="162629503687514352">Chrome OS parollarınızı sinxronizasiya edə bilmədi.</translation>
 <translation id="1628000112320670027">Chrome ilə yardım alın</translation>
 <translation id="1662639173275167396">Chrome OS <ph name="BEGIN_LINK_LINUX_OSS" />Linux'dakı (Beta)<ph name="END_LINK_LINUX_OSS" /> <ph name="BEGIN_LINK_CROS_OSS" />açıq mənbə proqramında<ph name="END_LINK_CROS_OSS" /> dəstəklənir.</translation>
@@ -55,7 +59,6 @@ Bəzi funksiyalar əlçatmaz ola bilər ki, nəticədə tərcihlərə edilən d�
 <translation id="2534507159460261402">Google Pay (Chrome'a kopyalandı)</translation>
 <translation id="2580411288591421699">Hazırda istifadə olunan Google Chrome versiyasını quraşdıra bilməzsiniz. Lütfən, Google Chrome'u qapadın və yenidən cəhd edin.</translation>
 <translation id="2586406160782125153">Brauzinq datanız bu cihazdan silinəcək. Datanı sonradan bərpa etmək üçün Chrome'a <ph name="USER_EMAIL" /> kimi daxil olun.</translation>
-<translation id="2588322182880276190">Chrome logosu</translation>
 <translation id="2622559029861875898">Chrome güncəlləmələri yoxlaya bilmir. İnternet bağlantınızı yoxlamağa cəhd edin.</translation>
 <translation id="2644798301485385923">Chrome OS Sistemi</translation>
 <translation id="2652691236519827073">Linki Yeni Chrome tabında açın</translation>
@@ -68,6 +71,7 @@ Bəzi funksiyalar əlçatmaz ola bilər ki, nəticədə tərcihlərə edilən d�
 <translation id="2847461019998147611">Google Chrome məhsulunu bu dildə görüntüləyin</translation>
 <translation id="2857540653560290388">Chrome başlayır...</translation>
 <translation id="2871893339301912279">Chrome'a daxil olmusunuz!</translation>
+<translation id="2885378588091291677">Tapşırıq Meneceri</translation>
 <translation id="2888126860611144412">Chrome haqqında</translation>
 <translation id="2929907241665500097">Chrome güncəllənmədi, xəta baş verdi. <ph name="BEGIN_LINK" />Chrome'un güncəllənmə problemlərini və alınmayan güncəllənmələri həll edin.<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> - Şəbəkəyə Giriş - Chrome</translation>
@@ -103,6 +107,7 @@ Bəzi funksiyalar əlçatmaz ola bilər ki, nəticədə tərcihlərə edilən d�
 <translation id="3889417619312448367">Google Chrome'u sistemdən silin</translation>
 <translation id="4050175100176540509">Mühüm təhlükəsizlik təkmilləşdirilmələri və yeni funksiyalar son versiyada əlçatandır.</translation>
 <translation id="4053720452172726777">Google Chrome'u fərdiləşdirin və nəzarət edin</translation>
+<translation id="4110895483821904099">Yeni Chrome profilinizi ayarlayın</translation>
 <translation id="4143243756087420366">Chrome adı və şəkli</translation>
 <translation id="4147555960264124640">İdarə olunan hesab ilə giriş edirsiniz və onun Chrome profili üzrə administrator nəzarətini verirsiniz. Tətbiqlər, əlfəcin, tarixçə, parol və digər ayarlar kimi Chrome datası həmişəlik <ph name="USER_NAME" /> adlı istifadəçi ilə əlaqələndiriləcək. Bu datanı Google İdarə panelindən silə biləcəksiniz, amma bu datanı başqa hesab ilə əlaqələndirə bilməyəcəksiniz. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Quraşdırıcı arxivi dekompres edə bilmədi. Google Chrome'u yenidən endirməyiniz xahiş olunur.</translation>
@@ -136,6 +141,7 @@ Bəzi funksiyalar əlçatmaz ola bilər ki, nəticədə tərcihlərə edilən d�
 <translation id="4771048833395599659">Bu fayl təlükəli ola bilər, bu səbəbdən Chrome onu blok etdi.</translation>
 <translation id="479167709087336770">Bu, Google axtarışda istifadə edilən eyni orfoqrafiya yoxlayandan istifadə edir. Brauzerdə yazdığınız mətn Google'a göndərilir. Bunu istənilən vaxt ayarlardan dəyişə bilərsiniz.</translation>
 <translation id="4891791193823137474">Google Chrome'a arxa fonda işləməyə icazə verin</translation>
+<translation id="489337168347244450">{NUM_DAYS,plural, =1{Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: 1 gün əvvəl.}other{Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: {NUM_DAYS} gün əvvəl.}}</translation>
 <translation id="4895437082222824641">Linki yeni Chrome tabında açın</translation>
 <translation id="4953650215774548573">Google Chrome'u defolt brauzer təyin edin</translation>
 <translation id="495931528404527476">Chrome'da</translation>
@@ -153,6 +159,7 @@ Bəzi funksiyalar əlçatmaz ola bilər. Xüsusi profil direktoriyası göstəri
 <translation id="5430073640787465221">Tərcih faylınız zədələnib və ya yanlışdır.  Google Chrome ayarlarınızı bərpa edə bilmir.</translation>
 <translation id="556024056938947818">Google Chrome parolları göstərməyə cəhd edir.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
+<translation id="5633355459292055250">Chrome'u açdığım zaman soruşulsun</translation>
 <translation id="5657226924540934362">Hər hansı ayar bu səhifədə göstərilməsə, <ph name="LINK_BEGIN" />
       Chrome OS ayarlarına<ph name="LINK_END" /> baxın</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> təlükəli ola bilər, bu səbəbdən Chrome onu blok etdi.</translation>
@@ -178,6 +185,7 @@ Bəzi funksiyalar əlçatmaz ola bilər. Xüsusi profil direktoriyası göstəri
 <translation id="6291549208091401781">Google Chrome kompüterinizdəki bütün istifadəçilər üçün artıq quraşdırılıb.</translation>
 <translation id="6338556085225130112">Google Chrome güncəlləşir</translation>
 <translation id="6368958679917195344">Chrome OS əlavə <ph name="BEGIN_LINK_CROS_OSS" />açıq mənbə proqram təminatı ilə<ph name="END_LINK_CROS_OSS" /> mümkün oldu.</translation>
+<translation id="6454142105866844106">Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome Dev</translation>
 <translation id="6566149418543181476">Google Chrome güncəllənir (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6676384891291319759">İnternet</translation>
@@ -195,14 +203,17 @@ Bəzi funksiyalar əlçatmaz ola bilər. Xüsusi profil direktoriyası göstəri
 <translation id="7106741999175697885">Tapşırıq Meneceri - Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{Chrome üçün yeni güncəlləmə əlçatandır. Chrome yenidən işə başladıqdan sonra tətbiq ediləcək.}=1{Chrome üçün yeni güncəlləmə əlçatandır. Chrome yenidən işə başladıqdan sonra tətbiq ediləcək. Anonim pəncərəniz yenidən açılmayacaq.}other{Chrome üçün yeni güncəlləmə əlçatandır. Chrome yenidən işə başladıqdan sonra tətbiq ediləcək. # Anonim pəncərəniz yenidən açılmayacaq.}}</translation>
 <translation id="7155997830309522122">Bu halda, Chrome'da saxlanmış parolları redaktə edərək yeni parola uyğunlaşdırın.</translation>
+<translation id="7236955538461508933">{NUM_HOURS,plural, =1{Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: 1 saat əvvəl.}other{Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: {NUM_HOURS} saat əvvəl.}}</translation>
 <translation id="7242029209006116544">İdarə olunan hesabla daxil olursnuz və onun inzibati idarəetməsini Google Chrome profilinizə verirsiniz. Tətbiqləriniz, əlfəcinləriniz, tarixçəniz və digər ayarlarınız Chrome datanızla birlikdə <ph name="USER_NAME" /> üzərinə həmişəlik bənd olacaq. Bu datanı Google Hesabları Paneli vasitəsilə silə bilərsiniz, lakin bu datanı digər hesabla əlaqəli edə bilməzsiniz. Mövcud Chrome datanızı ayrı saxlamaq üçün yeni profil yarada bilərsiniz. <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">Bu dil Google Chrome UI-ni göstərmək üçün istifadə edilir</translation>
 <translation id="7296210096911315575">Mühüm istifadə və təhlükəsizlik məlumatı</translation>
 <translation id="7308322188646931570">Faylları endirmək üçün Chrome yaddaşa giriş tələb edir</translation>
 <translation id="7339898014177206373">Yeni pəncərə</translation>
+<translation id="7386132805935307836">Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: dünən.</translation>
 <translation id="7398801000654795464">Chrome'a <ph name="USER_EMAIL_ADDRESS" /> olaraq daxil olmuşdunuz. Lütfən, yenidən daxil olmaq üçün eyni hesabdan istifadə edin.</translation>
 <translation id="7408085963519505752">Chrome OS şərtləri</translation>
 <translation id="7419046106786626209">Chrome OS datanızı sinxronizasiya edə bilmədi, çünki sinxronizasiya domeniniz üçün əlçatan deyil.</translation>
+<translation id="7423733001651488593">Bununla baxış datanız bu cihazdan həmişəlik siləcək. Datanı bərpa etmək üçün Chrome'a belə daxil olun:</translation>
 <translation id="7486227612705979895">Ünvan panelində təkliflər irəli sürmək üçün Chrome Diskinizə daxil olacaq</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7573289029918943991">Cihazınızın güncəl olub-olmadığına baxmaq üçün <ph name="LINK_BEGIN" />Chrome OS Ayarlarına<ph name="LINK_END" /> keçin</translation>
@@ -234,6 +245,7 @@ Bəzi funksiyalar əlçatmaz ola bilər. Xüsusi profil direktoriyası göstəri
 <translation id="828798499196665338">Valideyniniz Chrome üçün "Saytlar, tətbiqlər və artırmalar üçün icazələri" deaktiv edib. Bu <ph name="EXTENSION_TYPE_PARAMETER" /> artırmasının aktiv edilməsinə icazə verilmir.</translation>
 <translation id="8290100596633877290">Google Chrome'da xəta baş verdi. İndi yenidən başladılsın?</translation>
 <translation id="8342675569599923794">Bu fayl təhlükəlidir, bu səbəbdən Chrome onu blok etdi.</translation>
+<translation id="8344083974188970894">{NUM_MINS,plural, =1{Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: 1 dəqiqə əvvəl.}other{Chrome arzuolunmaz proqram olub-olmadığını həftədə bir dəfə yoxlayır. Son yoxlanma: {NUM_MINS} dəqiqə əvvəl.}}</translation>
 <translation id="8370517070665726704">Müəllif hüquqları <ph name="YEAR" /> Google MMC. Bütün hüquqlar qorunur.</translation>
 <translation id="840084489713044809">Google Chrome parollarınızı eksport etmək istəyir.</translation>
 <translation id="8498858610309223613">Google Chrome üçün xüsusi təhlükəsizlik yeniləməsi indicə tətbiq edildi. İndi yenidən başladın və açdığınız tablar bərpa ediləcək.</translation>
@@ -246,8 +258,10 @@ Bəzi funksiyalar əlçatmaz ola bilər. Xüsusi profil direktoriyası göstəri
 <translation id="8641606876632989680">Oğurlanmış parol ilə daxil olduqda Chrome sizə bildiriş göndərəcək</translation>
 <translation id="8669527147644353129">Google Chrome Yardımçı</translation>
 <translation id="8679801911857917785">O, həmçinin, Chrome açılanda hansı səhifənin göstərildiyini idarə edir.</translation>
+<translation id="8681614230122836773">Chrome kompüterdə zərərli proqram tapıb</translation>
 <translation id="870251953148363156">Google Chrome'u güncəlləşdirin</translation>
 <translation id="873133009373065397">Google Chrome defolt brauzeri müəyyən edə və ya ayarlaya bilmir</translation>
+<translation id="8748242232968346981">Chrome'da öz profilinizi yaradın?</translation>
 <translation id="8823341990149967727">Chrome'un vaxtı keçib</translation>
 <translation id="8834965163890861871">Google Chrome parolları redaktə etməyə çalışır. Buna icazə vermək üçün Windows parolunuzu yazın.</translation>
 <translation id="884296878221830158">Həmçinin, Chrome'a başlayanda və ya Əsas səhifə düyməsinə klikləyəndə göstəriləsi səhifəyə nəzarət edir.</translation>

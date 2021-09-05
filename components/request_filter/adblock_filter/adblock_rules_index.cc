@@ -79,7 +79,7 @@ bool DoesUrlMatchRulePattern(const flat::FilterRule& rule,
   if (rule.host() && rule.host()->size()) {
     base::StringPiece host =
         url.spec().substr(url.host().begin, url.host().len);
-    if (!host.ends_with(rule.host()->str()))
+    if (!base::EndsWith(host, rule.host()->str()))
       return false;
     host.remove_suffix(rule.host()->size());
     if (!host.empty() && host.back() != '.')

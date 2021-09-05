@@ -75,7 +75,7 @@ syncer::SyncDataList ToSyncerSyncDataList(
   return result;
 }
 
-static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 19),
+static_assert(extensions::disable_reason::DISABLE_REASON_LAST == (1LL << 20),
               "Please consider whether your new disable reason should be"
               " syncable, and if so update this bitmask accordingly!");
 const int kKnownSyncableDisableReasons =
@@ -237,10 +237,10 @@ ExtensionSyncData ExtensionSyncService::CreateSyncData(
   // for the existence of disable reasons instead), we're just setting it here
   // for older Chrome versions (<M48).
   bool enabled = (disable_reasons == extensions::disable_reason::DISABLE_NONE);
-  if (extension_prefs->GetExtensionBlacklistState(extension.id()) ==
-      extensions::BLACKLISTED_MALWARE) {
+  if (extension_prefs->GetExtensionBlocklistState(extension.id()) ==
+      extensions::BLOCKLISTED_MALWARE) {
     enabled = false;
-    NOTREACHED() << "Blacklisted extensions should not be getting synced.";
+    NOTREACHED() << "Blocklisted extensions should not be getting synced.";
   }
 
   bool incognito_enabled = extensions::util::IsIncognitoEnabled(id, profile_);
@@ -371,7 +371,7 @@ void ExtensionSyncService::ApplySyncData(
   if (!!incoming_disable_reasons == extension_sync_data.enabled()) {
     // The enabled flag disagrees with the presence of disable reasons. This
     // must either come from an old (<M45) client which doesn't sync disable
-    // reasons, or the extension is blacklisted (which doesn't have a
+    // reasons, or the extension is blocklisted (which doesn't have a
     // corresponding disable reason).
     // Update |disable_reasons| based on the enabled flag.
     if (extension_sync_data.enabled())
@@ -522,6 +522,8 @@ void ExtensionSyncService::ApplyBookmarkAppSyncData(
     WebApplicationIconInfo icon_info;
     icon_info.url = icon.url;
     icon_info.square_size_px = icon.size;
+    // Web apps in Extensions system supports Purpose::ANY icons only.
+    icon_info.purpose = blink::Manifest::ImageResource::Purpose::ANY;
     web_app_info->icon_infos.push_back(icon_info);
   }
 
@@ -642,7 +644,7 @@ std::vector<ExtensionSyncData> ExtensionSyncService::GetLocalSyncDataList(
   // Collect the local state.
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile_);
   std::vector<ExtensionSyncData> data;
-  // Note: Maybe we should include blacklisted/blocked extensions here, i.e.
+  // Note: Maybe we should include blocklisted/blocked extensions here, i.e.
   // just call registry->GeneratedInstalledExtensionsSet().
   // It would be more consistent, but the danger is that the black/blocklist
   // hasn't been updated on all clients by the time sync has kicked in -

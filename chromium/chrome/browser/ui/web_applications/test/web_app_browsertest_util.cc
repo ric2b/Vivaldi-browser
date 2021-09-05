@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
@@ -27,7 +29,6 @@
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_tab_helper_base.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "content/public/browser/notification_service.h"
@@ -42,6 +43,9 @@ namespace web_app {
 
 AppId InstallWebApp(Profile* profile,
                     std::unique_ptr<WebApplicationInfo> web_app_info) {
+  if (web_app_info->title.empty())
+    web_app_info->title = base::ASCIIToUTF16("WebApplicationInfo App Name");
+
   AppId app_id;
   base::RunLoop run_loop;
   auto* provider = WebAppProviderBase::GetProviderBase(profile);
@@ -64,7 +68,7 @@ Browser* LaunchWebAppBrowser(Profile* profile, const AppId& app_id) {
   EXPECT_TRUE(
       apps::AppServiceProxyFactory::GetForProfile(profile)
           ->BrowserAppLauncher()
-          .LaunchAppWithParams(apps::AppLaunchParams(
+          ->LaunchAppWithParams(apps::AppLaunchParams(
               app_id, apps::mojom::LaunchContainer::kLaunchContainerWindow,
               WindowOpenDisposition::CURRENT_TAB,
               apps::mojom::AppLaunchSource::kSourceTest)));
@@ -91,7 +95,7 @@ Browser* LaunchBrowserForWebAppInTab(Profile* profile, const AppId& app_id) {
   content::WebContents* web_contents =
       apps::AppServiceProxyFactory::GetForProfile(profile)
           ->BrowserAppLauncher()
-          .LaunchAppWithParams(apps::AppLaunchParams(
+          ->LaunchAppWithParams(apps::AppLaunchParams(
               app_id, apps::mojom::LaunchContainer::kLaunchContainerTab,
               WindowOpenDisposition::NEW_FOREGROUND_TAB,
               apps::mojom::AppLaunchSource::kSourceTest));
@@ -211,6 +215,24 @@ void UninstallWebApp(Profile* profile, const AppId& app_id) {
   DCHECK(provider->install_finalizer().CanUserUninstallExternalApp(app_id));
   provider->install_finalizer().UninstallExternalAppByUser(app_id,
                                                            base::DoNothing());
+}
+
+SkColor ReadAppIconPixel(Profile* profile,
+                         const AppId& app_id,
+                         SquareSizePx size,
+                         int x,
+                         int y) {
+  SkColor result;
+  base::RunLoop run_loop;
+  WebAppProviderBase::GetProviderBase(profile)->icon_manager().ReadIcons(
+      app_id, IconPurpose::ANY, {size},
+      base::BindLambdaForTesting(
+          [&](std::map<SquareSizePx, SkBitmap> icon_bitmaps) {
+            run_loop.Quit();
+            result = icon_bitmaps.at(size).getColor(x, y);
+          }));
+  run_loop.Run();
+  return result;
 }
 
 }  // namespace web_app

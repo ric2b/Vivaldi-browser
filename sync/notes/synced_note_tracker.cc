@@ -5,7 +5,6 @@
 #include "sync/notes/synced_note_tracker.h"
 
 #include <algorithm>
-#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -27,7 +26,8 @@
 #include "ui/base/models/tree_node_iterator.h"
 
 namespace sync_bookmarks {
-extern const base::Feature kInvalidateBookmarkSyncMetadataIfClientTagDuplicates;
+extern const base::Feature
+    kInvalidateBookmarkSyncMetadataIfClientTagMissingWhileInSync;
 }
 
 namespace sync_notes {
@@ -55,6 +55,38 @@ std::unordered_map<int64_t, const vivaldi::NoteNode*> BuildIdToNoteNodeMap(
     id_to_note_node_map[node->id()] = node;
   }
   return id_to_note_node_map;
+}
+
+// Predicate that determines whether a last-synced-time is considered recent
+// enough to activate the logic for
+// |kInvalidateNoteSyncMetadataIfClientTagMissingWhileInSync|.
+bool IsRecentEnoughTimeToConsiderInSync(base::Time time) {
+  return base::Time::Now() - time < base::TimeDelta::FromDays(2);
+}
+
+bool ShouldInvalidateMetadataDueToMissingClientTags(
+    bool note_without_client_tag_found,
+    bool has_local_changes,
+    base::Time last_sync_time) {
+  if (!note_without_client_tag_found) {
+    // All good, nothing to invalidate.
+    return false;
+  }
+
+  if (!has_local_changes &&
+      IsRecentEnoughTimeToConsiderInSync(last_sync_time) &&
+      base::FeatureList::IsEnabled(
+          sync_bookmarks::
+              kInvalidateBookmarkSyncMetadataIfClientTagMissingWhileInSync)) {
+    // This seems like a very good time to invalidate metadata, since it's very
+    // likely that the local state is in sync with the remote (server-side)
+    // state. This means there's low change to run into conflicts.
+    return true;
+  }
+
+  // Force-invalidate if the corresponding feature toggle is enabled.
+  return base::FeatureList::IsEnabled(
+      sync_bookmarks::kInvalidateBookmarkSyncMetadataIfClientTagMissing);
 }
 
 }  // namespace
@@ -131,7 +163,8 @@ std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
     sync_pb::ModelTypeState model_type_state) {
   // base::WrapUnique() used because the constructor is private.
   auto tracker = base::WrapUnique(new SyncedNoteTracker(
-      std::move(model_type_state), /*notes_full_title_reuploaded=*/false));
+      std::move(model_type_state), /*notes_full_title_reuploaded=*/false,
+      /*last_sync_time=*/base::Time::Now()));
   return tracker;
 }
 
@@ -158,14 +191,17 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
     tracker->SetNotesFullTitleReuploaded();
   }
 
+  // If the field is not present, |last_sync_time| will be initialized with the
+  // Unix epoch.
+  tracker->last_sync_time_ =
+      syncer::ProtoTimeToTime(model_metadata.last_sync_time());
+
   bool is_not_corrupted = tracker->InitEntitiesFromModelAndMetadata(
       model, std::move(model_metadata));
 
   if (!is_not_corrupted) {
     return nullptr;
   }
-
-  tracker->ReuploadNotesOnLoadIfNeeded();
 
   return tracker;
 }
@@ -305,16 +341,17 @@ void SyncedNoteTracker::MarkDeleted(const Entity* entity) {
 
 void SyncedNoteTracker::Remove(const Entity* entity) {
   DCHECK(entity);
-  // TODO(rushans): erase only if entity is not a tombstone.
+  DCHECK_EQ(entity, GetEntityForSyncId(entity->metadata()->server_id()));
+
   if (entity->note_node()) {
     DCHECK(!entity->metadata()->is_deleted());
     DCHECK_EQ(0, std::count(ordered_local_tombstones_.begin(),
                             ordered_local_tombstones_.end(), entity));
+    note_node_to_entities_map_.erase(entity->note_node());
   } else {
     DCHECK(entity->metadata()->is_deleted());
   }
 
-  note_node_to_entities_map_.erase(entity->note_node());
   base::Erase(ordered_local_tombstones_, entity);
   sync_id_to_entities_map_.erase(entity->metadata()->server_id());
 }
@@ -330,6 +367,7 @@ void SyncedNoteTracker::IncrementSequenceNumber(const Entity* entity) {
 sync_pb::NotesModelMetadata SyncedNoteTracker::BuildNoteModelMetadata() const {
   sync_pb::NotesModelMetadata model_metadata;
   model_metadata.set_notes_full_title_reuploaded(notes_full_title_reuploaded_);
+  model_metadata.set_last_sync_time(syncer::TimeToProtoTime(last_sync_time_));
   for (const std::pair<const std::string, std::unique_ptr<Entity>>& pair :
        sync_id_to_entities_map_) {
     DCHECK(pair.second) << " for ID " << pair.first;
@@ -414,14 +452,18 @@ SyncedNoteTracker::GetEntitiesWithLocalChanges(size_t max_entries) const {
 }
 
 SyncedNoteTracker::SyncedNoteTracker(sync_pb::ModelTypeState model_type_state,
-                                     bool notes_full_title_reuploaded)
+                                     bool notes_full_title_reuploaded,
+                                     base::Time last_sync_time)
     : model_type_state_(std::move(model_type_state)),
-      notes_full_title_reuploaded_(notes_full_title_reuploaded) {}
+      notes_full_title_reuploaded_(notes_full_title_reuploaded),
+      last_sync_time_(last_sync_time) {}
 
 bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     const vivaldi::NotesModel* model,
     sync_pb::NotesModelMetadata model_metadata) {
   DCHECK(model_type_state_.initial_sync_done());
+
+  bool note_without_client_tag_found = false;
 
   // Build a temporary map to look up note nodes efficiently by node ID.
   std::unordered_map<int64_t, const vivaldi::NoteNode*> id_to_note_node_map =
@@ -456,10 +498,7 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
               note_metadata.metadata().client_tag_hash());
       const bool new_element =
           used_client_tag_hashes.insert(client_tag_hash).second;
-      if (!new_element &&
-          base::FeatureList::IsEnabled(
-              sync_bookmarks::
-                  kInvalidateBookmarkSyncMetadataIfClientTagDuplicates)) {
+      if (!new_element) {
         DLOG(ERROR) << "Error when decoding sync metadata: Duplicated client "
                        "tag hash.";
         return false;
@@ -478,6 +517,7 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
           /*node=*/nullptr, std::make_unique<sync_pb::EntityMetadata>(
                                 std::move(*note_metadata.mutable_metadata())));
       ordered_local_tombstones_.push_back(tombstone_entity.get());
+      DCHECK_EQ(0U, sync_id_to_entities_map_.count(sync_id));
       sync_id_to_entities_map_[sync_id] = std::move(tombstone_entity);
       continue;
     }
@@ -499,6 +539,7 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
 
     if (!node->is_permanent_node() &&
         !note_metadata.metadata().has_client_tag_hash()) {
+      note_without_client_tag_found = true;
     }
 
     // The client-tag-hash is optional, but if it does exist, it is expected to
@@ -532,6 +573,7 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     entity->set_commit_may_have_started(true);
     CHECK_EQ(0U, note_node_to_entities_map_.count(node));
     note_node_to_entities_map_[node] = entity.get();
+    DCHECK_EQ(0U, sync_id_to_entities_map_.count(sync_id));
     sync_id_to_entities_map_[sync_id] = std::move(entity);
   }
 
@@ -543,6 +585,11 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     if (note_node_to_entities_map_.count(node) == 0) {
       return false;
     }
+  }
+
+  if (ShouldInvalidateMetadataDueToMissingClientTags(
+          note_without_client_tag_found, HasLocalChanges(), last_sync_time_)) {
+    return false;
   }
 
   CheckAllNodesTracked(model);
@@ -562,7 +609,7 @@ SyncedNoteTracker::ReorderUnsyncedEntitiesExceptDeletions(
   //    node. What's left in |nodes| are the roots of the forest.
   // 3. Start at each root in |nodes|, emit the update and recurse over its
   //    children.
-  std::set<const vivaldi::NoteNode*> nodes;
+  std::unordered_set<const vivaldi::NoteNode*> nodes;
   // Collect nodes with updates
   for (const SyncedNoteTracker::Entity* entity : entities) {
     DCHECK(entity->IsUnsynced());
@@ -585,11 +632,11 @@ SyncedNoteTracker::ReorderUnsyncedEntitiesExceptDeletions(
   return ordered_entities;
 }
 
-void SyncedNoteTracker::ReuploadNotesOnLoadIfNeeded() {
+bool SyncedNoteTracker::ReuploadNotesOnLoadIfNeeded() {
   if (notes_full_title_reuploaded_ ||
       !base::FeatureList::IsEnabled(
           switches::kSyncReuploadBookmarkFullTitles)) {
-    return;
+    return false;
   }
   for (const auto& sync_id_and_entity : sync_id_to_entities_map_) {
     const SyncedNoteTracker::Entity* entity = sync_id_and_entity.second.get();
@@ -601,7 +648,8 @@ void SyncedNoteTracker::ReuploadNotesOnLoadIfNeeded() {
     }
     IncrementSequenceNumber(entity);
   }
-  notes_full_title_reuploaded_ = true;
+  SetNotesFullTitleReuploaded();
+  return true;
 }
 
 void SyncedNoteTracker::TraverseAndAppend(

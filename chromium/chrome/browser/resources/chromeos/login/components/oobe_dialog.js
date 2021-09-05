@@ -49,16 +49,6 @@ Polymer({
     },
 
     /**
-     * True when dialog is displayed in full-screen mode.
-     */
-    fullScreenDialog: {
-      type: Boolean,
-      value: false,
-      reflectToAttribute: true,
-      observer: 'onfullScreenDialogChanged_',
-    },
-
-    /**
      * If true footer would be shrunk as much as possible to fit container.
      */
     footerShrinkable: {
@@ -141,8 +131,6 @@ Polymer({
     var isOobe = window.hasOwnProperty('Oobe') &&
         window.hasOwnProperty('DISPLAY_TYPE') && Oobe.getInstance() &&
         Oobe.getInstance().displayType == DISPLAY_TYPE.OOBE;
-    if (isOobe || document.documentElement.hasAttribute('full-screen-dialog'))
-      this.fullScreenDialog = true;
   },
 
   /**
@@ -178,19 +166,16 @@ Polymer({
         continue;
 
       focused = true;
-      this.focusElement_(focusedElements[i]);
+      Polymer.RenderStatus.afterNextRender(
+          this, () => this.focusElement_(focusedElements[i]));
       break;
     }
-    if (!focused && focusedElements.length > 0)
-      this.focusElement_(focusedElements[0]);
+    if (!focused && focusedElements.length > 0) {
+      Polymer.RenderStatus.afterNextRender(
+          this, () => this.focusElement_(focusedElements[0]));
+    }
 
     this.fire('show-dialog');
-  },
-
-  /** @private */
-  onfullScreenDialogChanged_() {
-    if (this.fullScreenDialog)
-      document.documentElement.setAttribute('full-screen-dialog', true);
   },
 
   /** @private */

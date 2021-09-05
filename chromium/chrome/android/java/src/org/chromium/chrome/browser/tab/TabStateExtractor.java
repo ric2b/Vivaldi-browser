@@ -24,9 +24,10 @@ public class TabStateExtractor {
         TabState tabState = new TabState();
         tabState.contentsState = getWebContentsState(tabImpl);
         tabState.openerAppId = TabAssociatedApp.getAppId(tab);
-        tabState.parentId = tab.getParentId();
-        tabState.timestampMillis = tab.getTimestampMillis();
-        tabState.tabLaunchTypeAtCreation = tab.getLaunchTypeAtInitialTabCreation();
+        tabState.parentId = CriticalPersistedTabData.from(tab).getParentId();
+        tabState.timestampMillis = CriticalPersistedTabData.from(tab).getTimestampMillis();
+        tabState.tabLaunchTypeAtCreation =
+                CriticalPersistedTabData.from(tab).getTabLaunchTypeAtCreation();
         // Don't save the actual default theme color because it could change on night mode state
         // changed.
         tabState.themeColor = TabThemeColorHelper.isUsingColorFromTabContents(tab)
@@ -41,7 +42,9 @@ public class TabStateExtractor {
      * @param tab The {@link TabImpl} from which to extract the WebContents state.
      **/
     public static WebContentsState getWebContentsState(TabImpl tab) {
-        if (tab.getFrozenContentsState() != null) return tab.getFrozenContentsState();
+        if (CriticalPersistedTabData.from(tab).getWebContentsState() != null) {
+            return CriticalPersistedTabData.from(tab).getWebContentsState();
+        }
 
         // Native call returns null when buffer allocation needed to serialize the state failed.
         ByteBuffer buffer = getWebContentsStateAsByteBuffer(tab);
@@ -56,7 +59,7 @@ public class TabStateExtractor {
     private static ByteBuffer getWebContentsStateAsByteBuffer(TabImpl tab) {
         LoadUrlParams pendingLoadParams = tab.getPendingLoadParams();
         if (pendingLoadParams == null) {
-            return WebContentsStateBridge.getContentsStateAsByteBuffer(tab);
+            return WebContentsStateBridge.getContentsStateAsByteBuffer(tab.getWebContents());
         } else {
             Referrer referrer = pendingLoadParams.getReferrer();
             return WebContentsStateBridge.createSingleNavigationStateAsByteBuffer(

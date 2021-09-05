@@ -11,7 +11,7 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 
@@ -30,17 +30,12 @@ public class AssistantRootViewContainer
         super(context, attrs);
         assert context instanceof ChromeActivity;
         mActivity = (ChromeActivity) context;
-        mBrowserControlsStateProvider = mActivity.getFullscreenManager();
+        mBrowserControlsStateProvider = mActivity.getBrowserControlsManager();
         mBrowserControlsStateProvider.addObserver(this);
     }
 
     public void setTalkbackViewSizeFraction(float fraction) {
         mTalkbackSheetSizeFraction = fraction;
-    }
-
-    @Override
-    public void onContentOffsetChanged(int offset) {
-        invalidate();
     }
 
     @Override

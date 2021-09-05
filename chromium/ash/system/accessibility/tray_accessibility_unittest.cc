@@ -251,13 +251,14 @@ class TrayAccessibilityTest : public AshTestBase, public AccessibilityObserver {
   // In material design we show the help button but theme it as disabled if
   // it is not possible to load the help page.
   bool IsHelpAvailableOnDetailMenu() {
-    return detailed_menu_->help_view_->state() == views::Button::STATE_NORMAL;
+    return detailed_menu_->help_view_->GetState() ==
+           views::Button::STATE_NORMAL;
   }
 
   // In material design we show the settings button but theme it as disabled if
   // it is not possible to load the settings page.
   bool IsSettingsAvailableOnDetailMenu() {
-    return detailed_menu_->settings_view_->state() ==
+    return detailed_menu_->settings_view_->GetState() ==
            views::Button::STATE_NORMAL;
   }
 
@@ -652,7 +653,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling spoken feedback.
@@ -672,7 +675,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling spoken feedback.
@@ -692,7 +697,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling select to speak.
@@ -712,7 +719,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling select to speak.
@@ -732,7 +741,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling dictation.
@@ -752,7 +763,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling dictation.
@@ -772,7 +785,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling high contrast.
@@ -792,7 +807,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling high contrast.
@@ -812,7 +829,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling full screen magnifier.
@@ -832,7 +851,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling screen magnifier.
@@ -852,7 +873,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling docked magnifier.
@@ -872,7 +895,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling docked magnifier.
@@ -892,7 +917,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling large cursor.
@@ -912,7 +939,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling large cursor.
@@ -932,7 +961,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enable on-screen keyboard.
@@ -952,7 +983,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disable on-screen keyboard.
@@ -972,7 +1005,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling mono audio.
@@ -992,7 +1027,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling mono audio.
@@ -1012,7 +1049,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling caret highlight.
@@ -1032,7 +1071,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling caret highlight.
@@ -1052,7 +1093,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling highlight mouse cursor.
@@ -1072,7 +1115,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_TRUE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling highlight mouse cursor.
@@ -1092,7 +1137,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling highlight keyboard focus.
@@ -1112,7 +1159,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_TRUE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling highlight keyboard focus.
@@ -1132,7 +1181,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling sticky keys.
@@ -1152,7 +1203,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_TRUE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling sticky keys.
@@ -1172,10 +1225,14 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
-  // Enabling switch access.
+  // Switch Access is currently not available on the login screen; see
+  // crbug/1108808
+  /* // Enabling switch access.
   EnableSwitchAccess(true);
   CreateDetailedMenu();
   EXPECT_FALSE(IsSpokenFeedbackEnabledOnDetailMenu());
@@ -1214,6 +1271,7 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
   EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
+  */
 
   // Enabling all of the a11y features.
   EnableSpokenFeedback(true);
@@ -1281,7 +1339,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently cannot be enabled from the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Enabling autoclick.
@@ -1301,7 +1361,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently not available on the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 
   // Disabling autoclick.
@@ -1321,7 +1383,9 @@ TEST_F(TrayAccessibilityLoginScreenTest, CheckMarksOnDetailMenu) {
   EXPECT_FALSE(IsHighlightMouseCursorEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighlightKeyboardFocusEnabledOnDetailMenu());
   EXPECT_FALSE(IsStickyKeysEnabledOnDetailMenu());
-  EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
+  // Switch Access is currently not available on the login screen.
+  // TODO(crbug.com/1108808): Uncomment once issue is addressed.
+  // EXPECT_FALSE(IsSwitchAccessEnabledOnDetailMenu());
   CloseDetailMenu();
 }
 

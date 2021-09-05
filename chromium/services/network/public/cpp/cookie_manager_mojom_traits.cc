@@ -93,6 +93,8 @@ network::mojom::CookieEffectiveSameSite EnumTraits<
       return network::mojom::CookieEffectiveSameSite::kStrictMode;
     case net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE:
       return network::mojom::CookieEffectiveSameSite::kLaxModeAllowUnsafe;
+    case net::CookieEffectiveSameSite::UNDEFINED:
+      return network::mojom::CookieEffectiveSameSite::kUndefined;
     default:
       break;
   }
@@ -116,6 +118,9 @@ bool EnumTraits<network::mojom::CookieEffectiveSameSite,
       return true;
     case network::mojom::CookieEffectiveSameSite::kLaxModeAllowUnsafe:
       *output = net::CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE;
+      return true;
+    case network::mojom::CookieEffectiveSameSite::kUndefined:
+      *output = net::CookieEffectiveSameSite::UNDEFINED;
       return true;
     default:
       break;
@@ -403,37 +408,21 @@ bool StructTraits<network::mojom::CookieInclusionStatusDataView,
   return out->IsValid();
 }
 
-bool StructTraits<
-    network::mojom::CookieWithStatusDataView,
-    net::CookieWithStatus>::Read(network::mojom::CookieWithStatusDataView c,
-                                 net::CookieWithStatus* out) {
-  net::CanonicalCookie cookie;
-  net::CookieInclusionStatus status;
-  if (!c.ReadCookie(&cookie))
-    return false;
-  if (!c.ReadStatus(&status))
-    return false;
-
-  *out = {cookie, status};
-
-  return true;
-}
-
-bool StructTraits<network::mojom::CookieAndLineWithStatusDataView,
-                  net::CookieAndLineWithStatus>::
-    Read(network::mojom::CookieAndLineWithStatusDataView c,
-         net::CookieAndLineWithStatus* out) {
+bool StructTraits<network::mojom::CookieAndLineWithAccessResultDataView,
+                  net::CookieAndLineWithAccessResult>::
+    Read(network::mojom::CookieAndLineWithAccessResultDataView c,
+         net::CookieAndLineWithAccessResult* out) {
   base::Optional<net::CanonicalCookie> cookie;
   std::string cookie_string;
-  net::CookieInclusionStatus status;
+  net::CookieAccessResult access_result;
   if (!c.ReadCookie(&cookie))
     return false;
   if (!c.ReadCookieString(&cookie_string))
     return false;
-  if (!c.ReadStatus(&status))
+  if (!c.ReadAccessResult(&access_result))
     return false;
 
-  *out = {cookie, cookie_string, status};
+  *out = {cookie, cookie_string, access_result};
 
   return true;
 }
@@ -444,13 +433,16 @@ bool StructTraits<
                                    net::CookieAccessResult* out) {
   net::CookieEffectiveSameSite effective_same_site;
   net::CookieInclusionStatus status;
+  net::CookieAccessSemantics access_semantics;
 
   if (!c.ReadEffectiveSameSite(&effective_same_site))
     return false;
   if (!c.ReadStatus(&status))
     return false;
+  if (!c.ReadAccessSemantics(&access_semantics))
+    return false;
 
-  *out = {effective_same_site, status};
+  *out = {effective_same_site, status, access_semantics};
 
   return true;
 }
@@ -476,17 +468,16 @@ bool StructTraits<
     net::CookieChangeInfo>::Read(network::mojom::CookieChangeInfoDataView info,
                                  net::CookieChangeInfo* out) {
   net::CanonicalCookie cookie;
-  net::CookieAccessSemantics access_semantics =
-      net::CookieAccessSemantics::UNKNOWN;
+  net::CookieAccessResult access_result;
   net::CookieChangeCause cause = net::CookieChangeCause::EXPLICIT;
   if (!info.ReadCookie(&cookie))
     return false;
-  if (!info.ReadAccessSemantics(&access_semantics))
+  if (!info.ReadAccessResult(&access_result))
     return false;
   if (!info.ReadCause(&cause))
     return false;
 
-  *out = net::CookieChangeInfo(cookie, access_semantics, cause);
+  *out = net::CookieChangeInfo(cookie, access_result, cause);
   return true;
 }
 

@@ -27,6 +27,7 @@ ios_app_bundle("hello") {
   ]
 
   deps = [
+    ":foo",
     ":storyboards",
     "//shared:hello_framework",
     "//shared:hello_framework+bundle",
@@ -38,4 +39,29 @@ storyboards("storyboards") {
     "resources/LaunchScreen.storyboard",
     "resources/Main.storyboard",
   ]
+}
+
+source_set("baz") {
+  module_name = "Baz"
+  sources = [ "Baz.swift" ]
+}
+
+source_set("bar") {
+  module_name = "Bar"
+  sources = [ "Bar.swift" ]
+  deps = [ ":baz" ]
+}
+
+group("bar_indirect") {
+  public_deps = [ ":bar" ]
+}
+
+source_set("foo") {
+  module_name = "Foo"
+  bridge_header = "Foo-Bridging-Header.h"
+  sources = [
+    "Foo.swift",
+    "FooWrapper.swift",
+  ]
+  deps = [ ":bar_indirect" ]
 }

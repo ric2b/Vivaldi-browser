@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
 #include "chrome/browser/media/router/providers/wired_display/wired_display_media_route_provider.h"
@@ -30,6 +31,11 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
 #include "url/origin.h"
+
+#if defined(OS_MAC)
+#include "base/mac/mac_util.h"
+#include "ui/base/cocoa/permissions_utils.h"
+#endif
 
 using testing::_;
 using testing::Invoke;
@@ -135,6 +141,7 @@ class MediaRouterViewsUITest : public ChromeRenderViewHostTestHarness {
     SetMediaRouterFactory();
     mock_router_ = static_cast<MockMediaRouter*>(
         MediaRouterFactory::GetApiForBrowserContext(GetBrowserContext()));
+    logger_ = std::make_unique<LoggerImpl>();
 
     // Store sink observers so that they can be notified in tests.
     ON_CALL(*mock_router_, RegisterMediaSinksObserver(_))
@@ -142,6 +149,7 @@ class MediaRouterViewsUITest : public ChromeRenderViewHostTestHarness {
           media_sinks_observers_.push_back(observer);
           return true;
         });
+    ON_CALL(*mock_router_, GetLogger()).WillByDefault(Return(logger_.get()));
 
     CreateSessionServiceTabHelper(web_contents());
     ui_ = std::make_unique<MediaRouterViewsUI>(web_contents());
@@ -245,6 +253,7 @@ class MediaRouterViewsUITest : public ChromeRenderViewHostTestHarness {
   MockMediaRouter* mock_router_ = nullptr;
   std::unique_ptr<MediaRouterViewsUI> ui_;
   std::unique_ptr<StartPresentationContext> start_presentation_context_;
+  std::unique_ptr<LoggerImpl> logger_;
   content::PresentationRequest presentation_request_{
       {0, 0},
       {GURL("https://google.com/presentation")},
@@ -502,6 +511,11 @@ TEST_F(MediaRouterViewsUITest, RouteCreationTimeoutForTab) {
 }
 
 TEST_F(MediaRouterViewsUITest, RouteCreationTimeoutForDesktop) {
+#if defined(OS_MAC)
+  if (base::mac::IsAtLeastOS10_15())
+    ui_->set_screen_capture_allowed_for_testing(true);
+#endif
+
   StartCastingAndExpectTimeout(
       MediaCastMode::DESKTOP_MIRROR,
       l10n_util::GetStringUTF8(
@@ -520,6 +534,31 @@ TEST_F(MediaRouterViewsUITest, RouteCreationTimeoutForPresentation) {
                                 base::UTF8ToUTF16("frameurl.fakeurl")),
       20);
 }
+
+#if defined(OS_MAC)
+TEST_F(MediaRouterViewsUITest, DesktopMirroringFailsWhenDisallowedOnMac) {
+  // Failure due to a lack of screen capture permissions only happens on macOS
+  // 10.15 or later. See crbug.com/1087236 for more info.
+  if (!base::mac::IsAtLeastOS10_15())
+    return;
+
+  ui_->set_screen_capture_allowed_for_testing(false);
+  MockControllerObserver observer(ui_.get());
+  MediaSink sink(kSinkId, kSinkName, SinkIconType::CAST);
+  ui_->OnResultsUpdated({{sink, {MediaCastMode::DESKTOP_MIRROR}}});
+  for (MediaSinksObserver* sinks_observer : media_sinks_observers_)
+    sinks_observer->OnSinksUpdated({sink}, std::vector<url::Origin>());
+
+  EXPECT_CALL(observer, OnModelUpdated(_))
+      .WillOnce(WithArg<0>([&](const CastDialogModel& model) {
+        EXPECT_EQ(
+            model.media_sinks()[0].issue->info().title,
+            l10n_util::GetStringUTF8(
+                IDS_MEDIA_ROUTER_ISSUE_MAC_SCREEN_CAPTURE_PERMISSION_ERROR));
+      }));
+  ui_->StartCasting(kSinkId, MediaCastMode::DESKTOP_MIRROR);
+}
+#endif
 
 // Tests that if a local file CreateRoute call is made from a new tab, the
 // file will be opened in the new tab.

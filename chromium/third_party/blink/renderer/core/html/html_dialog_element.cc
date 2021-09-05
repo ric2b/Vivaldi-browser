@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -81,8 +82,10 @@ static void SetFocusForDialog(HTMLDialogElement* dialog) {
   if (!doc.IsActive())
     return;
   if (!doc.IsInMainFrame() &&
-      !doc.TopFrameOrigin()->CanAccess(doc.GetSecurityOrigin()))
+      !doc.TopFrameOrigin()->CanAccess(
+          doc.GetExecutionContext()->GetSecurityOrigin())) {
     return;
+  }
 
   // 6. Empty topDocument's autofocus candidates.
   // 7. Set topDocument's autofocus processed flag to true.

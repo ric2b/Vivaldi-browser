@@ -9,27 +9,19 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/datasource/vivaldi_data_source_api.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-CSSModsDataClassHandler::CSSModsDataClassHandler(Profile* profile)
-    : profile_(profile) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-}
-
-CSSModsDataClassHandler::~CSSModsDataClassHandler() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-}
-
 void CSSModsDataClassHandler::GetData(
+    Profile* profile,
     const std::string& data_id,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  base::FilePath custom_css_path = profile_->GetPrefs()->GetFilePath(
+  base::FilePath custom_css_path = profile->GetPrefs()->GetFilePath(
       vivaldiprefs::kAppearanceCssUiModsDirectory);
   if (custom_css_path.empty()) {
     std::string data = "{}";
@@ -43,9 +35,9 @@ void CSSModsDataClassHandler::GetData(
     return;
   }
 
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&CSSModsDataClassHandler::GetDataForIdOnBlockingThread,
                      custom_css_path, data_id),
@@ -87,7 +79,6 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
         (size_t)data.length());
   } else {
     base::FilePath file_path = dir_path.AppendASCII(data_id);
-    return extensions::VivaldiDataSourcesAPI::ReadFileOnBlockingThread(
-        file_path);
+    return vivaldi_data_url_utils::ReadFileOnBlockingThread(file_path);
   }
 }

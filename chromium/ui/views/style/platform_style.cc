@@ -33,7 +33,7 @@ const bool PlatformStyle::kIsOkButtonLeading = false;
 const float PlatformStyle::kFocusHaloThickness = 2.f;
 const float PlatformStyle::kFocusHaloInset = -1.f;
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
 
 const int PlatformStyle::kMinLabelButtonWidth = 70;
 const int PlatformStyle::kMinLabelButtonHeight = 33;
@@ -72,9 +72,10 @@ gfx::Range PlatformStyle::RangeToDeleteBackwards(const base::string16& text,
   return gfx::Range(cursor_position, previous_grapheme_index);
 }
 
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 
-#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || !defined(OS_LINUX)
+#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || \
+    (!defined(OS_LINUX) && !defined(OS_CHROMEOS))
 // static
 std::unique_ptr<Border> PlatformStyle::CreateThemedLabelButtonBorder(
     LabelButton* button) {

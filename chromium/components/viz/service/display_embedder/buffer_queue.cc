@@ -80,7 +80,7 @@ bool BufferQueue::Reshape(const gfx::Size& size,
   if (size == size_ && color_space == color_space_ && format == format_)
     return false;
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_APPLE)
   // TODO(ccameron): This assert is being hit on Mac try jobs. Determine if that
   // is cause for concern or if it is benign.
   // http://crbug.com/524624
@@ -153,7 +153,8 @@ std::unique_ptr<BufferQueue::AllocatedSurface> BufferQueue::GetNextSurface(
   DCHECK(format_);
   const ResourceFormat format = GetResourceFormat(format_.value());
   const gpu::Mailbox mailbox = sii_->CreateSharedImage(
-      format, size_, color_space_,
+      format, size_, color_space_, kTopLeft_GrSurfaceOrigin,
+      kPremul_SkAlphaType,
       gpu::SHARED_IMAGE_USAGE_SCANOUT |
           gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT,
       surface_handle_);

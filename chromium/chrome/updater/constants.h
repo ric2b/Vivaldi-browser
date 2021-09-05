@@ -53,17 +53,11 @@ extern const char kCrashMeSwitch[];
 // Runs as the Crashpad handler.
 extern const char kCrashHandlerSwitch[];
 
+// Updates the updater.
+extern const char kUpdateSwitch[];
+
 // Installs the updater.
 extern const char kInstallSwitch[];
-
-#if defined(OS_MACOSX)
-// Swaps the current version of the updater with the newly installed one.
-// Performs clean-up.
-extern const char kPromoteCandidateSwitch[];
-
-// TODO(crbug 1072061): this switch should not be shipped.
-extern const char kUninstallCandidateSwitch[];
-#endif  // OS_MACOSX
 
 #if defined(OS_WIN)
 // A debug switch to indicate that --install is running from the `out` directory
@@ -116,6 +110,9 @@ extern const char kUpdaterJSONDefaultUrl[];
 // The URL where crash reports are uploaded.
 extern const char kCrashUploadURL[];
 extern const char kCrashStagingUploadURL[];
+
+// DM server end point.
+extern const char kDeviceManagementServerURL[];
 
 // File system paths.
 //

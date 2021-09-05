@@ -11,6 +11,10 @@
 #include "build/build_config.h"
 #include "ui/gl/gl_export.h"
 
+#if defined(OS_WIN)
+#include <dxgi1_6.h>
+#endif
+
 #if defined(OS_ANDROID)
 #include "base/files/scoped_file.h"
 #endif
@@ -26,8 +30,19 @@ GL_EXPORT base::ScopedFD MergeFDs(base::ScopedFD a, base::ScopedFD b);
 GL_EXPORT bool UsePassthroughCommandDecoder(
     const base::CommandLine* command_line);
 
+GL_EXPORT bool PassthroughCommandDecoderSupported();
+
 #if defined(OS_WIN)
 GL_EXPORT bool AreOverlaysSupportedWin();
+
+// Calculates present during in 100 ns from number of frames per second.
+GL_EXPORT unsigned int FrameRateToPresentDuration(float frame_rate);
+
+GL_EXPORT UINT GetOverlaySupportFlags(DXGI_FORMAT format);
+
+// Whether to use full damage when direct compostion root surface presents.
+// This function is thread safe.
+GL_EXPORT bool ShouldForceDirectCompositionRootSurfaceFullDamage();
 #endif
 
 }  // namespace gl

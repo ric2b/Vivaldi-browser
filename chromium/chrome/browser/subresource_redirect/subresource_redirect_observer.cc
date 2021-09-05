@@ -81,7 +81,7 @@ bool ShouldCompressionServerRedirectSubresource() {
   return base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect) &&
          base::GetFieldTrialParamByFeatureAsBool(
              blink::features::kSubresourceRedirect,
-             "enable_subresource_server_redirect", false);
+             "enable_subresource_server_redirect", true);
 }
 
 bool ShowInfoBarOnAndroid(content::WebContents* web_contents) {
@@ -129,8 +129,8 @@ SubresourceRedirectObserver::SubresourceRedirectObserver(
   auto* optimization_guide_decider =
       GetOptimizationGuideDeciderFromWebContents(web_contents);
   if (optimization_guide_decider) {
-    optimization_guide_decider->RegisterOptimizationTypesAndTargets(
-        {optimization_guide::proto::COMPRESS_PUBLIC_IMAGES}, {});
+    optimization_guide_decider->RegisterOptimizationTypes(
+        {optimization_guide::proto::COMPRESS_PUBLIC_IMAGES});
   }
 }
 

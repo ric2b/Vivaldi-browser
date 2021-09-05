@@ -17,6 +17,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/predictors/loading_test_util.h"
 #include "chrome/browser/predictors/predictors_features.h"
+#include "chrome/browser/predictors/predictors_switches.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_ui_data.h"
@@ -29,18 +30,26 @@
 #include "net/base/network_isolation_key.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/origin.h"
 
 namespace predictors {
 
 namespace {
 
+using ::testing::UnorderedElementsAreArray;
+
 class FakePrefetchManagerDelegate
     : public PrefetchManager::Delegate,
       public base::SupportsWeakPtr<FakePrefetchManagerDelegate> {
  public:
+  void PrefetchInitiated(const GURL& url, const GURL& prefetch_url) override {
+    prefetched_urls_for_main_frame_url_[url].insert(prefetch_url);
+  }
+
   void PrefetchFinished(std::unique_ptr<PrefetchStats> stats) override {
     finished_urls_.insert(stats->url);
     auto iter = done_callbacks_.find(stats->url);
@@ -60,7 +69,18 @@ class FakePrefetchManagerDelegate
     loop.Run();
   }
 
+  base::flat_set<GURL> GetPrefetchedURLsForURL(const GURL& url) const {
+    auto it = prefetched_urls_for_main_frame_url_.find(url);
+    if (it == prefetched_urls_for_main_frame_url_.end())
+      return {};
+    return it->second;
+  }
+
+  void ClearPrefetchedURLs() { prefetched_urls_for_main_frame_url_ = {}; }
+
  private:
+  base::flat_map<GURL, base::flat_set<GURL>>
+      prefetched_urls_for_main_frame_url_;
   base::flat_set<GURL> finished_urls_;
   base::flat_map<GURL, base::OnceClosure> done_callbacks_;
 };
@@ -69,6 +89,12 @@ class FakePrefetchManagerDelegate
 net::NetworkIsolationKey CreateNetworkIsolationKey(const GURL& main_frame_url) {
   url::Origin origin = url::Origin::Create(main_frame_url);
   return net::NetworkIsolationKey(origin, origin);
+}
+
+PrefetchRequest CreateScriptRequest(const GURL& url,
+                                    const GURL& main_frame_url) {
+  return PrefetchRequest(url, CreateNetworkIsolationKey(main_frame_url),
+                         network::mojom::RequestDestination::kScript);
 }
 
 }  // namespace
@@ -103,14 +129,16 @@ PrefetchManagerTest::PrefetchManagerTest()
           std::make_unique<PrefetchManager>(fake_delegate_->AsWeakPtr(),
                                             profile_.get())) {
   features_.InitAndEnableFeature(features::kLoadingPredictorPrefetch);
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kLoadingPredictorAllowLocalRequestForTesting);
 }
 
 // Tests prefetching a single URL.
 TEST_F(PrefetchManagerTest, OneMainFrameUrlOnePrefetch) {
   GURL main_frame_url("https://abc.invalid");
   GURL subresource_url("https://xyz.invalid/script.js");
-  PrefetchRequest request(subresource_url,
-                          CreateNetworkIsolationKey(main_frame_url));
+  PrefetchRequest request =
+      CreateScriptRequest(subresource_url, main_frame_url);
 
   base::RunLoop loop;
   content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
@@ -118,6 +146,15 @@ TEST_F(PrefetchManagerTest, OneMainFrameUrlOnePrefetch) {
         network::ResourceRequest& request = params->url_request;
         EXPECT_EQ(request.url, subresource_url);
         EXPECT_TRUE(request.load_flags & net::LOAD_PREFETCH);
+
+        EXPECT_EQ(request.referrer_policy, net::ReferrerPolicy::NO_REFERRER);
+        EXPECT_EQ(request.destination,
+                  network::mojom::RequestDestination::kScript);
+        EXPECT_EQ(
+            static_cast<blink::mojom::ResourceType>(request.resource_type),
+            blink::mojom::ResourceType::kScript);
+
+        EXPECT_EQ(request.mode, network::mojom::RequestMode::kNoCors);
 
         std::string purpose;
         EXPECT_TRUE(request.headers.GetHeader("Purpose", &purpose));
@@ -128,6 +165,9 @@ TEST_F(PrefetchManagerTest, OneMainFrameUrlOnePrefetch) {
       }));
   prefetch_manager_->Start(main_frame_url, {request});
   loop.Run();
+
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url),
+              UnorderedElementsAreArray({subresource_url}));
 
   fake_delegate_->WaitForPrefetchFinished(main_frame_url);
 }
@@ -146,7 +186,7 @@ TEST_F(PrefetchManagerTest, OneMainFrameUrlMultiplePrefetch) {
 
   // The ControllableHttpResponses must be made before the test server
   // is started.
-  for (size_t i = 0; i < PrefetchManager::kMaxInflightJobs + 1; i++) {
+  for (size_t i = 0; i < features::GetMaxInflightPrefetches() + 1; i++) {
     std::string path = base::StringPrintf("/script%" PRIuS ".js", i);
     paths.push_back(path);
     responses.push_back(
@@ -161,20 +201,28 @@ TEST_F(PrefetchManagerTest, OneMainFrameUrlMultiplePrefetch) {
   // The request URLs can only be constructed after the server is started.
   for (size_t i = 0; i < responses.size(); i++) {
     GURL url = test_server.GetURL(paths[i]);
-    requests.emplace_back(url, CreateNetworkIsolationKey(main_frame_url));
+    requests.push_back(CreateScriptRequest(url, main_frame_url));
   }
 
   // Start the prefetching.
   prefetch_manager_->Start(main_frame_url, std::move(requests));
 
   // Wait for requests up to the inflight limit.
-  for (size_t i = 0; i < responses.size() - 1; i++)
+  std::vector<GURL> prefetched_urls;
+  for (size_t i = 0; i < responses.size() - 1; i++) {
+    prefetched_urls.push_back(test_server.GetURL(paths[i]));
     responses[i]->WaitForRequest();
+  }
+
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url),
+              UnorderedElementsAreArray(prefetched_urls));
 
   // Verify there is a queued job. Pump the run loop just to give the manager a
   // chance to incorrectly start the queued job and fail the expectation.
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetQueuedJobsCount(), 1u);
+
+  fake_delegate_->ClearPrefetchedURLs();
 
   // Finish one request.
   responses.front()->Send("hi");
@@ -183,6 +231,9 @@ TEST_F(PrefetchManagerTest, OneMainFrameUrlMultiplePrefetch) {
   // Wait for the queued job to start.
   responses.back()->WaitForRequest();
   EXPECT_EQ(GetQueuedJobsCount(), 0u);
+
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url),
+              UnorderedElementsAreArray({test_server.GetURL(paths.back())}));
 
   // Finish all requests.
   for (size_t i = 1; i < responses.size(); i++) {
@@ -204,7 +255,7 @@ TEST_F(PrefetchManagerTest, MultipleMainFrameUrlMultiplePrefetch) {
   GURL main_frame_url2("https://def.invalid");
 
   // Set up prefetches one more than the inflight limit.
-  size_t count = PrefetchManager::kMaxInflightJobs;
+  size_t count = features::GetMaxInflightPrefetches();
 
   // The ControllableHttpResponses must be made before the test server
   // is started.
@@ -221,13 +272,17 @@ TEST_F(PrefetchManagerTest, MultipleMainFrameUrlMultiplePrefetch) {
   ASSERT_TRUE(test_server_handle);
 
   // The request URLs can only be constructed after the server is started.
-  for (size_t i = 0; i < count; i++) {
+  std::vector<GURL> expected_prefetch_requests_for_main_frame_url;
+  for (size_t i = 0; i < count - 1; i++) {
     GURL url = test_server.GetURL(paths[i]);
-    requests.emplace_back(url, CreateNetworkIsolationKey(main_frame_url));
+    requests.push_back(CreateScriptRequest(url, main_frame_url));
+    expected_prefetch_requests_for_main_frame_url.push_back(url);
   }
-  {
-    GURL url = test_server.GetURL(paths[count]);
-    requests.emplace_back(url, CreateNetworkIsolationKey(main_frame_url2));
+  std::vector<GURL> expected_prefetch_requests_for_main_frame_url2;
+  for (size_t i = count - 1; i < count + 1; i++) {
+    GURL url = test_server.GetURL(paths[i]);
+    requests.push_back(CreateScriptRequest(url, main_frame_url2));
+    expected_prefetch_requests_for_main_frame_url2.push_back(url);
   }
 
   // Start the prefetching.
@@ -247,6 +302,15 @@ TEST_F(PrefetchManagerTest, MultipleMainFrameUrlMultiplePrefetch) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetQueuedJobsCount(), 1u);
 
+  EXPECT_THAT(
+      fake_delegate_->GetPrefetchedURLsForURL(main_frame_url),
+      UnorderedElementsAreArray(expected_prefetch_requests_for_main_frame_url));
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url2),
+              UnorderedElementsAreArray(
+                  {expected_prefetch_requests_for_main_frame_url2.front()}));
+
+  fake_delegate_->ClearPrefetchedURLs();
+
   // Finish one request.
   responses.front()->Send("hi");
   responses.front()->Done();
@@ -254,6 +318,13 @@ TEST_F(PrefetchManagerTest, MultipleMainFrameUrlMultiplePrefetch) {
   // Wait for the queued job to start.
   responses.back()->WaitForRequest();
   EXPECT_EQ(GetQueuedJobsCount(), 0u);
+
+  // We don't expect any more requests for |main_frame_url| to be initiated and
+  // we expect the last request for |main_frame_url2| to go out.
+  EXPECT_TRUE(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url).empty());
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url2),
+              UnorderedElementsAreArray(
+                  {expected_prefetch_requests_for_main_frame_url2.back()}));
 
   // Finish all requests.
   for (size_t i = 1; i < responses.size(); i++) {
@@ -268,7 +339,7 @@ TEST_F(PrefetchManagerTest, Stop) {
   net::test_server::EmbeddedTestServer test_server;
 
   // Set up prefetches (limit + 1 for URL1, and 1 for URL2)
-  size_t limit = PrefetchManager::kMaxInflightJobs;
+  size_t limit = features::GetMaxInflightPrefetches();
 
   GURL main_frame_url("https://abc.invalid");
   std::vector<std::string> paths;
@@ -305,17 +376,19 @@ TEST_F(PrefetchManagerTest, Stop) {
   ASSERT_TRUE(test_server_handle);
 
   // The request URLs can only be constructed after the server is started.
+  std::vector<GURL> expected_prefetch_requests;
   for (size_t i = 0; i < limit; i++) {
     GURL url = test_server.GetURL(paths[i]);
-    requests.emplace_back(url, CreateNetworkIsolationKey(main_frame_url));
+    requests.push_back(CreateScriptRequest(url, main_frame_url));
+    expected_prefetch_requests.push_back(url);
   }
   // This request should never be seen.
-  requests.emplace_back(test_server.GetURL("/should_be_cancelled"),
-                        CreateNetworkIsolationKey(main_frame_url));
+  requests.push_back(CreateScriptRequest(
+      test_server.GetURL("/should_be_cancelled"), main_frame_url));
 
   // The request from the second navigation.
-  PrefetchRequest request2(test_server.GetURL(path2),
-                           CreateNetworkIsolationKey(main_frame_url2));
+  PrefetchRequest request2 =
+      CreateScriptRequest(test_server.GetURL(path2), main_frame_url2);
 
   // Start URL1, URL2.
   prefetch_manager_->Start(main_frame_url, requests);
@@ -336,19 +409,25 @@ TEST_F(PrefetchManagerTest, Stop) {
   }
   fake_delegate_->WaitForPrefetchFinished(main_frame_url);
 
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url),
+              UnorderedElementsAreArray(expected_prefetch_requests));
+
   // The request for URL2 should be requested.
   response2->WaitForRequest();
   response2->Send("hi");
   response2->Done();
 
   fake_delegate_->WaitForPrefetchFinished(main_frame_url2);
+
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url2),
+              UnorderedElementsAreArray({test_server.GetURL(path2)}));
 }
 
 TEST_F(PrefetchManagerTest, StopAndStart) {
   net::test_server::EmbeddedTestServer test_server;
 
   // Set up prefetches (limit + 1).
-  size_t limit = PrefetchManager::kMaxInflightJobs;
+  size_t limit = features::GetMaxInflightPrefetches();
 
   GURL main_frame_url("https://abc.invalid");
   std::vector<std::string> paths;
@@ -382,13 +461,15 @@ TEST_F(PrefetchManagerTest, StopAndStart) {
   ASSERT_TRUE(test_server_handle);
 
   // The request URLs can only be constructed after the server is started.
+  std::vector<GURL> expected_prefetch_requests;
   for (size_t i = 0; i < limit; i++) {
     GURL url = test_server.GetURL(paths[i]);
-    requests.emplace_back(url, CreateNetworkIsolationKey(main_frame_url));
+    requests.push_back(CreateScriptRequest(url, main_frame_url));
+    expected_prefetch_requests.push_back(url);
   }
   // This request should never be seen.
-  requests.emplace_back(test_server.GetURL("/should_be_cancelled"),
-                        CreateNetworkIsolationKey(main_frame_url));
+  requests.push_back(CreateScriptRequest(
+      test_server.GetURL("/should_be_cancelled"), main_frame_url));
 
   // Start.
   prefetch_manager_->Start(main_frame_url, requests);
@@ -397,9 +478,13 @@ TEST_F(PrefetchManagerTest, StopAndStart) {
   for (auto& response : responses) {
     response->WaitForRequest();
   }
+  EXPECT_THAT(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url),
+              UnorderedElementsAreArray(expected_prefetch_requests));
 
   // Call stop.
   prefetch_manager_->Stop(main_frame_url);
+
+  fake_delegate_->ClearPrefetchedURLs();
 
   // Call start again. These requests will be coalesced
   // with the stopped info, and will just be dropped.
@@ -414,6 +499,9 @@ TEST_F(PrefetchManagerTest, StopAndStart) {
   }
   fake_delegate_->WaitForPrefetchFinished(main_frame_url);
 
+  // We don't expect any additional requests to be started.
+  EXPECT_TRUE(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url).empty());
+
   // Restart requests. These requests will work as normal.
   prefetch_manager_->Start(main_frame_url, requests);
   for (auto& response : responses2) {
@@ -423,6 +511,9 @@ TEST_F(PrefetchManagerTest, StopAndStart) {
   }
 
   fake_delegate_->WaitForPrefetchFinished(main_frame_url);
+
+  // Prefetches should have been initiated with the second start.
+  EXPECT_FALSE(fake_delegate_->GetPrefetchedURLsForURL(main_frame_url).empty());
 }
 
 class HeaderInjectingThrottle : public blink::URLLoaderThrottle {
@@ -480,8 +571,7 @@ TEST_F(PrefetchManagerTest, Throttles) {
 
   GURL main_frame_url("https://abc.invalid");
   GURL prefetch_url = test_server.GetURL("/prefetch");
-  PrefetchRequest request(prefetch_url,
-                          CreateNetworkIsolationKey(main_frame_url));
+  PrefetchRequest request = CreateScriptRequest(prefetch_url, main_frame_url);
 
   prefetch_manager_->Start(main_frame_url, {request});
 

@@ -216,9 +216,9 @@ void ImagePaintTimingDetector::RecordImage(
     const LayoutObject& object,
     const IntSize& intrinsic_size,
     const ImageResourceContent& cached_image,
-    const PropertyTreeState& current_paint_chunk_properties,
+    const PropertyTreeStateOrAlias& current_paint_chunk_properties,
     const StyleFetchedImage* style_image,
-    const IntRect* image_border) {
+    const IntRect& image_border) {
   Node* node = object.GetNode();
   if (!node)
     return;
@@ -226,9 +226,23 @@ void ImagePaintTimingDetector::RecordImage(
     return;
 
   RecordId record_id = std::make_pair(&object, &cached_image);
-  bool is_recored_visible_image =
+  bool is_recorded_visible_image =
       records_manager_.IsRecordedVisibleImage(record_id);
-  if (is_recored_visible_image &&
+  if (int depth = IgnorePaintTimingScope::IgnoreDepth()) {
+    // Record the largest loaded image that is hidden due to documentElement
+    // being invisible but by no other reason (i.e. IgnoreDepth() needs to be
+    // 1).
+    if (depth == 1 && IgnorePaintTimingScope::IsDocumentElementInvisible() &&
+        !is_recorded_visible_image && cached_image.IsLoaded()) {
+      uint64_t rect_size = ComputeImageRectSize(image_border, intrinsic_size,
+                                                current_paint_chunk_properties,
+                                                object, cached_image);
+      records_manager_.MaybeUpdateLargestIgnoredImage(record_id, rect_size);
+    }
+    return;
+  }
+
+  if (is_recorded_visible_image &&
       !records_manager_.IsVisibleImageLoaded(record_id) &&
       cached_image.IsLoaded()) {
     records_manager_.OnImageLoaded(record_id, frame_index_, style_image);
@@ -237,39 +251,23 @@ void ImagePaintTimingDetector::RecordImage(
             frame_view_->GetPaintTimingDetector().Visualizer()) {
       FloatRect mapped_visual_rect =
           frame_view_->GetPaintTimingDetector().CalculateVisualRect(
-              image_border ? *image_border
-                           : object.FragmentsVisualRectBoundingBox(),
-              current_paint_chunk_properties);
+              image_border, current_paint_chunk_properties);
       visualizer->DumpImageDebuggingRect(object, mapped_visual_rect,
                                          cached_image);
     }
     return;
   }
 
-  if (is_recored_visible_image || !is_recording_)
+  if (is_recorded_visible_image || !is_recording_)
     return;
-  IntRect visual_rect =
-      image_border ? *image_border : object.FragmentsVisualRectBoundingBox();
+
   // Before the image resource starts loading, <img> has no size info. We wait
   // until the size is known.
-  if (visual_rect.IsEmpty())
+  if (image_border.IsEmpty())
     return;
-  FloatRect mapped_visual_rect =
-      frame_view_->GetPaintTimingDetector().CalculateVisualRect(
-          visual_rect, current_paint_chunk_properties);
-  if (base::Optional<PaintTimingVisualizer>& visualizer =
-          frame_view_->GetPaintTimingDetector().Visualizer()) {
-    visualizer->DumpImageDebuggingRect(object, mapped_visual_rect,
-                                       cached_image);
-  }
-  uint64_t rect_size = mapped_visual_rect.Size().Area();
-  // Transform visual rect to window before calling downscale.
-  WebFloatRect float_visual_rect = FloatRect(visual_rect);
-  frame_view_->GetPaintTimingDetector().ConvertViewportToWindow(
-      &float_visual_rect);
-  rect_size = DownScaleIfIntrinsicSizeIsSmaller(
-      rect_size, intrinsic_size.Area(),
-      float_visual_rect.width * float_visual_rect.height);
+  uint64_t rect_size = ComputeImageRectSize(image_border, intrinsic_size,
+                                            current_paint_chunk_properties,
+                                            object, cached_image);
   if (rect_size == 0) {
     records_manager_.RecordInvisible(object);
   } else {
@@ -281,11 +279,41 @@ void ImagePaintTimingDetector::RecordImage(
   }
 }
 
+uint64_t ImagePaintTimingDetector::ComputeImageRectSize(
+    const IntRect& image_border,
+    const IntSize& intrinsic_size,
+    const PropertyTreeStateOrAlias& current_paint_chunk_properties,
+    const LayoutObject& object,
+    const ImageResourceContent& cached_image) {
+  FloatRect mapped_visual_rect =
+      frame_view_->GetPaintTimingDetector().CalculateVisualRect(
+          image_border, current_paint_chunk_properties);
+  if (base::Optional<PaintTimingVisualizer>& visualizer =
+          frame_view_->GetPaintTimingDetector().Visualizer()) {
+    visualizer->DumpImageDebuggingRect(object, mapped_visual_rect,
+                                       cached_image);
+  }
+  uint64_t rect_size = mapped_visual_rect.Size().Area();
+  // Transform visual rect to window before calling downscale.
+  WebFloatRect float_visual_rect = FloatRect(image_border);
+  frame_view_->GetPaintTimingDetector().ConvertViewportToWindow(
+      &float_visual_rect);
+  rect_size = DownScaleIfIntrinsicSizeIsSmaller(
+      rect_size, intrinsic_size.Area(),
+      float_visual_rect.width * float_visual_rect.height);
+  return rect_size;
+}
+
 void ImagePaintTimingDetector::NotifyImageFinished(
     const LayoutObject& object,
     const ImageResourceContent* cached_image) {
   RecordId record_id = std::make_pair(&object, cached_image);
   records_manager_.NotifyImageFinished(record_id);
+}
+
+void ImagePaintTimingDetector::ReportLargestIgnoredImage() {
+  need_update_timing_at_frame_end_ = true;
+  records_manager_.ReportLargestIgnoredImage(frame_index_);
 }
 
 ImageRecordsManager::ImageRecordsManager(LocalFrameView* frame_view)
@@ -309,11 +337,41 @@ void ImageRecordsManager::OnImageLoaded(const RecordId& record_id,
   OnImageLoadedInternal(record, current_frame_index);
 }
 
+void ImageRecordsManager::ReportLargestIgnoredImage(
+    unsigned current_frame_index) {
+  if (!largest_ignored_image_)
+    return;
+  base::WeakPtr<ImageRecord> record = largest_ignored_image_->AsWeakPtr();
+  Node* node = DOMNodeIds::NodeForId(largest_ignored_image_->node_id);
+  if (!node || !node->GetLayoutObject() ||
+      !largest_ignored_image_->cached_image) {
+    // The image has been removed, so we have no content to report.
+    largest_ignored_image_.reset();
+    return;
+  }
+  RecordId record_id = std::make_pair(node->GetLayoutObject(),
+                                      largest_ignored_image_->cached_image);
+  size_ordered_set_.insert(record);
+  visible_images_.insert(record_id, std::move(largest_ignored_image_));
+  OnImageLoadedInternal(record, current_frame_index);
+}
+
 void ImageRecordsManager::OnImageLoadedInternal(
     base::WeakPtr<ImageRecord>& record,
     unsigned current_frame_index) {
   SetLoaded(record);
   QueueToMeasurePaintTime(record, current_frame_index);
+}
+
+void ImageRecordsManager::MaybeUpdateLargestIgnoredImage(
+    const RecordId& record_id,
+    const uint64_t& visual_size) {
+  if (visual_size && (!largest_ignored_image_ ||
+                      visual_size > largest_ignored_image_->first_size)) {
+    largest_ignored_image_ =
+        CreateImageRecord(*record_id.first, record_id.second, visual_size);
+    largest_ignored_image_->load_time = base::TimeTicks::Now();
+  }
 }
 
 void ImageRecordsManager::RecordVisible(const RecordId& record_id,

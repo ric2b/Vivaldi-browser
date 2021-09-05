@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {AsyncJobQueue} from '../async_job_queue.js'
+import {AsyncJobQueue} from '../async_job_queue.js';
 import {assert} from '../chrome_util.js';
 
 /**
@@ -11,8 +11,9 @@ import {assert} from '../chrome_util.js';
 export class AsyncWriter {
   /**
    * @param {function(!Blob): !Promise} doWrite
+   * @param {{onClosed: ((function(): !Promise)|undefined)}=} callbacks
    */
-  constructor(doWrite) {
+  constructor(doWrite, {onClosed = (async () => {})} = {}) {
     /**
      * @type {!AsyncJobQueue}
      * @private
@@ -26,6 +27,12 @@ export class AsyncWriter {
     this.doWrite_ = doWrite;
 
     /**
+     * @type {function(): !Promise}
+     * @private
+     */
+    this.onClosed_ = onClosed;
+
+    /**
      * @type {boolean}
      * @private
      */
@@ -35,10 +42,11 @@ export class AsyncWriter {
   /**
    * Writes the blob asynchronously with |doWrite|.
    * @param {!Blob} blob
+   * @return {!Promise} Resolved when the data is written.
    */
-  write(blob) {
+  async write(blob) {
     assert(!this.closed_);
-    this.queue_.push(() => this.doWrite_(blob));
+    await this.queue_.push(() => this.doWrite_(blob));
   }
 
   /**
@@ -48,6 +56,7 @@ export class AsyncWriter {
   async close() {
     this.closed_ = true;
     await this.queue_.flush();
+    await this.onClosed_();
   }
 
   /**
@@ -60,6 +69,9 @@ export class AsyncWriter {
     const doWrite = (blob) => {
       return Promise.all(writers.map((writer) => writer.write(blob)));
     };
-    return new AsyncWriter(doWrite);
+    const onClosed = () => {
+      return Promise.all(writers.map((writer) => writer.close()));
+    };
+    return new AsyncWriter(doWrite, {onClosed});
   }
 }

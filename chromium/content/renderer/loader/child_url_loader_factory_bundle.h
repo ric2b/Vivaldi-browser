@@ -12,12 +12,13 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "content/common/content_export.h"
-#include "content/public/common/transferrable_url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
+#include "third_party/blink/public/mojom/loader/transferrable_url_loader.mojom.h"
 
 namespace content {
 
@@ -49,6 +50,26 @@ class CONTENT_EXPORT ChildPendingURLLoaderFactoryBundle
       bool bypass_redirect_checks);
   ~ChildPendingURLLoaderFactoryBundle() override;
 
+  template <typename T>
+  static std::unique_ptr<ChildPendingURLLoaderFactoryBundle>
+  CreateFromDefaultFactoryImpl(std::unique_ptr<T> default_factory_impl) {
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> pending_remote;
+    mojo::MakeSelfOwnedReceiver(
+        std::move(default_factory_impl),
+        pending_remote.InitWithNewPipeAndPassReceiver());
+
+    std::unique_ptr<ChildPendingURLLoaderFactoryBundle> pending_bundle(
+        new ChildPendingURLLoaderFactoryBundle(
+            std::move(pending_remote),  // pending_default_factory
+            {},                         // pending_default_network_factory
+            {},                         // pending_scheme_specific_factories
+            {},                         // pending_isolated_world_factories
+            {},                         // direct_network_factory_remote
+            {},                         // pending_prefetch_loader_factory
+            false));                    // bypass_redirect_checks
+    return pending_bundle;
+  }
+
   mojo::PendingRemote<network::mojom::URLLoaderFactory>&
   direct_network_factory_remote() {
     return direct_network_factory_remote_;
@@ -58,9 +79,18 @@ class CONTENT_EXPORT ChildPendingURLLoaderFactoryBundle
     return pending_prefetch_loader_factory_;
   }
 
+  void MarkAsDeprecatedProcessWideFactory() {
+    is_deprecated_process_wide_factory_ = true;
+  }
+  bool is_deprecated_process_wide_factory() const {
+    return is_deprecated_process_wide_factory_;
+  }
+
  protected:
   // PendingURLLoaderFactoryBundle overrides.
   scoped_refptr<network::SharedURLLoaderFactory> CreateFactory() override;
+
+  bool is_deprecated_process_wide_factory_ = false;
 
   mojo::PendingRemote<network::mojom::URLLoaderFactory>
       direct_network_factory_remote_;
@@ -112,12 +142,17 @@ class CONTENT_EXPORT ChildURLLoaderFactoryBundle
   void Update(
       std::unique_ptr<ChildPendingURLLoaderFactoryBundle> pending_factories);
   void UpdateSubresourceOverrides(
-      std::vector<mojom::TransferrableURLLoaderPtr>* subresource_overrides);
+      std::vector<blink::mojom::TransferrableURLLoaderPtr>*
+          subresource_overrides);
   void SetPrefetchLoaderFactory(
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           prefetch_loader_factory);
 
   virtual bool IsHostChildURLLoaderFactoryBundle() const;
+
+  void MarkAsDeprecatedProcessWideFactory() {
+    is_deprecated_process_wide_factory_ = true;
+  }
 
  protected:
   ~ChildURLLoaderFactoryBundle() override;
@@ -135,7 +170,10 @@ class CONTENT_EXPORT ChildURLLoaderFactoryBundle
   mojo::Remote<network::mojom::URLLoaderFactory> direct_network_factory_;
   mojo::Remote<network::mojom::URLLoaderFactory> prefetch_loader_factory_;
 
-  std::map<GURL, mojom::TransferrableURLLoaderPtr> subresource_overrides_;
+  bool is_deprecated_process_wide_factory_ = false;
+
+  std::map<GURL, blink::mojom::TransferrableURLLoaderPtr>
+      subresource_overrides_;
 };
 
 }  // namespace content

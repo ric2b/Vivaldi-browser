@@ -44,15 +44,11 @@
 #include "components/sync/nigori/keystore_keys_handler.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/preference_specifics.pb.h"
-#include "components/sync/syncable/directory.h"
-#include "components/sync/syncable/syncable_id.h"
-#include "components/sync/syncable/test_user_share.h"
-#include "components/sync/syncable/user_share.h"
 #include "components/sync/test/engine/fake_model_worker.h"
 #include "components/sync/test/engine/mock_connection_manager.h"
 #include "components/sync/test/engine/mock_model_type_processor.h"
 #include "components/sync/test/engine/mock_nudge_handler.h"
-#include "components/sync/test/engine/test_syncable_utils.h"
+#include "components/sync/test/fake_sync_encryption_handler.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -235,8 +231,7 @@ class SyncerTest : public testing::Test,
   }
 
   void SetUp() override {
-    test_user_share_.SetUp();
-    mock_server_ = std::make_unique<MockConnectionManager>(directory());
+    mock_server_ = std::make_unique<MockConnectionManager>();
     debug_info_getter_ = std::make_unique<MockDebugInfoGetter>();
     workers_.push_back(scoped_refptr<ModelSafeWorker>(
         new FakeModelWorker(GROUP_NON_BLOCKING)));
@@ -244,8 +239,8 @@ class SyncerTest : public testing::Test,
     listeners.push_back(this);
 
     model_type_registry_ = std::make_unique<ModelTypeRegistry>(
-        workers_, test_user_share_.user_share(), &mock_nudge_handler_,
-        &cancelation_signal_, test_user_share_.keystore_keys_handler());
+        workers_, &mock_nudge_handler_, &cancelation_signal_,
+        &encryption_handler_);
     model_type_registry_->RegisterDirectoryTypeDebugInfoObserver(
         &debug_info_cache_);
 
@@ -255,10 +250,10 @@ class SyncerTest : public testing::Test,
     EnableDatatype(PREFERENCES);
 
     context_ = std::make_unique<SyncCycleContext>(
-        mock_server_.get(), directory(), extensions_activity_.get(), listeners,
+        mock_server_.get(), extensions_activity_.get(), listeners,
         debug_info_getter_.get(), model_type_registry_.get(),
-        "fake_invalidator_client_id", mock_server_->store_birthday(),
-        "fake_bag_of_chips",
+        "fake_invalidator_client_id", local_cache_guid(),
+        mock_server_->store_birthday(), "fake_bag_of_chips",
         /*poll_interval=*/base::TimeDelta::FromMinutes(30));
     syncer_ = new Syncer(&cancelation_signal_);
     scheduler_ = std::make_unique<SyncSchedulerImpl>(
@@ -275,7 +270,6 @@ class SyncerTest : public testing::Test,
         &debug_info_cache_);
     mock_server_.reset();
     scheduler_.reset();
-    test_user_share_.TearDown();
   }
 
   void VerifyNoHierarchyConflictsReported(
@@ -298,11 +292,7 @@ class SyncerTest : public testing::Test,
     return debug_info_cache_.GetLatestStatusCounters(type);
   }
 
-  syncable::Directory* directory() {
-    return test_user_share_.user_share()->directory.get();
-  }
-
-  const std::string local_cache_guid() { return directory()->cache_guid(); }
+  const std::string local_cache_guid() { return "lD16ebCGCZh+zkiZ68gWDw=="; }
 
   const std::string foreign_cache_guid() { return "kqyg7097kro6GSUod+GSg=="; }
 
@@ -346,7 +336,7 @@ class SyncerTest : public testing::Test,
 
   base::test::SingleThreadTaskEnvironment task_environment_;
 
-  TestUserShare test_user_share_;
+  FakeSyncEncryptionHandler encryption_handler_;
   scoped_refptr<ExtensionsActivity> extensions_activity_;
   std::unique_ptr<MockConnectionManager> mock_server_;
   CancelationSignal cancelation_signal_;
@@ -402,13 +392,13 @@ TEST_F(SyncerTest, GetUpdatesPartialThrottled) {
   const sync_pb::EntitySpecifics pref = MakeSpecifics(PREFERENCES);
 
   // Normal sync, all the data types should get synced.
-  mock_server_->AddUpdateSpecifics(1, 0, "A", 10, 10, true, 0, bookmark,
+  mock_server_->AddUpdateSpecifics("1", "0", "A", 10, 10, true, 0, bookmark,
                                    foreign_cache_guid(), "-1");
-  mock_server_->AddUpdateSpecifics(2, 1, "B", 10, 10, false, 2, bookmark,
+  mock_server_->AddUpdateSpecifics("2", "1", "B", 10, 10, false, 2, bookmark,
                                    foreign_cache_guid(), "-2");
-  mock_server_->AddUpdateSpecifics(3, 1, "C", 10, 10, false, 1, bookmark,
+  mock_server_->AddUpdateSpecifics("3", "1", "C", 10, 10, false, 1, bookmark,
                                    foreign_cache_guid(), "-3");
-  mock_server_->AddUpdateSpecifics(4, 0, "D", 10, 10, false, 0, pref);
+  mock_server_->AddUpdateSpecifics("4", "0", "D", 10, 10, false, 0, pref);
 
   EXPECT_TRUE(SyncShareNudge());
   // Initial state. Everything is normal.
@@ -423,13 +413,13 @@ TEST_F(SyncerTest, GetUpdatesPartialThrottled) {
   mock_server_->set_throttling(true);
   mock_server_->SetPartialFailureTypes(throttled_types);
 
-  mock_server_->AddUpdateSpecifics(1, 0, "E", 20, 20, true, 0, bookmark,
+  mock_server_->AddUpdateSpecifics("1", "0", "E", 20, 20, true, 0, bookmark,
                                    foreign_cache_guid(), "-1");
-  mock_server_->AddUpdateSpecifics(2, 1, "F", 20, 20, false, 2, bookmark,
+  mock_server_->AddUpdateSpecifics("2", "1", "F", 20, 20, false, 2, bookmark,
                                    foreign_cache_guid(), "-2");
-  mock_server_->AddUpdateSpecifics(3, 1, "G", 20, 20, false, 1, bookmark,
+  mock_server_->AddUpdateSpecifics("3", "1", "G", 20, 20, false, 1, bookmark,
                                    foreign_cache_guid(), "-3");
-  mock_server_->AddUpdateSpecifics(4, 0, "H", 20, 20, false, 0, pref);
+  mock_server_->AddUpdateSpecifics("4", "0", "H", 20, 20, false, 0, pref);
   EXPECT_TRUE(SyncShareNudge());
 
   // PREFERENCES continues to work normally (not throttled).
@@ -440,13 +430,13 @@ TEST_F(SyncerTest, GetUpdatesPartialThrottled) {
   // Unthrottled BOOKMARKS, then BOOKMARKS should get synced now.
   mock_server_->set_throttling(false);
 
-  mock_server_->AddUpdateSpecifics(1, 0, "E", 30, 30, true, 0, bookmark,
+  mock_server_->AddUpdateSpecifics("1", "0", "E", 30, 30, true, 0, bookmark,
                                    foreign_cache_guid(), "-1");
-  mock_server_->AddUpdateSpecifics(2, 1, "F", 30, 30, false, 2, bookmark,
+  mock_server_->AddUpdateSpecifics("2", "1", "F", 30, 30, false, 2, bookmark,
                                    foreign_cache_guid(), "-2");
-  mock_server_->AddUpdateSpecifics(3, 1, "G", 30, 30, false, 1, bookmark,
+  mock_server_->AddUpdateSpecifics("3", "1", "G", 30, 30, false, 1, bookmark,
                                    foreign_cache_guid(), "-3");
-  mock_server_->AddUpdateSpecifics(4, 0, "H", 30, 30, false, 0, pref);
+  mock_server_->AddUpdateSpecifics("4", "0", "H", 30, 30, false, 0, pref);
   EXPECT_TRUE(SyncShareNudge());
   // BOOKMARKS unthrottled.
   EXPECT_EQ(2U, GetProcessor(BOOKMARKS)->GetNumUpdateResponses());
@@ -457,13 +447,13 @@ TEST_F(SyncerTest, GetUpdatesPartialFailure) {
   const sync_pb::EntitySpecifics pref = MakeSpecifics(PREFERENCES);
 
   // Normal sync, all the data types should get synced.
-  mock_server_->AddUpdateSpecifics(1, 0, "A", 10, 10, true, 0, bookmark,
+  mock_server_->AddUpdateSpecifics("1", "0", "A", 10, 10, true, 0, bookmark,
                                    foreign_cache_guid(), "-1");
-  mock_server_->AddUpdateSpecifics(2, 1, "B", 10, 10, false, 2, bookmark,
+  mock_server_->AddUpdateSpecifics("2", "1", "B", 10, 10, false, 2, bookmark,
                                    foreign_cache_guid(), "-2");
-  mock_server_->AddUpdateSpecifics(3, 1, "C", 10, 10, false, 1, bookmark,
+  mock_server_->AddUpdateSpecifics("3", "1", "C", 10, 10, false, 1, bookmark,
                                    foreign_cache_guid(), "-3");
-  mock_server_->AddUpdateSpecifics(4, 0, "D", 10, 10, false, 0, pref);
+  mock_server_->AddUpdateSpecifics("4", "0", "D", 10, 10, false, 0, pref);
 
   EXPECT_TRUE(SyncShareNudge());
   // Initial state. Everything is normal.
@@ -478,13 +468,13 @@ TEST_F(SyncerTest, GetUpdatesPartialFailure) {
   mock_server_->set_partial_failure(true);
   mock_server_->SetPartialFailureTypes(failed_types);
 
-  mock_server_->AddUpdateSpecifics(1, 0, "E", 20, 20, true, 0, bookmark,
+  mock_server_->AddUpdateSpecifics("1", "0", "E", 20, 20, true, 0, bookmark,
                                    foreign_cache_guid(), "-1");
-  mock_server_->AddUpdateSpecifics(2, 1, "F", 20, 20, false, 2, bookmark,
+  mock_server_->AddUpdateSpecifics("2", "1", "F", 20, 20, false, 2, bookmark,
                                    foreign_cache_guid(), "-2");
-  mock_server_->AddUpdateSpecifics(3, 1, "G", 20, 20, false, 1, bookmark,
+  mock_server_->AddUpdateSpecifics("3", "1", "G", 20, 20, false, 1, bookmark,
                                    foreign_cache_guid(), "-3");
-  mock_server_->AddUpdateSpecifics(4, 0, "H", 20, 20, false, 0, pref);
+  mock_server_->AddUpdateSpecifics("4", "0", "H", 20, 20, false, 0, pref);
   EXPECT_TRUE(SyncShareNudge());
 
   // PREFERENCES continues to work normally (not throttled).
@@ -495,13 +485,13 @@ TEST_F(SyncerTest, GetUpdatesPartialFailure) {
   // Set BOOKMARKS not partial failed, then BOOKMARKS should get synced now.
   mock_server_->set_partial_failure(false);
 
-  mock_server_->AddUpdateSpecifics(1, 0, "E", 30, 30, true, 0, bookmark,
+  mock_server_->AddUpdateSpecifics("1", "0", "E", 30, 30, true, 0, bookmark,
                                    foreign_cache_guid(), "-1");
-  mock_server_->AddUpdateSpecifics(2, 1, "F", 30, 30, false, 2, bookmark,
+  mock_server_->AddUpdateSpecifics("2", "1", "F", 30, 30, false, 2, bookmark,
                                    foreign_cache_guid(), "-2");
-  mock_server_->AddUpdateSpecifics(3, 1, "G", 30, 30, false, 1, bookmark,
+  mock_server_->AddUpdateSpecifics("3", "1", "G", 30, 30, false, 1, bookmark,
                                    foreign_cache_guid(), "-3");
-  mock_server_->AddUpdateSpecifics(4, 0, "H", 30, 30, false, 0, pref);
+  mock_server_->AddUpdateSpecifics("4", "0", "H", 30, 30, false, 0, pref);
   EXPECT_TRUE(SyncShareNudge());
   // BOOKMARKS not failed.
   EXPECT_EQ(2U, GetProcessor(BOOKMARKS)->GetNumUpdateResponses());
@@ -519,10 +509,8 @@ TEST_F(SyncerTest, TestSimpleCommit) {
                             MakeSpecifics(PREFERENCES), kSyncId2);
 
   EXPECT_TRUE(SyncShareNudge());
-  EXPECT_THAT(
-      mock_server_->committed_ids(),
-      UnorderedElementsAre(syncable::Id::CreateFromClientString(kSyncId1),
-                           syncable::Id::CreateFromClientString(kSyncId2)));
+  EXPECT_THAT(mock_server_->committed_ids(),
+              UnorderedElementsAre(kSyncId1, kSyncId2));
 }
 
 TEST_F(SyncerTest, TestSimpleGetUpdates) {
@@ -814,8 +802,8 @@ TEST_F(SyncerTest, TestClientCommandDuringUpdate) {
       GetSpecificsFieldNumberFromModelType(BOOKMARKS));
   bookmark_delay->set_delay_ms(950);
   command->set_client_invalidation_hint_buffer_size(11);
-  mock_server_->AddUpdateDirectory(1, 0, "in_root", 1, 1, foreign_cache_guid(),
-                                   "-1");
+  mock_server_->AddUpdateDirectory("1", "0", "in_root", 1, 1,
+                                   foreign_cache_guid(), "-1");
   mock_server_->SetGUClientCommand(std::move(command));
   EXPECT_TRUE(SyncShareNudge());
 
@@ -834,8 +822,8 @@ TEST_F(SyncerTest, TestClientCommandDuringUpdate) {
       GetSpecificsFieldNumberFromModelType(BOOKMARKS));
   bookmark_delay->set_delay_ms(1050);
   command->set_client_invalidation_hint_buffer_size(9);
-  mock_server_->AddUpdateDirectory(1, 0, "in_root", 1, 1, foreign_cache_guid(),
-                                   "-1");
+  mock_server_->AddUpdateDirectory("1", "0", "in_root", 1, 1,
+                                   foreign_cache_guid(), "-1");
   mock_server_->SetGUClientCommand(std::move(command));
   EXPECT_TRUE(SyncShareNudge());
 
@@ -892,7 +880,7 @@ TEST_F(SyncerTest, TestClientCommandDuringCommit) {
 }
 
 TEST_F(SyncerTest, ClientTagServerCreatedUpdatesWork) {
-  mock_server_->AddUpdateDirectory(1, 0, "permitem1", 1, 10,
+  mock_server_->AddUpdateDirectory("1", "0", "permitem1", 1, 10,
                                    foreign_cache_guid(), "-1");
   mock_server_->SetLastUpdateClientTag("clienttag");
 
@@ -951,9 +939,7 @@ TEST_F(SyncerTest, UpdateThenCommit) {
 
   // The sync cycle should have included a GetUpdate, then a commit.
   EXPECT_TRUE(mock_server_->last_request().has_commit());
-  EXPECT_THAT(
-      mock_server_->committed_ids(),
-      UnorderedElementsAre(syncable::Id::CreateFromClientString(to_commit)));
+  EXPECT_THAT(mock_server_->committed_ids(), UnorderedElementsAre(to_commit));
 
   // The update should have been received.
   ASSERT_EQ(1U, GetProcessor(BOOKMARKS)->GetNumUpdateResponses());
@@ -1135,13 +1121,11 @@ TEST_P(MixedResult, ExtensionsActivity) {
       "bookmarkid2");
 
   if (ShouldFailBookmarkCommit()) {
-    mock_server_->SetTransientErrorId(
-        syncable::Id::CreateFromClientString("bookmarkid2"));
+    mock_server_->SetTransientErrorId("bookmarkid2");
   }
 
   if (ShouldFailAutofillCommit()) {
-    mock_server_->SetTransientErrorId(
-        syncable::Id::CreateFromClientString("prefid1"));
+    mock_server_->SetTransientErrorId("prefid1");
   }
 
   // Put some extensions activity records into the monitor.

@@ -4,9 +4,11 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/personalization_section.h"
 
+#include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "base/bind.h"
 #include "base/no_destructor.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/settings/chromeos/ambient_mode_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/change_picture_handler.h"
@@ -15,6 +17,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/wallpaper_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
@@ -22,6 +25,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "url/gurl.h"
 
 namespace chromeos {
 namespace settings {
@@ -60,7 +64,6 @@ const std::vector<SearchConcept>& GetPersonalizationSearchConcepts() {
   return *tags;
 }
 
-// TODO(b/159766700): Add search concepts for |kAmbientModePhotosSubpagePath|.
 const std::vector<SearchConcept>& GetAmbientModeSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_AMBIENT_MODE,
@@ -89,6 +92,18 @@ const std::vector<SearchConcept>& GetAmbientModeOnSearchConcepts() {
        {.setting = mojom::Setting::kAmbientModeOnOff},
        {IDS_OS_SETTINGS_TAG_AMBIENT_MODE_TURN_OFF_ALT1,
         SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_AMBIENT_MODE_GOOGLE_PHOTOS_ALBUM,
+       mojom::kAmbientModeGooglePhotosAlbumSubpagePath,
+       mojom::SearchResultIcon::kWallpaper,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kAmbientModeGooglePhotosAlbum}},
+      {IDS_OS_SETTINGS_TAG_AMBIENT_MODE_ART_GALLERY_ALBUM,
+       mojom::kAmbientModeArtGalleryAlbumSubpagePath,
+       mojom::SearchResultIcon::kWallpaper,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kAmbientModeArtGalleryAlbum}},
   });
   return *tags;
 }
@@ -108,7 +123,16 @@ const std::vector<SearchConcept>& GetAmbientModeOffSearchConcepts() {
 }
 
 bool IsAmbientModeAllowed() {
-  return chromeos::features::IsAmbientModeEnabled();
+  return chromeos::features::IsAmbientModeEnabled() &&
+         ash::AmbientClient::Get()->IsAmbientModeAllowed();
+}
+
+bool IsAmbientModePhotoPreviewAllowed() {
+  return chromeos::features::IsAmbientModePhotoPreviewEnabled();
+}
+
+GURL GetGooglePhotosURL() {
+  return GURL(chrome::kGooglePhotosURL);
 }
 
 }  // namespace
@@ -147,14 +171,37 @@ void PersonalizationSection::AddLoadTimeData(
       {"ambientModeTitle", IDS_OS_SETTINGS_AMBIENT_MODE_TITLE},
       {"ambientModeEnabled", IDS_OS_SETTINGS_AMBIENT_MODE_ENABLED},
       {"ambientModeDisabled", IDS_OS_SETTINGS_AMBIENT_MODE_DISABLED},
+      {"ambientModePageDescription",
+       IDS_OS_SETTINGS_AMBIENT_MODE_PAGE_DESCRIPTION},
       {"ambientModeOn", IDS_OS_SETTINGS_AMBIENT_MODE_ON},
       {"ambientModeOff", IDS_OS_SETTINGS_AMBIENT_MODE_OFF},
       {"ambientModeTopicSourceTitle",
        IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_TITLE},
       {"ambientModeTopicSourceGooglePhotos",
        IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_GOOGLE_PHOTOS},
+      {"ambientModeTopicSourceGooglePhotosDescription",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_GOOGLE_PHOTOS_DESC},
+      {"ambientModeTopicSourceGooglePhotosDescriptionNoAlbum",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_GOOGLE_PHOTOS_DESC_NO_ALBUM},
       {"ambientModeTopicSourceArtGallery",
        IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_ART_GALLERY},
+      {"ambientModeTopicSourceArtGalleryDescription",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_ART_GALLERY_DESCRIPTION},
+      {"ambientModeTopicSourceSelectedRow",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_SELECTED_ROW},
+      {"ambientModeTopicSourceUnselectedRow",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_UNSELECTED_ROW},
+      {"ambientModeTopicSourceSubpage",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TOPIC_SOURCE_SUBPAGE},
+      {"ambientModeWeatherTitle", IDS_OS_SETTINGS_AMBIENT_MODE_WEATHER_TITLE},
+      {"ambientModeTemperatureUnitFahrenheit",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TEMPERATURE_UNIT_FAHRENHEIT},
+      {"ambientModeTemperatureUnitCelsius",
+       IDS_OS_SETTINGS_AMBIENT_MODE_TEMPERATURE_UNIT_CELSIUS},
+      {"ambientModeAlbumsSubpageAlbumSelected",
+       IDS_OS_SETTINGS_AMBIENT_MODE_ALBUMS_SUBPAGE_ALBUM_SELECTED},
+      {"ambientModeAlbumsSubpageAlbumUnselected",
+       IDS_OS_SETTINGS_AMBIENT_MODE_ALBUMS_SUBPAGE_ALBUM_UNSELECTED},
       {"changePictureTitle", IDS_OS_SETTINGS_CHANGE_PICTURE_TITLE},
       {"openWallpaperApp", IDS_OS_SETTINGS_OPEN_WALLPAPER_APP},
       {"personalizationPageTitle", IDS_OS_SETTINGS_PERSONALIZATION},
@@ -184,6 +231,18 @@ void PersonalizationSection::AddLoadTimeData(
       "changePictureVideoModeEnabled",
       base::FeatureList::IsEnabled(::features::kChangePictureVideoMode));
   html_source->AddBoolean("isAmbientModeEnabled", IsAmbientModeAllowed());
+  html_source->AddBoolean("isAmbientModePhotoPreviewEnabled",
+                          IsAmbientModePhotoPreviewAllowed());
+  html_source->AddString(
+      "ambientModeAlbumsSubpageGooglePhotosTitle",
+      l10n_util::GetStringFUTF16(
+          IDS_OS_SETTINGS_AMBIENT_MODE_ALBUMS_SUBPAGE_GOOGLE_PHOTOS_TITLE,
+          base::UTF8ToUTF16(GetGooglePhotosURL().spec())));
+  html_source->AddString(
+      "ambientModeAlbumsSubpageGooglePhotosNoAlbum",
+      l10n_util::GetStringFUTF16(
+          IDS_OS_SETTINGS_AMBIENT_MODE_ALBUMS_SUBPAGE_GOOGLE_PHOTOS_NO_ALBUM,
+          base::UTF8ToUTF16(GetGooglePhotosURL().spec())));
 }
 
 void PersonalizationSection::AddHandlers(content::WebUI* web_ui) {
@@ -238,19 +297,18 @@ void PersonalizationSection::RegisterHierarchy(
   };
   RegisterNestedSettingBulk(mojom::Subpage::kAmbientMode, kAmbientModeSettings,
                             generator);
-
-  // Note: The subpage name in the UI is updated dynamically based on the topic
-  // source.
-  // TODO(b/159766700): Create a string for the page title and strings for the
-  // search.
   generator->RegisterNestedSubpage(
-      IDS_OS_SETTINGS_AMBIENT_MODE_TITLE, mojom::Subpage::kAmbientModePhotos,
+      IDS_OS_SETTINGS_AMBIENT_MODE_TITLE,
+      mojom::Subpage::kAmbientModeGooglePhotosAlbum,
       mojom::Subpage::kAmbientMode, mojom::SearchResultIcon::kWallpaper,
       mojom::SearchResultDefaultRank::kMedium,
-      mojom::kAmbientModePhotosSubpagePath);
-  generator->RegisterNestedSetting(
-      mojom::Setting::kAmbientModeUpdatePhotosContainers,
-      mojom::Subpage::kAmbientModePhotos);
+      mojom::kAmbientModeGooglePhotosAlbumSubpagePath);
+  generator->RegisterNestedSubpage(
+      IDS_OS_SETTINGS_AMBIENT_MODE_TITLE,
+      mojom::Subpage::kAmbientModeArtGalleryAlbum, mojom::Subpage::kAmbientMode,
+      mojom::SearchResultIcon::kWallpaper,
+      mojom::SearchResultDefaultRank::kMedium,
+      mojom::kAmbientModeArtGalleryAlbumSubpagePath);
 }
 
 void PersonalizationSection::OnAmbientModeEnabledStateChanged() {

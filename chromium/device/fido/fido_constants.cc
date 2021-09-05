@@ -33,8 +33,9 @@ const char kCredentialManagementMapKey[] = "credMgmt";
 const char kCredentialManagementPreviewMapKey[] = "credentialMgmtPreview";
 const char kBioEnrollmentMapKey[] = "bioEnroll";
 const char kBioEnrollmentPreviewMapKey[] = "userVerificationMgmtPreview";
-const char kUvTokenMapKey[] = "uvToken";
+const char kPinUvTokenMapKey[] = "pinUvAuthToken";
 const char kDefaultCredProtectKey[] = "defaultCredProtect";
+const char kEnterpriseAttestationKey[] = "ep";
 
 const base::TimeDelta kDeviceTimeout = base::TimeDelta::FromSeconds(20);
 const base::TimeDelta kU2fRetryDelay = base::TimeDelta::FromMilliseconds(200);

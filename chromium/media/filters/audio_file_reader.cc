@@ -225,7 +225,7 @@ int AudioFileReader::GetNumberOfFrames() const {
   if (ipc_audio_decoder_)
     return ipc_audio_decoder_->number_of_frames();
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
-  return static_cast<int>(ceil(GetDuration().InSecondsF() * sample_rate()));
+  return base::ClampCeil(GetDuration().InSecondsF() * sample_rate());
 }
 
 bool AudioFileReader::OpenDemuxerForTesting() {
@@ -283,8 +283,8 @@ bool AudioFileReader::OnNewFrame(
         frames_read / static_cast<double>(sample_rate_));
 
     if (pkt_duration < frame_duration && pkt_duration > base::TimeDelta()) {
-      const int new_frames_read = frames_read * (pkt_duration.InSecondsF() /
-                                                 frame_duration.InSecondsF());
+      const int new_frames_read =
+          base::ClampFloor(frames_read * (pkt_duration / frame_duration));
       DVLOG(2) << "Shrinking AAC frame from " << frames_read << " to "
                << new_frames_read << " based on packet duration.";
       frames_read = new_frames_read;

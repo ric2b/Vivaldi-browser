@@ -7,11 +7,12 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/chrome_extension_browser_constants.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
@@ -37,6 +38,7 @@
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
@@ -555,9 +557,8 @@ void ExtensionContextMenuModel::CreatePageAccessSubmenu(
       PAGE_ACCESS_RUN_ON_SITE,
       l10n_util::GetStringFUTF16(
           IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE,
-          url_formatter::StripWWW(base::UTF8ToUTF16(
-              url::Origin::Create(web_contents->GetLastCommittedURL())
-                  .host()))),
+          url_formatter::IDNToUnicode(url_formatter::StripWWW(
+              web_contents->GetLastCommittedURL().host()))),
       kRadioGroup);
   page_access_submenu_->AddRadioItemWithStringId(
       PAGE_ACCESS_RUN_ON_ALL_SITES,
@@ -580,6 +581,8 @@ void ExtensionContextMenuModel::HandlePageAccessCommand(
   content::WebContents* web_contents = GetActiveWebContents();
   if (!web_contents)
     return;
+
+  LogPageAccessAction(command_id);
 
   if (command_id == PAGE_ACCESS_LEARN_MORE) {
     content::OpenURLParams params(
@@ -613,6 +616,30 @@ void ExtensionContextMenuModel::HandlePageAccessCommand(
     runner->HandlePageAccessModified(extension,
                                      convert_page_access(current_access),
                                      convert_page_access(command_id));
+}
+
+void ExtensionContextMenuModel::LogPageAccessAction(int command_id) const {
+  switch (command_id) {
+    case PAGE_ACCESS_LEARN_MORE:
+      base::RecordAction(base::UserMetricsAction(
+          "Extensions.ContextMenu.Hosts.LearnMoreClicked"));
+      break;
+    case PAGE_ACCESS_RUN_ON_CLICK:
+      base::RecordAction(base::UserMetricsAction(
+          "Extensions.ContextMenu.Hosts.OnClickClicked"));
+      break;
+    case PAGE_ACCESS_RUN_ON_SITE:
+      base::RecordAction(base::UserMetricsAction(
+          "Extensions.ContextMenu.Hosts.OnSiteClicked"));
+      break;
+    case PAGE_ACCESS_RUN_ON_ALL_SITES:
+      base::RecordAction(base::UserMetricsAction(
+          "Extensions.ContextMenu.Hosts.OnAllSitesClicked"));
+      break;
+    default:
+      NOTREACHED() << "Unknown option: " << command_id;
+      break;
+  }
 }
 
 content::WebContents* ExtensionContextMenuModel::GetActiveWebContents() const {

@@ -45,7 +45,7 @@
 // The standard OpenGL native extension headers are also included.
 #if defined(OS_WIN)
 #include <GL/wglext.h>
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
 #include <OpenGL/OpenGL.h>
 #elif defined(USE_GLX)
 #include <GL/glx.h>
@@ -468,6 +468,11 @@
 #define GL_SUPERSAMPLE_SCALE_Y_NV 0x9373
 #define GL_CONFORMANT_NV 0x9374
 #endif /* GL_NV_internalformat_sample_query */
+
+#ifndef GL_EXT_YUV_target
+#define GL_EXT_YUV_target 1
+#define GL_SAMPLER_EXTERNAL_2D_Y2Y_EXT 0x8BE7
+#endif /* GL_EXT_YUV_target */
 
 #define GL_GLEXT_PROTOTYPES 1
 

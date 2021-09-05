@@ -56,11 +56,11 @@
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/beacons.h"
 #include "chrome/installer/util/helper.h"
+#include "chrome/installer/util/initial_preferences.h"
+#include "chrome/installer/util/initial_preferences_constants.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/l10n_string_util.h"
-#include "chrome/installer/util/master_preferences.h"
-#include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/registry_entry.h"
 #include "chrome/installer/util/scoped_user_protocol_entry.h"
 #include "chrome/installer/util/util_constants.h"
@@ -743,7 +743,7 @@ bool ElevateAndRegisterChrome(const base::FilePath& chrome_exe,
 
   if (base::PathExists(exe_path)) {
     base::CommandLine cmd(exe_path);
-    InstallUtil::AppendModeSwitch(&cmd);
+    InstallUtil::AppendModeAndChannelSwitches(&cmd);
     if (!is_per_user)
       cmd.AppendSwitch(installer::switches::kSystemLevel);
     cmd.AppendSwitchPath(installer::switches::kRegisterChromeBrowser,
@@ -1376,7 +1376,7 @@ bool ShortcutOpUnpinFromTaskbar(const base::FilePath& shortcut_path) {
 }
 
 bool ShortcutOpDelete(const base::FilePath& shortcut_path) {
-  bool ret = base::DeleteFile(shortcut_path, false);
+  bool ret = base::DeleteFile(shortcut_path);
   LOG_IF(ERROR, !ret) << "Failed to remove " << shortcut_path.value();
   return ret;
 }
@@ -1418,7 +1418,6 @@ bool ShortcutOpListOrRemoveUnknownArgs(
   const char* const kept_switches[] = {
       switches::kApp,
       switches::kAppId,
-      switches::kShowAppList,
       switches::kProfileDirectory,
   };
   base::CommandLine desired_args(base::CommandLine::NO_PROGRAM);
@@ -1505,11 +1504,20 @@ bool RemoveShortcutFolderIfEmpty(ShellUtil::ShortcutLocation location,
     return false;
   }
   if (base::IsDirectoryEmpty(shortcut_folder) &&
-      !base::DeleteFileRecursively(shortcut_folder)) {
+      !base::DeletePathRecursively(shortcut_folder)) {
     LOG(ERROR) << "Cannot remove folder " << shortcut_folder.value();
     return false;
   }
   return true;
+}
+
+// Return a shortened version of |component|. Cut in the middle to try
+// to avoid losing the unique parts of |component| (which are usually
+// at the beginning or end for things like usernames and paths).
+base::string16 ShortenAppModelIdComponent(const base::string16& component,
+                                          int desired_length) {
+  return component.substr(0, desired_length / 2) +
+         component.substr(component.length() - ((desired_length + 1) / 2));
 }
 
 }  // namespace
@@ -1814,7 +1822,7 @@ base::string16 ShellUtil::FormatIconLocation(const base::FilePath& icon_path,
 
 base::string16 ShellUtil::GetChromeShellOpenCmd(
     const base::FilePath& chrome_exe) {
-  return L"\"" + chrome_exe.value() + L"\" -- \"%1\"";
+  return base::CommandLine(chrome_exe).GetCommandLineStringForShell();
 }
 
 base::string16 ShellUtil::GetChromeDelegateCommand(
@@ -1903,14 +1911,13 @@ base::string16 ShellUtil::GetBrowserModelId(bool is_per_user_install) {
   } else if (is_per_user_install && !GetUserSpecificRegistrySuffix(&suffix)) {
     NOTREACHED();
   }
-  // There is only one component (i.e. the suffixed appid) in this case, but it
-  // is still necessary to go through the appid constructor to make sure the
-  // returned appid is truncated if necessary.
-  std::vector<base::string16> components(1, app_id.append(suffix));
-  return BuildAppModelId(components);
+  app_id.append(suffix);
+  if (app_id.length() <= installer::kMaxAppModelIdLength)
+    return app_id;
+  return ShortenAppModelIdComponent(app_id, installer::kMaxAppModelIdLength);
 }
 
-base::string16 ShellUtil::BuildAppModelId(
+base::string16 ShellUtil::BuildAppUserModelId(
     const std::vector<base::string16>& components) {
   DCHECK_GT(components.size(), 0U);
 
@@ -1937,13 +1944,8 @@ base::string16 ShellUtil::BuildAppModelId(
     const base::string16& component = *it;
     DCHECK(!component.empty());
     if (component.length() > max_component_length) {
-      // Append a shortened version of this component. Cut in the middle to try
-      // to avoid losing the unique parts of this component (which are usually
-      // at the beginning or end for things like usernames and paths).
-      app_id.append(component, 0, max_component_length / 2);
-      app_id.append(component,
-                    component.length() - ((max_component_length + 1) / 2),
-                    base::string16::npos);
+      app_id.append(
+          ShortenAppModelIdComponent(component, max_component_length));
     } else {
       app_id.append(component);
     }
@@ -2453,7 +2455,8 @@ bool ShellUtil::AddFileAssociations(
   app_info.file_type_name = file_type_name;
   app_info.file_type_icon_path = icon_path;
   app_info.file_type_icon_index = 0;
-  app_info.command_line = command_line.GetCommandLineStringWithPlaceholders();
+  app_info.command_line = command_line.GetCommandLineStringForShell();
+
   GetProgIdEntries(app_info, &entries);
 
   std::vector<base::string16> handled_file_extensions;

@@ -25,7 +25,11 @@ extern const base::Feature kForceWebRequestProxyForTest;
 
 extern const base::Feature kAllowWithholdingExtensionPermissionsOnInstall;
 
+extern const base::Feature kContentScriptsMatchOriginAsFallback;
+
 extern const base::Feature kReportKeepaliveUkm;
+
+extern const base::Feature kReturnScopesInGetAuthToken;
 
 }  // namespace extensions_features
 

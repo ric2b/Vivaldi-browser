@@ -20,6 +20,10 @@
 #include "ui/views/input_event_activation_protector.h"
 #include "ui/views/window/non_client_view.h"
 
+namespace gfx {
+class RoundedCornersF;
+}
+
 namespace views {
 
 class FootnoteContainerView;
@@ -179,6 +183,12 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   bool IsCloseButtonVisible() const;
   gfx::Rect GetCloseButtonMirroredBounds() const;
 
+  // Helper function that gives the corner radius values that should be applied
+  // to the BubbleFrameView's client view. These values depend on the amount of
+  // inset present on the client view and the presence of header and footer
+  // views.
+  gfx::RoundedCornersF GetClientCornerRadii() const;
+
   BubbleBorder* bubble_border_for_testing() const { return bubble_border_; }
 
  private:
@@ -230,6 +240,12 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // Gets the height of the |header_view_| given a |frame_width|. Returns zero
   // if there is no header view or if it is not visible.
   int GetHeaderHeightForFrameWidth(int frame_width) const;
+
+  // Updates the corner radius of a layer backed client view for MD rounded
+  // corners.
+  // TODO(tluk): Use this and remove the need for GetClientMask() for clipping
+  // client views to the bubble border's bounds.
+  void UpdateClientLayerCornerRadius();
 
   // The bubble border.
   BubbleBorder* bubble_border_ = nullptr;

@@ -184,14 +184,14 @@ ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
     }
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // There may be no windows. Allow a nullptr profile.
   Profile* profile = Profile::FromBrowserContext(browser_context());
   ::vivaldi::CreateVivaldiMainMenu(profile, &params->items, params->mode, IDC_VIV_DYNAMIC_MENU_ID_START, tag_counter);
   return RespondNow(NoArguments());
 #else
   return RespondNow(Error("NOT IMPLEMENTED"));
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 }
 
 }  // namespace extensions

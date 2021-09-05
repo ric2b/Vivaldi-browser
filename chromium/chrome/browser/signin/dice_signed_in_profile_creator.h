@@ -5,8 +5,12 @@
 #ifndef CHROME_BROWSER_SIGNIN_DICE_SIGNED_IN_PROFILE_CREATOR_H_
 #define CHROME_BROWSER_SIGNIN_DICE_SIGNED_IN_PROFILE_CREATOR_H_
 
+#include <string>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/profiles/profile.h"
 #include "google_apis/gaia/core_account_id.h"
 
@@ -18,8 +22,13 @@ class DiceSignedInProfileCreator {
   // Creates a new profile and moves the account from source_profile to the new
   // profile. The callback is called with the new profile or nullptr in case of
   // failure. The callback is never called synchronously.
+  // If |local_profile_name| is not empty, it will be set as local name for the
+  // new profile.
+  // If |icon_index| is nullopt, a random icon will be selected.
   DiceSignedInProfileCreator(Profile* source_profile,
                              CoreAccountId account_id,
+                             const base::string16& local_profile_name,
+                             base::Optional<size_t> icon_index,
                              base::OnceCallback<void(Profile*)> callback);
 
   ~DiceSignedInProfileCreator();
@@ -36,8 +45,9 @@ class DiceSignedInProfileCreator {
   // Callback invoked once the token service is ready for the new profile.
   void OnNewProfileTokensLoaded(Profile* new_profile);
 
-  Profile* source_profile_;
-  CoreAccountId account_id_;
+  Profile* const source_profile_;
+  const CoreAccountId account_id_;
+
   base::OnceCallback<void(Profile*)> callback_;
   std::unique_ptr<TokensLoadedCallbackRunner> tokens_loaded_callback_runner_;
 

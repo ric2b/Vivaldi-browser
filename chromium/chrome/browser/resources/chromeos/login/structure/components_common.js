@@ -15,6 +15,7 @@
 // <include src="../components/oobe_help_dialog.js">
 // <include src="../components/html-echo.js">
 // <include src="../components/progress_list_item.js">
+// <include src="../components/oobe_carousel.js">
 // <include src="../throbber_notice.js">
 // <include src="../notification_card.js">
 
@@ -49,5 +50,7 @@
 // <include src="../screen_tpm_error.js">
 // <include src="../device_disabled.js">
 // <include src="../screen_wrong_hwid.js">
+// <include src="../family_link_notice.js">
+// <include src="../user_creation.js">
 
 // <include src="components_[OOBE].js">

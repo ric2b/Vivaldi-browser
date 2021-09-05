@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <vector>
 
 #include "ash/app_list/app_list_export.h"
 #include "ash/app_list/model/app_list_model.h"
@@ -47,7 +48,7 @@ namespace ash {
 namespace test {
 class AppsGridViewTest;
 class AppsGridViewTestApi;
-}
+}  // namespace test
 
 class ApplicationDragAndDropHost;
 class AppListConfig;
@@ -279,6 +280,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Returns the last app list item view in the selected page in the folder.
   AppListItemView* GetCurrentPageLastItemViewInFolder();
 
+  // Updates paged view structure and save it to meta data.
+  void UpdatePagedViewStructure();
+
   // Returns true if tablet mode is active.
   bool IsTabletMode() const;
 
@@ -308,11 +312,14 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Translates the items container view to center the current page in the apps
   // grid.
   void RecenterItemsContainer();
-  // Appends a background card to the back of |background_cards_| with a defined
-  // |opacity|.
-  void AppendBackgroundCard(float opacity);
+  // Appends a background card to the back of |background_cards_|.
+  void AppendBackgroundCard();
   // Removes the background card at the end of |background_cards_|.
   void RemoveBackgroundCard();
+  // Masks the apps grid container to background cards bounds.
+  void MaskContainerToBackgroundBounds();
+  // Removes all background cards from |background_cards_|.
+  void RemoveAllBackgroundCards();
 
   // Return the view model.
   views::ViewModelT<AppListItemView>* view_model() { return &view_model_; }
@@ -535,6 +542,9 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) override;
   void OnBoundsAnimatorDone(views::BoundsAnimator* animator) override;
 
+  // Call OnBoundsAnimatorDone when all layer animations finish.
+  void MaybeCallOnBoundsAnimatorDone();
+
   // Hide a given view temporarily without losing (mouse) events and / or
   // changing the size of it. If |immediate| is set the change will be
   // immediately applied - otherwise it will change gradually.
@@ -736,6 +746,12 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // Create a layer mask for graident alpha when the feature is enabled.
   void MaybeCreateGradientMask();
 
+  // Obtains the target page to flip for |drag_point|.
+  int GetPageFlipTargetForDrag(const gfx::Point& drag_point);
+
+  // Updates the highlighted background card. Used only for cardified state.
+  void SetHighlightedBackgroundCard(int new_highlighted_page);
+
   AppListModel* model_ = nullptr;         // Owned by AppListView.
   AppListItemList* item_list_ = nullptr;  // Not owned.
 
@@ -901,9 +917,16 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   // recent drag on AppsGridView instead of the app icon.
   gfx::PointF last_mouse_drag_point_;
 
+  // The highlighted page during cardified state.
+  int highlighted_page_ = -1;
+
   // Layer array for apps grid background cards. Used to display the background
   // card during cardified state.
   std::vector<std::unique_ptr<ui::Layer>> background_cards_;
+
+  int bounds_animation_for_cardified_state_in_progress_ = 0;
+
+  base::WeakPtrFactory<AppsGridView> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AppsGridView);
 };

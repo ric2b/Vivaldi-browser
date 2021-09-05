@@ -21,6 +21,7 @@
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_type.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -175,7 +176,12 @@ void TrayBubbleView::RerouteEventHandler::OnKeyEvent(ui::KeyEvent* event) {
                ui::EF_COMMAND_DOWN | ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN);
   if ((key_code == ui::VKEY_TAB && flags == ui::EF_NONE) ||
       (key_code == ui::VKEY_TAB && flags == ui::EF_SHIFT_DOWN) ||
-      (key_code == ui::VKEY_ESCAPE && flags == ui::EF_NONE)) {
+      (key_code == ui::VKEY_ESCAPE && flags == ui::EF_NONE) ||
+      // Do not dismiss the bubble immediately when a user triggers a feedback
+      // report; if they're reporting an issue with the bubble we want the
+      // screenshot to contain it.
+      (key_code == ui::VKEY_I &&
+       flags == (ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN))) {
     // Make TrayBubbleView activatable as the following Widget::OnKeyEvent might
     // try to activate it.
     tray_bubble_view_->SetCanActivate(true);
@@ -250,7 +256,7 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
     // Create a layer so that the layer for FocusRing stays in this view's
     // layer. Without it, the layer for FocusRing goes above the
     // NativeViewHost and may steal events.
-    SetPaintToLayer();
+    SetPaintToLayer(ui::LAYER_NOT_DRAWN);
   }
 
   auto layout = std::make_unique<BottomAlignedBoxLayout>(this);
@@ -388,10 +394,11 @@ ui::LayerType TrayBubbleView::GetLayerType() const {
   return ui::LAYER_TEXTURED;
 }
 
-NonClientFrameView* TrayBubbleView::CreateNonClientFrameView(Widget* widget) {
-  BubbleFrameView* frame = static_cast<BubbleFrameView*>(
-      BubbleDialogDelegateView::CreateNonClientFrameView(widget));
-  frame->SetBubbleBorder(std::move(owned_bubble_border_));
+std::unique_ptr<NonClientFrameView> TrayBubbleView::CreateNonClientFrameView(
+    Widget* widget) {
+  auto frame = BubbleDialogDelegateView::CreateNonClientFrameView(widget);
+  static_cast<BubbleFrameView*>(frame.get())
+      ->SetBubbleBorder(std::move(owned_bubble_border_));
   return frame;
 }
 

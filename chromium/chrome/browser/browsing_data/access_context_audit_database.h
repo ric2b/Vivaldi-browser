@@ -11,8 +11,9 @@
 #include "net/cookies/canonical_cookie.h"
 #include "sql/database.h"
 #include "sql/init_status.h"
+#include "sql/meta_table.h"
 #include "sql/test/test_helpers.h"
-#include "url/gurl.h"
+#include "url/origin.h"
 
 // Provides the backend SQLite storage to support access context auditing. This
 // requires storing information associating individual client-side storage API
@@ -25,30 +26,34 @@ class AccessContextAuditDatabase
   enum class StorageAPIType : int {
     kCookie = 0,
     kLocalStorage = 1,
-    kSessionStorage,
-    kFileSystem,
-    kWebDatabase,
-    kServiceWorker,
-    kCacheStorage,
-    kIndexedDB,
-    kAppCache,
+    kSessionStorage = 2,
+    kFileSystem = 3,
+    kWebDatabase = 4,
+    kServiceWorker = 5,
+    kCacheStorage = 6,
+    kIndexedDB = 7,
+    kAppCache = 8,
+    kMaxValue = kAppCache
   };
 
   // An individual record of a Storage API access, associating the individual
   // API usage with a top level frame origin.
   struct AccessRecord {
-    AccessRecord(const GURL& top_frame_origin,
+    AccessRecord(const url::Origin& top_frame_origin,
                  const std::string& name,
                  const std::string& domain,
                  const std::string& path,
-                 const base::Time& last_access_time);
-    AccessRecord(const GURL& top_frame_origin,
+                 const base::Time& last_access_time,
+                 bool is_persistent);
+    AccessRecord(const url::Origin& top_frame_origin,
                  const StorageAPIType& type,
-                 const GURL& origin,
+                 const url::Origin& origin,
                  const base::Time& last_access_time);
-    AccessRecord(const AccessRecord& other);
     ~AccessRecord();
-    GURL top_frame_origin;
+    AccessRecord(const AccessRecord& other);
+    AccessRecord& operator=(const AccessRecord& other);
+
+    url::Origin top_frame_origin;
     StorageAPIType type;
 
     // Identifies a canonical cookie, only used when |type| is kCookie.
@@ -57,16 +62,23 @@ class AccessContextAuditDatabase
     std::string path;
 
     // Identifies an origin-keyed storage API, used when |type| is NOT kCookie.
-    GURL origin;
+    url::Origin origin;
 
     base::Time last_access_time;
+
+    // When |type| is kCookie, indicates the record will be cleared on startup
+    // unless the database is started with restore_non_persistent_cookies.
+    bool is_persistent;
   };
 
   explicit AccessContextAuditDatabase(
       const base::FilePath& path_to_database_dir);
 
   // Initialises internal database. Must be called prior to any other usage.
-  void Init();
+  void Init(bool restore_non_persistent_cookies);
+
+  // Calculates and reports various database metrics.
+  void ComputeDatabaseMetrics();
 
   // Persists the provided list of |records| in the database.
   void AddRecords(const std::vector<AccessRecord>& records);
@@ -77,20 +89,39 @@ class AccessContextAuditDatabase
   // Removes a record from the database and from future calls to GetAllRecords.
   void RemoveRecord(const AccessRecord& record);
 
+  // Removes all records from the the database.
+  void RemoveAllRecords();
+
+  // Removes all records where |begin| <= record.last_access_time <= |end|.
+  void RemoveAllRecordsForTimeRange(base::Time begin, base::Time end);
+
   // Removes all records that match the provided cookie details.
   void RemoveAllRecordsForCookie(const std::string& name,
                                  const std::string& domain,
                                  const std::string& path);
 
   // Remove all records of access to |origin|'s storage API of |type|.
-  void RemoveAllRecordsForOriginStorage(const GURL& origin,
-                                        StorageAPIType type);
+  void RemoveAllRecordsForOriginKeyedStorage(const url::Origin& origin,
+                                             StorageAPIType type);
 
-  // Removes all records for cookie domains and API origins that match session
-  // only entries in |settings|
+  // Remove all records with a top frame origin present in |origins|.
+  void RemoveAllRecordsForTopFrameOrigins(
+      const std::vector<url::Origin>& origins);
+
+  // Removes all records for which the result of inspecting |content_settings|
+  // for the storage origin or cookie domain is a content setting of
+  // CLEAR_ON_EXIT.
   void RemoveSessionOnlyRecords(
-      scoped_refptr<content_settings::CookieSettings> cookie_settings,
       const ContentSettingsForOneType& content_settings);
+
+  // Remove storage API access records for which the storage type is a member of
+  // |storage_api_types|, the timestamp is between |begin| and |end|, and the
+  // |origin_matcher| callback, if set, returns true for the storage origin.
+  void RemoveStorageApiRecords(
+      const std::set<StorageAPIType>& storage_api_types,
+      base::RepeatingCallback<bool(const url::Origin&)> origin_matcher,
+      base::Time begin,
+      base::Time end);
 
  protected:
   virtual ~AccessContextAuditDatabase() = default;
@@ -100,6 +131,7 @@ class AccessContextAuditDatabase
   bool InitializeSchema();
 
   sql::Database db_;
+  sql::MetaTable meta_table_;
   base::FilePath db_file_path_;
 };
 

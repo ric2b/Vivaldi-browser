@@ -56,6 +56,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/family_link_notice_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/fingerprint_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_password_changed_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
@@ -80,6 +81,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_board_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/wrong_hwid_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/user_image_source.h"
@@ -338,6 +340,7 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ObjectSrc, "object-src chrome:;");
+  source->DisableTrustedTypesCSP();
 
   // Only add a filter when runing as test.
   const bool is_running_test = command_line->HasSwitch(::switches::kTestName) ||
@@ -383,6 +386,9 @@ void OobeUI::ConfigureOobeDisplay() {
   if (display_type_ == kOobeDisplay) {
     AddScreenHandler(std::make_unique<WelcomeScreenHandler>(
         js_calls_container_.get(), core_handler_));
+
+    AddScreenHandler(std::make_unique<DemoPreferencesScreenHandler>(
+        js_calls_container_.get()));
   }
 
   AddScreenHandler(std::make_unique<NetworkScreenHandler>(
@@ -445,7 +451,7 @@ void OobeUI::ConfigureOobeDisplay() {
   AddScreenHandler(
       std::make_unique<DemoSetupScreenHandler>(js_calls_container_.get()));
 
-  AddScreenHandler(std::make_unique<DemoPreferencesScreenHandler>(
+  AddScreenHandler(std::make_unique<FamilyLinkNoticeScreenHandler>(
       js_calls_container_.get()));
 
   AddScreenHandler(std::make_unique<FingerprintSetupScreenHandler>(
@@ -498,6 +504,9 @@ void OobeUI::ConfigureOobeDisplay() {
 
   AddScreenHandler(std::make_unique<PackagedLicenseScreenHandler>(
       js_calls_container_.get()));
+
+  AddScreenHandler(
+      std::make_unique<UserCreationScreenHandler>(js_calls_container_.get()));
 
   AddScreenHandler(
       std::make_unique<TpmErrorScreenHandler>(js_calls_container_.get()));
@@ -592,18 +601,6 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   content::WebUIDataSource* html_source =
       CreateOobeUIDataSource(localized_strings, display_type_);
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), html_source);
-
-  // If allowed, request that the shared resources send this page Polymer 1
-  // resources instead of Polymer 2.
-  // TODO (https://crbug.com/739611): Remove this exception by migrating to
-  // Polymer 2.
-  if (base::FeatureList::IsEnabled(features::kWebUIPolymer2Exceptions)) {
-    auto* shared_source = content::URLDataSource::GetSourceForURL(
-        Profile::FromWebUI(web_ui),
-        GURL("chrome://resources/polymer/v1_0/polymer/polymer.html"));
-    if (shared_source)
-      shared_source->DisablePolymer2ForHost(chrome::kChromeUIOobeHost);
-  }
 }
 
 OobeUI::~OobeUI() {

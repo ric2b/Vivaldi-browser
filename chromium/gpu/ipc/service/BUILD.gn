@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//gpu/vulkan/features.gni")
 import("//testing/test.gni")
@@ -14,7 +13,7 @@ declare_args() {
   subpixel_font_rendering_disabled = false
 }
 
-jumbo_component("service") {
+component("service") {
   output_name = "gpu_ipc_service"
   sources = [
     "command_buffer_stub.cc",
@@ -107,7 +106,7 @@ jumbo_component("service") {
     ]
     deps += [ "//ui/accelerated_widget_mac" ]
     lib_dirs = [ "$mac_sdk_path/usr/lib" ]
-    libs += [
+    frameworks = [
       "CoreGraphics.framework",
       "IOSurface.framework",
       "OpenGL.framework",
@@ -124,10 +123,10 @@ jumbo_component("service") {
     ]
     libs += [ "android" ]
   }
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [ "image_transport_surface_linux.cc" ]
   }
-  if (is_linux || use_ozone) {
+  if (is_linux || is_chromeos || use_ozone) {
     sources += [
       "gpu_memory_buffer_factory_native_pixmap.cc",
       "gpu_memory_buffer_factory_native_pixmap.h",

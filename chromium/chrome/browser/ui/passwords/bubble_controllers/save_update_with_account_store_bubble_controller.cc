@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_features_util.h"
@@ -82,12 +81,6 @@ std::vector<autofill::PasswordForm> DeepCopyForms(
                    return *form;
                  });
   return result;
-}
-
-bool IsSyncUser(Profile* profile) {
-  const syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForProfile(profile);
-  return password_bubble_experiment::IsSmartLockUser(sync_service);
 }
 
 }  // namespace
@@ -157,7 +150,7 @@ SaveUpdateWithAccountStoreBubbleController::
 void SaveUpdateWithAccountStoreBubbleController::OnSaveClicked() {
   DCHECK(state_ == password_manager::ui::PENDING_PASSWORD_STATE ||
          state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE);
-  dismissal_reason_ = metrics_util::CLICKED_SAVE;
+  dismissal_reason_ = metrics_util::CLICKED_ACCEPT;
   if (delegate_) {
     CleanStatisticsForSite(GetProfile(), origin_);
     if (IsCurrentStateUpdate() || !IsUsingAccountStore() ||
@@ -209,12 +202,6 @@ bool SaveUpdateWithAccountStoreBubbleController::IsCurrentStateUpdate() const {
                        return form.username_value ==
                               pending_password_.username_value;
                      });
-}
-
-bool SaveUpdateWithAccountStoreBubbleController::ShouldShowFooter() const {
-  return (state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE ||
-          state_ == password_manager::ui::PENDING_PASSWORD_STATE) &&
-         IsSyncUser(GetProfile());
 }
 
 bool SaveUpdateWithAccountStoreBubbleController::RevealPasswords() {

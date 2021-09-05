@@ -16,6 +16,7 @@
 <translation id="1335095011850992622">mga credit</translation>
 <translation id="1342835525016946179">article</translation>
 <translation id="1359897965706325498">banner</translation>
+<translation id="1480676835519562650">multiselectable, <ph name="SELECTED" /> sa <ph name="COUNT" /> ang pinili.</translation>
 <translation id="1589122976691792535">rehiyon</translation>
 <translation id="1591562245178063882">Buwang ito</translation>
 <translation id="1637811476055996098">Pumili ng Mga File</translation>
@@ -51,6 +52,7 @@
 <translation id="248395913932153421">Araw</translation>
 <translation id="2507943997699731163">Pakipunan ang field na ito.</translation>
 <translation id="2508569020611168319">listahan ng tab</translation>
+<translation id="2530182415807757784">multiselectable, walang pinili.</translation>
 <translation id="2561842179657104141">magpakita ng higit pang kontrol sa media</translation>
 <translation id="2572483411312390101">i-play</translation>
 <translation id="2613802280814924224">Mangyaring maglagay ng isang wastong value. Ang pinakamalapit na wastong value ay <ph name="VALID_VALUE" />.</translation>
@@ -102,7 +104,6 @@
 <translation id="4248100235867064564">menu bar</translation>
 <translation id="4360991593054037559">Mangyaring maglagay ng isang wastong value. Ang dalawang pinakamalapit na wastong value ay <ph name="VALID_VALUE_LOW" /> at <ph name="VALID_VALUE_HIGHER" />.</translation>
 <translation id="4384583879834880242">Q&amp;A</translation>
-<translation id="4413860115965805769">button ng menu</translation>
 <translation id="4444765639179266822">Mukhang ang sabi ay: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">sanggunian sa glosaryo</translation>
 <translation id="4522570452068850558">Mga Detalye</translation>

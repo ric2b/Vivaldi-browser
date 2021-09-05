@@ -11,11 +11,12 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmarks_policy_handler.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/policy/core/browser/configuration_policy_handler.h"
 #include "components/policy/core/browser/configuration_policy_handler_list.h"
 #include "components/policy/core/browser/configuration_policy_handler_parameters.h"
-#include "components/policy/core/browser/url_blacklist_policy_handler.h"
+#include "components/policy/core/browser/url_blocklist_policy_handler.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/policy/policy_constants.h"
 #include "components/safe_browsing/core/common/safe_browsing_policy_handler.h"
@@ -43,6 +44,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { policy::key::kChromeVariations,
     variations::prefs::kVariationsRestrictionsByPolicy,
     base::Value::Type::INTEGER },
+  { policy::key::kCloudReportingEnabled,
+    enterprise_reporting::kCloudReportingEnabled,
+    base::Value::Type::BOOLEAN },
   { policy::key::kDisableSafeBrowsingProceedAnyway,
     prefs::kSafeBrowsingProceedAnywayDisabled,
     base::Value::Type::BOOLEAN },
@@ -61,6 +65,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { policy::key::kPopupsBlockedForUrls,
     prefs::kManagedPopupsBlockedForUrls,
     base::Value::Type::LIST },
+  { policy::key::kPrintingEnabled,
+    prefs::kPrintingEnabled,
+    base::Value::Type::BOOLEAN },
   { policy::key::kSafeBrowsingEnabled,
     prefs::kSafeBrowsingEnabled,
     base::Value::Type::BOOLEAN },
@@ -73,7 +80,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { policy::key::kTranslateEnabled,
     prefs::kOfferTranslateEnabled,
     base::Value::Type::BOOLEAN },
-  { policy::key::kURLWhitelist,
+  { policy::key::kURLAllowlist,
     policy::policy_prefs::kUrlWhitelist,
     base::Value::Type::LIST},
 };
@@ -119,7 +126,8 @@ std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildPolicyHandlerList(
   }
 
   if (ShouldInstallURLBlocklistPolicyHandlers()) {
-    handlers->AddHandler(std::make_unique<policy::URLBlacklistPolicyHandler>());
+    handlers->AddHandler(std::make_unique<policy::URLBlocklistPolicyHandler>(
+        policy::key::kURLBlocklist));
   }
 
   return handlers;

@@ -34,10 +34,13 @@ def Classname(s):
   suited to C++.
 
   eg experimental.downloads -> Experimental_Downloads
-  updateAll -> UpdateAll.
+  updateAll -> UpdateAll
+  update_all -> UpdateAll
   """
   if s == '':
     return 'EMPTY_STRING'
+  if IsUnixName(s):
+    return CamelCase(s)
   return '_'.join([x[0].upper() + x[1:] for x in re.split(r'\W', s)])
 
 
@@ -123,12 +126,27 @@ def CloseNamespace(cpp_namespace):
   return c
 
 
+# TODO(karandeepb): Rename to FeatureNameToConstantName.
 def ConstantName(feature_name):
   """Returns a kName for a feature's name.
   """
   return ('k' + ''.join(word[0].upper() + word[1:]
       for word in feature_name.replace('.', ' ').split()))
 
+
+def UnixNameToConstantName(unix_name):
+  # type (str) -> str
+  """Converts unix_name to kUnixName.
+  """
+  return ('k' + ''.join(word[0].upper() + word[1:]
+      for word in unix_name.split('_')))
+
+def IsUnixName(s):
+  # type (str) -> bool
+  """Returns true if |s| is of the type unix_name i.e. only has lower cased
+  characters and underscores with at least one underscore.
+  """
+  return all(x.islower() or x == '_' for x in s) and '_' in s
 
 def CamelCase(unix_name):
   return ''.join(word.capitalize() for word in unix_name.split('_'))

@@ -71,7 +71,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   using ResourceList =
       std::vector<storage::mojom::ServiceWorkerResourceRecordPtr>;
   using GetRegisteredOriginsCallback =
-      base::OnceCallback<void(std::vector<url::Origin> callback)>;
+      base::OnceCallback<void(const std::vector<url::Origin>& origins)>;
   using FindRegistrationDataCallback = base::OnceCallback<void(
       storage::mojom::ServiceWorkerRegistrationDataPtr data,
       std::unique_ptr<ResourceList> resources,
@@ -107,8 +107,8 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   using GetUserKeysAndDataInDBCallback = storage::mojom::
       ServiceWorkerStorageControl::GetUserKeysAndDataByKeyPrefixCallback;
   using GetUserDataForAllRegistrationsInDBCallback = base::OnceCallback<void(
-      const std::vector<std::pair<int64_t, std::string>>& user_data,
-      ServiceWorkerDatabase::Status)>;
+      ServiceWorkerDatabase::Status,
+      std::vector<storage::mojom::ServiceWorkerUserDataPtr>)>;
 
   ~ServiceWorkerStorage();
 
@@ -140,7 +140,7 @@ class CONTENT_EXPORT ServiceWorkerStorage {
                                  FindRegistrationDataCallback callback);
 
   // Returns all stored registrations for a given origin.
-  void GetRegistrationsForOrigin(const GURL& origin,
+  void GetRegistrationsForOrigin(const url::Origin& origin,
                                  GetRegistrationsDataCallback callback);
 
   // Reads the total resource size stored in the storage for a given origin.
@@ -406,6 +406,9 @@ class CONTENT_EXPORT ServiceWorkerStorage {
   void DidWriteUncommittedResourceIds(DatabaseStatusCallback callback,
                                       const GURL& origin,
                                       ServiceWorkerDatabase::Status status);
+  void DidDoomUncommittedResourceIds(const std::vector<int64_t>& resource_ids,
+                                     DatabaseStatusCallback callback,
+                                     ServiceWorkerDatabase::Status status);
   void DidStoreUserData(DatabaseStatusCallback callback,
                         const GURL& origin,
                         ServiceWorkerDatabase::Status status);
@@ -429,10 +432,6 @@ class CONTENT_EXPORT ServiceWorkerStorage {
                                 ServiceWorkerDatabase::Status status);
 
   void ClearSessionOnlyOrigins();
-
-  int64_t NewRegistrationId();
-  int64_t NewVersionId();
-  int64_t NewResourceId();
 
   bool IsDisabled() const { return state_ == STORAGE_STATE_DISABLED; }
 

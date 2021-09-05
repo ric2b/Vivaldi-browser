@@ -218,11 +218,6 @@ base::TimeDelta FrameData::GetTotalCpuUsage() const {
   return total_cpu_time;
 }
 
-void FrameData::SetReceivedUserActivation(base::TimeDelta foreground_duration) {
-  user_activation_status_ = UserActivationStatus::kReceivedActivation;
-  pre_activation_foreground_duration_ = foreground_duration;
-}
-
 size_t FrameData::GetAdNetworkBytesForMime(ResourceMimeType mime_type) const {
   return ad_bytes_by_mime_[static_cast<size_t>(mime_type)];
 }
@@ -264,8 +259,6 @@ void FrameData::RecordAdFrameLoadUkmEvent(ukm::SourceId source_id) const {
     builder.SetCpuTime_PreActivation(
         GetActivationCpuUsage(UserActivationStatus::kNoActivation)
             .InMilliseconds());
-    builder.SetTiming_PreActivationForegroundDuration(
-        pre_activation_foreground_duration().InMilliseconds());
   }
 
   builder.SetCpuTime_PeakWindowedPercent(peak_windowed_cpu_percent_);
@@ -283,10 +276,8 @@ void FrameData::RecordAdFrameLoadUkmEvent(ukm::SourceId source_id) const {
 
   builder.SetFrameDepth(frame_depth_);
 
-  if (timing_ && !timing_->paint_timing.is_null() &&
-      timing_->paint_timing->first_contentful_paint) {
-    builder.SetTiming_FirstContentfulPaint(
-        timing_->paint_timing->first_contentful_paint->InMilliseconds());
+  if (auto earliest_fcp = earliest_first_contentful_paint()) {
+    builder.SetTiming_FirstContentfulPaint(earliest_fcp->InMilliseconds());
   }
   builder.Record(ukm_recorder->Get());
 }
@@ -318,11 +309,11 @@ void FrameData::SetFirstEligibleToPaint(
     // If the ad frame tree hasn't already received an earlier paint
     // eligibility stamp, mark it as eligible to paint. Since multiple frames
     // may report timestamps, we keep the earliest reported stamp.
-    // Note that this timestamp (or lack tereof) is best-effort.
+    // Note that this timestamp (or lack thereof) is best-effort.
     if (!first_eligible_to_paint_.has_value() ||
         first_eligible_to_paint_.value() > time_stamp.value())
       first_eligible_to_paint_ = time_stamp;
-  } else if (!FirstContentfulPaint().has_value()) {
+  } else if (!earliest_first_contentful_paint_.has_value()) {
     // If a frame in this ad frame tree has already painted, there is no
     // further need to update paint eligibility. But if nothing has
     // painted and a null value is passed into the setter, that means the
@@ -330,6 +321,19 @@ void FrameData::SetFirstEligibleToPaint(
     // value.
     first_eligible_to_paint_.reset();
   }
+}
+
+bool FrameData::SetEarliestFirstContentfulPaint(
+    base::Optional<base::TimeDelta> time_stamp) {
+  if (!time_stamp.has_value() || time_stamp.value().is_zero())
+    return false;
+
+  if (earliest_first_contentful_paint_.has_value() &&
+      time_stamp.value() >= earliest_first_contentful_paint_.value())
+    return false;
+
+  earliest_first_contentful_paint_ = time_stamp;
+  return true;
 }
 
 void FrameData::UpdateFrameVisibility() {

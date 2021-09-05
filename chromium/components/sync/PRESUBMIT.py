@@ -24,10 +24,9 @@ EXCEPTION_MODEL_TYPES = [
   'NIGORI',  # Model type string is 'encryption keys'.
   'SUPERVISED_USER_SETTINGS',  # Root tag and model type string replace
                                # 'Supervised' with 'Managed'
-  'SUPERVISED_USER_WHITELISTS',  # See previous.
+  'SUPERVISED_USER_ALLOWLISTS',  # See previous.
 
   # Deprecated types:
-  'DEPRECATED_EXPERIMENTS',
   'DEPRECATED_FAVICON_IMAGES',
   'DEPRECATED_FAVICON_TRACKING']
 
@@ -371,7 +370,7 @@ def FieldNumberToPrototypeString(field_number):
 
 def CheckChangeLintsClean(input_api, output_api):
   source_filter = lambda x: input_api.FilterSourceFile(
-    x, white_list=SYNC_SOURCE_FILES, black_list=None)
+    x, files_to_check=SYNC_SOURCE_FILES, files_to_skip=None)
   return input_api.canned_checks.CheckChangeLintsClean(
       input_api, output_api, source_filter, lint_filters=[], verbose_level=1)
 

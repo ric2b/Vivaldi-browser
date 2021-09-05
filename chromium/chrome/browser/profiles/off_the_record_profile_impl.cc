@@ -193,6 +193,9 @@ void OffTheRecordProfileImpl::Init() {
   AccessibilityLabelsService::InitOffTheRecordPrefs(this);
 
   HeavyAdServiceFactory::GetForBrowserContext(this)->InitializeOffTheRecord();
+
+  key_->SetProtoDatabaseProvider(
+      GetDefaultStoragePartition(this)->GetProtoDatabaseProvider());
 }
 
 OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
@@ -571,7 +574,7 @@ bool OffTheRecordProfileImpl::WasCreatedByVersionOrLater(
   return profile_->WasCreatedByVersionOrLater(version);
 }
 
-Profile::ExitType OffTheRecordProfileImpl::GetLastSessionExitType() {
+Profile::ExitType OffTheRecordProfileImpl::GetLastSessionExitType() const {
   return profile_->GetLastSessionExitType();
 }
 

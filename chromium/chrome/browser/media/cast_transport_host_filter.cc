@@ -15,7 +15,6 @@
 #include "content/public/browser/device_service.h"
 #include "media/cast/net/cast_transport.h"
 #include "media/cast/net/udp_transport_impl.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 
@@ -190,14 +189,6 @@ void CastTransportHostFilter::OnDelete(int32_t channel_id) {
              << "on non-existing channel";
   }
 
-  // Delete all existing remoting senders for this channel.
-  const auto entries = stream_id_map_.equal_range(channel_id);
-  for (auto it = entries.first; it != entries.second; ++it) {
-    if (remoting_sender_map_.Lookup(it->second)) {
-      DVLOG(3) << "Delete CastRemotingSender for stream: " << it->second;
-      remoting_sender_map_.Remove(it->second);
-    }
-  }
   stream_id_map_.erase(channel_id);
 
   if (id_map_.IsEmpty()) {
@@ -215,17 +206,6 @@ void CastTransportHostFilter::OnInitializeStream(
   if (transport) {
     if (config.rtp_payload_type == media::cast::RtpPayloadType::REMOTE_AUDIO ||
         config.rtp_payload_type == media::cast::RtpPayloadType::REMOTE_VIDEO) {
-      // Create CastRemotingSender for this RTP stream.
-      remoting_sender_map_.AddWithID(
-          std::make_unique<mirroring::CastRemotingSender>(
-              transport, config, kSendEventsInterval,
-              base::BindRepeating(
-                  &CastTransportHostFilter::OnCastRemotingSenderEvents,
-                  weak_factory_.GetWeakPtr(), channel_id)),
-          config.rtp_stream_id);
-      DVLOG(3) << "Create CastRemotingSender for stream: "
-               << config.rtp_stream_id;
-
       stream_id_map_.insert(std::make_pair(channel_id, config.rtp_stream_id));
     } else {
       transport->InitializeStream(

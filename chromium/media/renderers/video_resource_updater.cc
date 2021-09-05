@@ -158,23 +158,40 @@ VideoFrameResourceType ExternalResourceTypeForHardwarePlanes(
 
 class SyncTokenClientImpl : public VideoFrame::SyncTokenClient {
  public:
-  SyncTokenClientImpl(gpu::gles2::GLES2Interface* gl, gpu::SyncToken sync_token)
-      : gl_(gl), sync_token_(sync_token) {}
+  SyncTokenClientImpl(gpu::gles2::GLES2Interface* gl,
+                      gpu::SharedImageInterface* sii,
+                      gpu::SyncToken sync_token)
+      : gl_(gl), sii_(sii), sync_token_(sync_token) {
+    // Only one interface should be used.
+    DCHECK((gl_ && !sii_) || (!gl_ && sii_));
+  }
   ~SyncTokenClientImpl() override = default;
 
   void GenerateSyncToken(gpu::SyncToken* sync_token) override {
     if (sync_token_.HasData()) {
       *sync_token = sync_token_;
     } else {
-      gl_->GenSyncTokenCHROMIUM(sync_token->GetData());
+      if (gl_) {
+        gl_->GenSyncTokenCHROMIUM(sync_token->GetData());
+      } else {
+        *sync_token = sii_->GenVerifiedSyncToken();
+      }
     }
   }
 
   void WaitSyncToken(const gpu::SyncToken& sync_token) override {
     if (sync_token.HasData()) {
-      gl_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
+      if (gl_) {
+        gl_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
+      } else {
+        sii_->WaitSyncToken(sync_token);
+      }
       if (sync_token_.HasData() && sync_token_ != sync_token) {
-        gl_->WaitSyncTokenCHROMIUM(sync_token_.GetConstData());
+        if (gl_) {
+          gl_->WaitSyncTokenCHROMIUM(sync_token_.GetConstData());
+        } else {
+          sii_->WaitSyncToken(sync_token);
+        }
         sync_token_.Clear();
       }
     }
@@ -182,6 +199,7 @@ class SyncTokenClientImpl : public VideoFrame::SyncTokenClient {
 
  private:
   gpu::gles2::GLES2Interface* gl_;
+  gpu::SharedImageInterface* sii_;
   gpu::SyncToken sync_token_;
   DISALLOW_COPY_AND_ASSIGN(SyncTokenClientImpl);
 };
@@ -385,8 +403,9 @@ class VideoResourceUpdater::HardwarePlaneResource
                                                     BufferFormat(format), caps);
     }
     auto* sii = SharedImageInterface();
-    mailbox_ =
-        sii->CreateSharedImage(format, size, color_space, shared_image_usage);
+    mailbox_ = sii->CreateSharedImage(
+        format, size, color_space, kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, shared_image_usage, gpu::kNullSurfaceHandle);
     ContextGL()->WaitSyncTokenCHROMIUM(
         sii->GenUnverifiedSyncToken().GetConstData());
   }
@@ -634,6 +653,7 @@ void VideoResourceUpdater::AppendQuads(viz::RenderPass* render_pass,
                            SK_ColorTRANSPARENT, opacity, flipped,
                            nearest_neighbor, false, protected_video_type);
       texture_quad->set_resource_size_in_pixels(coded_size);
+      texture_quad->is_video_frame = true;
       for (viz::ResourceId resource_id : texture_quad->resources) {
         resource_provider_->ValidateResource(resource_id);
       }
@@ -795,7 +815,8 @@ void VideoResourceUpdater::CopyHardwarePlane(
   gl->DeleteTextures(1, &src_texture_id);
 
   // Pass an empty sync token to force generation of a new sync token.
-  SyncTokenClientImpl client(gl, gpu::SyncToken());
+  SyncTokenClientImpl client(gl, nullptr /* gpu::SharedImageInterface* */,
+                             gpu::SyncToken());
   gpu::SyncToken sync_token = video_frame->UpdateReleaseSyncToken(&client);
 
   auto transferable_resource = viz::TransferableResource::MakeGL(
@@ -820,11 +841,10 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
   VideoFrameExternalResources external_resources;
   gfx::ColorSpace resource_color_space = video_frame->ColorSpace();
 
-  bool copy_required = video_frame->metadata()->copy_required;
-
+  const auto& copy_mode = video_frame->metadata()->copy_mode;
   GLuint target = video_frame->mailbox_holder(0).texture_target;
-  // If |copy_required| then we will copy into a GL_TEXTURE_2D target.
-  if (copy_required)
+  // If texture copy is required, then we will copy into a GL_TEXTURE_2D target.
+  if (copy_mode == VideoFrameMetadata::CopyMode::kCopyToNewTexture)
     target = GL_TEXTURE_2D;
 
   gfx::BufferFormat buffer_formats[VideoFrame::kMaxPlanes];
@@ -848,11 +868,25 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
     const gpu::MailboxHolder& mailbox_holder = video_frame->mailbox_holder(i);
     if (mailbox_holder.mailbox.IsZero())
       break;
-
-    if (copy_required) {
+    if (copy_mode == VideoFrameMetadata::CopyMode::kCopyToNewTexture) {
       CopyHardwarePlane(video_frame.get(), resource_color_space, mailbox_holder,
                         &external_resources);
     } else {
+      gpu::SyncToken sync_token = mailbox_holder.sync_token;
+      gpu::Mailbox mailbox = mailbox_holder.mailbox;
+      if (copy_mode == VideoFrameMetadata::CopyMode::kCopyMailboxesOnly) {
+        auto* sii = SharedImageInterface();
+        uint32_t usage =
+            gpu::SHARED_IMAGE_USAGE_DISPLAY | gpu::SHARED_IMAGE_USAGE_GLES2;
+        mailbox = sii->CreateSharedImageWithAHB(mailbox_holder.mailbox, usage,
+                                                mailbox_holder.sync_token);
+        // Insert a sync token at this point and update video frame release sync
+        // token with it.
+        SyncTokenClientImpl client(nullptr /* GLES2Interface */, sii,
+                                   gpu::SyncToken());
+        sync_token = video_frame->UpdateReleaseSyncToken(&client);
+      }
+
       const gfx::Size& coded_size = video_frame->coded_size();
       const size_t width =
           VideoFrame::Columns(i, video_frame->format(), coded_size.width());
@@ -860,9 +894,8 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
           VideoFrame::Rows(i, video_frame->format(), coded_size.height());
       const gfx::Size plane_size(width, height);
       auto transfer_resource = viz::TransferableResource::MakeGL(
-          mailbox_holder.mailbox, GL_LINEAR, mailbox_holder.texture_target,
-          mailbox_holder.sync_token, plane_size,
-          video_frame->metadata()->allow_overlay);
+          mailbox, GL_LINEAR, mailbox_holder.texture_target, sync_token,
+          plane_size, video_frame->metadata()->allow_overlay);
       transfer_resource.color_space = resource_color_space;
       transfer_resource.read_lock_fences_enabled =
           video_frame->metadata()->read_lock_fences_enabled;
@@ -876,9 +909,21 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
           video_frame->metadata()->wants_promotion_hint;
 #endif
       external_resources.resources.push_back(std::move(transfer_resource));
-      external_resources.release_callbacks.push_back(
-          base::BindOnce(&VideoResourceUpdater::ReturnTexture,
-                         weak_ptr_factory_.GetWeakPtr(), video_frame));
+      if (copy_mode == VideoFrameMetadata::CopyMode::kCopyMailboxesOnly) {
+        // Adding a ref on |video_frame| to make sure lifetime of |video frame|
+        // is same as lifetime of this |mailbox|. Releasing |video_frame| before
+        // |mailbox| causes renderer to prepare more video frame which in turn
+        // causes holding onto multiple AHardwareBuffers by both |mailbox| and
+        // |video_frame| which in turn causes higher gpu memory usage and
+        // potential memory crashes.
+        external_resources.release_callbacks.push_back(base::BindOnce(
+            &VideoResourceUpdater::DestroyMailbox,
+            weak_ptr_factory_.GetWeakPtr(), mailbox, video_frame));
+      } else {
+        external_resources.release_callbacks.push_back(
+            base::BindOnce(&VideoResourceUpdater::ReturnTexture,
+                           weak_ptr_factory_.GetWeakPtr(), video_frame));
+      }
     }
   }
   return external_resources;
@@ -1238,7 +1283,21 @@ void VideoResourceUpdater::ReturnTexture(scoped_refptr<VideoFrame> video_frame,
   // The video frame will insert a wait on the previous release sync token.
   auto* gl = raster_context_provider_ ? raster_context_provider_->ContextGL()
                                       : context_provider_->ContextGL();
-  SyncTokenClientImpl client(gl, sync_token);
+  SyncTokenClientImpl client(gl, nullptr /* gpu::SharedImageInterface* */,
+                             sync_token);
+  video_frame->UpdateReleaseSyncToken(&client);
+}
+
+void VideoResourceUpdater::DestroyMailbox(gpu::Mailbox mailbox,
+                                          scoped_refptr<VideoFrame> video_frame,
+                                          const gpu::SyncToken& sync_token,
+                                          bool lost_resource) {
+  if (lost_resource)
+    return;
+
+  auto* sii = SharedImageInterface();
+  sii->DestroySharedImage(sync_token, mailbox);
+  SyncTokenClientImpl client(nullptr, sii, sync_token);
   video_frame->UpdateReleaseSyncToken(&client);
 }
 
@@ -1304,6 +1363,14 @@ bool VideoResourceUpdater::OnMemoryDump(
   }
 
   return true;
+}
+
+gpu::SharedImageInterface* VideoResourceUpdater::SharedImageInterface() const {
+  auto* sii = raster_context_provider_
+                  ? raster_context_provider_->SharedImageInterface()
+                  : context_provider_->SharedImageInterface();
+  DCHECK(sii);
+  return sii;
 }
 
 }  // namespace media

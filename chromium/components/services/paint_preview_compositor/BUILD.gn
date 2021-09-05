@@ -14,8 +14,6 @@ static_library("paint_preview_compositor") {
     "paint_preview_compositor_impl.h",
     "paint_preview_frame.cc",
     "paint_preview_frame.h",
-    "skp_result.cc",
-    "skp_result.h",
   ]
 
   deps = [
@@ -30,7 +28,7 @@ static_library("paint_preview_compositor") {
     "//url",
   ]
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//components/services/font/public/cpp" ]
   }
 
@@ -55,6 +53,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/paint_preview/common",
+    "//components/paint_preview/common:test_utils",
     "//components/paint_preview/common/proto",
     "//skia",
     "//testing/gmock",

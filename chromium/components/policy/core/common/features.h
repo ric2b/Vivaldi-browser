@@ -12,10 +12,7 @@
 namespace policy {
 namespace features {
 
-// TODO(994227) Remove references to this now unused feature.
-POLICY_EXPORT extern const base::Feature kPolicyAtomicGroup;
-
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // Feature that controls whether the browser ignores sensitive policies on an
 // unmanaged Mac.
 POLICY_EXPORT extern const base::Feature kIgnoreSensitivePoliciesOnUnmanagedMac;
@@ -25,6 +22,11 @@ POLICY_EXPORT extern const base::Feature kIgnoreSensitivePoliciesOnUnmanagedMac;
 // Machine Level Policies. If enabled, |kCBCMServiceAccounts| must also be
 // enabled.
 POLICY_EXPORT extern const base::Feature kCBCMPolicyInvalidations;
+
+// Feature that controls if remote commands are enabled in CBCM. If enabled,
+// the browser will register for remote commands FCM invalidations, and fetch
+// remote commands when fetching policies.
+POLICY_EXPORT extern const base::Feature kCBCMRemoteCommands;
 
 }  // namespace features
 }  // namespace policy

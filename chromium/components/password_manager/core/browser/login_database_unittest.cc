@@ -1105,7 +1105,7 @@ TEST_F(LoginDatabaseTest, BlacklistedLogins) {
   form.password_element = ASCIIToUTF16("Passwd");
   form.submit_element = ASCIIToUTF16("signIn");
   form.signon_realm = "http://www.google.com/";
-  form.blacklisted_by_user = true;
+  form.blocked_by_user = true;
   form.scheme = PasswordForm::Scheme::kHtml;
   form.date_synced = base::Time::Now();
   form.date_last_used = base::Time::Now();
@@ -1186,7 +1186,7 @@ TEST_F(LoginDatabaseTest, UpdateIncompleteCredentials) {
   incomplete_form.username_value = ASCIIToUTF16("my_username");
   incomplete_form.password_value = ASCIIToUTF16("my_password");
   incomplete_form.date_last_used = base::Time::Now();
-  incomplete_form.blacklisted_by_user = false;
+  incomplete_form.blocked_by_user = false;
   incomplete_form.scheme = PasswordForm::Scheme::kHtml;
   EXPECT_EQ(AddChangeForForm(incomplete_form), db().AddLogin(incomplete_form));
 
@@ -1253,7 +1253,7 @@ TEST_F(LoginDatabaseTest, UpdateOverlappingCredentials) {
   incomplete_form.username_value = ASCIIToUTF16("my_username");
   incomplete_form.password_value = ASCIIToUTF16("my_password");
   incomplete_form.date_last_used = base::Time::Now();
-  incomplete_form.blacklisted_by_user = false;
+  incomplete_form.blocked_by_user = false;
   incomplete_form.scheme = PasswordForm::Scheme::kHtml;
   EXPECT_EQ(AddChangeForForm(incomplete_form), db().AddLogin(incomplete_form));
 
@@ -1302,7 +1302,7 @@ TEST_F(LoginDatabaseTest, DoubleAdd) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.blacklisted_by_user = false;
+  form.blocked_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
 
@@ -1321,7 +1321,7 @@ TEST_F(LoginDatabaseTest, AddWrongForm) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.blacklisted_by_user = false;
+  form.blocked_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   EXPECT_EQ(PasswordStoreChangeList(), db().AddLogin(form));
 
@@ -1337,7 +1337,7 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.blacklisted_by_user = false;
+  form.blocked_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   form.date_last_used = base::Time::Now();
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
@@ -1351,7 +1351,7 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.date_synced = base::Time::Now();
   form.date_created = base::Time::Now() - base::TimeDelta::FromDays(1);
   form.date_last_used = base::Time::Now() + base::TimeDelta::FromDays(1);
-  form.blacklisted_by_user = true;
+  form.blocked_by_user = true;
   form.scheme = PasswordForm::Scheme::kBasic;
   form.type = PasswordForm::Type::kGenerated;
   form.display_name = ASCIIToUTF16("Mr. Smith");
@@ -1381,7 +1381,7 @@ TEST_F(LoginDatabaseTest, UpdateLoginWithoutPassword) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.blacklisted_by_user = false;
+  form.blocked_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   form.date_last_used = base::Time::Now();
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
@@ -1420,7 +1420,7 @@ TEST_F(LoginDatabaseTest, RemoveWrongForm) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.blacklisted_by_user = false;
+  form.blocked_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   // The form isn't in the database.
   EXPECT_FALSE(db().RemoveLogin(form, /*changes=*/nullptr));
@@ -1472,21 +1472,21 @@ void AddMetricsTestData(LoginDatabase* db) {
   password_form.url = GURL("https://fifth.example.com/");
   password_form.signon_realm = "https://fifth.example.com/";
   password_form.password_value = ASCIIToUTF16("");
-  password_form.blacklisted_by_user = true;
+  password_form.blocked_by_user = true;
   EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.url = GURL("https://sixth.example.com/");
   password_form.signon_realm = "https://sixth.example.com/";
   password_form.username_value = ASCIIToUTF16("my_username");
   password_form.password_value = ASCIIToUTF16("my_password");
-  password_form.blacklisted_by_user = false;
+  password_form.blocked_by_user = false;
   EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.url = GURL();
   password_form.signon_realm = "android://hash@com.example.android/";
   password_form.username_value = ASCIIToUTF16("JohnDoe");
   password_form.password_value = ASCIIToUTF16("my_password");
-  password_form.blacklisted_by_user = false;
+  password_form.blocked_by_user = false;
   EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.username_value = ASCIIToUTF16("JaneDoe");
@@ -1494,22 +1494,22 @@ void AddMetricsTestData(LoginDatabase* db) {
 
   password_form.url = GURL("http://rsolomakhin.github.io/autofill/");
   password_form.signon_realm = "http://rsolomakhin.github.io/";
-  password_form.blacklisted_by_user = true;
+  password_form.blocked_by_user = true;
   EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.url = GURL("https://rsolomakhin.github.io/autofill/");
   password_form.signon_realm = "https://rsolomakhin.github.io/";
-  password_form.blacklisted_by_user = true;
+  password_form.blocked_by_user = true;
   EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.url = GURL("http://rsolomakhin.github.io/autofill/123");
   password_form.signon_realm = "http://rsolomakhin.github.io/";
-  password_form.blacklisted_by_user = true;
+  password_form.blocked_by_user = true;
   EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.url = GURL("https://rsolomakhin.github.io/autofill/1234");
   password_form.signon_realm = "https://rsolomakhin.github.io/";
-  password_form.blacklisted_by_user = true;
+  password_form.blocked_by_user = true;
   EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   StatisticsTable& stats_table = db->stats_table();
@@ -1632,10 +1632,6 @@ TEST_F(LoginDatabaseTest, ReportMetricsTest) {
   histogram_tester.ExpectUniqueSample("PasswordManager.InaccessiblePasswords",
                                       0, 1);
 #if !defined(OS_IOS) && !defined(OS_ANDROID)
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.BubbleSuppression.DomainsWithSuppressedBubble", 2, 1);
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.BubbleSuppression.AccountsWithSuppressedBubble", 3, 1);
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.BubbleSuppression.AccountsInStatisticsTable", 4, 1);
 #endif  // !defined(OS_IOS) && !defined(OS_ANDROID)
@@ -1782,7 +1778,7 @@ TEST_F(LoginDatabaseTest, DuplicatesMetrics_NoDuplicates) {
   password_form.url = GURL("http://example3.com/");
   password_form.username_value = ASCIIToUTF16("username_1");
   ASSERT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-  password_form.blacklisted_by_user = true;
+  password_form.blocked_by_user = true;
   password_form.username_value = ASCIIToUTF16("username_2");
   ASSERT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
   password_form.username_value = ASCIIToUTF16("username_3");
@@ -2014,7 +2010,7 @@ TEST_F(LoginDatabaseTest, EncryptionEnabled) {
 }
 #endif  // !defined(OS_IOS)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // Test that LoginDatabase does not encrypt values when encryption is disabled.
 // TODO(crbug.com/829857) This is supported only for Linux, while transitioning
 // into LoginDB with full encryption.
@@ -2032,7 +2028,7 @@ TEST_F(LoginDatabaseTest, EncryptionDisabled) {
       GetColumnValuesFromDatabase<std::string>(file, "password_value").at(0),
       base::UTF16ToUTF8(password_form.password_value));
 }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
 // On Android and ChromeOS there is a mix of plain-text and obfuscated
@@ -2413,7 +2409,7 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
   base::HistogramTester histogram_tester;
   ASSERT_TRUE(db.Init());
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   testing_local_state().registry()->RegisterTimePref(prefs::kPasswordRecovery,
                                                      base::Time());
   db.InitPasswordRecoveryUtil(std::make_unique<PasswordRecoveryUtilMac>(
@@ -2438,7 +2434,7 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
 #endif
 
 // Check histograms.
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
   histogram_tester.ExpectUniqueSample("PasswordManager.CleanedUpPasswords", 1,
                                       1);
   histogram_tester.ExpectUniqueSample(
@@ -2452,7 +2448,7 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest, DeleteUndecryptableLoginsTest) {
 #endif
 }
 
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_MAC)
 TEST_F(LoginDatabaseUndecryptableLoginsTest, PasswordRecoveryEnabledGetLogins) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kDeleteCorruptedPasswords);
@@ -2553,7 +2549,7 @@ TEST_F(LoginDatabaseUndecryptableLoginsTest, KeychainLockedTest) {
       "PasswordManager.DeleteUndecryptableLoginsReturnValue",
       metrics_util::DeleteCorruptedPasswordsResult::kEncryptionUnavailable, 1);
 }
-#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+#endif  // defined(OS_MAC)
 
 // Test retrieving password forms by supplied password.
 TEST_F(LoginDatabaseTest, GetLoginsByPassword) {

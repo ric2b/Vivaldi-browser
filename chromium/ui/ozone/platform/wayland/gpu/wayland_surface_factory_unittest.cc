@@ -185,8 +185,7 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
  protected:
   std::unique_ptr<SurfaceOzoneCanvas> CreateCanvas(
       gfx::AcceleratedWidget widget) {
-    auto canvas = surface_factory_->CreateCanvasForWidget(
-        widget_, base::ThreadTaskRunnerHandle::Get().get());
+    auto canvas = surface_factory_->CreateCanvasForWidget(widget_);
     base::RunLoop().RunUntilIdle();
 
     return canvas;
@@ -234,7 +233,8 @@ TEST_P(WaylandSurfaceFactoryTest,
   }
 
   // Now, schedule 3 buffers for swap.
-  auto* mock_surface = server_.GetObject<wl::MockSurface>(widget_);
+  auto* mock_surface = server_.GetObject<wl::MockSurface>(
+      window_->root_surface()->GetSurfaceId());
 
   CallbacksHelper cbs_helper;
   // Submit all the available buffers.
@@ -318,7 +318,7 @@ TEST_P(WaylandSurfaceFactoryTest,
 
   // This will result in Wayland server releasing previously attached buffer for
   // swap id=0u and calling OnSubmission for buffer with swap id=1u.
-  mock_surface->ReleasePrevAttachedBuffer();
+  mock_surface->ReleaseBuffer(mock_surface->prev_attached_buffer());
 
   Sync();
 
@@ -368,7 +368,7 @@ TEST_P(WaylandSurfaceFactoryTest,
 
   // This will result in Wayland server releasing previously attached buffer for
   // swap id=1u and calling OnSubmission for buffer with swap id=2u.
-  mock_surface->ReleasePrevAttachedBuffer();
+  mock_surface->ReleaseBuffer(mock_surface->prev_attached_buffer());
 
   Sync();
 

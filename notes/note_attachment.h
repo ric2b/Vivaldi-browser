@@ -3,6 +3,7 @@
 #ifndef NOTES_NOTE_ATTACHMENT_H_
 #define NOTES_NOTE_ATTACHMENT_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>

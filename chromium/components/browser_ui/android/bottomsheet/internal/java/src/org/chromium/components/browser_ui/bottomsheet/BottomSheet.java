@@ -23,11 +23,15 @@ import androidx.annotation.DimenRes;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Callback;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ObserverList;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent.HeightMode;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
+import org.chromium.components.browser_ui.bottomsheet.internal.R;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.util.AccessibilityUtil;
 
@@ -64,6 +68,9 @@ class BottomSheet extends FrameLayout
 
     /** The desired height of a content that has just been shown or whose height was invalidated. */
     private static final float HEIGHT_UNSPECIFIED = -1.0f;
+
+    /** A means of reporting an exception/stack without crashing. */
+    private static Callback<Throwable> sExceptionReporter;
 
     /** A flag to force the small screen state of the bottom sheet. */
     private static Boolean sIsSmallScreenForTesting;
@@ -196,6 +203,11 @@ class BottomSheet extends FrameLayout
         mIsTouchEnabled = true;
     }
 
+    /** @param reporter A means of reporting an exception without crashing. */
+    static void setExceptionReporter(Callback<Throwable> reporter) {
+        sExceptionReporter = reporter;
+    }
+
     /** @return The dimen describing the height of the shadow above the bottom sheet. */
     static @DimenRes int getTopShadowResourceId() {
         return R.dimen.bottom_sheet_toolbar_shadow_height;
@@ -282,8 +294,7 @@ class BottomSheet extends FrameLayout
 
         mToolbarHolder =
                 (TouchRestrictingFrameLayout) findViewById(R.id.bottom_sheet_toolbar_container);
-        mToolbarHolder.setBackgroundResource(
-                org.chromium.components.browser_ui.styles.R.drawable.top_round);
+        mToolbarHolder.setBackgroundResource(R.drawable.top_round);
 
         mDefaultToolbarView = mToolbarHolder.findViewById(R.id.bottom_sheet_toolbar);
 
@@ -292,8 +303,7 @@ class BottomSheet extends FrameLayout
         mBottomSheetContentContainer =
                 (TouchRestrictingFrameLayout) findViewById(R.id.bottom_sheet_content);
         mBottomSheetContentContainer.setBottomSheet(this);
-        mBottomSheetContentContainer.setBackgroundResource(
-                org.chromium.components.browser_ui.styles.R.drawable.top_round);
+        mBottomSheetContentContainer.setBackgroundResource(R.drawable.top_round);
 
         mContainerWidth = root.getWidth();
         mContainerHeight = root.getHeight();
@@ -494,6 +504,16 @@ class BottomSheet extends FrameLayout
             mSheetContent.getContentView().removeOnLayoutChangeListener(this);
         }
 
+        if (content != null && getParent() == null) {
+            mSheetContainer.addView(this);
+        } else if (content == null) {
+            if (mSheetContainer.getParent() == null) {
+                throw new RuntimeException(
+                        "Attempting to detach sheet that was not in the hierarchy!");
+            }
+            mSheetContainer.removeView(this);
+        }
+
         swapViews(content != null ? content.getContentView() : null,
                 mSheetContent != null ? mSheetContent.getContentView() : null,
                 mBottomSheetContentContainer);
@@ -624,13 +644,6 @@ class BottomSheet extends FrameLayout
         if (isSheetOpen() && MathUtils.areFloatsEqual(translationY, getTranslationY())) return;
 
         setTranslationY(translationY);
-
-        float hiddenHeight = getHiddenRatio() * mContainerHeight;
-        if (mCurrentOffsetPx <= hiddenHeight && this.getParent() != null) {
-            mSheetContainer.removeView(this);
-        } else if (mCurrentOffsetPx > hiddenHeight && this.getParent() == null) {
-            mSheetContainer.addView(this);
-        }
 
         // Do open/close computation based on the minimum allowed state by the sheet's content.
         // Note that when transitioning from hidden to peek, even dismissable sheets may want
@@ -861,9 +874,8 @@ class BottomSheet extends FrameLayout
 
         if (state == SheetState.HALF && !isHalfStateEnabled()) state = SheetState.FULL;
 
-        mTargetState = state;
-
         cancelAnimation();
+        mTargetState = state;
 
         if (animate && state != mCurrentState) {
             createSettleAnimation(state, reason);
@@ -906,6 +918,18 @@ class BottomSheet extends FrameLayout
     private void setInternalCurrentState(@SheetState int state, @StateChangeReason int reason) {
         if (state == mCurrentState) return;
 
+        // If we somehow got here with null content, force the sheet to close without animation.
+        // See https://crbug.com/1126872 for more information.
+        if (getCurrentSheetContent() == null && state != SheetState.HIDDEN) {
+            Throwable throwable = new Throwable(
+                    "This is not a crash. See https://crbug.com/1126872 for details.");
+            PostTask.postTask(
+                    TaskTraits.BEST_EFFORT_MAY_BLOCK, () -> sExceptionReporter.onResult(throwable));
+
+            setSheetState(SheetState.HIDDEN, false);
+            return;
+        }
+
         // TODO(mdjones): This shouldn't be able to happen, but does occasionally during layout.
         //                Fix the race condition that is making this happen.
         if (state == SheetState.NONE) {
@@ -934,9 +958,7 @@ class BottomSheet extends FrameLayout
 
             if (getCurrentSheetContent().swipeToDismissEnabled()) {
                 contentDescription += ". "
-                        + getResources().getString(
-                                org.chromium.components.browser_ui.widget.R.string
-                                        .bottom_sheet_accessibility_description);
+                        + getResources().getString(R.string.bottom_sheet_accessibility_description);
             }
 
             setContentDescription(contentDescription);

@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/layout/text_run_constructor.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/paint/box_painter.h"
 #include "third_party/blink/renderer/core/paint/image_element_timing.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
@@ -49,11 +50,16 @@ bool CheckForOversizedImagesPolicy(const LayoutImage& layout_image,
   if (layout_size.IsEmpty() || image_size.IsEmpty())
     return false;
 
-  double dpr = layout_image.GetDocument().GetFrame()->DevicePixelRatio();
-  double downscale_ratio_width =
-      image_size.Width() / (dpr * layout_size.Width());
-  double downscale_ratio_height =
-      image_size.Height() / (dpr * layout_size.Height());
+  // Note: Do not use frame->GetDevicePixelRatio() here, because it
+  // leads to different behaviour on MacOS platform. https://crbug.com/716231.
+  // virtual/scalefactor200/http/tests/images/document-policy/document-policy-oversized-images-edge-cases.html
+  // verifies the behaviour.
+  const double dsf =
+      layout_image.GetDocument().GetPage()->DeviceScaleFactorDeprecated();
+  const double downscale_ratio_width =
+      image_size.Width() / layout_size.Width() / dsf;
+  const double downscale_ratio_height =
+      image_size.Height() / layout_size.Height() / dsf;
 
   const LayoutImageResource* image_resource = layout_image.ImageResource();
   const ImageResourceContent* cached_image =
@@ -92,10 +98,6 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info) {
   if (area_element->ImageElement() != layout_image_.GetNode())
     return;
 
-  // Even if the theme handles focus ring drawing for entire elements, it won't
-  // do it for an area within an image, so we don't call
-  // LayoutTheme::themeDrawsFocusRing here.
-
   // We use EnsureComputedStyle() instead of GetComputedStyle() here because
   // <area> is used and its style applied even if it has display:none.
   const ComputedStyle* area_element_style = area_element->EnsureComputedStyle();
@@ -116,8 +118,8 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info) {
           paint_info.context, layout_image_, DisplayItem::kImageAreaFocusRing))
     return;
 
-  DrawingRecorder recorder(paint_info.context, layout_image_,
-                           DisplayItem::kImageAreaFocusRing);
+  BoxDrawingRecorder recorder(paint_info.context, layout_image_,
+                              DisplayItem::kImageAreaFocusRing, paint_offset);
 
   // FIXME: Clip path instead of context when Skia pathops is ready.
   // https://crbug.com/251206
@@ -169,7 +171,8 @@ void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
   if (!has_image) {
     // Draw an outline rect where the image should be.
     IntRect paint_rect = PixelSnappedIntRect(content_rect);
-    DrawingRecorder recorder(context, layout_image_, paint_info.phase);
+    BoxDrawingRecorder recorder(context, layout_image_, paint_info.phase,
+                                paint_offset);
     context.SetStrokeStyle(kSolidStroke);
     context.SetStrokeColor(Color::kLightGray);
     context.SetFillColor(Color::kTransparent);
@@ -180,7 +183,8 @@ void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
   PhysicalRect paint_rect = layout_image_.ReplacedContentRect();
   paint_rect.offset += paint_offset;
 
-  DrawingRecorder recorder(context, layout_image_, paint_info.phase);
+  BoxDrawingRecorder recorder(context, layout_image_, paint_info.phase,
+                              paint_offset);
   DCHECK(paint_info.PaintContainer());
   PaintIntoRect(context, paint_rect, content_rect);
 }
@@ -261,11 +265,13 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
     DCHECK(window);
     ImageElementTiming::From(*window).NotifyImagePainted(
         &layout_image_, image_content,
-        context.GetPaintController().CurrentPaintChunkProperties());
+        context.GetPaintController().CurrentPaintChunkProperties(),
+        pixel_snapped_dest_rect);
   }
   PaintTimingDetector::NotifyImagePaint(
       layout_image_, image->Size(), image_content,
-      context.GetPaintController().CurrentPaintChunkProperties());
+      context.GetPaintController().CurrentPaintChunkProperties(),
+      pixel_snapped_dest_rect);
 }
 
 }  // namespace blink

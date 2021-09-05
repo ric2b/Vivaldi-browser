@@ -7,10 +7,12 @@
 #include <algorithm>
 
 #include "base/check_op.h"
+#include "base/values.h"
 #include "ppapi/cpp/rect.h"
-#include "ppapi/cpp/size.h"
 #include "ppapi/cpp/var.h"
 #include "ppapi/cpp/var_dictionary.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace chrome_pdf {
 
@@ -19,7 +21,7 @@ namespace {
 constexpr char kDefaultPageOrientation[] = "defaultPageOrientation";
 constexpr char kTwoUpViewEnabled[] = "twoUpViewEnabled";
 
-int GetWidestPageWidth(const std::vector<pp::Size>& page_sizes) {
+int GetWidestPageWidth(const std::vector<gfx::Size>& page_sizes) {
   int widest_page_width = 0;
   for (const auto& page_size : page_sizes) {
     widest_page_width = std::max(widest_page_width, page_size.width());
@@ -48,11 +50,11 @@ DocumentLayout::Options& DocumentLayout::Options::operator=(
 
 DocumentLayout::Options::~Options() = default;
 
-pp::Var DocumentLayout::Options::ToVar() const {
-  pp::VarDictionary dictionary;
-  dictionary.Set(kDefaultPageOrientation,
-                 static_cast<int32_t>(default_page_orientation_));
-  dictionary.Set(kTwoUpViewEnabled, two_up_view_enabled_);
+base::Value DocumentLayout::Options::ToValue() const {
+  base::Value dictionary(base::Value::Type::DICTIONARY);
+  dictionary.SetIntKey(kDefaultPageOrientation,
+                       static_cast<int32_t>(default_page_orientation_));
+  dictionary.SetBoolKey(kTwoUpViewEnabled, two_up_view_enabled_);
   return dictionary;
 }
 
@@ -98,8 +100,8 @@ void DocumentLayout::SetOptions(const Options& options) {
 }
 
 void DocumentLayout::ComputeSingleViewLayout(
-    const std::vector<pp::Size>& page_sizes) {
-  pp::Size document_size(GetWidestPageWidth(page_sizes), 0);
+    const std::vector<gfx::Size>& page_sizes) {
+  gfx::Size document_size(GetWidestPageWidth(page_sizes), 0);
 
   if (page_layouts_.size() != page_sizes.size()) {
     // TODO(kmoon): May want to do less work when shrinking a layout.
@@ -113,7 +115,7 @@ void DocumentLayout::ComputeSingleViewLayout(
       document_size.Enlarge(0, kBottomSeparator);
     }
 
-    const pp::Size& page_size = page_sizes[i];
+    const gfx::Size& page_size = page_sizes[i];
     pp::Rect page_rect =
         draw_utils::GetRectForSingleView(page_size, document_size);
     CopyRectIfModified(page_rect, &page_layouts_[i].outer_rect);
@@ -130,8 +132,8 @@ void DocumentLayout::ComputeSingleViewLayout(
 }
 
 void DocumentLayout::ComputeTwoUpViewLayout(
-    const std::vector<pp::Size>& page_sizes) {
-  pp::Size document_size(GetWidestPageWidth(page_sizes), 0);
+    const std::vector<gfx::Size>& page_sizes) {
+  gfx::Size document_size(GetWidestPageWidth(page_sizes), 0);
 
   if (page_layouts_.size() != page_sizes.size()) {
     // TODO(kmoon): May want to do less work when shrinking a layout.
@@ -143,7 +145,7 @@ void DocumentLayout::ComputeTwoUpViewLayout(
     draw_utils::PageInsetSizes page_insets =
         draw_utils::GetPageInsetsForTwoUpView(
             i, page_sizes.size(), kSingleViewInsets, kHorizontalSeparator);
-    const pp::Size& page_size = page_sizes[i];
+    const gfx::Size& page_size = page_sizes[i];
 
     pp::Rect page_rect;
     if (i % 2 == 0) {

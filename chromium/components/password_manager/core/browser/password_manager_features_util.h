@@ -41,9 +41,14 @@ bool ShouldShowAccountStorageOptIn(const PrefService* pref_service,
 // Whether it makes sense to ask the user to signin again to access the
 // account-based password storage. This is true if a user on this device
 // previously opted into using the account store but is signed-out now.
+// |current_page_url| is the current URL, used to suppress the promo on the
+// Google signin page (no point in asking the user to sign in while they're
+// already doing that). For non-web contexts (e.g. native UIs), it is valid to
+// pass an empty GURL.
 // See PasswordFeatureManager::ShouldShowAccountStorageReSignin.
 bool ShouldShowAccountStorageReSignin(const PrefService* pref_service,
-                                      const syncer::SyncService* sync_service);
+                                      const syncer::SyncService* sync_service,
+                                      const GURL& current_page_url);
 
 // Sets opt-in to using account storage for passwords for the current
 // signed-in user (unconsented primary account).
@@ -120,6 +125,23 @@ ComputePasswordAccountStorageUserState(const PrefService* pref_service,
 // See PasswordFeatureManager::ComputePasswordAccountStorageUsageLevel.
 password_manager::metrics_util::PasswordAccountStorageUsageLevel
 ComputePasswordAccountStorageUsageLevel(
+    const PrefService* pref_service,
+    const syncer::SyncService* sync_service);
+
+// Increases the count of how many times Chrome automatically offered a user
+// not opted-in to the account-scoped passwords storage to move a password to
+// their account. Should only be called if the user is signed-in and not
+// opted-in. |pref_service| and |sync_service| must be non-null.
+// See PasswordFeatureManager::RecordMoveOfferedToNonOptedInUser().
+void RecordMoveOfferedToNonOptedInUser(PrefService* pref_service,
+                                       const syncer::SyncService* sync_service);
+
+// Gets the count of how many times Chrome automatically offered a user
+// not opted-in to the account-scoped passwords storage to move a password to
+// their account. Should only be called if the user is signed-in and not
+// opted-in. |pref_service| and |sync_service| must be non-null.
+// See PasswordFeatureManager::GetMoveOfferedToNonOptedInUserCount().
+int GetMoveOfferedToNonOptedInUserCount(
     const PrefService* pref_service,
     const syncer::SyncService* sync_service);
 

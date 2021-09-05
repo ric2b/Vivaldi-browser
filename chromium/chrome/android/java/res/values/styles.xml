@@ -42,9 +42,6 @@
         <!-- With ActionBar -->
         <item name="windowActionBar">true</item>
         <item name="windowNoTitle">false</item>
-
-        <!-- Window properties -->
-        <item name="android:windowBackground">@drawable/action_bar_activity_bg</item>
     </style>
 
     <style name="Base.Theme.Chromium.WithWindowAnimation">
@@ -136,6 +133,10 @@
         <item name="actionBarStyle">@style/SettingsActionBarModern</item>
         <item name="preferenceTheme">@style/PreferenceTheme</item>
         <item name="alertDialogTheme">@style/Theme.Chromium.AlertDialog</item>
+
+        <!-- Text style attributes used by the preference_material.xml layout. -->
+        <item name="android:textAppearanceListItem">@style/TextAppearance.TextLarge.Primary</item>
+        <item name="android:textColorSecondary">@color/default_text_color_secondary_list</item>
     </style>
 
     <style name="Theme.Chromium.Settings" parent="Base.Theme.Chromium.Settings" />
@@ -269,12 +270,26 @@
     </style>
 
     <!-- First Run Experience -->
+    <!-- Avoid using @font/accent_font, a downloaded font, on text that could appear in the first
+         couple of frames of app start. It may not be ready yet, see https://crbug.com/1119990 -->
+    <style name="TextAppearance.FreFirstFrameTitle" parent="TextAppearance.Headline.Primary" >
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+    <style name="TextAppearance.FreFirstFrameButton" parent="TextAppearance.Button.Text.Filled">
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
     <style name="FreTitle">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:gravity">center</item>
         <item name="android:lineSpacingMultiplier">1.4</item>
         <item name="android:textAppearance">@style/TextAppearance.Headline.Primary</item>
+    </style>
+    <style name="FreWelcomePageTitle" parent="FreTitle">
+        <item name="android:textAppearance">@style/TextAppearance.FreFirstFrameTitle</item>
+    </style>
+    <style name="FreAcceptTosButton" parent="FilledButton.Flat">
+        <item name="android:textAppearance">@style/TextAppearance.FreFirstFrameButton</item>
     </style>
 
     <!-- Web Notifications -->
@@ -699,4 +714,13 @@
     <style name="DarkModeCompatibleVerticalScrolling">
         <item name="android:scrollbarThumbVertical">@color/default_scroll_thumb</item>
     </style>
+
+    <!-- Overflow menu -->
+    <style name="AppMenuItemText">
+        <item name="android:textAppearance">@style/TextAppearance.TextLarge.Primary</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:paddingEnd">9dp</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
 </resources>

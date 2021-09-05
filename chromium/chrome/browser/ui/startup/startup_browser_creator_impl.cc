@@ -74,7 +74,7 @@
 #include "rlz/buildflags/buildflags.h"
 #include "ui/base/buildflags.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #import "chrome/browser/mac/dock.h"
 #include "chrome/browser/mac/install_from_dmg.h"
@@ -209,7 +209,7 @@ LaunchMode GetLaunchModeSlow() {
 
   return LM_SHORTCUT_UNKNOWN;
 }
-#elif defined(OS_MACOSX)  // defined(OS_WIN)
+#elif defined(OS_MAC)  // defined(OS_WIN)
 LaunchMode GetLaunchModeFast() {
   DiskImageStatus dmg_launch_status =
       IsAppRunningFromReadOnlyDiskImage(nullptr);
@@ -450,7 +450,7 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
           command_line_.GetSwitchValueASCII(switches::kInstallChromeApp));
     }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     if (process_startup) {
       // Check whether the auto-update system needs to be promoted from user
       // to system.
@@ -469,13 +469,13 @@ bool StartupBrowserCreatorImpl::Launch(Profile* profile,
 #if defined(OS_WIN)
   if (process_startup) {
     // Update this number when users should go through a taskbar shortcut
-    // migration again. The last reason to do this was crrev.com/719141 @
-    // 80.0.3978.0.
+    // migration again. The last reason to do this was crrev.com/2285399 @
+    // 86.0.4231.0.
     //
     // Note: If shortcut updates need to be done once after a future OS upgrade,
     // that should be done by re-versioning Active Setup (see //chrome/installer
     // and http://crbug.com/577697 for details).
-    const base::Version kLastVersionNeedingMigration({80U, 0U, 3978U, 0U});
+    const base::Version kLastVersionNeedingMigration({86U, 0U, 4231U, 0U});
 
     PrefService* local_state = g_browser_process->local_state();
     if (local_state) {
@@ -649,8 +649,8 @@ bool StartupBrowserCreatorImpl::MaybeLaunchApplication(Profile* profile) {
     // Opens an empty browser window if the app_id is invalid.
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
-        .LaunchAppWithCallback(app_id, command_line_, cur_dir_,
-                               base::BindOnce(&FinalizeWebAppLaunch));
+        ->LaunchAppWithCallback(app_id, command_line_, cur_dir_,
+                                base::BindOnce(&FinalizeWebAppLaunch));
     return true;
   }
 
@@ -774,7 +774,7 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
 
   SessionRestore::BehaviorBitmask restore_options = 0;
   if (behavior == BrowserOpenBehavior::SYNCHRONOUS_RESTORE) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     bool was_mac_login_or_resume = base::mac::WasLaunchedAsLoginOrResumeItem();
 #else
     bool was_mac_login_or_resume = false;
@@ -852,7 +852,7 @@ StartupTabs StartupBrowserCreatorImpl::DetermineStartupTabs(
       }
     }
 
-    // A Master Preferences file provided with this distribution may specify
+    // An initial preferences file provided with this distribution may specify
     // tabs to be displayed on first run, overriding all non-command-line tabs,
     // including the profile reset tab.
     StartupTabs distribution_tabs =

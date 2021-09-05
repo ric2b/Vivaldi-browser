@@ -142,6 +142,7 @@ void PrintPreviewMessageHandler::OnDidStartPreview(
 }
 
 void PrintPreviewMessageHandler::OnDidPrepareForDocumentToPdf(
+    content::RenderFrameHost* render_frame_host,
     int document_cookie,
     const PrintHostMsg_PreviewIds& ids) {
   PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
@@ -163,7 +164,7 @@ void PrintPreviewMessageHandler::OnDidPrepareForDocumentToPdf(
     return;
 
   client->DoPrepareForDocumentToPdf(
-      document_cookie,
+      document_cookie, render_frame_host,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(
               &PrintPreviewMessageHandler::OnPrepareForDocumentToPdfDone,
@@ -173,10 +174,10 @@ void PrintPreviewMessageHandler::OnDidPrepareForDocumentToPdf(
 
 void PrintPreviewMessageHandler::OnDidPreviewPage(
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPreviewPage_Params& params,
+    const mojom::DidPreviewPageParams& params,
     const PrintHostMsg_PreviewIds& ids) {
   int page_number = params.page_number;
-  const mojom::DidPrintContentParams& content = params.content;
+  const mojom::DidPrintContentParams& content = *params.content;
   if (page_number < FIRST_PAGE_INDEX || !content.metafile_data_region.IsValid())
     return;
 
@@ -216,7 +217,7 @@ void PrintPreviewMessageHandler::OnDidPreviewPage(
 
 void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
     content::RenderFrameHost* render_frame_host,
-    const PrintHostMsg_DidPreviewDocument_Params& params,
+    const mojom::DidPreviewDocumentParams& params,
     const PrintHostMsg_PreviewIds& ids) {
   // Always try to stop the worker.
   StopWorker(params.document_cookie);
@@ -228,7 +229,7 @@ void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
   const bool composite_document_using_individual_pages =
       ShouldUseCompositor(print_preview_ui);
   const base::ReadOnlySharedMemoryRegion& metafile =
-      params.content.metafile_data_region;
+      params.content->metafile_data_region;
 
   // When the Print Compositor is active, the print document is composed from
   // the individual pages, so |metafile| should be invalid.
@@ -237,7 +238,7 @@ void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
   if (composite_document_using_individual_pages == metafile.IsValid())
     return;
 
-  if (params.expected_pages_count <= 0) {
+  if (params.expected_pages_count == 0) {
     NOTREACHED();
     return;
   }
@@ -486,6 +487,8 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
                                    render_frame_host)
     IPC_MESSAGE_HANDLER(PrintHostMsg_RequestPrintPreview,
                         OnRequestPrintPreview)
+    IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrepareDocumentForPreview,
+                        OnDidPrepareForDocumentToPdf)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPreviewPage, OnDidPreviewPage)
     IPC_MESSAGE_HANDLER(PrintHostMsg_MetafileReadyForPrinting,
                         OnMetafileReadyForPrinting)
@@ -497,8 +500,6 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
   handled = true;
   IPC_BEGIN_MESSAGE_MAP(PrintPreviewMessageHandler, message)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidStartPreview, OnDidStartPreview)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrepareDocumentForPreview,
-                        OnDidPrepareForDocumentToPdf)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetDefaultPageLayout,
                         OnDidGetDefaultPageLayout)
     IPC_MESSAGE_UNHANDLED(handled = false)

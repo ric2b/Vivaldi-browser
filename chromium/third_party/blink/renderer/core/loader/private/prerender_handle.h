@@ -39,7 +39,6 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
@@ -51,7 +50,6 @@ class PrerenderClient;
 class PrerenderHandle final : public GarbageCollected<PrerenderHandle>,
                               public ExecutionContextLifecycleObserver,
                               public mojom::blink::PrerenderHandleClient {
-  USING_GARBAGE_COLLECTED_MIXIN(PrerenderHandle);
   USING_PRE_FINALIZER(PrerenderHandle, Dispose);
 
  public:
@@ -61,14 +59,12 @@ class PrerenderHandle final : public GarbageCollected<PrerenderHandle>,
                                  unsigned prerender_rel_types);
 
   using PassKey = util::PassKey<PrerenderHandle>;
-  PrerenderHandle(
-      PassKey,
-      ExecutionContext*,
-      PrerenderClient*,
-      const KURL&,
-      HeapMojoRemote<mojom::blink::PrerenderHandle,
-                     HeapMojoWrapperMode::kForceWithoutContextObserver>,
-      mojo::PendingReceiver<mojom::blink::PrerenderHandleClient>);
+  PrerenderHandle(PassKey,
+                  ExecutionContext*,
+                  PrerenderClient*,
+                  const KURL&,
+                  HeapMojoRemote<mojom::blink::PrerenderHandle>,
+                  mojo::PendingReceiver<mojom::blink::PrerenderHandleClient>);
   ~PrerenderHandle() override;
   void Dispose();
 
@@ -91,12 +87,8 @@ class PrerenderHandle final : public GarbageCollected<PrerenderHandle>,
 
   KURL url_;
   WeakMember<PrerenderClient> client_;
-  HeapMojoRemote<mojom::blink::PrerenderHandle,
-                 HeapMojoWrapperMode::kForceWithoutContextObserver>
-      remote_handle_;
-  HeapMojoReceiver<mojom::blink::PrerenderHandleClient,
-                   PrerenderHandle,
-                   HeapMojoWrapperMode::kForceWithoutContextObserver>
+  HeapMojoRemote<mojom::blink::PrerenderHandle> remote_handle_;
+  HeapMojoReceiver<mojom::blink::PrerenderHandleClient, PrerenderHandle>
       receiver_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderHandle);

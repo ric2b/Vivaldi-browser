@@ -222,38 +222,8 @@ bool DownloadItemModel::IsDangerous() const {
 }
 
 bool DownloadItemModel::MightBeMalicious() const {
-  if (!IsDangerous())
-    return false;
-  switch (download_->GetDangerType()) {
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
-    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
-    case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
-    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
-    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
-    case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
-    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
-    case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
-    case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
-    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
-      return true;
-
-    case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
-    case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
-    case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
-    case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-    case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
-    case download::DOWNLOAD_DANGER_TYPE_MAX:
-      // We shouldn't get any of these due to the IsDangerous() test above.
-      NOTREACHED();
-      FALLTHROUGH;
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
-      return false;
-  }
-  NOTREACHED();
-  return false;
+  return IsDangerous() && (download_->GetDangerType() !=
+                           download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE);
 }
 
 // If you change this definition of malicious, also update
@@ -601,7 +571,8 @@ bool DownloadItemModel::IsCommandChecked(
       return download_->GetOpenWhenComplete() ||
              download_crx_util::IsExtensionDownload(*download_);
     case DownloadCommands::ALWAYS_OPEN_TYPE:
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_MAC)
       if (download_commands->CanOpenPdfInSystemViewer()) {
         DownloadPrefs* prefs = DownloadPrefs::FromBrowserContext(profile());
         return prefs->ShouldOpenPdfInSystemReader();
@@ -641,7 +612,8 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
       bool is_checked = IsCommandChecked(download_commands,
                                          DownloadCommands::ALWAYS_OPEN_TYPE);
       DownloadPrefs* prefs = DownloadPrefs::FromBrowserContext(profile());
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_MAC)
       if (download_commands->CanOpenPdfInSystemViewer()) {
         prefs->SetShouldOpenPdfInSystemReader(!is_checked);
         SetShouldPreferOpeningInBrowser(is_checked);
@@ -691,7 +663,8 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
           report.set_token(token);
         std::string serialized_report;
         if (report.SerializeToString(&serialized_report)) {
-          sb_service->SendSerializedDownloadReport(serialized_report);
+          sb_service->SendSerializedDownloadReport(profile(),
+                                                   serialized_report);
         } else {
           DCHECK(false)
               << "Unable to serialize the uncommon download warning report.";
@@ -783,3 +756,24 @@ void DownloadItemModel::CompleteSafeBrowsingScan() {
   state->CompleteDownload();
 }
 #endif
+
+bool DownloadItemModel::ShouldShowDropdown() const {
+  // We don't show the dropdown for dangerous file types or for files
+  // blocked by enterprise policy.
+  if (IsDangerous() && GetState() != DownloadItem::CANCELLED &&
+      !MightBeMalicious()) {
+    return false;
+  }
+
+  if (GetDangerType() ==
+          download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK ||
+      GetDangerType() ==
+          download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED ||
+      GetDangerType() == download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE ||
+      GetDangerType() ==
+          download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE) {
+    return false;
+  }
+
+  return true;
+}

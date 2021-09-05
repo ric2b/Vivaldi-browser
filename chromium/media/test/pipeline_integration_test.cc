@@ -150,7 +150,7 @@ static base::Time kLiveTimelineOffset() {
   return timeline_offset;
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 class ScopedVerboseLogEnabler {
  public:
   ScopedVerboseLogEnabler() : old_level_(logging::GetMinLogLevel()) {
@@ -496,10 +496,10 @@ INSTANTIATE_TEST_SUITE_P(OpenCodecs,
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 const PlaybackTestData kADTSTests[] = {
-    {"bear-audio-main-aac.aac", 0, 2724},
-    {"bear-audio-lc-aac.aac", 0, 2717},
-    {"bear-audio-implicit-he-aac-v1.aac", 0, 2812},
-    {"bear-audio-implicit-he-aac-v2.aac", 0, 3047},
+    {"bear-audio-main-aac.aac", 0, 2708},
+    {"bear-audio-lc-aac.aac", 0, 2791},
+    {"bear-audio-implicit-he-aac-v1.aac", 0, 2829},
+    {"bear-audio-implicit-he-aac-v2.aac", 0, 2900},
 };
 
 // TODO(chcunningham): Migrate other basic playback tests to TEST_P.
@@ -739,7 +739,7 @@ TEST_F(PipelineIntegrationTest, PlaybackTooManyChannels) {
 }
 
 TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Enable scoped logs to help track down hangs.  http://crbug.com/1014646
   ScopedVerboseLogEnabler scoped_log_enabler;
 #endif
@@ -776,7 +776,7 @@ TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
 }
 
 TEST_F(PipelineIntegrationTest, PlaybackWithVideoTrackDisabledThenEnabled) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Enable scoped logs to help track down hangs.  http://crbug.com/1014646
   ScopedVerboseLogEnabler scoped_log_enabler;
 #endif
@@ -841,7 +841,7 @@ TEST_F(PipelineIntegrationTest, TrackStatusChangesAfterPipelineEnded) {
 }
 
 // TODO(https://crbug.com/1009964): Enable test when MacOS flake is fixed.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_TrackStatusChangesWhileSuspended \
   DISABLED_TrackStatusChangesWhileSuspended
 #else
@@ -2591,7 +2591,7 @@ TEST_F(PipelineIntegrationTest, MSE_BasicPlayback_VideoOnly_MP4_HEV1) {
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 TEST_F(PipelineIntegrationTest, SeekWhilePaused) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Enable scoped logs to help track down hangs.  http://crbug.com/1014646
   ScopedVerboseLogEnabler scoped_log_enabler;
 #endif
@@ -2620,7 +2620,7 @@ TEST_F(PipelineIntegrationTest, SeekWhilePaused) {
 }
 
 TEST_F(PipelineIntegrationTest, SeekWhilePlaying) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Enable scoped logs to help track down hangs.  http://crbug.com/1014646
   ScopedVerboseLogEnabler scoped_log_enabler;
 #endif

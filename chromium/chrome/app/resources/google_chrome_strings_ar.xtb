@@ -8,17 +8,21 @@
 <translation id="1088300314857992706">‏كان <ph name="USER_EMAIL_ADDRESS" /> يستخدم Chrome سابقًا</translation>
 <translation id="1097330777386562916">‏محو بيانات الموقع وملفات تعريف الارتباط عند الخروج من Chrome</translation>
 <translation id="110877069173485804">‏هذا Chrome الخاص بك</translation>
+<translation id="1125124144982679672">‏مَن يستخدم متصفِّح Chrome؟</translation>
 <translation id="1142745911746664600">‏تعذّرت إعادة التحميل Chrome</translation>
 <translation id="1154147086299354128">‏&amp;فتح في Chrome</translation>
 <translation id="123620459398936149">‏تعذر على نظام التشغيل Chrome مزامنة البيانات. يُرجى تحديث عبارة مرور المزامنة.</translation>
 <translation id="1302523850133262269">‏يُرجى الانتظار لحين تثبيت Chrome لآخر تحديثات النظام.</translation>
+<translation id="1355000804395496115">‏يمكنك استخدام ملفات شخصية مختلفة في متصفِّح Chrome للفصل بين التصفُّح الخاص بالعمل والتصفُّح الشخصي، أو للفصل بين الأشخاص المختلفين الذين يستخدمون هذا الجهاز.</translation>
 <translation id="137466361146087520">‏الإصدار التجريبي من Google Chrome</translation>
 <translation id="1399397803214730675">‏يحتوي جهاز الكمبيوتر هذا على نسخة أحدث من Google Chrome. إذا كان برنامج Google Chrome لا يعمل، يُرجى إزالة Google Chrome وإعادة المحاولة.</translation>
 <translation id="1434626383986940139">‏تطبيقات Chrome Canary</translation>
+<translation id="1513277449617685876">‏للفصل بين التصفُّح الشخصي والتصفُّح باستخدام حساب <ph name="NEW_USER" />، يمكنك إنشاء ملف شخصي جديد على متصفِّح Chrome.</translation>
 <translation id="1553358976309200471">‏تحديث Chrome‏</translation>
 <translation id="1587223624401073077">‏يستخدم Google Chrome الكاميرا.</translation>
 <translation id="1587325591171447154">‏ملف <ph name="FILE_NAME" /> ضار، لذلك فقد حظره Chrome.</translation>
 <translation id="1619887657840448962">‏لجعل Chrome أكثر أمنًا، أوقفنا الإضافة التالية التي لم تُدرج في <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> وربما تكون قد أضيفت بدون علمك.</translation>
+<translation id="162448658176061655">‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل قليل.</translation>
 <translation id="162629503687514352">‏تعذّر على نظام التشغيل Chrome مزامنة كلمات المرور.</translation>
 <translation id="1628000112320670027">‏الحصول على مساعدة في Chrome</translation>
 <translation id="1662639173275167396">‏أصبح نظام التشغيل Chrome متاحًا من خلال <ph name="BEGIN_LINK_CROS_OSS" />برنامج مفتوح المصدر<ph name="END_LINK_CROS_OSS" />إضافي، كما في نظام التشغيل <ph name="BEGIN_LINK_LINUX_OSS" />Linux (إصدار تجريبي)<ph name="END_LINK_LINUX_OSS" />.</translation>
@@ -55,7 +59,6 @@
 <translation id="2534507159460261402">‏Google Pay (تم النسخ إلى Chrome)</translation>
 <translation id="2580411288591421699">‏لا يمكن تثبيت نفس الإصدار المثبت من Google Chrome والذي يتم تشغيله حاليًا. يُرجى إغلاق Google Chrome وإعادة المحاولة.</translation>
 <translation id="2586406160782125153">‏سيؤدي هذا إلى حذف بيانات التصفح من هذا الجهاز. لاسترداد بياناتك لاحقًا، سجّل الدخول إلى Chrome كـ <ph name="USER_EMAIL" />.</translation>
-<translation id="2588322182880276190">‏شعار Chrome</translation>
 <translation id="2622559029861875898">‏يتعذّر على Chrome البحث عن تحديثات. يُرجى التحقّق من اتصال الإنترنت.</translation>
 <translation id="2644798301485385923">‏نظام التشغيل Chrome</translation>
 <translation id="2652691236519827073">‏فتح الرابط في علامة تبويب جديدة في Chrome</translation>
@@ -68,6 +71,7 @@
 <translation id="2847461019998147611">‏عرض Google Chrome بهذه اللغة</translation>
 <translation id="2857540653560290388">‏جارٍ إطلاق Chrome...</translation>
 <translation id="2871893339301912279">‏تم تسجيل دخولك إلى Chrome!</translation>
+<translation id="2885378588091291677">إدارة المهام</translation>
 <translation id="2888126860611144412">‏لمحة عن Chrome</translation>
 <translation id="2929907241665500097">‏تعذّر تحديث Chrome بسبب حدوث خطأ. <ph name="BEGIN_LINK" />حلّ مشاكل تحديث Chrome وتعذُّر التحديثات<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736">‏<ph name="PAGE_TITLE" /> - Chrome - تسجيل الدخول إلى الشبكة</translation>
@@ -103,6 +107,7 @@
 <translation id="3889417619312448367">‏إزالة Google Chrome</translation>
 <translation id="4050175100176540509">تحسينات الأمان المهمة والميزات الجديدة متاحة في أحدث إصدار.</translation>
 <translation id="4053720452172726777">‏تخصيص Google Chrome والتحكم فيه</translation>
+<translation id="4110895483821904099">‏إعداد ملفك الشخصي الجديد على متصفِّح Chrome</translation>
 <translation id="4143243756087420366">‏الاسم والصورة على Chrome</translation>
 <translation id="4147555960264124640">‏إنك تسجل الدخول باستخدام حساب مُدار وتمنح المشرف إمكانية التحكم في ملفك الشخصي في Google Chrome. وسيتم ربط بيانات Chrome التابعة لك، مثل التطبيقات والإشارات المرجعية والسجلّ وكلمات المرور والإعدادات الأخرى بالمستخدم <ph name="USER_NAME" />. وستتمكن من حذف هذه البيانات عبر لوحة تحكم حسابات Google، ولكنك لن تتمكن من إقران هذه البيانات بحساب آخر. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">‏فشلت أداة المثبِّت في فك ضغط الأرشيف. يُرجى تنزيل Google Chrome مرة أخرى.</translation>
@@ -136,8 +141,9 @@
 <translation id="4771048833395599659">‏قد يكون هذا الملف ضارًا، لذلك فقد حظره Chrome.</translation>
 <translation id="479167709087336770">‏يستخدم ذلك المدقق الإملائي نفسه الذي يتم استخدامه في "بحث Google". ويتم إرسال النص الذي تكتبه في المتصفّح إلى Google. يمكنك دائمًا تغيير هذا السلوك في الإعدادات.</translation>
 <translation id="4891791193823137474">‏دع Google Chrome يعمل في الخلفية</translation>
+<translation id="489337168347244450">{NUM_DAYS,plural, =1{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل يوم واحد.}zero{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_DAYS} يوم.}two{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل يومَين ({NUM_DAYS}).}few{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_DAYS} أيام.}many{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_DAYS} يومًا.}other{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_DAYS} يوم.}}</translation>
 <translation id="4895437082222824641">‏فتح الرابط في علامة تبويب جديدة في Chrome</translation>
-<translation id="4953650215774548573">‏تعيين Google Chrome المتصفح التلقائي</translation>
+<translation id="4953650215774548573">‏تحديد Google Chrome المتصفح التلقائي</translation>
 <translation id="495931528404527476">‏في Chrome</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5062123544085870375">‏إعادة تشغيل نظام التشغيل Chrome</translation>
@@ -153,6 +159,7 @@
 <translation id="5430073640787465221">‏ملف الإعدادات المفضّلة تالف أو غير صالح. يتعذر على Google Chrome استرداد إعداداتك.</translation>
 <translation id="556024056938947818">‏يحاول Google Chrome إظهار كلمات المرور.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
+<translation id="5633355459292055250">‏السؤال عند فتح متصفِّح Chrome</translation>
 <translation id="5657226924540934362">‏في حال عدم عرض إعداد على هذه الصفحة، انتقل إلى <ph name="LINK_BEGIN" />
       إعدادات نظام التشغيل Chrome<ph name="LINK_END" /></translation>
 <translation id="565744775970812598">‏قد يكون ملف <ph name="FILE_NAME" /> ضارًا، لذلك فقد حظره Chrome.</translation>
@@ -178,6 +185,7 @@
 <translation id="6291549208091401781">‏تم تثبيت Google Chrome من قبل لجميع المستخدمين على الكمبيوتر.</translation>
 <translation id="6338556085225130112">‏تحديث Google Chrome</translation>
 <translation id="6368958679917195344">‏أصبح نظام التشغيل Chrome متاحًا من خلال <ph name="BEGIN_LINK_CROS_OSS" />برنامج مفتوح المصدر<ph name="END_LINK_CROS_OSS" /> إضافي.</translation>
+<translation id="6454142105866844106">‏يتحقَّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا.</translation>
 <translation id="6515495397637126556">‏<ph name="PAGE_TITLE" /> - إصدار قناة مطوري البرامج من Google Chrome</translation>
 <translation id="6566149418543181476">‏جارٍ تحديث Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6676384891291319759">الدخول إلى الإنترنت</translation>
@@ -195,14 +203,17 @@
 <translation id="7106741999175697885">‏مدير المهام - Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{‏يتوفر تحديث جديد لبرنامج Chrome وسيتم تطبيقه عند إعادة التشغيل.}=1{‏يتوفر تحديث جديد لبرنامج Chrome وسيتم تطبيقه عند إعادة التشغيل. لن تتم إعادة فتح نافذة التصفح المتخفي.}two{‏يتوفر تحديث جديد لبرنامج Chrome وسيتم تطبيقه عند إعادة التشغيل. لن تتم إعادة فتح نافذتَي التصفح المتخفي.}few{‏يتوفر تحديث جديد لبرنامج Chrome وسيتم تطبيقه عند إعادة التشغيل. لن تتم إعادة فتح نوافذ التصفّح المتخفي البالغ عددها #.}many{‏يتوفر تحديث جديد لبرنامج Chrome وسيتم تطبيقه عند إعادة التشغيل. لن تتم إعادة فتح نوافذ التصفّح المتخفي البالغ عددها #.}other{‏يتوفر تحديث جديد لبرنامج Chrome وسيتم تطبيقه عند إعادة التشغيل. لن تتم إعادة فتح نوافذ التصفّح المتخفي البالغ عددها #.}}</translation>
 <translation id="7155997830309522122">‏في هذه الحالة، يُرجى تعديل كلمة المرور المحفوظة في Chrome لتتطابق مع كلمة المرور الجديدة.</translation>
+<translation id="7236955538461508933">{NUM_HOURS,plural, =1{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل ساعة واحدة.}zero{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_HOURS} ساعة.}two{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل ساعتَين ({NUM_HOURS}).}few{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_HOURS} ساعات.}many{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_HOURS} ساعة.}other{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_HOURS} ساعة.}}</translation>
 <translation id="7242029209006116544">‏إنك تسجل الدخول باستخدام حساب مُدار وتمنح المشرف إمكانية التحكم في ملفك الشخصي في Google Chrome. وسيتم ربط بيانات Chrome التابعة لك، مثل التطبيقات والإشارات المرجعية والسجلّ وكلمات المرور والإعدادات الأخرى بالمستخدم <ph name="USER_NAME" />. وستتمكن من حذف هذه البيانات عبر لوحة تحكم حسابات Google، ولكنك لن تتمكن من إقران هذه البيانات بحساب آخر. ويُمكنك اختيار إنشاء ملف شخصي جديد للإبقاء على بياناتك الحالية في Chrome بشكل مستقل. <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">‏يتم استخدام هذه اللغة لعرض واجهة مستخدم Google Chrome</translation>
 <translation id="7296210096911315575">معلومات مهمّة حول الأمان والاستخدام</translation>
 <translation id="7308322188646931570">‏يحتاج Chrome للوصول إلى مساحة التخزين لتنزيل الملفات.</translation>
 <translation id="7339898014177206373">نافذة جديدة</translation>
+<translation id="7386132805935307836">‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق أمس.</translation>
 <translation id="7398801000654795464">‏تم تسجيل دخولك إلى Chrome باعتبارك <ph name="USER_EMAIL_ADDRESS" />. يُرجى استخدام الحساب نفسه لتسجيل الدخول مرة أخرى.</translation>
 <translation id="7408085963519505752">‏بنود نظام التشغيل Chrome</translation>
 <translation id="7419046106786626209">‏تعذر على نظام التشغيل Chrome مزامنة البيانات نظرًا لأن المزامنة غير متاحة في نطاقك.</translation>
+<translation id="7423733001651488593">‏سيؤدي هذا الإجراء إلى حذف بيانات التصفُّح من هذا الجهاز نهائيًا. لاسترداد البيانات، يُرجى تسجيل الدخول إلى Chrome بحساب</translation>
 <translation id="7486227612705979895">‏سيصل Chrome إلى Drive لإنشاء الاقتراحات في شريط العناوين.</translation>
 <translation id="7535429826459677826">‏إصدار مطوري البرامج من Google Chrome</translation>
 <translation id="7573289029918943991">‏للتأكّد من أن جهازك يستخدم أحدث إصدار من نظام التشغيل، يُرجى الانتقال إلى <ph name="LINK_BEGIN" />إعدادات نظام التشغيل Chrome<ph name="LINK_END" />.</translation>
@@ -234,6 +245,7 @@
 <translation id="828798499196665338">‏أوقفَ أحد والدَيك "أذونات المواقع الإلكترونية والتطبيقات والإضافات" لمتصفِّح Chrome. ولا يمكن تفعيل <ph name="EXTENSION_TYPE_PARAMETER" />.</translation>
 <translation id="8290100596633877290">‏للأسف! تعطل Google Chrome. هل تريد إعادة التشغيل الآن؟</translation>
 <translation id="8342675569599923794">‏هذا الملف ضار، لذلك فقد حظره Chrome.</translation>
+<translation id="8344083974188970894">{NUM_MINS,plural, =1{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل دقيقة واحدة.}zero{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_MINS} دقيقة.}two{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل دقيقتَين ({NUM_MINS}).}few{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_MINS} دقائق.}many{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_MINS} دقيقة.}other{‏يتحقّق Chrome من وجود أي برامج غير مرغوب فيها مرة واحدة أسبوعيًا. تمّ إجراء آخر عملية تحقُّق قبل {NUM_MINS} دقيقة.}}</translation>
 <translation id="8370517070665726704">‏حقوق الطبع والنشر لعام <ph name="YEAR" /> لشركة Google LLC. جميع الحقوق محفوظة.</translation>
 <translation id="840084489713044809">‏يرغب Google Chrome في تصدير كلمات المرور.</translation>
 <translation id="8498858610309223613">‏تم للتو تطبيق تحديث أمان خاص لمتصفِّح Google Chrome. ويمكنك الآن إعادة التشغيل وستتم استعادة علامات التبويب.</translation>
@@ -246,8 +258,10 @@
 <translation id="8641606876632989680">‏في حال تسجيل الدخول باستخدام كلمة مرور محتمَل تعرّضها للاختراق، سيرسل Chrome إشعارات إليك.</translation>
 <translation id="8669527147644353129">‏مساعد Google Chrome</translation>
 <translation id="8679801911857917785">‏كما أنها تتحكم في الصفحة التي تظهر عند تشغيل Chrome.</translation>
+<translation id="8681614230122836773">‏عثر متصفّح Chrome على برنامج ضارّ على جهاز الكمبيوتر.</translation>
 <translation id="870251953148363156">‏&amp;تحديث Google Chrome</translation>
 <translation id="873133009373065397">‏يتعذَّر على Google Chrome تحديد المتصفح التلقائي أو تعيينه</translation>
+<translation id="8748242232968346981">‏هل تريد إنشاء ملف شخصي خاص بك على متصفِّح Chrome؟</translation>
 <translation id="8823341990149967727">‏إصدار Chrome قديم</translation>
 <translation id="8834965163890861871">‏يحاول Google Chrome تعديل كلمات المرور. للسماح بذلك، يُرجى كتابة كلمة مرور Windows الخاصة بك.</translation>
 <translation id="884296878221830158">‏كما أنها تتحكم في الصفحة التي تظهر عند تشغيل Chrome أو النقر على زر الصفحة الرئيسية.</translation>

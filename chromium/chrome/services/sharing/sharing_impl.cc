@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/callback.h"
+#include "chrome/services/sharing/nearby/decoder/nearby_decoder.h"
 #include "chrome/services/sharing/nearby/nearby_connections.h"
-#include "chrome/services/sharing/nearby_decoder/nearby_decoder.h"
 #include "chrome/services/sharing/public/mojom/nearby_decoder.mojom.h"
 #include "chrome/services/sharing/webrtc/sharing_webrtc_connection.h"
 #include "jingle/glue/thread_wrapper.h"
@@ -23,8 +23,8 @@ SharingImpl::SharingImpl(mojo::PendingReceiver<mojom::Sharing> receiver)
 SharingImpl::~SharingImpl() = default;
 
 void SharingImpl::CreateSharingWebRtcConnection(
-    mojo::PendingRemote<mojom::SignallingSender> signalling_sender,
-    mojo::PendingReceiver<mojom::SignallingReceiver> signalling_receiver,
+    mojo::PendingRemote<mojom::SignalingSender> signaling_sender,
+    mojo::PendingReceiver<mojom::SignalingReceiver> signaling_receiver,
     mojo::PendingRemote<mojom::SharingWebRtcConnectionDelegate> delegate,
     mojo::PendingReceiver<mojom::SharingWebRtcConnection> connection,
     mojo::PendingRemote<network::mojom::P2PSocketManager> socket_manager,
@@ -36,7 +36,7 @@ void SharingImpl::CreateSharingWebRtcConnection(
   // base::Unretained is safe as the |peer_connection| is owned by |this|.
   auto sharing_connection = std::make_unique<SharingWebRtcConnection>(
       webrtc_peer_connection_factory_.get(), std::move(ice_servers),
-      std::move(signalling_sender), std::move(signalling_receiver),
+      std::move(signaling_sender), std::move(signaling_receiver),
       std::move(delegate), std::move(connection), std::move(socket_manager),
       std::move(mdns_responder),
       base::BindOnce(&SharingImpl::SharingWebRtcConnectionDisconnected,
@@ -47,14 +47,14 @@ void SharingImpl::CreateSharingWebRtcConnection(
 }
 
 void SharingImpl::CreateNearbyConnections(
-    mojo::PendingRemote<NearbyConnectionsHostMojom> host,
+    NearbyConnectionsDependenciesPtr dependencies,
     CreateNearbyConnectionsCallback callback) {
   // Reset old instance of Nearby Connections stack.
   nearby_connections_.reset();
 
   mojo::PendingRemote<NearbyConnectionsMojom> remote;
   nearby_connections_ = std::make_unique<NearbyConnections>(
-      remote.InitWithNewPipeAndPassReceiver(), std::move(host),
+      remote.InitWithNewPipeAndPassReceiver(), std::move(dependencies),
       base::BindOnce(&SharingImpl::NearbyConnectionsDisconnected,
                      weak_ptr_factory_.GetWeakPtr()));
   std::move(callback).Run(std::move(remote));

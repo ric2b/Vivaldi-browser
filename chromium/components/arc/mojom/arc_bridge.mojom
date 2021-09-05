@@ -34,6 +34,7 @@ import "components/arc/mojom/net.mojom";
 import "components/arc/mojom/notifications.mojom";
 import "components/arc/mojom/obb_mounter.mojom";
 import "components/arc/mojom/oemcrypto.mojom";
+import "components/arc/mojom/payment_app.mojom";
 import "components/arc/mojom/pip.mojom";
 import "components/arc/mojom/policy.mojom";
 import "components/arc/mojom/power.mojom";
@@ -42,6 +43,7 @@ import "components/arc/mojom/process.mojom";
 import "components/arc/mojom/property.mojom";
 import "components/arc/mojom/rotation_lock.mojom";
 import "components/arc/mojom/screen_capture.mojom";
+import "components/arc/mojom/sensor.mojom";
 import "components/arc/mojom/storage_manager.mojom";
 import "components/arc/mojom/timer.mojom";
 import "components/arc/mojom/tracing.mojom";
@@ -54,9 +56,9 @@ import "components/arc/mojom/volume_mounter.mojom";
 import "components/arc/mojom/wake_lock.mojom";
 import "components/arc/mojom/wallpaper.mojom";
 
-// Next MinVersion: 49
+// Next MinVersion: 51
 // Deprecated method IDs: 101, 105, 121
-// Next method ID: 154
+// Next method ID: 156
 interface ArcBridgeHost {
   // Keep the entries alphabetical. In order to do so without breaking
   // compatibility with the ARC instance, explicitly assign each interface a
@@ -181,6 +183,10 @@ interface ArcBridgeHost {
   [MinVersion=28] OnOemCryptoInstanceReady@133(
       pending_remote<OemCryptoInstance> instance_remote);
 
+  // Notifies Chrome that the PaymentAppInstance interface is ready.
+  [MinVersion=50] OnPaymentAppInstanceReady@155(
+      pending_remote<PaymentAppInstance> instance_remote);
+
   // Notifies Chrome that the PipInstance interface is ready.
   [MinVersion=41] OnPipInstanceReady@146(
       pending_remote<PipInstance> instance_remote);
@@ -210,6 +216,10 @@ interface ArcBridgeHost {
   // Notifies Chrome that the ScreenCaptureInstance interface is ready.
   [MinVersion=35] OnScreenCaptureInstanceReady@140(
       pending_remote<ScreenCaptureInstance> instance_remote);
+
+  // Notifies Chrome that the SensorInstance interface is ready.
+  [MinVersion=49] OnSensorInstanceReady@154(
+      pending_remote<SensorInstance> instance_ptr);
 
   // Notifies Chrome that the SmartCardManagerInstance interface is ready.
   [MinVersion=48] OnSmartCardManagerInstanceReady@153(

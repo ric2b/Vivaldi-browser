@@ -20,6 +20,7 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_notifications.h"
+#include "chrome/browser/apps/app_service/arc_activity_adaptive_icon_impl.h"
 #include "chrome/browser/apps/app_service/arc_icon_once_loader.h"
 #include "chrome/browser/apps/app_service/icon_key_util.h"
 #include "chrome/browser/apps/app_service/paused_apps.h"
@@ -76,7 +77,7 @@ class ArcApps : public KeyedService,
                apps::mojom::ConnectOptionsPtr opts) override;
   void LoadIcon(const std::string& app_id,
                 apps::mojom::IconKeyPtr icon_key,
-                apps::mojom::IconCompression icon_compression,
+                apps::mojom::IconType icon_type,
                 int32_t size_hint_in_dip,
                 bool allow_placeholder_icon,
                 LoadIconCallback callback) override;
@@ -92,6 +93,7 @@ class ArcApps : public KeyedService,
   void SetPermission(const std::string& app_id,
                      apps::mojom::PermissionPtr permission) override;
   void Uninstall(const std::string& app_id,
+                 apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
                  bool report_abuse) override;
   void PauseApp(const std::string& app_id) override;
@@ -153,7 +155,7 @@ class ArcApps : public KeyedService,
   void OnInstanceRegistryWillBeDestroyed(
       apps::InstanceRegistry* instance_registry) override;
 
-  void LoadPlayStoreIcon(apps::mojom::IconCompression icon_compression,
+  void LoadPlayStoreIcon(apps::mojom::IconType icon_type,
                          int32_t size_hint_in_dip,
                          IconEffects icon_effects,
                          LoadIconCallback callback);
@@ -165,6 +167,8 @@ class ArcApps : public KeyedService,
   void ConvertAndPublishPackageApps(
       const arc::mojom::ArcPackageInfo& package_info,
       bool update_icon = true);
+  IconEffects GetIconEffects(const std::string& app_id,
+                             const ArcAppListPrefs::AppInfo& app_info);
   void SetIconEffect(const std::string& app_id);
   void CloseTasks(const std::string& app_id);
   void UpdateAppIntentFilters(
@@ -187,6 +191,7 @@ class ArcApps : public KeyedService,
 
   Profile* const profile_;
   ArcIconOnceLoader arc_icon_once_loader_;
+  ArcActivityAdaptiveIconImpl arc_activity_adaptive_icon_impl_;
 
   apps_util::IncrementingIconKeyFactory icon_key_factory_;
 

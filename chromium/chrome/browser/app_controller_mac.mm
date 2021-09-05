@@ -44,7 +44,6 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/mac/mac_startup_profiler.h"
-#include "chrome/browser/policy/chrome_browser_cloud_management_controller.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -93,6 +92,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #include "components/handoff/handoff_manager.h"
 #include "components/handoff/handoff_utility.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
@@ -120,7 +120,7 @@
 #include "browser/vivaldi_app_observer.h"
 #include "extensions/api/menubar/menubar_api.h"
 #include "prefs/vivaldi_gen_prefs.h"
-#import  "third_party/sparkle_lib/Sparkle.framework/Headers/SUUpdater.h"
+#import  "thirdparty/macsparkle/Sparkle/SUUpdater.h"
 #include "ui/vivaldi_bookmark_menu_mac.h"
 
 using apps::AppShimManager;
@@ -350,6 +350,10 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 @synthesize startupComplete = _startupComplete;
 
 - (void)dealloc {
+  if (vivaldi::IsVivaldiRunning()) {
+    [[SUUpdater sharedUpdater] setDelegate:nil];
+    [_sparkle_updater_delegate release];
+  }
   [[_closeTabMenuItem menu] setDelegate:nil];
   [super dealloc];
 }
@@ -761,6 +765,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     return;
   }
 
+  if (vivaldi::IsVivaldiRunning()) {
+    _sparkle_updater_delegate = [[SparkleUpdaterDelegate alloc] init];
+    [[SUUpdater sharedUpdater] setDelegate:_sparkle_updater_delegate];
+  }
+
   MacStartupProfiler::GetInstance()->Profile(
       MacStartupProfiler::DID_FINISH_LAUNCHING);
   MacStartupProfiler::GetInstance()->RecordMetrics();
@@ -820,8 +829,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     _localPrefRegistrar.Init(localState);
     _localPrefRegistrar.Add(
         prefs::kAllowFileSelectionDialogs,
-        base::Bind(&chrome::BrowserCommandController::UpdateOpenFileState,
-                   _menuState.get()));
+        base::BindRepeating(
+            &chrome::BrowserCommandController::UpdateOpenFileState,
+            _menuState.get()));
   }
 
   _handoff_active_url_observer_bridge.reset(
@@ -1933,10 +1943,10 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   _profilePrefRegistrar->Init(_lastProfile->GetPrefs());
   _profilePrefRegistrar->Add(
       prefs::kIncognitoModeAvailability,
-      base::Bind(&chrome::BrowserCommandController::
-                     UpdateSharedCommandsForIncognitoAvailability,
-                 _menuState.get(),
-                 _lastProfile));
+      base::BindRepeating(&chrome::BrowserCommandController::
+                              UpdateSharedCommandsForIncognitoAvailability,
+                          _menuState.get(), _lastProfile));
+
   if (vivaldi::IsVivaldiRunning()) {
     _profilePrefRegistrar->Add(
         vivaldiprefs::kBookmarksManagerSorting,

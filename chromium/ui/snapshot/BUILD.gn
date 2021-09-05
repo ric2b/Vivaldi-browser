@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -12,7 +11,7 @@ import("//testing/test.gni")
 # TODO(crbug.com/1018739): remove this when migration is done.
 set_sources_assignment_filter([])
 
-jumbo_component("snapshot") {
+component("snapshot") {
   sources = [
     "screenshot_grabber.cc",
     "screenshot_grabber.h",
@@ -79,19 +78,23 @@ jumbo_component("snapshot") {
   }
 
   if (is_mac) {
-    libs = [
+    frameworks = [
       "AppKit.framework",
       "CoreGraphics.framework",
     ]
   }
 }
 
-jumbo_source_set("snapshot_export") {
+source_set("snapshot_export") {
   sources = [ "snapshot_export.h" ]
   visibility = [ ":*" ]
 }
 
 test("snapshot_unittests") {
+  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
+    use_xvfb = true
+  }
+
   sources = [ "test/run_all_unittests.cc" ]
 
   if (is_mac) {

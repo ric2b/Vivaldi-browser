@@ -52,6 +52,17 @@ cast_source_set("feature_list") {
   ]
 }
 
+cast_source_set("web_preferences") {
+  sources = [
+    "cast_web_preferences.cc",
+    "cast_web_preferences.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/common",
+  ]
+}
+
 cast_source_set("browser") {
   sources = [
     "application_media_capabilities.cc",
@@ -127,13 +138,16 @@ cast_source_set("browser") {
     "service/cast_service_simple.h",
     "service_connector.cc",
     "service_connector.h",
-    "tts/tts_controller.h",
-    "tts/tts_controller_impl.cc",
-    "tts/tts_controller_impl.h",
-    "tts/tts_platform.cc",
-    "tts/tts_platform.h",
-    "tts/tts_platform_stub.cc",
-    "tts/tts_platform_stub.h",
+    "webui/cast_resource_data_source.cc",
+    "webui/cast_resource_data_source.h",
+    "webui/cast_webui.cc",
+    "webui/cast_webui.h",
+    "webui/cast_webui_controller_factory.cc",
+    "webui/cast_webui_controller_factory.h",
+    "webui/cast_webui_message_handler.cc",
+    "webui/cast_webui_message_handler.h",
+    "webui/constants.cc",
+    "webui/constants.h",
   ]
 
   if (chromecast_branding == "public") {
@@ -154,6 +168,7 @@ cast_source_set("browser") {
 
   deps = [
     ":browser_buildflags",
+    ":web_preferences",
     "//base",
     "//base:i18n",
     "//base/util/memory_pressure",
@@ -168,6 +183,8 @@ cast_source_set("browser") {
     "//chromecast/base:cast_version",
     "//chromecast/browser/bluetooth/public/mojom",
     "//chromecast/browser/general_audience_browsing/mojom",
+    "//chromecast/browser/mojom",
+    "//chromecast/browser/webui/mojom",
     "//chromecast/common",
     "//chromecast/common:queryable_data",
     "//chromecast/common/media",
@@ -189,6 +206,7 @@ cast_source_set("browser") {
     "//components/metrics",
     "//components/metrics:content",
     "//components/metrics:net",
+    "//components/on_load_script_injector/browser",
     "//components/variations/net",
 
     # TODO(gfhuang): Eliminate this dependency if ScreenInfoMetricsProvider
@@ -211,6 +229,7 @@ cast_source_set("browser") {
     "//media",
     "//media/mojo/mojom:remoting",
     "//media/mojo/services",
+    "//mojo/public/cpp/bindings",
     "//net",
     "//services/media_session/public/mojom",
     "//services/network/public/mojom",
@@ -249,7 +268,7 @@ cast_source_set("browser") {
     ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [
       "cast_system_memory_pressure_evaluator.cc",
       "cast_system_memory_pressure_evaluator.h",
@@ -368,7 +387,8 @@ cast_source_set("browser") {
       "extensions/cast_kiosk_delegate.h",
       "extensions/cast_prefs.cc",
       "extensions/cast_prefs.h",
-      "extensions/stub_storage_monitor.cc",
+      "webui/cast_extension_webui.cc",
+      "webui/cast_extension_webui.h",
     ]
     if (use_aura) {
       sources += [
@@ -406,9 +426,11 @@ cast_source_set("browser") {
       "//ui/views:views",
       "//ui/wm/public:public",
     ]
+  } else {
+    sources += [ "webui/cast_webui_default.cc" ]
   }
 
-  if (is_linux && use_ozone) {
+  if ((is_linux || is_chromeos) && use_ozone) {
     sources += [
       "exo/cast_wm_helper.cc",
       "exo/cast_wm_helper.h",
@@ -589,14 +611,6 @@ cast_source_set("unittests") {
     deps += [
       "//ui/aura:test_support",
       "//ui/events:test_support",
-    ]
-  }
-
-  if (is_linux && use_ozone) {
-    sources += [ "webview/webview_window_manager_unittest.cc" ]
-    deps += [
-      "//chromecast/graphics",
-      "//components/exo",
     ]
   }
 }

@@ -362,7 +362,7 @@ class CupsPrintersManagerTest : public testing::Test,
         std::make_unique<FakeEnterprisePrintersProvider>();
     enterprise_printers_provider_ = enterprise_printers_provider.get();
 
-    // Register the pref |UserNativePrintersAllowed|
+    // Register the pref |UserPrintersAllowed|
     CupsPrintersManager::RegisterProfilePrefs(pref_service_.registry());
 
     manager_ = CupsPrintersManager::CreateForTesting(
@@ -417,7 +417,7 @@ class CupsPrintersManagerTest : public testing::Test,
   // This is unused, it's just here for memory ownership.
   PrinterEventTracker event_tracker_;
 
-  // PrefService used to register the |UserNativePrintersAllowed| pref and
+  // PrefService used to register the |UserPrintersAllowed| pref and
   // change its value for testing.
   sync_preferences::TestingPrefServiceSyncable pref_service_;
 
@@ -434,7 +434,7 @@ PrinterDetector::DetectedPrinter MakeDiscoveredPrinter(const std::string& id,
                                                        const std::string& uri) {
   PrinterDetector::DetectedPrinter ret;
   ret.printer.set_id(id);
-  ret.printer.set_uri(uri);
+  ret.printer.SetUri(uri);
   return ret;
 }
 
@@ -446,7 +446,7 @@ PrinterDetector::DetectedPrinter MakeDiscoveredPrinter(const std::string& id) {
 // Calls MakeDiscoveredPrinter with the USB protocol as the uri.
 PrinterDetector::DetectedPrinter MakeUsbDiscoveredPrinter(
     const std::string& id) {
-  return MakeDiscoveredPrinter(id, "usb:");
+  return MakeDiscoveredPrinter(id, "usb://host/path");
 }
 
 // Pseudo-constructor for inline creation of a DetectedPrinter that should (in
@@ -606,7 +606,7 @@ TEST_F(CupsPrintersManagerTest, GetPrinter) {
   EXPECT_FALSE(printer);
 }
 
-// Test that if |UserNativePrintersAllowed| pref is set to false, then
+// Test that if |UserPrintersAllowed| pref is set to false, then
 // GetPrinters() will only return printers from
 // |PrinterClass::kEnterprise|.
 TEST_F(CupsPrintersManagerTest, GetPrintersUserNativePrintersDisabled) {
@@ -615,7 +615,7 @@ TEST_F(CupsPrintersManagerTest, GetPrintersUserNativePrintersDisabled) {
   task_environment_.RunUntilIdle();
 
   // Disable the use of non-enterprise printers.
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, false);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
   // Verify that non-enterprise printers are not returned by GetPrinters()
   std::vector<Printer> saved_printers =
@@ -628,7 +628,7 @@ TEST_F(CupsPrintersManagerTest, GetPrintersUserNativePrintersDisabled) {
   ExpectPrinterIdsAre(enterprise_printers, {"Enterprise"});
 }
 
-// Test that if |UserNativePrintersAllowed| pref is set to false, then
+// Test that if |UserPrintersAllowed| pref is set to false, then
 // SavePrinter() will simply do nothing.
 TEST_F(CupsPrintersManagerTest, SavePrinterUserNativePrintersDisabled) {
   // Start by installing a saved printer to be used to test than any
@@ -645,7 +645,7 @@ TEST_F(CupsPrintersManagerTest, SavePrinterUserNativePrintersDisabled) {
   ExpectPrintersInClassAre(PrinterClass::kDiscovered, {"Discovered"});
 
   // Disable the use of non-enterprise printers.
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, false);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
   // Update the existing saved printer. Verify that the changes did not
   // progogate.
@@ -654,36 +654,36 @@ TEST_F(CupsPrintersManagerTest, SavePrinterUserNativePrintersDisabled) {
   task_environment_.RunUntilIdle();
 
   // Reenable user printers in order to do checking.
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, true);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, true);
   ExpectPrintersInClassAre(PrinterClass::kSaved, {"Saved"});
   EXPECT_EQ(manager_->GetPrinters(PrinterClass::kSaved)[0].display_name(), "");
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, false);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
   // Attempt to update the Automatic and Discovered printers. In both cases
   // check that the printers do not move into the saved category.
   manager_->SavePrinter(Printer("Automatic"));
   task_environment_.RunUntilIdle();
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, true);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, true);
   ExpectPrintersInClassAre(PrinterClass::kAutomatic, {"Automatic"});
   ExpectPrintersInClassAre(PrinterClass::kSaved, {"Saved"});
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, false);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
   manager_->SavePrinter(Printer("Discovered"));
   task_environment_.RunUntilIdle();
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, true);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, true);
   ExpectPrintersInClassAre(PrinterClass::kDiscovered, {"Discovered"});
   ExpectPrintersInClassAre(PrinterClass::kSaved, {"Saved"});
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, false);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
   // Attempt to update a printer that we haven't seen before, check that nothing
   // changed.
   manager_->SavePrinter(Printer("NewFangled"));
   task_environment_.RunUntilIdle();
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, true);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, true);
   ExpectPrintersInClassAre(PrinterClass::kSaved, {"Saved"});
 }
 
-// Test that if |UserNativePrintersAllowed| pref is set to false GetPrinter only
+// Test that if |UserPrintersAllowed| pref is set to false GetPrinter only
 // returns a printer when the given printer id corresponds to an enterprise
 // printer. Otherwise, it returns nothing.
 TEST_F(CupsPrintersManagerTest, GetPrinterUserNativePrintersDisabled) {
@@ -695,8 +695,8 @@ TEST_F(CupsPrintersManagerTest, GetPrinterUserNativePrintersDisabled) {
   ExpectPrintersInClassAre(PrinterClass::kSaved, {"Saved"});
   ExpectPrintersInClassAre(PrinterClass::kEnterprise, {"Enterprise"});
 
-  // Diable the use of non-enterprise printers.
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, false);
+  // Disable the use of non-enterprise printers.
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
   base::Optional<Printer> saved_printer = manager_->GetPrinter("Saved");
   EXPECT_FALSE(saved_printer);
@@ -747,7 +747,7 @@ TEST_F(CupsPrintersManagerTest, UpdatedPrinterConfiguration) {
   manager_->PrinterInstalled(printer, /*is_automatic=*/false);
 
   Printer updated(printer);
-  updated.set_uri("different value");
+  updated.SetUri("ipp://different.value");
   EXPECT_FALSE(manager_->IsPrinterInstalled(updated));
 
   updated = printer;
@@ -774,7 +774,7 @@ TEST_F(CupsPrintersManagerTest, UpdatedPrinterConfiguration) {
 // Test that we can save non-discovered printers.
 TEST_F(CupsPrintersManagerTest, SavePrinterSucceedsOnManualPrinter) {
   Printer printer(kPrinterId);
-  printer.set_uri("manual uri");
+  printer.SetUri("ipp://manual.uri");
   manager_->SavePrinter(printer);
 
   auto saved_printers = manager_->GetPrinters(PrinterClass::kSaved);
@@ -800,7 +800,7 @@ TEST_F(CupsPrintersManagerTest, SavePrinterUpdatesPreviouslyInstalledPrinter) {
   EXPECT_TRUE(manager_->IsPrinterInstalled(printer));
 
   Printer updated(printer);
-  updated.set_uri("different value");
+  updated.SetUri("ipps://different/value");
   EXPECT_FALSE(manager_->IsPrinterInstalled(updated));
 
   manager_->SavePrinter(updated);
@@ -816,7 +816,7 @@ TEST_F(CupsPrintersManagerTest, SavePrinterUpdatesPreviouslyInstalledPrinter) {
 // Automatic USB Printer is configured automatically.
 TEST_F(CupsPrintersManagerTest, AutomaticUsbPrinterIsInstalledAutomatically) {
   auto automatic_printer = MakeAutomaticPrinter(kPrinterId);
-  automatic_printer.printer.set_uri("usb:");
+  automatic_printer.printer.SetUri("usb://host/path");
 
   usb_detector_->AddDetections({automatic_printer});
 
@@ -825,14 +825,14 @@ TEST_F(CupsPrintersManagerTest, AutomaticUsbPrinterIsInstalledAutomatically) {
   EXPECT_TRUE(printer_configurer_->IsConfigured(kPrinterId));
 }
 
-// Automatic USB Printer is *not* configured if |UserNativePrintersAllowed|
+// Automatic USB Printer is *not* configured if |UserPrintersAllowed|
 // pref is set to false.
 TEST_F(CupsPrintersManagerTest, AutomaticUsbPrinterNotInstalledAutomatically) {
   // Disable the use of non-enterprise printers.
-  UpdatePolicyValue(prefs::kUserNativePrintersAllowed, false);
+  UpdatePolicyValue(prefs::kUserPrintersAllowed, false);
 
   auto automatic_printer = MakeAutomaticPrinter(kPrinterId);
-  automatic_printer.printer.set_uri("usb:");
+  automatic_printer.printer.SetUri("usb://host/path");
 
   zeroconf_detector_->AddDetections({automatic_printer});
 
@@ -845,7 +845,7 @@ TEST_F(CupsPrintersManagerTest, AutomaticUsbPrinterNotInstalledAutomatically) {
 // installed.
 TEST_F(CupsPrintersManagerTest, OtherNearbyPrintersNotInstalledAutomatically) {
   auto discovered_printer = MakeDiscoveredPrinter("Discovered");
-  discovered_printer.printer.set_uri("usb:");
+  discovered_printer.printer.SetUri("usb://host/path");
   auto automatic_printer = MakeAutomaticPrinter("Automatic");
 
   usb_detector_->AddDetections({discovered_printer});
@@ -861,7 +861,7 @@ TEST_F(CupsPrintersManagerTest, OtherNearbyPrintersNotInstalledAutomatically) {
 
 TEST_F(CupsPrintersManagerTest, DetectedUsbPrinterConfigurationNotification) {
   auto discovered_printer = MakeDiscoveredPrinter("Discovered");
-  discovered_printer.printer.set_uri("usb:");
+  discovered_printer.printer.SetUri("usb://host/path");
 
   usb_detector_->AddDetections({discovered_printer});
   task_environment_.RunUntilIdle();
@@ -877,7 +877,7 @@ TEST_F(CupsPrintersManagerTest, DetectedUsbPrinterConfigurationNotification) {
 TEST_F(CupsPrintersManagerTest,
        DetectedZeroconfDiscoveredPrinterNoNotification) {
   auto discovered_printer = MakeDiscoveredPrinter("Discovered");
-  discovered_printer.printer.set_uri("ipp:");
+  discovered_printer.printer.SetUri("ipp://host");
 
   zeroconf_detector_->AddDetections({discovered_printer});
   task_environment_.RunUntilIdle();
@@ -935,19 +935,6 @@ TEST_F(CupsPrintersManagerTest, RecordNearbyNetworkPrinterCounts) {
   task_environment_.RunUntilIdle();
   histogram_tester.ExpectBucketCount("Printing.CUPS.NearbyNetworkPrintersCount",
                                      2, 1);
-}
-
-TEST_F(CupsPrintersManagerTest, IsIppUri) {
-  // IPP protocol
-  ASSERT_TRUE(IsIppUri("ipp://1.2.3.4"));
-  // IPPS protocol
-  ASSERT_TRUE(IsIppUri("ipps://1.2.3.4"));
-  // USB protocol
-  ASSERT_FALSE(IsIppUri("usb://1.2.3.4"));
-  // Malformed URI
-  ASSERT_FALSE(IsIppUri("ipp/1.2.3.4"));
-  // Empty URI
-  ASSERT_FALSE(IsIppUri(""));
 }
 
 }  // namespace

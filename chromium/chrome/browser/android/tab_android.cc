@@ -27,7 +27,6 @@
 #include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -43,6 +42,7 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/common/url_constants.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
@@ -373,14 +373,6 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
   GURL gurl(base::android::ConvertJavaStringToUTF8(env, url));
   if (gurl.is_empty())
     return PAGE_LOAD_FAILED;
-
-  // If the page was prerendered, use it.
-  // Note in incognito mode, we don't have a PrerenderManager.
-  bool loaded;
-  if (prerender::PrerenderManager::MaybeUsePrerenderedPage(
-          GetProfile(), web_contents(), gurl, &loaded)) {
-    return loaded ? FULL_PRERENDERED_PAGE_LOAD : PARTIAL_PRERENDERED_PAGE_LOAD;
-  }
 
   GURL fixed_url(
       url_formatter::FixupURL(gurl.possibly_invalid_spec(), std::string()));

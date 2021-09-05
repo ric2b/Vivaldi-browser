@@ -6,13 +6,17 @@ package org.chromium.chrome.browser.compositor.overlays.strip;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.graphics.RectF;
+import android.os.Handler;
 import android.os.SystemClock;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
+import org.chromium.chrome.browser.compositor.TitleCache;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
@@ -27,9 +31,14 @@ import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.TabStripSceneLayer;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.ui.base.LocalizationUtils;
@@ -38,12 +47,11 @@ import org.chromium.ui.resources.ResourceManager;
 import java.util.List;
 
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * This class handles managing which {@link StripLayoutHelper} is currently active and dispatches
@@ -82,14 +90,39 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     private TabStripEventHandler mTabStripEventHandler;
 
+    private TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
+    private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
+    private final TabModelSelectorObserver mTabModelSelectorObserver =
+            new EmptyTabModelSelectorObserver() {
+                @Override
+                public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
+                    tabModelSwitched(newModel.isIncognito());
+                }
+            };
+
+    private TabModelObserver mTabModelObserver;
+
+    private final String mDefaultTitle;
+    private final Supplier<TitleCache> mTitleCacheSupplier;
+
     // Vivaldi
     private final ChromeTabbedActivity mActivity;
+    private float mViewportHeightOffset;
+    private boolean mShouldHideOverlay;
 
     private class TabStripEventHandler implements GestureHandler {
         @Override
         public void onDown(float x, float y, boolean fromMouse, int buttons) {
+            // Note(david@vivaldi.com): We need to manipulate the y value of the event when the
+            // toolbar is at the bottom in order to handle the input events.
+            if (ChromeApplication.isVivaldi()) {
+                if (mModelSelectorButton.onDown(x, mViewportHeightOffset - y)) return;
+                getActiveStripLayoutHelper().onDown(
+                        time(), x, mViewportHeightOffset - y, fromMouse, buttons);
+            } else {
             if (mModelSelectorButton.onDown(x, y)) return;
             getActiveStripLayoutHelper().onDown(time(), x, y, fromMouse, buttons);
+            }
         }
 
         @Override
@@ -120,6 +153,12 @@ public class StripLayoutHelperManager implements SceneOverlay {
                 mModelSelectorButton.handleClick(time);
                 return;
             }
+            // Note(david@vivaldi.com): Take the viewport offset into account when toolbar is at the
+            // bottom.
+            if(!VivaldiUtils.isTopToolbarOn()) {
+                getActiveStripLayoutHelper().click(
+                        time(), x, mViewportHeightOffset - y, fromMouse, buttons);
+            } else
             getActiveStripLayoutHelper().click(time(), x, y, fromMouse, buttons);
         }
 
@@ -145,15 +184,18 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     /**
      * Creates an instance of the {@link StripLayoutHelperManager}.
-     * @param context           The current Android {@link Context}.
-     * @param updateHost        The parent {@link LayoutUpdateHost}.
-     * @param renderHost        The {@link LayoutRenderHost}.
+     * @param context The current Android {@link Context}.
+     * @param updateHost The parent {@link LayoutUpdateHost}.
+     * @param renderHost The {@link LayoutRenderHost}.
+     * @param titleCacheSupplier A supplier of the title cache.
      */
-    public StripLayoutHelperManager(
-            Context context, LayoutUpdateHost updateHost, LayoutRenderHost renderHost) {
+    public StripLayoutHelperManager(Context context, LayoutUpdateHost updateHost,
+            LayoutRenderHost renderHost, Supplier<TitleCache> titleCacheSupplier) {
         mUpdateHost = updateHost;
+        mTitleCacheSupplier = titleCacheSupplier;
         mTabStripTreeProvider = new TabStripSceneLayer(context);
         mTabStripEventHandler = new TabStripEventHandler();
+        mDefaultTitle = context.getString(R.string.tab_loading_default_title);
         mEventFilter =
                 new AreaGestureEventFilter(context, mTabStripEventHandler, null, false, false);
 
@@ -185,6 +227,13 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
         Resources res = context.getResources();
 
+        // Note(david@vivaldi.com): In order to avoid a line between tab strip and address-bar we
+        // apply a margin.
+        if (ChromeApplication.isVivaldi()) {
+            final int tabStripMargin = 2;
+            mHeight = (res.getDimension(R.dimen.tab_strip_height) + tabStripMargin)
+                    / res.getDisplayMetrics().density;
+        } else
         mHeight = res.getDimension(R.dimen.tab_strip_height) / res.getDisplayMetrics().density;
         mModelSelectorButton.setAccessibilityDescription(
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
@@ -194,6 +243,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
         // Vivaldi
         mActivity = (ChromeTabbedActivity)context;
+        mShouldHideOverlay = false;
     }
 
     /**
@@ -204,6 +254,14 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mTabStripTreeProvider = null;
         mIncognitoHelper.destroy();
         mNormalHelper.destroy();
+        if (mTabModelSelector != null) {
+            mTabModelSelector.getTabModelFilterProvider().removeTabModelFilterObserver(
+                    mTabModelObserver);
+
+            mTabModelSelector.removeObserver(mTabModelSelectorObserver);
+            mTabModelSelectorTabModelObserver.destroy();
+            mTabModelSelectorTabObserver.destroy();
+        }
     }
 
     private void handleModelSelectorButtonClick() {
@@ -232,6 +290,22 @@ public class StripLayoutHelperManager implements SceneOverlay {
     public SceneOverlayLayer getUpdatedSceneOverlayTree(RectF viewport, RectF visibleViewport,
             LayerTitleCache layerTitleCache, ResourceManager resourceManager, float yOffset) {
         assert mTabStripTreeProvider != null;
+
+        // Note(david@vivaldi.com): Apply the correct |yOffset| according to the toolbar position.
+        if (!VivaldiUtils.isTopToolbarOn() && !mShouldHideOverlay) {
+            mViewportHeightOffset = viewport.height()
+                    * (1.f / mActivity.getResources().getDisplayMetrics().density);
+            yOffset += mViewportHeightOffset - mHeight;
+        } else {
+            mViewportHeightOffset = 0;
+            // Add vertical offset when there is an active panel.
+            if (mActivity.getLayoutManager() != null) {
+                OverlayPanel panel =
+                        mActivity.getLayoutManager().getOverlayPanelManager().getActivePanel();
+                if (panel != null) yOffset += panel.getBasePageY();
+            }
+            yOffset += 0;
+        }
 
         Tab selectedTab = mTabModelSelector.getCurrentModel().getTabAt(
                 mTabModelSelector.getCurrentModel().index());
@@ -295,6 +369,14 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     @Override
     public boolean shouldHideAndroidBrowserControls() {
+        // Note(david@vivaldi.com): We might need to hide the overlay when there is an active panel.
+        // This only applies when toolbar is at the bottom.
+        if (!VivaldiUtils.isTopToolbarOn()) {
+            mShouldHideOverlay =
+                    mActivity.getLayoutManager().getOverlayPanelManager().getActivePanel() != null;
+            mTabStripTreeProvider.shouldHideOverlay(mShouldHideOverlay);
+            return mShouldHideOverlay;
+        }
         return false;
     }
 
@@ -336,14 +418,36 @@ public class StripLayoutHelperManager implements SceneOverlay {
             TabCreatorManager tabCreatorManager) {
         if (mTabModelSelector == modelSelector) return;
 
+        mTabModelObserver = new TabModelObserver() {
+            @Override
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int launchType, @TabCreationState int creationState) {
+                updateTitleForTab(tab);
+            }
+        };
+        modelSelector.getTabModelFilterProvider().addTabModelFilterObserver(mTabModelObserver);
+
         mTabModelSelector = modelSelector;
+
+        if (mTabModelSelector.isTabStateInitialized()) {
+            updateModelSwitcherButton();
+        } else {
+            mTabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {
+                @Override
+                public void onTabStateInitialized() {
+                    updateModelSwitcherButton();
+                    new Handler().post(() -> mTabModelSelector.removeObserver(this));
+                }
+            });
+        }
+
         mNormalHelper.setTabModel(mTabModelSelector.getModel(false),
                 tabCreatorManager.getTabCreator(false));
         mIncognitoHelper.setTabModel(mTabModelSelector.getModel(true),
                 tabCreatorManager.getTabCreator(true));
         tabModelSwitched(mTabModelSelector.isIncognitoSelected());
 
-        new TabModelSelectorTabModelObserver(modelSelector) {
+        mTabModelSelectorTabModelObserver = new TabModelSelectorTabModelObserver(modelSelector) {
             /**
              * @return The actual current time of the app in ms.
              */
@@ -387,16 +491,19 @@ public class StripLayoutHelperManager implements SceneOverlay {
                 getStripLayoutHelper(tab.isIncognito()).tabSelected(time(), tab.getId(), lastId);
             }
 
-            /** Vivaldi **/
             @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type,
-                                  @TabCreationState int creationState) {
+            public void didAddTab(Tab tab, int type, int creationState) {
+                boolean selected = type != TabLaunchType.FROM_LONGPRESS_BACKGROUND
+                        || (mTabModelSelector.isIncognitoSelected() && tab.isIncognito());
+                getStripLayoutHelper(tab.isIncognito())
+                        .tabCreated(
+                                time(), tab.getId(), mTabModelSelector.getCurrentTabId(), selected);
+                // Vivaldi
                 updateModelSwitcherButton();
             }
-
         };
 
-        new TabModelSelectorTabObserver(modelSelector) {
+        mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(modelSelector) {
             @Override
             public void onLoadStarted(Tab tab, boolean toDifferentDocument) {
                 getStripLayoutHelper(tab.isIncognito()).tabLoadStarted(tab.getId());
@@ -427,6 +534,16 @@ public class StripLayoutHelperManager implements SceneOverlay {
                 getStripLayoutHelper(tab.isIncognito()).tabPageLoadFinished(tab.getId());
             }
 
+            @Override
+            public void onTitleUpdated(Tab tab) {
+                updateTitleForTab(tab);
+            }
+
+            @Override
+            public void onFaviconUpdated(Tab tab, Bitmap icon) {
+                updateTitleForTab(tab);
+            }
+
             // Vivaldi
             @Override
             public void onDidChangeThemeColor(Tab tab, int color) {
@@ -438,17 +555,22 @@ public class StripLayoutHelperManager implements SceneOverlay {
         // Vivaldi
         new ActivityTabProvider.ActivityTabTabObserver(mActivity.getActivityTabProvider()) {
             @Override
-            protected void onObservingDifferentTab(Tab tab) {
+            public void onObservingDifferentTab(Tab tab, boolean hint) {
                 if (tab != null && !tab.isBeingRestored())
                     mTabStripTreeProvider.setTabStripBackgroundColor(
                             TabThemeColorHelper.getColor(tab));
             }
         };
+
+        mTabModelSelector.addObserver(mTabModelSelectorObserver);
     }
 
-    @Override
-    public void tabTitleChanged(int tabId, String title) {
-        getActiveStripLayoutHelper().tabTitleChanged(tabId, title);
+    private void updateTitleForTab(Tab tab) {
+        if (mTitleCacheSupplier.get() == null) return;
+
+        String title = mTitleCacheSupplier.get().getUpdatedTitle(tab, mDefaultTitle);
+        getStripLayoutHelper(tab.isIncognito()).tabTitleChanged(tab.getId(), title);
+        mUpdateHost.requestUpdate();
     }
 
     public float getHeight() {
@@ -484,20 +606,11 @@ public class StripLayoutHelperManager implements SceneOverlay {
     }
 
     @Override
-    public void onHideLayout() {}
-
-    @Override
     public boolean handlesTabCreating() {
         return false;
     }
 
-    @Override
-    public void tabStateInitialized() {
-        updateModelSwitcherButton();
-    }
-
-    @Override
-    public void tabModelSwitched(boolean incognito) {
+    private void tabModelSwitched(boolean incognito) {
         if (incognito == mIsIncognito) return;
         mIsIncognito = incognito;
 
@@ -528,11 +641,6 @@ public class StripLayoutHelperManager implements SceneOverlay {
         }
     }
 
-    @Override
-    public void tabCreated(long time, boolean incognito, int id, int prevId, boolean selected) {
-        getStripLayoutHelper(incognito).tabCreated(time, id, prevId, selected);
-    }
-
     /**
      * @param incognito Whether or not you want the incognito StripLayoutHelper
      * @return The requested StripLayoutHelper.
@@ -559,6 +667,12 @@ public class StripLayoutHelperManager implements SceneOverlay {
         TabModel currentTabModel = mTabModelSelector.getCurrentModel();
         if (currentTabModel == null) return;
         if (!currentTabModel.isIncognito()) currentTabModel.commitAllTabClosures();
-        ((ChromeActivity) mActivity).getTabCreator(currentTabModel.isIncognito()).launchNTP();
+        mActivity.getTabCreator(currentTabModel.isIncognito()).launchNTP();
+    }
+
+    /** Vivaldi **/
+    public boolean isSceneOffScreen() {
+        return mActivity.getBrowserControlsManager().areBrowserControlsAtMinHeight()
+                || !VivaldiUtils.isTabStripOn();
     }
 }

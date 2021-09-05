@@ -38,9 +38,6 @@ class CastToolbarButton : public ToolbarButton,
                     std::unique_ptr<MediaRouterContextualMenu> context_menu);
   ~CastToolbarButton() override;
 
-  // Updates the icon image.
-  void UpdateIcon();
-
   // MediaRouterActionController::Observer:
   void ShowIcon() override;
   void HideIcon() override;
@@ -60,23 +57,20 @@ class CastToolbarButton : public ToolbarButton,
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  void UpdateIcon() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
-  // views::View
-  void AddedToWidget() override;
 
   MediaRouterContextualMenu* context_menu_for_test() {
     return context_menu_.get();
   }
 
  private:
-  const gfx::VectorIcon& GetCurrentIcon() const;
-
   MediaRouterActionController* GetActionController() const;
 
-  SkColor GetIconColor(ButtonState state, const gfx::VectorIcon* icon_id) const;
+  // Updates insets per touch ui mode.
+  void UpdateLayoutInsetDelta();
 
   Browser* const browser_;
   Profile* const profile_;

@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_item.h"
 #include "third_party/blink/renderer/core/layout/bidi_run_for_line.h"
+#include "third_party/blink/renderer/core/layout/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_ruby_run.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -553,7 +554,7 @@ static inline void SetLogicalWidthForTextRun(
   bool kerning_is_enabled =
       font.GetFontDescription().GetTypesettingFeatures() & kKerning;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // FIXME: Having any font feature settings enabled can lead to selection gaps
   // on Chromium-mac. https://bugs.webkit.org/show_bug.cgi?id=113418
   bool can_use_cached_word_measurements =
@@ -1457,6 +1458,9 @@ void LayoutBlockFlow::MarkDirtyFloatsForPaintInvalidation(
 //     can have distinct borders/margin/padding that contribute to the min/max
 //     width.
 struct InlineMinMaxIterator {
+  STACK_ALLOCATED();
+
+ public:
   LayoutObject* parent;
   LayoutObject* current;
   bool end_of_inline;
@@ -1612,6 +1616,9 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
     LayoutUnit& max_logical_width) {
   LayoutUnit inline_max;
   LayoutUnit inline_min;
+
+  if (IsListItem())
+    ToLayoutListItem(this)->UpdateMarkerTextIfNeeded();
 
   const ComputedStyle& style_to_use = StyleRef();
 
@@ -2441,7 +2448,7 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
         outline_rects, PhysicalOffset(),
         o.OutlineRectsShouldIncludeBlockVisualOverflow());
     if (!outline_rects.IsEmpty()) {
-      PhysicalRect outline_bounds = UnionRectEvenIfEmpty(outline_rects);
+      PhysicalRect outline_bounds = UnionRect(outline_rects);
       outline_bounds.Inflate(LayoutUnit(o.StyleRef().OutlineOutsetExtent()));
       outline_bounds_of_all_continuations.Unite(outline_bounds);
     }

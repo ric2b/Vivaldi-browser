@@ -13,8 +13,20 @@
 namespace media {
 
 namespace {
+
 const int kDegreesToArcSeconds = 3600;
 const int kSecondsTo100MicroSeconds = 10000;
+
+// Determines if camera is mounted on a device with naturally portrait display.
+bool IsPortraitDevice(DWORD display_height,
+                      DWORD display_width,
+                      int device_angle) {
+  if (device_angle == 0 || device_angle == 180)
+    return display_height >= display_width;
+  else
+    return display_height < display_width;
+}
+
 }  // namespace
 
 // Windows platform stores pan and tilt (min, max, step and current) in
@@ -27,6 +39,10 @@ long CaptureAngleToPlatformValue(double arc_seconds) {
 
 double PlatformAngleToCaptureValue(long degrees) {
   return 1.0 * degrees * kDegreesToArcSeconds;
+}
+
+double PlatformAngleToCaptureStep(long step, double min, double max) {
+  return PlatformAngleToCaptureValue(step);
 }
 
 // Windows platform stores exposure time (min, max and current) in log base 2
@@ -42,8 +58,22 @@ double PlatformExposureTimeToCaptureValue(long log_seconds) {
   return std::exp2(log_seconds) * kSecondsTo100MicroSeconds;
 }
 
-double PlatformExposureTimeToCaptureStep(long log_step) {
-  return std::exp2(log_step);
+double PlatformExposureTimeToCaptureStep(long log_step,
+                                         double min,
+                                         double max) {
+  // The smallest possible value is
+  // |exp2(min_log_seconds) * kSecondsTo100MicroSeconds|.
+  // That value can be computed by PlatformExposureTimeToCaptureValue and is
+  // passed to this function as |min| thus there is not need to recompute it
+  // here.
+  // The second smallest possible value is
+  // |exp2(min_log_seconds + log_step) * kSecondsTo100MicroSeconds| which equals
+  // to |exp2(log_step) * min|.
+  // While the relative step or ratio between consecutive values is always the
+  // same (|std::exp2(log_step)|), the smallest absolute step is between the
+  // smallest and the second smallest possible values i.e. between |min| and
+  // |exp2(log_step) * min|.
+  return (std::exp2(log_step) - 1) * min;
 }
 
 // Note: Because we can't find a solid way to detect camera location (front/back
@@ -79,6 +109,7 @@ int GetCameraRotation(VideoFacingMode facing) {
   if (::EnumDisplaySettings(internal_display_device.DeviceName,
                             ENUM_CURRENT_SETTINGS, &mode)) {
     int device_orientation = 0;
+    int portrait_correction = 0;
     switch (mode.dmDisplayOrientation) {
       case DMDO_DEFAULT:
         device_orientation = 0;
@@ -93,7 +124,13 @@ int GetCameraRotation(VideoFacingMode facing) {
         device_orientation = 270;
         break;
     }
-    rotation = (360 - device_orientation) % 360;
+    // Correct the 90 degree offset between the camera mounted in landscape and
+    // the default orientation on a naturally portrait device.
+    if (IsPortraitDevice(mode.dmPelsHeight, mode.dmPelsWidth,
+                         device_orientation)) {
+      portrait_correction = 90;
+    }
+    rotation = (360 - device_orientation - portrait_correction) % 360;
   }
 
   return rotation;

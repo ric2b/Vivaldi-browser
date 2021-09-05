@@ -11,17 +11,19 @@ goog.provide('Panel');
 goog.require('AnnotationsUI');
 goog.require('BackgroundKeyboardHandler');
 goog.require('BrailleCommandData');
+goog.require('ChromeVoxKbHandler');
 goog.require('ChromeVoxState');
+goog.require('CommandStore');
 goog.require('EventSourceType');
 goog.require('GestureCommandData');
 goog.require('ISearchUI');
+goog.require('LocaleOutputHelper');
 goog.require('Msgs');
 goog.require('PanelCommand');
 goog.require('PanelMenu');
 goog.require('PanelMenuItem');
 goog.require('Tutorial');
-goog.require('ChromeVoxKbHandler');
-goog.require('CommandStore');
+goog.require('UserAnnotationHandler');
 
 /**
  * Class to manage the panel.
@@ -59,6 +61,7 @@ Panel = class {
     // part of |Background| construction).
     new ChromeVoxState();
     UserAnnotationHandler.init();
+    LocaleOutputHelper.init();
 
     /** @type {Element} @private */
     Panel.speechContainer_ = $('speech-container');
@@ -85,6 +88,18 @@ Panel = class {
     Panel.brailleTableElement_ = $('braille-table');
     Panel.brailleTableElement2_ = $('braille-table2');
 
+    /** @private {Element} */
+    Panel.braillePanLeft_ = $('braille-pan-left');
+    Panel.braillePanLeft_.addEventListener('click', () => {
+      chrome.extension.getBackgroundPage()['ChromeVox'].braille.panLeft();
+    }, false);
+
+    /** @private {Element} */
+    Panel.braillePanRight_ = $('braille-pan-right');
+    Panel.braillePanRight_.addEventListener('click', () => {
+      chrome.extension.getBackgroundPage()['ChromeVox'].braille.panRight();
+    }, false);
+
     /** @type {Panel.Mode} @private */
     Panel.mode_ = Panel.Mode.COLLAPSED;
 
@@ -107,6 +122,20 @@ Panel = class {
      * @private
      */
     Panel.tutorial_ = new Tutorial();
+
+    /**
+     * @type {Object}
+     * @private
+     */
+    Panel.iTutorial = {
+      // Closure needs this to know about the showNextLesson function.
+      // Otherwise, Closure fires an error whenever calling showNextLesson().
+      showNextLesson: () => {
+        throw new Error(
+            'iTutorial should be assigned to the <i-tutorial> ' +
+            'element before calling showNextLesson()');
+      }
+    };
 
     Panel.setPendingCallback(null);
     Panel.updateFromPrefs();
@@ -160,7 +189,6 @@ Panel = class {
 
     /** @private {boolean} */
     Panel.iTutorialEnabled_ = false;
-
     chrome.commandLinePrivate.hasSwitch(
         'enable-experimental-accessibility-chromevox-tutorial', (enabled) => {
           Panel.iTutorialEnabled_ = enabled;
@@ -369,6 +397,10 @@ Panel = class {
         'braille': null,
         'developer': null
       };
+
+      // TODO(accessibility): Commands should be based off of CommandStore and
+      // not the keymap. There are commands that don't have a key binding (e.g.
+      // commands for touch).
 
       // Get the key map from the background page.
       const bkgnd = chrome.extension.getBackgroundPage();
@@ -627,8 +659,24 @@ Panel = class {
       }
     };
 
+    const routeCursor = function(event) {
+      const cell = event.target;
+      if (cell.tagName == 'TD') {
+        const displayPosition = parseInt(cell.id.split('-')[0], 10);
+        if (Number.isNaN(displayPosition)) {
+          throw new Error(
+              'The display position is calculated assuming that the cell ID ' +
+              'is formatted like int-string. For example, 0-brailleCell is a ' +
+              'valid cell ID.');
+        }
+        chrome.extension.getBackgroundPage()['ChromeVox'].braille.route(
+            displayPosition);
+      }
+    };
+
     Panel.brailleContainer_.addEventListener('mouseover', addBorders);
     Panel.brailleContainer_.addEventListener('mouseout', removeBorders);
+    Panel.brailleContainer_.addEventListener('click', routeCursor);
 
     // Clear the tables.
     let rowCount = Panel.brailleTableElement_.rows.length;
@@ -1087,47 +1135,23 @@ Panel = class {
    * @param {string=} opt_page Show a specific page.
    */
   static onTutorial(opt_page) {
-    // Change the url fragment to 'fullscreen', which signals the native
-    // host code to make the window fullscreen, revealing the menus.
     if (Panel.iTutorialEnabled_) {
-      if ($('i-tutorial') === null) {
-        // Load resources if this is the first time opening the tutorial.
-        const tutorialScript = document.createElement('script');
-        tutorialScript.src = '../i_tutorial/i_tutorial.js';
-        tutorialScript.setAttribute('type', 'module');
-        const lessonScript = document.createElement('script');
-        lessonScript.src = '../i_tutorial/tutorial_lesson.js';
-        lessonScript.setAttribute('type', 'module');
-        document.body.appendChild(tutorialScript);
-        document.body.appendChild(lessonScript);
-
-        // Create tutorial container and element.
-        const tutorialContainer = document.createElement('div');
-        tutorialContainer.setAttribute('id', 'i-tutorial-container');
-        tutorialContainer.hidden = true;
-        const tutorialElement = document.createElement('i-tutorial');
-        tutorialElement.setAttribute('id', 'i-tutorial');
-        tutorialContainer.appendChild(tutorialElement);
-        document.body.appendChild(tutorialContainer);
-
-        // Add listeners. These are custom events fired from custom components.
-        $('i-tutorial')
-            .addEventListener('tutorial-close', Panel.onCloseTutorial);
-        $('i-tutorial').addEventListener('request-speech', (evt) => {
-          const text = evt.detail.text;
-          const background = chrome.extension.getBackgroundPage();
-          const cvox = background['ChromeVox'];
-          cvox.tts.speak(
-              text, background.QueueMode.FLUSH, {'doNotInterrupt': true});
-        });
+      if (!$('i-tutorial')) {
+        const curriculum = Panel.sessionState ===
+                chrome.loginState.SessionState.IN_OOBE_SCREEN ?
+            'oobe' :
+            null;
+        Panel.createITutorial(curriculum);
       }
 
       Panel.setMode(Panel.Mode.FULLSCREEN_I_TUTORIAL);
+      if (Panel.iTutorial.show) {
+        Panel.iTutorial.show();
+      }
       return;
     }
 
     Panel.setMode(Panel.Mode.FULLSCREEN_TUTORIAL);
-
     switch (opt_page) {
       case 'updateNotes':
         Panel.tutorial_.updateNotes();
@@ -1135,6 +1159,64 @@ Panel = class {
       default:
         Panel.tutorial_.lastViewedPage();
     }
+  }
+
+  /**
+   * Creates an <i-tutorial> element and adds it to the dom.
+   * @param {(string|null)} curriculum
+   */
+  static createITutorial(curriculum) {
+    const tutorialScript = document.createElement('script');
+    tutorialScript.src = '../i_tutorial/i_tutorial.js';
+    tutorialScript.setAttribute('type', 'module');
+    const lessonScript = document.createElement('script');
+    lessonScript.src = '../i_tutorial/tutorial_lesson.js';
+    lessonScript.setAttribute('type', 'module');
+    document.body.appendChild(tutorialScript);
+    document.body.appendChild(lessonScript);
+
+    // Create tutorial container and element.
+    const tutorialContainer = document.createElement('div');
+    tutorialContainer.setAttribute('id', 'i-tutorial-container');
+    tutorialContainer.hidden = true;
+    const tutorialElement = document.createElement('i-tutorial');
+    tutorialElement.setAttribute('id', 'i-tutorial');
+    if (curriculum) {
+      tutorialElement.curriculum = curriculum;
+    }
+    tutorialContainer.appendChild(tutorialElement);
+    document.body.appendChild(tutorialContainer);
+    Panel.iTutorial = tutorialElement;
+
+    // Add listeners. These are custom events fired from custom components.
+    $('i-tutorial').addEventListener('closetutorial', (evt) => {
+      // Ensure UserActionMonitor is destroyed before closing tutorial.
+      const background =
+          chrome.extension.getBackgroundPage()['ChromeVoxState']['instance'];
+      background.destroyUserActionMonitor();
+      Panel.onCloseTutorial();
+    });
+    $('i-tutorial').addEventListener('requestspeech', (evt) => {
+      const text = evt.detail.text;
+      const background = chrome.extension.getBackgroundPage();
+      const cvox = background['ChromeVox'];
+      cvox.tts.speak(
+          text, background.QueueMode.INTERJECT, {'doNotInterrupt': true});
+    });
+    $('i-tutorial').addEventListener('startinteractivemode', (evt) => {
+      const actions = evt.detail.actions;
+      const background =
+          chrome.extension.getBackgroundPage()['ChromeVoxState']['instance'];
+      background.createUserActionMonitor(actions, () => {
+        background.destroyUserActionMonitor();
+        Panel.iTutorial.showNextLesson();
+      });
+    });
+    $('i-tutorial').addEventListener('stopinteractivemode', (evt) => {
+      const background =
+          chrome.extension.getBackgroundPage()['ChromeVoxState']['instance'];
+      background.destroyUserActionMonitor();
+    });
   }
 
   /**

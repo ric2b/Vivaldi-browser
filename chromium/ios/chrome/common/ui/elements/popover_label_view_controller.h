@@ -7,11 +7,19 @@
 
 #import <UIKit/UIKit.h>
 
+// Delegate which handles interactions inside popover.
+@protocol PopoverLabelViewControllerDelegate
+
+// Notifies the delegate that a link was tapped.
+- (void)didTapLinkURL:(NSURL*)URL;
+
+@end
+
 // Static popover presenting a simple message.
 @interface PopoverLabelViewController : UIViewController
 
 // Init with only a main message shown as the primary label.
-- (instancetype)initWithMessage:(NSString*)message NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithMessage:(NSString*)message;
 
 // Init with primary string and an attributed string set to secondary text.
 - (instancetype)initWithPrimaryAttributedString:
@@ -24,6 +32,8 @@
 - (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
+
+@property(nonatomic, weak) id<PopoverLabelViewControllerDelegate> delegate;
 
 @end
 

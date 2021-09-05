@@ -149,9 +149,9 @@ class TestingSpellCheckProvider : public SpellCheckProvider,
   void GetPerLanguageSuggestions(
       const base::string16& word,
       GetPerLanguageSuggestionsCallback callback) override;
+  void InitializeDictionaries(InitializeDictionariesCallback callback) override;
 #endif  // defined(OS_WIN)
-
-#endif
+#endif  // BUILDFLAG(USE_BROWSER_SPELLCHECKER)
 
 #if defined(OS_ANDROID)
   void DisconnectSessionBridge() override;

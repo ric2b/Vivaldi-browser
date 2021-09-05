@@ -50,22 +50,22 @@ TEST_F(StackTraceTest, OutputToStream) {
   const void* const* addresses = trace.Addresses(&frames_found);
 
 #if defined(OFFICIAL_BUILD) && \
-    ((defined(OS_POSIX) && !defined(OS_MACOSX)) || defined(OS_FUCHSIA))
+    ((defined(OS_POSIX) && !defined(OS_APPLE)) || defined(OS_FUCHSIA))
   // Stack traces require an extra data table that bloats our binaries,
   // so they're turned off for official builds. Stop the test here, so
   // it at least verifies that StackTrace calls don't crash.
   return;
 #endif  // defined(OFFICIAL_BUILD) &&
-        // ((defined(OS_POSIX) && !defined(OS_MACOSX)) || defined(OS_FUCHSIA))
+        // ((defined(OS_POSIX) && !defined(OS_APPLE)) || defined(OS_FUCHSIA))
 
   ASSERT_TRUE(addresses);
   ASSERT_GT(frames_found, 5u) << "Too few frames found.";
 
-#if defined(OFFICIAL_BUILD) && defined(OS_MACOSX)
+#if defined(OFFICIAL_BUILD) && defined(OS_APPLE)
   // Official Mac OS X builds contain enough information to unwind the stack,
   // but not enough to symbolize the output.
   return;
-#endif  // defined(OFFICIAL_BUILD) && defined(OS_MACOSX)
+#endif  // defined(OFFICIAL_BUILD) && defined(OS_APPLE)
 
 #if defined(OS_FUCHSIA) || defined(OS_ANDROID)
   // Under Fuchsia and Android, StackTrace emits executable build-Ids and
@@ -88,8 +88,9 @@ TEST_F(StackTraceTest, OutputToStream) {
 
   // Expect a demangled symbol.
   // Note that Windows Release builds omit the function parameters from the
-  // demangled stack output, otherwise this could be "testing::Test::Run()".
-  EXPECT_TRUE(backtrace_message.find("testing::Test::Run") != std::string::npos)
+  // demangled stack output, otherwise this could be "testing::UnitTest::Run()".
+  EXPECT_TRUE(backtrace_message.find("testing::UnitTest::Run") !=
+              std::string::npos)
       << "Expected a demangled symbol in backtrace:\n"
       << backtrace_message;
 
@@ -320,7 +321,7 @@ TEST_F(StackTraceTest, MAYBE_TraceStackFramePointers) {
   ExpectStackFramePointers<kDepth>(frames, kDepth);
 }
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_APPLE)
 #define MAYBE_StackEnd StackEnd
 #else
 #define MAYBE_StackEnd DISABLED_StackEnd

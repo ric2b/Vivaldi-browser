@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/app_management/app_management.mojom.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
@@ -138,6 +139,14 @@ PluginVmApps::PluginVmApps(
     const mojo::Remote<apps::mojom::AppService>& app_service,
     Profile* profile)
     : profile_(profile), permissions_observer_(this) {
+  // Don't show anything for non-primary profiles. We can't use
+  // `IsPluginVmAllowedForProfile()` here because we still let the user
+  // uninstall Plugin VM when it isn't allowed for some other reasons (e.g.
+  // policy).
+  if (!chromeos::ProfileHelper::IsPrimaryProfile(profile)) {
+    return;
+  }
+
   PublisherBase::Initialize(app_service, apps::mojom::AppType::kPluginVm);
 
   // Register for Plugin VM changes to policy and installed state, so that we
@@ -176,17 +185,16 @@ void PluginVmApps::Connect(
 
 void PluginVmApps::LoadIcon(const std::string& app_id,
                             apps::mojom::IconKeyPtr icon_key,
-                            apps::mojom::IconCompression icon_compression,
+                            apps::mojom::IconType icon_type,
                             int32_t size_hint_in_dip,
                             bool allow_placeholder_icon,
                             LoadIconCallback callback) {
   constexpr bool is_placeholder_icon = false;
   if (icon_key &&
       (icon_key->resource_id != apps::mojom::IconKey::kInvalidResourceId)) {
-    LoadIconFromResource(icon_compression, size_hint_in_dip,
-                         icon_key->resource_id, is_placeholder_icon,
-                         static_cast<IconEffects>(icon_key->icon_effects),
-                         std::move(callback));
+    LoadIconFromResource(
+        icon_type, size_hint_in_dip, icon_key->resource_id, is_placeholder_icon,
+        static_cast<IconEffects>(icon_key->icon_effects), std::move(callback));
     return;
   }
   // On failure, we still run the callback, with the zero IconValue.
@@ -225,6 +233,7 @@ void PluginVmApps::SetPermission(const std::string& app_id,
 }
 
 void PluginVmApps::Uninstall(const std::string& app_id,
+                             apps::mojom::UninstallSource uninstall_source,
                              bool clear_site_data,
                              bool report_abuse) {
   guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile_)

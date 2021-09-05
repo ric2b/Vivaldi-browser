@@ -19,6 +19,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece_forward.h"
+#include "chrome/updater/win/net/proxy_configuration.h"
 #include "chrome/updater/win/net/scoped_hinternet.h"
 #include "components/update_client/network.h"
 #include "url/gurl.h"
@@ -39,7 +40,8 @@ class NetworkFetcherWinHTTP
       update_client::NetworkFetcher::ResponseStartedCallback;
   using FetchProgressCallback = update_client::NetworkFetcher::ProgressCallback;
 
-  explicit NetworkFetcherWinHTTP(const HINTERNET& session_handle_);
+  NetworkFetcherWinHTTP(const HINTERNET& session_handle,
+                        scoped_refptr<ProxyConfiguration> proxy_configuration);
   NetworkFetcherWinHTTP(const NetworkFetcherWinHTTP&) = delete;
   NetworkFetcherWinHTTP& operator=(const NetworkFetcherWinHTTP&) = delete;
 
@@ -66,7 +68,8 @@ class NetworkFetcherWinHTTP
   std::string GetResponseBody() const;
   HRESULT GetNetError() const;
   std::string GetHeaderETag() const;
-  int64_t GetXHeaderRetryAfterSec() const;
+  std::string GetHeaderXCupServerProof() const;
+  int64_t GetHeaderXRetryAfterSec() const;
   base::FilePath GetFilePath() const;
 
   // Returns the number of bytes retrieved from the network. This may be
@@ -94,7 +97,7 @@ class NetworkFetcherWinHTTP
 
   HRESULT BeginFetch(
       const std::string& data,
-      const base::flat_map<std::string, std::string>& additional_headers);
+      base::flat_map<std::string, std::string> additional_headers);
   scoped_hinternet Connect();
   scoped_hinternet OpenRequest();
   HRESULT SendRequest(const std::string& data);
@@ -115,6 +118,7 @@ class NetworkFetcherWinHTTP
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
 
   const HINTERNET& session_handle_;  // Owned by NetworkFetcherWinHTTPFactory.
+  scoped_refptr<ProxyConfiguration> proxy_configuration_;
   scoped_hinternet connect_handle_;
   scoped_hinternet request_handle_;
 
@@ -130,11 +134,13 @@ class NetworkFetcherWinHTTP
   std::string path_for_request_;
 
   base::StringPiece16 verb_;
-  base::string16 content_type_;
+  // The value of Content-Type header, e.g. "application/json".
+  std::string content_type_;
   WriteDataCallback write_data_callback_;
   HRESULT net_error_ = S_OK;
-  std::string etag_;
-  int64_t xheader_retry_after_sec_ = -1;
+  std::string header_etag_;
+  std::string header_x_cup_server_proof_;
+  int64_t header_x_retry_after_sec_ = -1;
   std::vector<char> read_buffer_;
   std::string post_response_body_;
   base::FilePath file_path_;

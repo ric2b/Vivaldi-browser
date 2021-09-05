@@ -10,9 +10,9 @@
 #include "base/containers/flat_map.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
-#include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/blink/public/mojom/media/renderer_audio_output_stream_factory.mojom.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -52,30 +52,32 @@ class CONTENT_EXPORT AudioOutputIPCFactory {
   // Enables |this| to create MojoAudioOutputIPCs for the specified frame.
   // Does nothing if not using mojo factories.
   void RegisterRemoteFactory(
-      int frame_id,
+      const base::UnguessableToken& frame_token,
       blink::BrowserInterfaceBrokerProxy* interface_broker);
 
   // Every call to the above method must be matched by a call to this one when
   // the frame is destroyed. Does nothing if not using mojo factories.
-  void MaybeDeregisterRemoteFactory(int frame_id);
+  void MaybeDeregisterRemoteFactory(const base::UnguessableToken& frame_token);
 
   // The returned object may only be used on |io_task_runner()|.
   std::unique_ptr<media::AudioOutputIPC> CreateAudioOutputIPC(
-      int frame_id) const;
+      const base::UnguessableToken& frame_token) const;
 
  private:
-  using StreamFactoryMap =
-      base::flat_map<int,
-                     mojo::Remote<mojom::RendererAudioOutputStreamFactory>>;
+  using StreamFactoryMap = base::flat_map<
+      base::UnguessableToken,
+      mojo::Remote<blink::mojom::RendererAudioOutputStreamFactory>>;
 
-  mojom::RendererAudioOutputStreamFactory* GetRemoteFactory(int frame_id) const;
+  blink::mojom::RendererAudioOutputStreamFactory* GetRemoteFactory(
+      const base::UnguessableToken& frame_token) const;
 
   void RegisterRemoteFactoryOnIOThread(
-      int frame_id,
-      mojo::PendingRemote<mojom::RendererAudioOutputStreamFactory>
+      const base::UnguessableToken& frame_token,
+      mojo::PendingRemote<blink::mojom::RendererAudioOutputStreamFactory>
           factory_pending_remote);
 
-  void MaybeDeregisterRemoteFactoryOnIOThread(int frame_id);
+  void MaybeDeregisterRemoteFactoryOnIOThread(
+      const base::UnguessableToken& frame_token);
 
   // Indicates whether mojo factories are used.
   bool UsingMojoFactories() const;

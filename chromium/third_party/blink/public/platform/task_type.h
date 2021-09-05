@@ -73,9 +73,14 @@ enum class TaskType : unsigned char {
   kMicrotask = 9,
 
   // https://html.spec.whatwg.org/multipage/webappapis.html#timers
-  // This task source is used to queue tasks queued by setInterval() and similar
-  // APIs.
-  kJavascriptTimer = 10,
+  // For tasks queued by setInterval() and similar APIs. A different type is
+  // used depending on whether the timeout is zero or non-zero. Tasks with
+  // a zero timeout and a nesting level <= 5 will be associated with task
+  // queues that are not throttlable. This complies with the spec since it
+  // does not reduce the timeout to less than zero or bypass the timeout
+  // extension triggered on nesting level >= 5.
+  kJavascriptTimerDelayed = 10,
+  kJavascriptTimerImmediate = 72,
 
   // https://html.spec.whatwg.org/multipage/comms.html#sse-processing-model
   // This task source is used for any tasks that are queued by EventSource
@@ -237,6 +242,9 @@ enum class TaskType : unsigned char {
   // Tasks used for find-in-page.
   kInternalFindInPage = 70,
 
+  // Tasks that come in on the HighPriorityLocalFrame interface.
+  kInternalHighPriorityLocalFrame = 71,
+
   ///////////////////////////////////////
   // The following task types are only for thread-local queues.
   ///////////////////////////////////////
@@ -250,9 +258,11 @@ enum class TaskType : unsigned char {
   kMainThreadTaskQueueDefault = 39,
   kMainThreadTaskQueueInput = 40,
   kMainThreadTaskQueueIdle = 41,
-  kMainThreadTaskQueueIPC = 42,
+  // Removed:
+  // kMainThreadTaskQueueIPC = 42,
   kMainThreadTaskQueueControl = 43,
-  kMainThreadTaskQueueCleanup = 52,
+  // Removed:
+  // kMainThreadTaskQueueCleanup = 52,
   kMainThreadTaskQueueMemoryPurge = 62,
   kMainThreadTaskQueueNonWaking = 69,
   kCompositorThreadTaskQueueDefault = 45,
@@ -261,7 +271,7 @@ enum class TaskType : unsigned char {
   kWorkerThreadTaskQueueV8 = 47,
   kWorkerThreadTaskQueueCompositor = 48,
 
-  kCount = 71,
+  kCount = 73,
 };
 
 }  // namespace blink

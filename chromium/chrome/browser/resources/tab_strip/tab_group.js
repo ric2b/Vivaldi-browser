@@ -48,6 +48,13 @@ export class TabGroupElement extends CustomElement {
     return /** @type {!HTMLElement} */ (this.$('#dragImage'));
   }
 
+  /** @return {!HTMLElement} */
+  getDragImageCenter() {
+    // Since the drag handle is #chip, the drag image should be centered
+    // relatively to it.
+    return /** @type {!HTMLElement} */ (this.$('#chip'));
+  }
+
   /** @private */
   onClickChip_() {
     if (!this.dataset.groupId) {
@@ -83,6 +90,11 @@ export class TabGroupElement extends CustomElement {
     requestAnimationFrame(() => {
       this.toggleAttribute('dragging', enabled);
     });
+  }
+
+  /** @param {boolean} isDraggedOut */
+  setDraggedOut(isDraggedOut) {
+    this.toggleAttribute('dragged-out_', isDraggedOut);
   }
 
   /**

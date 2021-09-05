@@ -12,6 +12,10 @@
 #include "ui/gl/gl_features.h"
 #include "ui/gl/gl_switches.h"
 
+#if defined(USE_EGL)
+#include "ui/gl/gl_surface_egl.h"
+#endif  // defined(USE_EGL)
+
 #if defined(OS_ANDROID)
 #include "base/posix/eintr_wrapper.h"
 #include "third_party/libsync/src/include/sync/sync.h"
@@ -81,10 +85,53 @@ bool UsePassthroughCommandDecoder(const base::CommandLine* command_line) {
   }
 }
 
+bool PassthroughCommandDecoderSupported() {
+#if defined(USE_EGL)
+  // Using the passthrough command buffer requires that specific ANGLE
+  // extensions are exposed
+  return gl::GLSurfaceEGL::IsCreateContextBindGeneratesResourceSupported() &&
+         gl::GLSurfaceEGL::IsCreateContextWebGLCompatabilitySupported() &&
+         gl::GLSurfaceEGL::IsRobustResourceInitSupported() &&
+         gl::GLSurfaceEGL::IsDisplayTextureShareGroupSupported() &&
+         gl::GLSurfaceEGL::IsCreateContextClientArraysSupported();
+#else
+  // The passthrough command buffer is only supported on top of ANGLE/EGL
+  return false;
+#endif  // defined(USE_EGL)
+}
+
 #if defined(OS_WIN)
 // This function is thread safe.
 bool AreOverlaysSupportedWin() {
   return gl::DirectCompositionSurfaceWin::AreOverlaysSupported();
 }
-#endif
+
+unsigned int FrameRateToPresentDuration(float frame_rate) {
+  if (frame_rate == 0)
+    return 0u;
+  // Present duration unit is 100 ns.
+  return static_cast<unsigned int>(1.0E7 / frame_rate);
+}
+
+UINT GetOverlaySupportFlags(DXGI_FORMAT format) {
+  return gl::DirectCompositionSurfaceWin::GetOverlaySupportFlags(format);
+}
+
+bool ShouldForceDirectCompositionRootSurfaceFullDamage() {
+  static bool should_force = []() {
+    if (!base::FeatureList::IsEnabled(
+            features::kDirectCompositionForceFullDamage)) {
+      return false;
+    }
+    UINT brga_flags = DirectCompositionSurfaceWin::GetOverlaySupportFlags(
+        DXGI_FORMAT_B8G8R8A8_UNORM);
+    constexpr UINT kSupportBits =
+        DXGI_OVERLAY_SUPPORT_FLAG_DIRECT | DXGI_OVERLAY_SUPPORT_FLAG_SCALING;
+    if ((brga_flags & kSupportBits) == 0)
+      return false;
+    return true;
+  }();
+  return should_force;
+}
+#endif  // OS_WIN
 }  // namespace gl

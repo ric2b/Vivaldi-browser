@@ -106,9 +106,10 @@ ServiceWorkerSingleScriptUpdateChecker::ServiceWorkerSingleScriptUpdateChecker(
     ServiceWorkerUpdatedScriptLoader::BrowserContextGetter
         browser_context_getter,
     scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
-    std::unique_ptr<ServiceWorkerResponseReader> compare_reader,
-    std::unique_ptr<ServiceWorkerResponseReader> copy_reader,
-    std::unique_ptr<ServiceWorkerResponseWriter> writer,
+    mojo::Remote<storage::mojom::ServiceWorkerResourceReader> compare_reader,
+    mojo::Remote<storage::mojom::ServiceWorkerResourceReader> copy_reader,
+    mojo::Remote<storage::mojom::ServiceWorkerResourceWriter> writer,
+    int64_t writer_resource_id,
     ResultCallback callback)
     : script_url_(script_url),
       is_main_script_(is_main_script),
@@ -214,6 +215,7 @@ ServiceWorkerSingleScriptUpdateChecker::ServiceWorkerSingleScriptUpdateChecker(
 
   cache_writer_ = ServiceWorkerCacheWriter::CreateForComparison(
       std::move(compare_reader), std::move(copy_reader), std::move(writer),
+      writer_resource_id,
       /*pause_when_not_identical=*/true);
 
   network_loader_ = ServiceWorkerUpdatedScriptLoader::

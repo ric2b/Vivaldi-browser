@@ -30,7 +30,6 @@
 #include "third_party/blink/public/platform/web_audio_latency_hint.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/web/blink.h"
-#include "third_party/blink/public/web/modules/mediastream/web_media_stream_renderer_factory.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_testing_support.h"
 #include "ui/gfx/icc_profile.h"
@@ -42,7 +41,7 @@
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #endif
 
-#if defined(OS_FUCHSIA) || defined(OS_MACOSX)
+#if defined(OS_FUCHSIA) || defined(OS_MAC)
 #include "skia/ext/test_fonts.h"
 #endif
 
@@ -54,7 +53,7 @@ RenderViewImpl* CreateWebViewTestProxy(CompositorDependencies* compositor_deps,
                                        const mojom::CreateViewParams& params) {
   return new WebViewTestProxy(
       compositor_deps, params,
-      WebTestRenderThreadObserver::GetInstance()->test_interfaces());
+      WebTestRenderThreadObserver::GetInstance()->test_runner());
 }
 
 std::unique_ptr<RenderWidget> CreateWebWidgetTestProxy(
@@ -92,7 +91,7 @@ void WebTestContentRendererClient::RenderThreadStarted() {
 
   render_thread_observer_ = std::make_unique<WebTestRenderThreadObserver>();
 
-#if defined(OS_FUCHSIA) || defined(OS_MACOSX)
+#if defined(OS_FUCHSIA) || defined(OS_MAC)
   // On these platforms, fonts are set up in the renderer process. Other
   // platforms set up fonts as part of WebTestBrowserMainRunner in the
   // browser process, via WebTestBrowserPlatformInitialize().

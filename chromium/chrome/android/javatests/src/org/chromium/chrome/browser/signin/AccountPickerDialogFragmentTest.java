@@ -34,6 +34,7 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.test.util.FakeProfileDataSource;
@@ -48,15 +49,15 @@ import java.io.IOException;
  * Use FragmentScenario to test this fragment once we start using fragment from androidx.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags
-        .Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-        @Features.DisableFeatures({ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY})
-        public class AccountPickerDialogFragmentTest extends DummyUiActivityTestCase {
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@DisableFeatures({ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY})
+public class AccountPickerDialogFragmentTest extends DummyUiActivityTestCase {
     @Rule
     public final Features.JUnitProcessor mProcessor = new Features.JUnitProcessor();
 
     @Rule
-    public final ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
+    public final ChromeRenderTestRule mRenderTestRule =
+            ChromeRenderTestRule.Builder.withPublicCorpus().setRevision(1).build();
 
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule =
@@ -152,6 +153,6 @@ import java.io.IOException;
     private void addAccount(String accountName, String fullName) {
         ProfileDataSource.ProfileData profileData =
                 new ProfileDataSource.ProfileData(accountName, null, fullName, null);
-        mAccountManagerTestRule.addAccount(accountName, profileData);
+        mAccountManagerTestRule.addAccount(profileData);
     }
 }

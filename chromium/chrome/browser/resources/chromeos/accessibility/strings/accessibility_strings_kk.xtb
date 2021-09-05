@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Тізім элементі</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Екі саусағыңызбен оңға сырғытыңыз</translation>
+<translation id="1016393160682012902">Оның қалай жұмыс істейтінін білу үшін QWERTY пернесін, жаңартылатын Брайль қаріпі пернесін басыңыз немесе қимылдың өзін түртіңіз. Шығу үшін Ctrl+W пернелер тіркесімін немесе Esc пернесін басыңыз.</translation>
 <translation id="1022586497894531524">ChromeVox дауыстық ақпарат функциясын алғаш рет пайдаланып жатырсыз ба? Бұл қысқаша оқулықта ChromeVox қызметін қалай қолдану керектігі жөнінде маңызды ақпарат берілген.</translation>
 <translation id="1025074108959230262">Жабысу режимі өшірілген</translation>
 <translation id="1031961866430398710">содан кейін</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Ішкі сілтеме</translation>
 <translation id="4909019435900810068">Бір сөз артқа жылжыту</translation>
 <translation id="4911349081560453449">Алдыңғы құсбелгі ұяшығы жоқ.</translation>
-<translation id="4915087353619183190">Үйрену режимі іске қосылуда. Функциясын үйрену үшін QWERTY пернесін, жаңартылатын Брайль пернесін басыңыз немесе қимылдың өзін түртіңіз. Шығу үшін Ctrl+W тіркесімін немесе Esc пернесін басыңыз.</translation>
 <translation id="492295894462528572">Сөз басы</translation>
 <translation id="495046168593986294">Жоғарыға айналдыру</translation>
 <translation id="495170559598752135">Әрекеттер</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Жасыл</translation>
 <translation id="602001110135236999">Солға айналдыру</translation>
 <translation id="6034000775414344507">Ашық сұр</translation>
+<translation id="6036135911048686884">Түрту арқылы дыбыстау</translation>
 <translation id="6037602951055904232">Алға өту</translation>
 <translation id="6044160928851315051">Экранды күңгірттеу</translation>
 <translation id="6082768461603900813">Негізгі навигация</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{фунт}other{# фунт белгісі}}</translation>
 <translation id="8378855320830505539">Аймақ</translation>
 <translation id="8382679411218029383">Автотолтыру жолы мен тізімі</translation>
+<translation id="8394908167088220973">Медиа ойнату/кідірту</translation>
 <translation id="8428213095426709021">Параметрлер</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" /> деңгейі</translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">кестелер сияқты құрылымдық мазмұннан шығу</translation>
 <translation id="8779057862865475116">Алдыңғы сілтеме жоқ.</translation>
 <translation id="8796411681063377102">Келесі 3-деңгей тақырыбы</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />/<ph name="TOTALPAGES" /> бет</translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">басты</translation>
 <translation id="8882002077197914455">Жол тақырыбы</translation>

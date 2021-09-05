@@ -51,6 +51,7 @@ class TestAutofillClient : public AutofillClient {
   ukm::UkmRecorder* GetUkmRecorder() override;
   ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
+  const GURL& GetLastCommittedURL() override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
   std::string GetPageLanguage() const override;
 #if !defined(OS_IOS)
@@ -65,8 +66,8 @@ class TestAutofillClient : public AutofillClient {
   void OnUnmaskVerificationResult(PaymentsRpcResult result) override;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  std::vector<std::string> GetMerchantWhitelistForVirtualCards() override;
-  std::vector<std::string> GetBinRangeWhitelistForVirtualCards() override;
+  std::vector<std::string> GetAllowedMerchantsForVirtualCards() override;
+  std::vector<std::string> GetAllowedBinRangesForVirtualCards() override;
 
   void ShowLocalCardMigrationDialog(
       base::OnceClosure show_migration_dialog_closure) override;
@@ -185,14 +186,14 @@ class TestAutofillClient : public AutofillClient {
   }
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  void set_merchant_whitelist(
-      const std::vector<std::string>& merchant_whitelist) {
-    merchant_whitelist_ = merchant_whitelist;
+  void set_allowed_merchants(
+      const std::vector<std::string>& merchant_allowlist) {
+    allowed_merchants_ = merchant_allowlist;
   }
 
-  void set_bin_range_whitelist(
-      const std::vector<std::string>& bin_range_whitelist) {
-    bin_range_whitelist_ = bin_range_whitelist;
+  void set_allowed_bin_ranges(
+      const std::vector<std::string>& bin_range_allowlist) {
+    allowed_bin_ranges_ = bin_range_allowlist;
   }
 #endif
 
@@ -263,9 +264,12 @@ class TestAutofillClient : public AutofillClient {
   // The language that is returned by |GetPageLanguage()|.
   std::string page_language_;
 
+  // The last URL submitted by the user in the URL bar. Set in the constructor.
+  GURL last_committed_url_;
+
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  std::vector<std::string> merchant_whitelist_;
-  std::vector<std::string> bin_range_whitelist_;
+  std::vector<std::string> allowed_merchants_;
+  std::vector<std::string> allowed_bin_ranges_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(TestAutofillClient);

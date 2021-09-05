@@ -8,8 +8,8 @@
 #include <stddef.h>
 
 #include <map>
+#include <vector>
 
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/match_compare.h"
@@ -20,6 +20,7 @@
 class AutocompleteInput;
 class AutocompleteProvider;
 class AutocompleteProviderClient;
+class PrefService;
 class TemplateURLService;
 
 // All matches from all providers for a particular query.  This also tracks
@@ -31,13 +32,19 @@ class AutocompleteResult {
   typedef ACMatches::iterator iterator;
   using MatchDedupComparator = std::pair<GURL, bool>;
 
-  // Max number of matches we'll show from the various providers. This limit may
-  // be different for zero suggest (i.e. when |input_from_omnibox_focus| is
-  // true) and non zero suggest.
-  static size_t GetMaxMatches(bool input_from_omnibox_focus = false);
+  // Max number of matches we'll show from the various providers. This limit
+  // may be different for zero suggest and non zero suggest. Does not take into
+  // account the boost conditionally provided by the
+  // omnibox::kDynamicMaxAutocomplete feature.
+  static size_t GetMaxMatches(bool is_zero_suggest = false);
+  // Defaults to GetMaxMatches if omnibox::kDynamicMaxAutocomplete is disabled;
+  // otherwise returns the boosted dynamic limit.
+  static size_t GetDynamicMaxMatches();
 
   AutocompleteResult();
   ~AutocompleteResult();
+  AutocompleteResult(const AutocompleteResult&) = delete;
+  AutocompleteResult& operator=(const AutocompleteResult&) = delete;
 
   // Moves matches from |old_matches| to provide a consistent result set.
   // |old_matches| is mutated during this, and should not be used afterwards.
@@ -65,12 +72,6 @@ class AutocompleteResult {
   void SortAndCull(const AutocompleteInput& input,
                    TemplateURLService* template_url_service,
                    const AutocompleteMatch* preserve_default_match = nullptr);
-
-  // Creates and adds any dedicated Pedal matches triggered by existing matches.
-  // This should be the only place where new Pedal suggestions are introduced
-  // because it doesn't dedupe; it just carefully avoids adding duplicates.
-  void AppendDedicatedPedalMatches(AutocompleteProviderClient* client,
-                                   const AutocompleteInput& input);
 
   // Sets |pedal| in matches that have Pedal-triggering text.
   void ConvertInSuggestionPedalMatches(AutocompleteProviderClient* client);
@@ -121,13 +122,21 @@ class AutocompleteResult {
   // matches to keep, with respect to configured maximums, URL limits,
   // and relevancies.
   static size_t CalculateNumMatches(
-      bool input_from_omnibox_focus,
+      bool is_zero_suggest,
+      const ACMatches& matches,
+      const CompareWithDemoteByType<AutocompleteMatch>& comparing_object);
+  // Determines how many matches to keep depending on how many URLs would be
+  // shown. CalculateNumMatches defers to CalculateNumMatchesPerUrlCount if the
+  // kDynamicMaxAutocomplete feature is enabled.
+  static size_t CalculateNumMatchesPerUrlCount(
       const ACMatches& matches,
       const CompareWithDemoteByType<AutocompleteMatch>& comparing_object);
 
   const SearchSuggestionParser::HeadersMap& headers_map() const {
     return headers_map_;
   }
+
+  const std::vector<int>& hidden_group_ids() const { return hidden_group_ids_; }
 
   // Clears the matches for this result set.
   void Reset();
@@ -155,11 +164,18 @@ class AutocompleteResult {
   size_t EstimateMemoryUsage() const;
 
   // Get a list of comparators used for deduping for the matches in this result.
+  // This is only used for logging.
   std::vector<MatchDedupComparator> GetMatchDedupComparators() const;
 
   // Gets the header string associated with |suggestion_group_id|. Returns an
   // empty string if no header is found.
   base::string16 GetHeaderForGroupId(int suggestion_group_id) const;
+
+  // Returns whether or not |suggestion_group_id| should be collapsed in the UI.
+  // This method takes into account both the user's stored |prefs| as well as
+  // the server-provided visibility hint for |suggestion_group_id|.
+  bool IsSuggestionGroupIdHidden(PrefService* prefs,
+                                 int suggestion_group_id) const;
 
   // Logs metrics for when |new_result| replaces |old_result| asynchronously.
   // |old_result| a list of the comparators for the old matches.
@@ -169,6 +185,10 @@ class AutocompleteResult {
 
   void set_headers_map(const SearchSuggestionParser::HeadersMap& headers_map) {
     headers_map_ = headers_map;
+  }
+
+  void set_hidden_group_ids(const std::vector<int>& hidden_group_ids) {
+    hidden_group_ids_ = hidden_group_ids;
   }
 
  private:
@@ -253,10 +273,12 @@ class AutocompleteResult {
 
   ACMatches matches_;
 
-  // The map of suggestion group IDs to headers.
+  // The server supplied map of suggestion group IDs to header labels.
   SearchSuggestionParser::HeadersMap headers_map_;
 
-  DISALLOW_COPY_AND_ASSIGN(AutocompleteResult);
+  // The server supplied list of group IDs that should be hidden-by-default.
+  // Typical size is 0 to 3, from one provider. That's why it's not a set.
+  std::vector<int> hidden_group_ids_;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_RESULT_H_

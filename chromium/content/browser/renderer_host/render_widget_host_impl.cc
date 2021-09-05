@@ -15,19 +15,20 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/hash/hash.h"
 #include "base/i18n/rtl.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
@@ -46,6 +47,7 @@
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/file_system/browser_file_system_helper.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/native_file_system/native_file_system_manager_impl.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/display_feature.h"
 #include "content/browser/renderer_host/display_util.h"
@@ -66,13 +68,13 @@
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/common/drag_messages.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
-#include "content/common/visual_properties.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -95,13 +97,19 @@
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "net/base/filename_util.h"
+#include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "skia/ext/image_operations.h"
 #include "skia/ext/platform_canvas.h"
 #include "storage/browser/file_system/isolated_context.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/common/widget/visual_properties.h"
+#include "third_party/blink/public/mojom/input/touch_event.mojom.h"
+#include "third_party/blink/public/mojom/native_file_system/native_file_system_drag_drop_token.mojom.h"
+#include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
@@ -123,7 +131,7 @@
 #include "ui/android/view_android.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/browser/renderer_host/input/fling_scheduler_mac.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
@@ -249,6 +257,69 @@ std::vector<DropData::Metadata> DropDataToMetaData(const DropData& drop_data) {
   return metadata;
 }
 
+blink::mojom::DragDataPtr DropDataToDragData(
+    const DropData& drop_data,
+    NativeFileSystemManagerImpl* native_file_system_manager,
+    int child_id) {
+  // These fields are currently unused when dragging into Blink.
+  DCHECK(drop_data.download_metadata.empty());
+  DCHECK(drop_data.file_contents.empty());
+  DCHECK(drop_data.file_contents_content_disposition.empty());
+
+  std::vector<blink::mojom::DragItemPtr> items;
+  if (drop_data.text) {
+    blink::mojom::DragItemStringPtr item = blink::mojom::DragItemString::New();
+    item->string_type = ui::kMimeTypeText;
+    item->string_data = *drop_data.text;
+    items.push_back(blink::mojom::DragItem::NewString(std::move(item)));
+  }
+  if (!drop_data.url.is_empty()) {
+    blink::mojom::DragItemStringPtr item = blink::mojom::DragItemString::New();
+    item->string_type = ui::kMimeTypeURIList;
+    item->string_data = base::UTF8ToUTF16(drop_data.url.spec());
+    item->title = drop_data.url_title;
+    items.push_back(blink::mojom::DragItem::NewString(std::move(item)));
+  }
+  if (drop_data.html) {
+    blink::mojom::DragItemStringPtr item = blink::mojom::DragItemString::New();
+    item->string_type = ui::kMimeTypeHTML;
+    item->string_data = *drop_data.html;
+    item->base_url = drop_data.html_base_url;
+    items.push_back(blink::mojom::DragItem::NewString(std::move(item)));
+  }
+  for (const ui::FileInfo& file : drop_data.filenames) {
+    blink::mojom::DragItemFilePtr item = blink::mojom::DragItemFile::New();
+    item->path = file.path;
+    item->display_name = file.display_name;
+    mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken>
+        pending_token;
+    native_file_system_manager->CreateNativeFileSystemDragDropToken(
+        file.path, child_id, pending_token.InitWithNewPipeAndPassReceiver());
+    item->native_file_system_token = std::move(pending_token);
+    items.push_back(blink::mojom::DragItem::NewFile(std::move(item)));
+  }
+  for (const content::DropData::FileSystemFileInfo& file_system_file :
+       drop_data.file_system_files) {
+    blink::mojom::DragItemFileSystemFilePtr item =
+        blink::mojom::DragItemFileSystemFile::New();
+    item->url = file_system_file.url;
+    item->size = file_system_file.size;
+    item->file_system_id = file_system_file.filesystem_id;
+    items.push_back(blink::mojom::DragItem::NewFileSystemFile(std::move(item)));
+  }
+  for (const std::pair<base::string16, base::string16> data :
+       drop_data.custom_data) {
+    blink::mojom::DragItemStringPtr item = blink::mojom::DragItemString::New();
+    item->string_type = base::UTF16ToUTF8(data.first);
+    item->string_data = data.second;
+    items.push_back(blink::mojom::DragItem::NewString(std::move(item)));
+  }
+
+  return blink::mojom::DragData::New(std::move(items),
+                                     base::UTF16ToUTF8(drop_data.filesystem_id),
+                                     drop_data.referrer_policy);
+}
+
 class UnboundWidgetInputHandler : public blink::mojom::WidgetInputHandler {
  public:
   void SetFocus(bool focused) override {
@@ -339,7 +410,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
       new_content_rendering_delay_(kNewContentRenderingDelay),
       frame_token_message_queue_(std::move(frame_token_message_queue)),
       render_frame_metadata_provider_(
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
           ui::WindowResizeHelperMac::Get()->task_runner(),
 #else
           base::ThreadTaskRunnerHandle::Get(),
@@ -350,7 +421,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
   DCHECK(frame_token_message_queue_);
   frame_token_message_queue_->Init(this);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   fling_scheduler_ = std::make_unique<FlingSchedulerMac>(this);
 #elif defined(OS_ANDROID)
   fling_scheduler_ = std::make_unique<FlingSchedulerAndroid>(this);
@@ -449,6 +520,8 @@ RenderWidgetHostImpl* RenderWidgetHostImpl::From(RenderWidgetHost* rwh) {
 }
 
 void RenderWidgetHostImpl::SetView(RenderWidgetHostViewBase* view) {
+  synthetic_gesture_controller_.reset();
+
   if (view) {
     view_ = view->GetWeakPtr();
     if (!create_frame_sink_callback_.is_null())
@@ -456,8 +529,6 @@ void RenderWidgetHostImpl::SetView(RenderWidgetHostViewBase* view) {
   } else {
     view_.reset();
   }
-
-  synthetic_gesture_controller_.reset();
 }
 
 // static
@@ -481,7 +552,7 @@ const viz::FrameSinkId& RenderWidgetHostImpl::GetFrameSinkId() {
 }
 
 void RenderWidgetHostImpl::SendScreenRects() {
-  if (!renderer_initialized_ || waiting_for_screen_rects_ack_)
+  if (!renderer_initialized_ || !blink_widget_ || waiting_for_screen_rects_ack_)
     return;
 
   if (is_hidden_) {
@@ -496,8 +567,10 @@ void RenderWidgetHostImpl::SendScreenRects() {
   last_view_screen_rect_ = view_->GetViewBounds();
   last_window_screen_rect_ = view_->GetBoundsInRootWindow();
   view_->WillSendScreenRects();
-  Send(new WidgetMsg_UpdateScreenRects(GetRoutingID(), last_view_screen_rect_,
-                                       last_window_screen_rect_));
+  blink_widget_->UpdateScreenRects(
+      last_view_screen_rect_, last_window_screen_rect_,
+      base::BindOnce(&RenderWidgetHostImpl::OnUpdateScreenRectsAck,
+                     weak_factory_.GetWeakPtr()));
   waiting_for_screen_rects_ack_ = true;
 }
 
@@ -579,6 +652,7 @@ RenderWidgetHostImpl::BindNewFrameWidgetInterfaces() {
   blink_frame_widget_host_receiver_.reset();
   blink_frame_widget_.reset();
   frame_widget_input_handler_.reset();
+  widget_compositor_.reset();
   return std::make_pair(
       blink_frame_widget_host_receiver_.BindNewEndpointAndPassRemote(),
       blink_frame_widget_.BindNewEndpointAndPassReceiver());
@@ -593,6 +667,7 @@ void RenderWidgetHostImpl::BindFrameWidgetInterfaces(
   blink_frame_widget_host_receiver_.reset();
   blink_frame_widget_.reset();
   frame_widget_input_handler_.reset();
+  widget_compositor_.reset();
   blink_frame_widget_host_receiver_.Bind(std::move(frame_widget_host));
   blink_frame_widget_.Bind(std::move(frame_widget));
 }
@@ -645,13 +720,9 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderWidgetHostImpl, msg)
     IPC_MESSAGE_HANDLER(WidgetHostMsg_Close, OnClose)
-    IPC_MESSAGE_HANDLER(WidgetHostMsg_UpdateScreenRects_ACK,
-                        OnUpdateScreenRectsAck)
     IPC_MESSAGE_HANDLER(WidgetHostMsg_RequestSetBounds, OnRequestSetBounds)
     IPC_MESSAGE_HANDLER(DragHostMsg_StartDragging, OnStartDragging)
     IPC_MESSAGE_HANDLER(DragHostMsg_UpdateDragCursor, OnUpdateDragCursor)
-    IPC_MESSAGE_HANDLER(WidgetHostMsg_FrameSwapMessages,
-                        OnFrameSwapMessagesReceived)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -774,8 +845,8 @@ void RenderWidgetHostImpl::RemoveImeInputEventObserver(
 }
 #endif
 
-VisualProperties RenderWidgetHostImpl::GetInitialVisualProperties() {
-  VisualProperties initial_props = GetVisualProperties();
+blink::VisualProperties RenderWidgetHostImpl::GetInitialVisualProperties() {
+  blink::VisualProperties initial_props = GetVisualProperties();
 
   // A RenderWidget being created in the renderer means the browser should
   // reset any state that may be set for the previous RenderWidget but which
@@ -785,7 +856,7 @@ VisualProperties RenderWidgetHostImpl::GetInitialVisualProperties() {
   return initial_props;
 }
 
-VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
+blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   // This is only called while the RenderWidgetHost is attached to a delegate
   // still.
   DCHECK(delegate_);
@@ -799,13 +870,12 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   // frame.
   const bool is_frame_widget = owner_delegate_ || owned_by_render_frame_host_;
 
-  VisualProperties visual_properties;
+  blink::VisualProperties visual_properties;
 
   GetScreenInfo(&visual_properties.screen_info);
   // Note: Later in this method, ScreenInfo rects might be overridden!
 
-  visual_properties.is_fullscreen_granted =
-      delegate_->IsFullscreenForCurrentTab();
+  visual_properties.is_fullscreen_granted = delegate_->IsFullscreen();
 
   if (is_frame_widget)
     visual_properties.display_mode = delegate_->GetDisplayMode();
@@ -821,6 +891,9 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   visual_properties.browser_controls_params
       .animate_browser_controls_height_changes =
       rvh_delegate_view->ShouldAnimateBrowserControlsHeightChanges();
+  visual_properties.browser_controls_params
+      .only_expand_top_controls_at_page_top =
+      rvh_delegate_view->OnlyExpandTopControlsAtPageTop();
 
   float top_controls_height = rvh_delegate_view->GetTopControlsHeight();
   float top_controls_min_height = rvh_delegate_view->GetTopControlsMinHeight();
@@ -879,14 +952,14 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   //
   // The plumbing goes:
   // 1. Browser:    parent RenderWidgetHost
-  // 2. IPC           -> WidgetMsg_UpdateVisualProperties
+  // 2. IPC           -> blink::mojom::Widget::UpdateVisualProperties
   // 3. Renderer A: parent RenderWidget
   //                  (sometimes blink involved)
   // 4. Renderer A: child  RenderFrameProxy
   // 5. IPC           -> FrameHostMsg_SynchronizeVisualProperties
   // 6. Browser:    child  CrossProcessFrameConnector
   // 7. Browser:    parent RenderWidgetHost (We're here if |is_child_frame|.)
-  // 8. IPC           -> WidgetMsg_UpdateVisualProperties
+  // 8. IPC           -> blink::mojom::Widget::UpdateVisualProperties
   // 9. Renderer B: child  RenderWidget
 
   // This property comes from the top-level main frame.
@@ -941,8 +1014,14 @@ VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   // use the value provided from the parent.
   if (is_top_most_widget) {
     const DisplayFeature* display_feature = view_->GetDisplayFeature();
-    visual_properties.root_widget_window_segments = ComputeRootWindowSegments(
-        visual_properties.visible_viewport_size, display_feature);
+    if (display_feature) {
+      visual_properties.root_widget_window_segments =
+          display_feature->ComputeWindowSegments(
+              visual_properties.visible_viewport_size);
+    } else {
+      visual_properties.root_widget_window_segments = {
+          gfx::Rect(visual_properties.visible_viewport_size)};
+    }
   } else {
     visual_properties.root_widget_window_segments =
         properties_from_parent_local_root_.root_widget_window_segments;
@@ -1005,6 +1084,11 @@ bool RenderWidgetHostImpl::SynchronizeVisualProperties(
   if (!renderer_initialized_)
     return false;
 
+  // If we have not bound the blink widget interface put this request off.
+  // SynchronizeVisualProperties will get called after the channel is bound.
+  if (!blink_widget_)
+    return false;
+
   // Skip if the |delegate_| has already been detached because it's web contents
   // is being deleted, or if LocalSurfaceIdAllocation is suppressed, as we are
   // first updating our internal state from a child's request, before
@@ -1016,7 +1100,7 @@ bool RenderWidgetHostImpl::SynchronizeVisualProperties(
     return false;
   }
 
-  auto visual_properties = std::make_unique<VisualProperties>();
+  auto visual_properties = std::make_unique<blink::VisualProperties>();
   *visual_properties = GetVisualProperties();
   if (!StoredVisualPropertiesNeedsUpdate(old_visual_properties_,
                                          *visual_properties))
@@ -1025,7 +1109,7 @@ bool RenderWidgetHostImpl::SynchronizeVisualProperties(
   visual_properties->scroll_focused_node_into_view =
       scroll_focused_node_into_view;
 
-  Send(new WidgetMsg_UpdateVisualProperties(routing_id_, *visual_properties));
+  blink_widget_->UpdateVisualProperties(*visual_properties);
 
   bool width_changed =
       !old_visual_properties_ || old_visual_properties_->new_size.width() !=
@@ -1068,43 +1152,6 @@ bool RenderWidgetHostImpl::SynchronizeVisualProperties(
   }
 
   return true;
-}
-
-std::vector<gfx::Rect> RenderWidgetHostImpl::ComputeRootWindowSegments(
-    const gfx::Size& visible_viewport_size,
-    const DisplayFeature* display_feature) const {
-  std::vector<gfx::Rect> window_segments;
-
-  if (!display_feature) {
-    window_segments.emplace_back(visible_viewport_size);
-    return window_segments;
-  }
-
-  int display_feature_end =
-      display_feature->offset + display_feature->mask_length;
-  if (display_feature->orientation == DisplayFeature::Orientation::kVertical) {
-    // If the display feature is vertically oriented, it splits or masks
-    // the widget into two side-by-side segments. Note that in the masking
-    // scenario, there is an area of the widget that are not covered by the
-    // union of the window segments - this area's pixels will not be visible
-    // to the user.
-    window_segments.emplace_back(0, 0, display_feature->offset,
-                                 visible_viewport_size.height());
-    window_segments.emplace_back(
-        display_feature_end, 0,
-        visible_viewport_size.width() - display_feature_end,
-        visible_viewport_size.height());
-  } else {
-    // If the display feature is offset in the y direction, it splits or masks
-    // the widget into two stacked segments.
-    window_segments.emplace_back(0, 0, visible_viewport_size.width(),
-                                 display_feature->offset);
-    window_segments.emplace_back(
-        0, display_feature_end, visible_viewport_size.width(),
-        visible_viewport_size.height() - display_feature_end);
-  }
-
-  return window_segments;
 }
 
 void RenderWidgetHostImpl::GotFocus() {
@@ -1736,20 +1783,26 @@ void RenderWidgetHostImpl::RemoveObserver(RenderWidgetHostObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void RenderWidgetHostImpl::GetScreenInfo(ScreenInfo* result) {
+void RenderWidgetHostImpl::GetScreenInfo(blink::ScreenInfo* result) {
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetScreenInfo");
   if (view_)
     view_->GetScreenInfo(result);
   else
     DisplayUtil::GetDefaultScreenInfo(result);
 
-  if (display::Display::HasForceRasterColorProfile())
-    result->color_space = display::Display::GetForcedRasterColorProfile();
+  if (display::Display::HasForceRasterColorProfile()) {
+    result->display_color_spaces = gfx::DisplayColorSpaces(
+        display::Display::GetForcedRasterColorProfile());
+  }
 
   // TODO(sievers): find a way to make this done another way so the method
   // can be const.
   if (IsUseZoomForDSFEnabled())
     input_router_->SetDeviceScaleFactor(result->device_scale_factor);
+}
+
+float RenderWidgetHostImpl::GetDeviceScaleFactor() {
+  return GetScaleFactorForView(view_.get());
 }
 
 base::Optional<cc::TouchAction> RenderWidgetHostImpl::GetAllowedTouchAction() {
@@ -1782,9 +1835,7 @@ void RenderWidgetHostImpl::DragTargetDragOver(
     const gfx::PointF& screen_point,
     WebDragOperationsMask operations_allowed,
     int key_modifiers) {
-  // TODO(dtapuska): Remove this null check once all of the Drag IPCs
-  // come over the mojo channels. It will be guaranteed that this
-  // will be non-null.
+  // TODO(https://crbug.com/1102769): Replace with a for_frame() check.
   if (blink_frame_widget_) {
     blink_frame_widget_->DragTargetDragOver(
         ConvertWindowPointToViewport(client_point), screen_point,
@@ -1797,9 +1848,7 @@ void RenderWidgetHostImpl::DragTargetDragOver(
 void RenderWidgetHostImpl::DragTargetDragLeave(
     const gfx::PointF& client_point,
     const gfx::PointF& screen_point) {
-  // TODO(dtapuska): Remove this null check once all of the Drag IPCs
-  // come over the mojo channels. It will be guaranteed that this
-  // will be non-null.
+  // TODO(https://crbug.com/1102769): Replace with a for_frame() check.
   if (blink_frame_widget_) {
     gfx::PointF viewport_point = client_point;
     if (IsUseZoomForDSFEnabled())
@@ -1809,22 +1858,29 @@ void RenderWidgetHostImpl::DragTargetDragLeave(
 }
 
 void RenderWidgetHostImpl::DragTargetDrop(const DropData& drop_data,
-                                          const gfx::PointF& client_pt,
-                                          const gfx::PointF& screen_pt,
+                                          const gfx::PointF& client_point,
+                                          const gfx::PointF& screen_point,
                                           int key_modifiers) {
-  DropData drop_data_with_permissions(drop_data);
-  GrantFileAccessFromDropData(&drop_data_with_permissions);
-  Send(new DragMsg_TargetDrop(GetRoutingID(), drop_data_with_permissions,
-                              client_pt, screen_pt, key_modifiers));
+  // TODO(https://crbug.com/1102769): Replace with a for_frame() check.
+  if (blink_frame_widget_) {
+    DropData drop_data_with_permissions(drop_data);
+    GrantFileAccessFromDropData(&drop_data_with_permissions);
+    StoragePartitionImpl* storage_partition =
+        static_cast<StoragePartitionImpl*>(GetProcess()->GetStoragePartition());
+    blink_frame_widget_->DragTargetDrop(
+        DropDataToDragData(drop_data_with_permissions,
+                           storage_partition->GetNativeFileSystemManager(),
+                           GetProcess()->GetID()),
+        ConvertWindowPointToViewport(client_point), screen_point,
+        key_modifiers);
+  }
 }
 
 void RenderWidgetHostImpl::DragSourceEndedAt(
     const gfx::PointF& client_point,
     const gfx::PointF& screen_point,
     blink::WebDragOperation operation) {
-  // TODO(dtapuska): Remove this null check once all of the Drag IPCs
-  // come over the mojo channels. It will be guaranteed that this
-  // will be non-null.
+  // TODO(https://crbug.com/1102769): Replace with a for_frame() check.
   if (blink_frame_widget_) {
     blink_frame_widget_->DragSourceEndedAt(
         ConvertWindowPointToViewport(client_point), screen_point, operation);
@@ -1832,9 +1888,7 @@ void RenderWidgetHostImpl::DragSourceEndedAt(
 }
 
 void RenderWidgetHostImpl::DragSourceSystemDragEnded() {
-  // TODO(dtapuska): Remove this null check once all of the Drag IPCs
-  // come over the mojo channels. It will be guaranteed that this
-  // will be non-null.
+  // TODO(https://crbug.com/1102769): Replace with a for_frame() check.
   if (blink_frame_widget_)
     blink_frame_widget_->DragSourceSystemDragEnded();
 }
@@ -1857,7 +1911,8 @@ void RenderWidgetHostImpl::SetCursor(const ui::Cursor& cursor) {
 void RenderWidgetHostImpl::ShowContextMenuAtPoint(
     const gfx::Point& point,
     const ui::MenuSourceType source_type) {
-  Send(new WidgetMsg_ShowContextMenu(GetRoutingID(), source_type, point));
+  if (blink_frame_widget_)
+    blink_frame_widget_->ShowContextMenu(source_type, point);
 }
 
 RenderProcessHost::Priority RenderWidgetHostImpl::GetPriority() {
@@ -1929,7 +1984,7 @@ void RenderWidgetHostImpl::GetSnapshotFromBrowser(
     return;
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // MacOS version of underlying GrabViewSnapshot() blocks while
   // display/GPU are in a power-saving mode, so make sure display
   // does not go to sleep for the duration of reading a snapshot.
@@ -2021,13 +2076,6 @@ void RenderWidgetHostImpl::OnUpdateDragCursor(WebDragOperation current_op) {
     view->UpdateDragCursor(current_op);
 }
 
-void RenderWidgetHostImpl::OnFrameSwapMessagesReceived(
-    uint32_t frame_token,
-    std::vector<IPC::Message> messages) {
-  frame_token_message_queue_->OnFrameSwapMessagesReceived(frame_token,
-                                                          std::move(messages));
-}
-
 void RenderWidgetHostImpl::RendererExited() {
   if (!renderer_initialized_)
     return;
@@ -2058,14 +2106,15 @@ void RenderWidgetHostImpl::RendererExited() {
 }
 
 void RenderWidgetHostImpl::ResetStateForCreatedRenderWidget(
-    const VisualProperties& initial_props) {
+    const blink::VisualProperties& initial_props) {
   // When the RenderWidget was destroyed, the ack may never come back. Don't
   // let that prevent us from speaking to the next RenderWidget.
   waiting_for_screen_rects_ack_ = false;
 
   visual_properties_ack_pending_ =
       DoesVisualPropertiesNeedAck(nullptr, initial_props);
-  old_visual_properties_ = std::make_unique<VisualProperties>(initial_props);
+  old_visual_properties_ =
+      std::make_unique<blink::VisualProperties>(initial_props);
 
   // Reconstruct the input router to ensure that it has fresh state for a new
   // RenderWidget. Otherwise it may be stuck waiting for the old renderer to ack
@@ -2415,8 +2464,8 @@ void RenderWidgetHostImpl::OnLocalSurfaceIdChanged(
 
 // static
 bool RenderWidgetHostImpl::DidVisualPropertiesSizeChange(
-    const VisualProperties& old_visual_properties,
-    const VisualProperties& new_visual_properties) {
+    const blink::VisualProperties& old_visual_properties,
+    const blink::VisualProperties& new_visual_properties) {
   return old_visual_properties.auto_resize_enabled !=
              new_visual_properties.auto_resize_enabled ||
          (old_visual_properties.auto_resize_enabled &&
@@ -2432,8 +2481,8 @@ bool RenderWidgetHostImpl::DidVisualPropertiesSizeChange(
 
 // static
 bool RenderWidgetHostImpl::DoesVisualPropertiesNeedAck(
-    const std::unique_ptr<VisualProperties>& old_visual_properties,
-    const VisualProperties& new_visual_properties) {
+    const std::unique_ptr<blink::VisualProperties>& old_visual_properties,
+    const blink::VisualProperties& new_visual_properties) {
   // We should throttle sending updated VisualProperties to the renderer to
   // the rate of commit. This ensures we don't overwhelm the renderer with
   // visual updates faster than it can keep up.  |needs_ack| corresponds to
@@ -2456,8 +2505,8 @@ bool RenderWidgetHostImpl::DoesVisualPropertiesNeedAck(
 
 // static
 bool RenderWidgetHostImpl::StoredVisualPropertiesNeedsUpdate(
-    const std::unique_ptr<VisualProperties>& old_visual_properties,
-    const VisualProperties& new_visual_properties) {
+    const std::unique_ptr<blink::VisualProperties>& old_visual_properties,
+    const blink::VisualProperties& new_visual_properties) {
   if (!old_visual_properties)
     return true;
 
@@ -2697,16 +2746,6 @@ void RenderWidgetHostImpl::OnInvalidFrameToken(uint32_t frame_token) {
                                   bad_message::RWH_INVALID_FRAME_TOKEN);
 }
 
-void RenderWidgetHostImpl::OnMessageDispatchError(const IPC::Message& message) {
-  RenderProcessHost* rph = GetProcess();
-  rph->OnBadMessageReceived(message);
-}
-
-void RenderWidgetHostImpl::OnProcessSwapMessage(const IPC::Message& message) {
-  RenderProcessHost* rph = GetProcess();
-  rph->OnMessageReceived(message);
-}
-
 bool RenderWidgetHostImpl::RequestKeyboardLock(
     base::Optional<base::flat_set<ui::DomCode>> codes) {
   if (!delegate_) {
@@ -2799,7 +2838,7 @@ blink::mojom::InputEventResultState RenderWidgetHostImpl::FilterInputEvent(
         event.GetType() == WebInputEvent::Type::kGestureTap) {
       delegate_->FocusOwningWebContents(this);
     }
-    delegate_->DidReceiveInputEvent(this, event.GetType());
+    delegate_->DidReceiveInputEvent(this, event);
   }
 
   return view_ ? view_->FilterInputEvent(event)
@@ -2878,6 +2917,23 @@ bool RenderWidgetHostImpl::RemovePendingUserActivationIfAvailable() {
   return false;
 }
 
+void RenderWidgetHostImpl::InsertVisualStateCallback(
+    VisualStateCallback callback) {
+  if (!blink_frame_widget_) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  if (!widget_compositor_) {
+    blink_frame_widget_->BindWidgetCompositor(
+        widget_compositor_.BindNewPipeAndPassReceiver());
+  }
+
+  widget_compositor_->VisualStateRequest(base::BindOnce(
+      [](VisualStateCallback callback) { std::move(callback).Run(true); },
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback), false)));
+}
+
 const mojo::AssociatedRemote<blink::mojom::FrameWidget>&
 RenderWidgetHostImpl::GetAssociatedFrameWidget() {
   return blink_frame_widget_;
@@ -2888,6 +2944,13 @@ RenderWidgetHostImpl::GetFrameWidgetInputHandler() {
   if (!frame_widget_input_handler_)
     return nullptr;
   return frame_widget_input_handler_.get();
+}
+
+base::Optional<blink::VisualProperties>
+RenderWidgetHostImpl::GetLastVisualPropertiesSentToRendererForTesting() {
+  if (!old_visual_properties_)
+    return base::nullopt;
+  return *old_visual_properties_;
 }
 
 void RenderWidgetHostImpl::DispatchInputEventWithLatencyInfo(
@@ -3011,7 +3074,7 @@ void RenderWidgetHostImpl::GotResponseToKeyboardLockRequest(bool allowed) {
 }
 
 void RenderWidgetHostImpl::GotResponseToForceRedraw(int snapshot_id) {
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_MAC) || defined(OS_WIN)
   // On Mac, when using CoreAnimation, or Win32 when using GDI, there is a
   // delay between when content is drawn to the screen, and when the
   // snapshot will actually pick up that content. Insert a manual delay of
@@ -3033,7 +3096,7 @@ void RenderWidgetHostImpl::DetachDelegate() {
 }
 
 void RenderWidgetHostImpl::WindowSnapshotReachedScreen(int snapshot_id) {
-  DCHECK(base::MessageLoopCurrentForUI::IsSet());
+  DCHECK(base::CurrentUIThread::IsSet());
 
   if (!pending_surface_browser_snapshots_.empty()) {
     GetView()->CopyFromSurface(
@@ -3109,7 +3172,7 @@ void RenderWidgetHostImpl::OnSnapshotReceived(int snapshot_id,
       ++it;
     }
   }
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   if (pending_browser_snapshots_.empty())
     GetWakeLock()->CancelWakeLock();
 #endif
@@ -3202,7 +3265,7 @@ void RenderWidgetHostImpl::DidProcessFrame(uint32_t frame_token) {
   frame_token_message_queue_->DidProcessFrame(frame_token);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 device::mojom::WakeLock* RenderWidgetHostImpl::GetWakeLock() {
   // Here is a lazy binding, and will not reconnect after connection error.
   if (!wake_lock_) {
@@ -3264,7 +3327,7 @@ void RenderWidgetHostImpl::StopFling() {
 
 void RenderWidgetHostImpl::SetScreenOrientationForTesting(
     uint16_t angle,
-    ScreenOrientationValues type) {
+    blink::mojom::ScreenOrientation type) {
   screen_orientation_angle_for_testing_ = angle;
   screen_orientation_type_for_testing_ = type;
   SynchronizeVisualProperties();
@@ -3405,9 +3468,9 @@ void RenderWidgetHostImpl::ZoomToFindInPageRectInMainFrame(
   root_rvhi->ZoomToFindInPageRect(transformed_rect_to_zoom);
 }
 
-void RenderWidgetHostImpl::SetHasTouchEventHandlers(bool has_handlers) {
-  input_router_->OnHasTouchEventHandlers(has_handlers);
-  has_touch_handler_ = has_handlers;
+void RenderWidgetHostImpl::SetHasTouchEventConsumers(
+    blink::mojom::TouchEventConsumersPtr consumers) {
+  input_router_->OnHasTouchEventHandlers(consumers->has_touch_event_handlers);
 }
 
 void RenderWidgetHostImpl::IntrinsicSizingInfoChanged(

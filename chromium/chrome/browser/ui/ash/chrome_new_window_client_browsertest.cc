@@ -294,9 +294,15 @@ void TestAllOSSettingPages(const GURL& base_url) {
       base_url.Resolve(
           chromeos::settings::mojom::kLanguagesAndInputDetailsSubpagePath));
   TestOpenChromePage(
+      ChromePage::OSLANGUAGESINPUT,
+      base_url.Resolve(chromeos::settings::mojom::kInputSubpagePath));
+  TestOpenChromePage(
       ChromePage::OSLANGUAGESINPUTMETHODS,
       base_url.Resolve(
           chromeos::settings::mojom::kManageInputMethodsSubpagePath));
+  TestOpenChromePage(
+      ChromePage::OSLANGUAGESLANGUAGES,
+      base_url.Resolve(chromeos::settings::mojom::kLanguagesSubpagePath));
   TestOpenChromePage(
       ChromePage::OSLANGUAGESSMARTINPUTS,
       base_url.Resolve(chromeos::settings::mojom::kSmartInputsSubpagePath));
@@ -366,9 +372,6 @@ void TestAllOSSettingPages(const GURL& base_url) {
       ChromePage::CROSTINIEXPORTIMPORT,
       base_url.Resolve(
           chromeos::settings::mojom::kCrostiniBackupAndRestoreSubpagePath));
-  TestOpenChromePage(
-      ChromePage::DOWNLOADEDCONTENT,
-      base_url.Resolve(chromeos::settings::mojom::kDlcSubpagePath));
   TestOpenChromePage(
       ChromePage::EXTERNALSTORAGE,
       base_url.Resolve(chromeos::settings::mojom::kExternalStorageSubpagePath));

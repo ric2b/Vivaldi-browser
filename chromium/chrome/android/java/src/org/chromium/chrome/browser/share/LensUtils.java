@@ -20,6 +20,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
@@ -54,6 +55,7 @@ public class LensUtils {
     private static final String SEND_SRC_PARAM_NAME = "sendSrc";
     private static final String SEND_ALT_PARAM_NAME = "sendAlt";
     private static final String USE_DIRECT_INTENT_FEATURE_PARAM_NAME = "useDirectIntent";
+    private static final String DISABLE_ON_INCOGNITO_PARAM_NAME = "disableOnIncognito";
     private static final String MIN_AGSA_VERSION_NAME_FOR_LENS_POSTCAPTURE = "8.19";
     private static final String MIN_AGSA_VERSION_NAME_FOR_LENS_CHROME_SHOPPING_INTENT = "11.16";
     private static final String LENS_INTENT_TYPE_LENS_CHROME_SHOPPING = "18";
@@ -246,8 +248,9 @@ public class LensUtils {
             final long currentTimeNanos, final String srcUrl, final String titleOrAltText,
             @IntentType final int intentType, final boolean requiresConfirmation) {
         final CoreAccountInfo coreAccountInfo =
-                IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
-                        ConsentLevel.SYNC);
+                IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getPrimaryAccountInfo(ConsentLevel.SYNC);
         // If incognito do not send the account name to avoid leaking session
         // information to Lens.
         final String signedInAccountName =
@@ -311,13 +314,21 @@ public class LensUtils {
         return intent;
     }
 
-    public static boolean isGoogleLensFeatureEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS);
+    public static boolean isGoogleLensFeatureEnabled(boolean isIncognito) {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS)
+                && !(isIncognito
+                        && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                                ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS,
+                                DISABLE_ON_INCOGNITO_PARAM_NAME, false));
     }
 
-    public static boolean isGoogleLensShoppingFeatureEnabled() {
-        return useLensWithShopSimilarProducts() || useLensWithShopImageWithGoogleLens()
-                || useLensWithSearchSimilarProducts();
+    public static boolean isGoogleLensShoppingFeatureEnabled(boolean isIncognito) {
+        return (useLensWithShopSimilarProducts() || useLensWithShopImageWithGoogleLens()
+                       || useLensWithSearchSimilarProducts() || enableShoppyImageMenuItem())
+                && !(isIncognito
+                        && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                                ChromeFeatureList.CONTEXT_MENU_SHOP_WITH_GOOGLE_LENS,
+                                DISABLE_ON_INCOGNITO_PARAM_NAME, false));
     }
 
     /**
@@ -359,6 +370,16 @@ public class LensUtils {
                 ChromeFeatureList.CONTEXT_MENU_SHOP_WITH_GOOGLE_LENS,
                 LENS_SHOPPING_FEATURE_FLAG_VARIANT_NAME);
         return variation.equals("ShopImageWithGoogleLens");
+    }
+
+    /**
+     * Whether to display the lens menu item shop image with google lens.
+     */
+    public static boolean enableShoppyImageMenuItem() {
+        String variation = ChromeFeatureList.getFieldTrialParamByFeature(
+                ChromeFeatureList.CONTEXT_MENU_SHOP_WITH_GOOGLE_LENS,
+                LENS_SHOPPING_FEATURE_FLAG_VARIANT_NAME);
+        return variation.equals("ShopImageWithGoogleLensShoppyImage");
     }
 
     /**
@@ -430,14 +451,15 @@ public class LensUtils {
      * Whether to log UKM pings for lens-related behavior.
      * If in the experiment will log by default and will only be disabled
      * if the parameter is not absent and set to true.
+     * @param isIncognito Whether the user is currently in incognito mode.
      */
-    public static boolean shouldLogUkm() {
+    public static boolean shouldLogUkm(boolean isIncognito) {
         // Lens shopping feature takes the priority over the "Search image with Google Lens".
-        if (isGoogleLensShoppingFeatureEnabled()) {
+        if (isGoogleLensShoppingFeatureEnabled(isIncognito)) {
             return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                     ChromeFeatureList.CONTEXT_MENU_SHOP_WITH_GOOGLE_LENS, LOG_UKM_PARAM_NAME, true);
         }
-        if (isGoogleLensFeatureEnabled()) {
+        if (isGoogleLensFeatureEnabled(isIncognito)) {
             return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                     ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS, LOG_UKM_PARAM_NAME,
                     true);

@@ -114,14 +114,6 @@ void ServiceWorkerGlobalScopeProxy::CountFeature(WebFeature feature) {
   Client().CountFeature(feature);
 }
 
-void ServiceWorkerGlobalScopeProxy::CountDeprecation(WebFeature feature) {
-  DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
-  // Go through the same code path with countFeature() because a deprecation
-  // message is already shown on the worker console and a remaining work is
-  // just to record an API use.
-  CountFeature(feature);
-}
-
 void ServiceWorkerGlobalScopeProxy::ReportException(
     const String& error_message,
     std::unique_ptr<SourceLocation> location,
@@ -183,7 +175,7 @@ void ServiceWorkerGlobalScopeProxy::WillEvaluateClassicScript(
     size_t cached_metadata_size) {
   DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-      "ServiceWorker", "ServiceWorkerGlobalScopeProxy::EvaluateClassicScript",
+      "ServiceWorker", "ServiceWorkerGlobalScopeProxy::EvaluateTopLevelScript",
       TRACE_ID_LOCAL(this));
   // TODO(asamidoi): Remove CountWorkerScript which is called for recording
   // metrics if the metrics are no longer referenced, and then merge
@@ -205,25 +197,22 @@ void ServiceWorkerGlobalScopeProxy::WillEvaluateImportedClassicScript(
 
 void ServiceWorkerGlobalScopeProxy::WillEvaluateModuleScript() {
   DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+      "ServiceWorker", "ServiceWorkerGlobalScopeProxy::EvaluateTopLevelScript",
+      TRACE_ID_LOCAL(this));
   ScriptState::Scope scope(
       WorkerGlobalScope()->ScriptController()->GetScriptState());
   Client().WillEvaluateScript(
       WorkerGlobalScope()->ScriptController()->GetContext());
 }
 
-void ServiceWorkerGlobalScopeProxy::DidEvaluateClassicScript(bool success) {
+void ServiceWorkerGlobalScopeProxy::DidEvaluateTopLevelScript(bool success) {
   DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
   WorkerGlobalScope()->DidEvaluateScript();
   Client().DidEvaluateScript(success);
   TRACE_EVENT_NESTABLE_ASYNC_END1(
-      "ServiceWorker", "ServiceWorkerGlobalScopeProxy::EvaluateClassicScript",
+      "ServiceWorker", "ServiceWorkerGlobalScopeProxy::EvaluateTopLevelScript",
       TRACE_ID_LOCAL(this), "success", success);
-}
-
-void ServiceWorkerGlobalScopeProxy::DidEvaluateModuleScript(bool success) {
-  DCHECK_CALLED_ON_VALID_THREAD(worker_thread_checker_);
-  WorkerGlobalScope()->DidEvaluateScript();
-  Client().DidEvaluateScript(success);
 }
 
 void ServiceWorkerGlobalScopeProxy::DidCloseWorkerGlobalScope() {

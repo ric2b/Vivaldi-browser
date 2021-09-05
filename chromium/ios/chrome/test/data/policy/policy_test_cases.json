@@ -46,6 +46,18 @@
     ]
   },
 
+  "CloudManagementEnrollmentToken": {},
+
+  "CloudReportingEnabled": {
+    "os": [ "ios" ],
+    "policy_pref_mapping_test": [
+      {
+        "policies": { "CloudReportingEnabled": true },
+        "prefs": { "enterprise_reporting.chrome_cloud_reporting": { "local_state": true } }
+      }
+    ]
+  },
+
  "ChromeVariations": {
     "os": [ "ios" ],
     "policy_pref_mapping_test": [
@@ -57,6 +69,8 @@
       }
     ]
   },
+
+  "CloudPolicyOverridesPlatformPolicy": {},
 
   "DefaultPopupsSetting": {
     "os": [ "ios" ],
@@ -327,6 +341,28 @@
      ]
    },
 
+  "PrintingEnabled":{
+      "os":["ios"],
+      "policy_pref_mapping_test":[
+          {
+              "policies":{"PrintingEnabled": true},
+              "prefs":{
+                "printing.enabled":{
+                  "value": true
+              } 
+            }
+          },
+          {
+              "policies":{"PrintingEnabled": false},
+              "prefs":{
+                "printing.enabled":{
+                  "value": false
+              } 
+            }
+          }
+      ]
+  },
+
   "SafeBrowsingEnabled": {
     "os": [ "ios" ],
     "can_be_recommended": true,
@@ -393,21 +429,21 @@
     ]
   },
 
-  "URLBlacklist": {
+  "URLBlocklist": {
     "os": [ "ios" ],
     "policy_pref_mapping_test": [
       {
-        "policies": {"URLBlacklist": ["google.com"]},
+        "policies": {"URLBlocklist": ["google.com"]},
         "prefs": { "policy.url_blacklist": {}}
       }
     ]
   },
 
-  "URLWhitelist": {
+  "URLAllowlist": {
     "os": [ "ios" ],
     "policy_pref_mapping_test": [
       {
-        "policies": {"URLWhitelist": ["google.com"]},
+        "policies": {"URLAllowlist": ["google.com"]},
         "prefs": { "policy.url_whitelist": {}}
       }
     ]

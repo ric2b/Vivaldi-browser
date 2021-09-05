@@ -28,7 +28,7 @@ void ConvertThumbnailDataOnUIThread(
   ProfileManager* manager = g_browser_process->profile_manager();
   Profile* profile = manager->GetProfile(path);
 
-  extensions::VivaldiDataSourcesAPI::AddImageDataForBookmark(
+  VivaldiDataSourcesAPI::AddImageDataForBookmark(
       profile, bookmark_id, thumbnail,
       base::BindOnce(&OnBookmarkThumbnailStored, bookmark_id));
 }

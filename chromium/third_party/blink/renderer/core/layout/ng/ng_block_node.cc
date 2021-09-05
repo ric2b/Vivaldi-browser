@@ -32,6 +32,8 @@
 #include "third_party/blink/renderer/core/layout/ng/list/layout_ng_list_item.h"
 #include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_fraction_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_layout_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_padded_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_radical_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_row_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_scripts_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/mathml/ng_math_space_layout_algorithm.h"
@@ -52,10 +54,14 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_page_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_simplified_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_space_utils.h"
+#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table.h"
+#include "third_party/blink/renderer/core/layout/ng/table/ng_table_borders.h"
 #include "third_party/blink/renderer/core/layout/shapes/shape_outside_info.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_fraction_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_padded_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_radical_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_scripts_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_space_element.h"
 #include "third_party/blink/renderer/core/mathml/mathml_under_over_element.h"
@@ -108,23 +114,33 @@ NOINLINE void DetermineMathMLAlgorithmAndRun(
   DCHECK(box.IsMathML());
   // Currently math layout algorithms can only apply to MathML elements.
   auto* element = box.GetNode();
-  DCHECK(element);
-  if (IsA<MathMLSpaceElement>(element)) {
-    CreateAlgorithmAndRun<NGMathSpaceLayoutAlgorithm>(params, callback);
-  } else if (IsA<MathMLFractionElement>(element) &&
-             IsValidMathMLFraction(params.node)) {
-    CreateAlgorithmAndRun<NGMathFractionLayoutAlgorithm>(params, callback);
-  } else if (IsA<MathMLScriptsElement>(element) &&
-             IsValidMathMLScript(params.node)) {
-    // TODO(rbuis): take into account movablelimits.
-    if (IsA<MathMLUnderOverElement>(element)) {
-      CreateAlgorithmAndRun<NGMathUnderOverLayoutAlgorithm>(params, callback);
-    } else {
-      CreateAlgorithmAndRun<NGMathScriptsLayoutAlgorithm>(params, callback);
+  if (element) {
+    if (IsA<MathMLSpaceElement>(element)) {
+      CreateAlgorithmAndRun<NGMathSpaceLayoutAlgorithm>(params, callback);
+      return;
+    } else if (IsA<MathMLFractionElement>(element) &&
+               IsValidMathMLFraction(params.node)) {
+      CreateAlgorithmAndRun<NGMathFractionLayoutAlgorithm>(params, callback);
+      return;
+    } else if (IsA<MathMLRadicalElement>(element) &&
+               IsValidMathMLRadical(params.node)) {
+      CreateAlgorithmAndRun<NGMathRadicalLayoutAlgorithm>(params, callback);
+      return;
+    } else if (IsA<MathMLPaddedElement>(element)) {
+      CreateAlgorithmAndRun<NGMathPaddedLayoutAlgorithm>(params, callback);
+      return;
+    } else if (IsA<MathMLScriptsElement>(element) &&
+               IsValidMathMLScript(params.node)) {
+      // TODO(rbuis): take into account movablelimits.
+      if (IsA<MathMLUnderOverElement>(element)) {
+        CreateAlgorithmAndRun<NGMathUnderOverLayoutAlgorithm>(params, callback);
+      } else {
+        CreateAlgorithmAndRun<NGMathScriptsLayoutAlgorithm>(params, callback);
+      }
+      return;
     }
-  } else {
-    CreateAlgorithmAndRun<NGMathRowLayoutAlgorithm>(params, callback);
   }
+  CreateAlgorithmAndRun<NGMathRowLayoutAlgorithm>(params, callback);
 }
 
 template <typename Callback>
@@ -187,7 +203,7 @@ void UpdateLegacyMultiColumnFlowThread(
 
   // Stitch the columns together.
   NGBoxStrut border_scrollbar_padding =
-      ComputeBorders(constraint_space, node.Style()) +
+      ComputeBorders(constraint_space, node) +
       ComputeScrollbars(constraint_space, node) +
       ComputePadding(constraint_space, node.Style());
   NGFragment logical_multicol_fragment(writing_mode, fragment);
@@ -196,10 +212,6 @@ void UpdateLegacyMultiColumnFlowThread(
   LayoutMultiColumnSet* column_set =
       ToLayoutMultiColumnSetOrNull(flow_thread->FirstMultiColumnBox());
   for (const auto& child : fragment.Children()) {
-    // TODO(almaher): Remove check for out of flow.
-    if (child->IsOutOfFlowPositioned())
-      continue;
-
     if (child->GetLayoutObject() &&
         child->GetLayoutObject()->IsColumnSpanAll()) {
       // Column spanners are not part of the fragmentation context. We'll use
@@ -350,6 +362,14 @@ bool CanUseCachedIntrinsicInlineSizes(const MinMaxSizesInput& input,
   const auto& style = node.Style();
   if (style.MayHavePadding() && (style.PaddingStart().IsPercentOrCalc() ||
                                  style.PaddingEnd().IsPercentOrCalc()))
+    return false;
+
+  if (style.AspectRatio() &&
+      (style.LogicalMinHeight().IsPercentOrCalc() ||
+       style.LogicalMaxHeight().IsPercentOrCalc()) &&
+      input.percentage_resolution_block_size !=
+          node.GetLayoutBox()
+              ->IntrinsicLogicalWidthsPercentageResolutionBlockSize())
     return false;
 
   return true;
@@ -725,12 +745,19 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
     constraint_space = &zero_constraint_space;
 
   if (Style().AspectRatio() && input.type == MinMaxSizesType::kContent) {
+    LayoutUnit block_size(kIndefiniteSize);
+    if (IsOutOfFlowPositioned()) {
+      // For out-of-flow, the input percentage block size is actually our
+      // block size. We should use that for aspect-ratio purposes if known.
+      block_size = input.percentage_resolution_block_size;
+    }
+
     NGFragmentGeometry fragment_geometry =
         CalculateInitialMinMaxFragmentGeometry(*constraint_space, *this);
     NGBoxStrut border_padding =
         fragment_geometry.border + fragment_geometry.padding;
     LayoutUnit size_from_ar = ComputeInlineSizeFromAspectRatio(
-        *constraint_space, Style(), border_padding);
+        *constraint_space, Style(), border_padding, block_size);
     if (size_from_ar != kIndefiniteSize) {
       return {{size_from_ar, size_from_ar},
               Style().LogicalHeight().IsPercentOrCalc()};
@@ -759,11 +786,12 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
 
   // Calculate the %-block-size for our children up front. This allows us to
   // determine if |input|'s %-block-size is used.
+  const NGBoxStrut border_padding =
+      fragment_geometry.border + fragment_geometry.padding;
   bool uses_input_percentage_block_size = false;
   LayoutUnit child_percentage_resolution_block_size =
       CalculateChildPercentageBlockSizeForMinMax(
-          *constraint_space, *this,
-          fragment_geometry.border + fragment_geometry.padding,
+          *constraint_space, *this, border_padding,
           input.percentage_resolution_block_size,
           &uses_input_percentage_block_size);
 
@@ -807,18 +835,35 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
 
   const auto* node = box_->GetNode();
   const auto* html_marquee_element = DynamicTo<HTMLMarqueeElement>(node);
-  if (UNLIKELY(html_marquee_element && html_marquee_element->IsHorizontal()))
-    result.sizes.min_size = LayoutUnit();
-  else if (UNLIKELY(IsA<HTMLSelectElement>(node) ||
-                    (IsA<HTMLInputElement>(node) &&
-                     To<HTMLInputElement>(node)->type() ==
-                         input_type_names::kFile)) &&
-           Style().LogicalWidth().IsPercentOrCalc())
-    result.sizes.min_size = LayoutUnit();
+  const auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+  if (UNLIKELY((html_marquee_element && html_marquee_element->IsHorizontal()) ||
+               (IsA<HTMLSelectElement>(node) ||
+                (html_input_element &&
+                 html_input_element->type() == input_type_names::kFile)) &&
+                   Style().LogicalWidth().IsPercentOrCalc())) {
+    result.sizes.min_size = border_padding.InlineSum();
+  }
 
   bool depends_on_percentage_block_size =
       uses_input_percentage_block_size &&
       result.depends_on_percentage_block_size;
+
+  if (Style().AspectRatio() &&
+      BlockLengthUnresolvable(*constraint_space, Style().LogicalHeight(),
+                              LengthResolvePhase::kLayout)) {
+    // If the block size will be computed from the aspect ratio, we need
+    // to take the max-block-size into account.
+    // https://drafts.csswg.org/css-sizing-4/#aspect-ratio
+    MinMaxSizes min_max = ComputeMinMaxInlineSizesFromAspectRatio(
+        *constraint_space, Style(), border_padding,
+        LengthResolvePhase::kIntrinsic);
+    result.sizes.min_size = min_max.ClampSizeToMinAndMax(result.sizes.min_size);
+    result.sizes.max_size = min_max.ClampSizeToMinAndMax(result.sizes.max_size);
+    depends_on_percentage_block_size =
+        depends_on_percentage_block_size ||
+        Style().LogicalMinHeight().IsPercentOrCalc() ||
+        Style().LogicalMaxHeight().IsPercentOrCalc();
+  }
 
   box_->SetIntrinsicLogicalWidthsFromNG(
       input.percentage_resolution_block_size, depends_on_percentage_block_size,
@@ -876,7 +921,9 @@ NGLayoutInputNode NGBlockNode::NextSibling() const {
 }
 
 NGLayoutInputNode NGBlockNode::FirstChild() const {
-  auto* block = To<LayoutBlock>(box_);
+  auto* block = DynamicTo<LayoutBlock>(box_);
+  if (UNLIKELY(!block))
+    return NGBlockNode(box_->FirstChildBox());
   auto* child = GetLayoutObjectForFirstChildNode(block);
   if (!child)
     return nullptr;
@@ -923,6 +970,24 @@ NGBlockNode NGBlockNode::GetFieldsetContent() const {
   if (!child)
     return nullptr;
   return NGBlockNode(ToLayoutBox(child));
+}
+
+bool NGBlockNode::IsFixedTableLayout() const {
+  DCHECK(IsNGTable());
+  return To<LayoutNGTable>(box_)->IsFixedTableLayout();
+}
+
+const NGBoxStrut& NGBlockNode::GetTableBorders() const {
+  DCHECK(IsTable());
+  DCHECK(box_->IsLayoutNGMixin());
+  LayoutNGTable* layout_table = To<LayoutNGTable>(box_);
+  scoped_refptr<const NGTableBorders> table_borders =
+      layout_table->GetCachedTableBorders();
+  if (!table_borders) {
+    table_borders = NGTableBorders::ComputeTableBorders(*this);
+    layout_table->SetCachedTableBorders(table_borders.get());
+  }
+  return table_borders->TableBorder();
 }
 
 bool NGBlockNode::CanUseNewLayout(const LayoutBox& box) {
@@ -1084,24 +1149,6 @@ void NGBlockNode::PlaceChildrenInLayoutBox(
                                 physical_fragment, previous_break_token);
     }
   }
-
-  if (rendered_legend) {
-    // The rendered legend is a child of the the anonymous fieldset content
-    // child wrapper object on the legacy side. LayoutNG, on the other hand,
-    // generates a fragment for the rendered legend as a direct child of the
-    // fieldset container fragment (as a *sibling* preceding the anonymous
-    // fieldset content wrapper). Now that we have positioned the anonymous
-    // wrapper, we're ready to compensate for this discrepancy. See
-    // LayoutNGFieldset for more details.
-    LayoutBlock* content_wrapper = rendered_legend->ContainingBlock();
-    if (content_wrapper->IsLayoutFlowThread())
-      content_wrapper = content_wrapper->ContainingBlock();
-    DCHECK(content_wrapper->IsAnonymous());
-    DCHECK(IsA<HTMLFieldSetElement>(content_wrapper->Parent()->GetNode()));
-    LayoutPoint location = rendered_legend->Location();
-    location -= content_wrapper->Location();
-    rendered_legend->SetLocationAndUpdateOverflowControlsIfNeeded(location);
-  }
 }
 
 void NGBlockNode::PlaceChildrenInFlowThread(
@@ -1110,9 +1157,7 @@ void NGBlockNode::PlaceChildrenInFlowThread(
   for (const auto& child : physical_fragment.Children()) {
     const LayoutObject* child_object = child->GetLayoutObject();
     if (child_object && child_object != box_) {
-      // TODO(almaher): Remove check for out of flow.
-      DCHECK(child_object->IsColumnSpanAll() ||
-             child_object->IsOutOfFlowPositioned());
+      DCHECK(child_object->IsColumnSpanAll());
       CopyChildFragmentPosition(To<NGPhysicalBoxFragment>(*child), child.offset,
                                 physical_fragment);
       continue;
@@ -1317,6 +1362,11 @@ bool NGBlockNode::IsCustomLayoutLoaded() const {
 MathScriptType NGBlockNode::ScriptType() const {
   DCHECK(IsA<MathMLScriptsElement>(GetLayoutBox()->GetNode()));
   return To<MathMLScriptsElement>(GetLayoutBox()->GetNode())->GetScriptType();
+}
+
+bool NGBlockNode::HasIndex() const {
+  DCHECK(IsA<MathMLRadicalElement>(GetLayoutBox()->GetNode()));
+  return To<MathMLRadicalElement>(GetLayoutBox()->GetNode())->HasIndex();
 }
 
 scoped_refptr<const NGLayoutResult> NGBlockNode::LayoutAtomicInline(

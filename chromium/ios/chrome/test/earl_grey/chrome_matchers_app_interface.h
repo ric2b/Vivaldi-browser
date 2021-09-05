@@ -43,7 +43,11 @@
 
 // Matcher for element with accessibility label corresponding to |messageID|
 // and accessibility trait UIAccessibilityTraitHeader.
-+ (id<GREYMatcher>)headerWithAccessibilityLabelID:(int)messageID;
++ (id<GREYMatcher>)headerWithAccessibilityLabelID:(int)labelID;
+
+// Matcher for navigation bar title element with accessibility label
+// corresponding to |titleID|.
++ (id<GREYMatcher>)navigationBarTitleWithAccessibilityLabelID:(int)titleID;
 
 // Matcher for text field of a cell with |messageID|.
 + (id<GREYMatcher>)textFieldForCellWithLabelID:(int)messageID;
@@ -129,6 +133,10 @@
 // a link.
 + (id<GREYMatcher>)openLinkInNewTabButton;
 
+// Matcher for the Open in New Window option in the context menu when long
+// pressing a link.
++ (id<GREYMatcher>)openLinkInNewWindowButton;
+
 // Matcher for the done button on the navigation bar.
 + (id<GREYMatcher>)navigationBarDoneButton;
 
@@ -138,20 +146,11 @@
 // Matcher for the back button on the Bookmarks navigation bar.
 + (id<GREYMatcher>)bookmarksNavigationBarBackButton;
 
-// Returns matcher for the account consistency confirmation button.
-+ (id<GREYMatcher>)accountConsistencyConfirmationOKButton;
-
-// Returns matcher for "ADD ACCOUNT" button in unified consent dialog.
-+ (id<GREYMatcher>)unifiedConsentAddAccountButton;
-
 // Returns matcher for the add account accounts button.
 + (id<GREYMatcher>)addAccountButton;
 
 // Returns matcher for the sign out accounts button.
 + (id<GREYMatcher>)signOutAccountsButton;
-
-// Returns matcher for the sign out and clear data accounts button.
-+ (id<GREYMatcher>)signOutAndClearDataAccountsButton;
 
 // Returns matcher for the Clear Browsing Data cell on the Privacy screen.
 + (id<GREYMatcher>)clearBrowsingDataCell;

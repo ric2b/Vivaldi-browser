@@ -6,6 +6,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
+#include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/background/background_mode_manager.h"
@@ -51,8 +52,7 @@ class NativeMessagingLazyApiTest
     : public NativeMessagingApiTest,
       public testing::WithParamInterface<ContextType> {
  public:
-  void SetUp() override {
-    NativeMessagingApiTest::SetUp();
+  NativeMessagingLazyApiTest() {
     // Service Workers are currently only available on certain channels, so set
     // the channel for those tests.
     if (GetParam() == ContextType::kServiceWorker)
@@ -74,9 +74,11 @@ class NativeMessagingLazyApiTest
 INSTANTIATE_TEST_SUITE_P(EventPage,
                          NativeMessagingLazyApiTest,
                          ::testing::Values(ContextType::kEventPage));
-INSTANTIATE_TEST_SUITE_P(ServiceWorker,
-                         NativeMessagingLazyApiTest,
-                         ::testing::Values(ContextType::kServiceWorker));
+// Service Worker versions of these tests are flaky.
+// See http://crbug.com/1111536 and http://crbug.com/1111337.
+// INSTANTIATE_TEST_SUITE_P(ServiceWorker,
+//                          NativeMessagingLazyApiTest,
+//                         ::testing::Values(ContextType::kServiceWorker));
 
 IN_PROC_BROWSER_TEST_P(NativeMessagingLazyApiTest, NativeMessagingBasic) {
   ASSERT_NO_FATAL_FAILURE(test_host_.RegisterTestHost(false));
@@ -238,7 +240,7 @@ class TestKeepAliveStateObserver : public KeepAliveStateObserver {
     // On Mac, the browser remains alive when no windows are open, so observing
     // the KeepAliveRegistry cannot detect when the native messaging keep-alive
     // has been released; poll for changes instead.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     polling_timer_.Start(
         FROM_HERE, base::TimeDelta::FromMilliseconds(100),
         base::BindRepeating(&TestKeepAliveStateObserver::PollKeepAlive,
@@ -259,7 +261,7 @@ class TestKeepAliveStateObserver : public KeepAliveStateObserver {
 
   void OnKeepAliveRestartStateChanged(bool can_restart) override {}
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   void PollKeepAlive() {
     OnKeepAliveStateChanged(
         KeepAliveRegistry::GetInstance()->IsOriginRegistered(
@@ -386,9 +388,9 @@ class NativeMessagingLaunchBackgroundModeApiTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     NativeMessagingLaunchApiTest::SetUpCommandLine(command_line);
 
-    if (base::StringPiece(
-            ::testing::UnitTest::GetInstance()->current_test_info()->name())
-            .starts_with("PRE")) {
+    if (base::StartsWith(
+            ::testing::UnitTest::GetInstance()->current_test_info()->name(),
+            "PRE")) {
       return;
     }
     set_exit_when_last_browser_closes(false);

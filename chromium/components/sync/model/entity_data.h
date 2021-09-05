@@ -78,6 +78,12 @@ struct EntityData {
   // bookmarks.
   bool is_bookmark_guid_in_specifics_preprocessed = false;
 
+  // Indicate whether note GUID was missing in the original specifics during
+  // GetUpdates. If the GUID in specifics was evaluated by
+  // AdaptGuidForNote(), this field will be set to true. Relevant only for
+  // notes.
+  bool is_note_guid_in_specifics_preprocessed = false;
+
   // Unique position of an entity among its siblings. This is supposed to be
   // set only for datatypes that support positioning (e.g. Bookmarks).
   sync_pb::UniquePosition unique_position;

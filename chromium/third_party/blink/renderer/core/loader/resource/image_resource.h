@@ -34,6 +34,7 @@
 
 namespace blink {
 
+class DOMWrapperWorld;
 class FetchParameters;
 class ImageResourceContent;
 class ResourceClient;
@@ -52,15 +53,14 @@ class ResourceFetcher;
 class CORE_EXPORT ImageResource final
     : public Resource,
       public MultipartImageResourceParser::Client {
-  USING_GARBAGE_COLLECTED_MIXIN(ImageResource);
-
  public:
   // Use ImageResourceContent::Fetch() unless ImageResource is required.
   // TODO(hiroshige): Make Fetch() private.
   static ImageResource* Fetch(FetchParameters&, ResourceFetcher*);
 
   // TODO(hiroshige): Make Create() test-only by refactoring ImageDocument.
-  static ImageResource* Create(const ResourceRequest&);
+  static ImageResource* Create(const ResourceRequest&,
+                               scoped_refptr<const DOMWrapperWorld> world);
   static ImageResource* CreateForTest(const KURL&);
 
   ImageResource(const ResourceRequest&,

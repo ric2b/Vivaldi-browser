@@ -21,12 +21,12 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManagerWrapper;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
-import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -68,6 +68,7 @@ public class ContextualSearchTapEventTest {
     private ContextualSearchPanel mPanel;
     private OverlayPanelManagerWrapper mPanelManager;
     private SelectionClient mContextualSearchClient;
+    private LayoutManager mLayoutManager;
 
     // --------------------------------------------------------------------------------------------
 
@@ -76,8 +77,8 @@ public class ContextualSearchTapEventTest {
      */
     private static class ContextualSearchPanelWrapper extends ContextualSearchPanel {
         public ContextualSearchPanelWrapper(
-                Context context, LayoutUpdateHost updateHost, OverlayPanelManager panelManager) {
-            super(context, updateHost, panelManager);
+                Context context, LayoutManager layoutManager, OverlayPanelManager panelManager) {
+            super(context, layoutManager, panelManager);
         }
 
         @Override
@@ -97,7 +98,7 @@ public class ContextualSearchTapEventTest {
      */
     private static class ContextualSearchManagerWrapper extends ContextualSearchManager {
         public ContextualSearchManagerWrapper(ChromeActivity activity) {
-            super(activity, null);
+            super(activity, null, activity.getRootUiCoordinatorForTesting().getScrimCoordinator());
             setSelectionController(new MockCSSelectionController(activity, this));
             WebContents webContents = WebContentsFactory.createWebContents(false, false);
             ContentView cv = ContentView.createContentView(

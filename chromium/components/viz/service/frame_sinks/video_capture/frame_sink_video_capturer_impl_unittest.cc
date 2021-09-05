@@ -4,6 +4,7 @@
 
 #include "components/viz/service/frame_sinks/video_capture/frame_sink_video_capturer_impl.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -74,8 +75,7 @@ bool CompareVarsInCompositorFrameMetadata(
 constexpr FrameSinkId kFrameSinkId = FrameSinkId(1, 1);
 
 // The compositor frame interval.
-constexpr base::TimeDelta kVsyncInterval =
-    base::TimeDelta::FromSecondsD(1.0 / 60.0);
+constexpr auto kVsyncInterval = base::TimeDelta::FromSeconds(1) / 60;
 
 const struct SizeSet {
   // The size of the compositor frame sink's Surface.
@@ -444,8 +444,7 @@ class FrameSinkVideoCapturerTest : public testing::Test {
 
   base::TimeTicks GetNextVsync() const {
     const auto now = task_runner_->NowTicks();
-    const auto num_vsyncs_elapsed = (now - start_time_) / kVsyncInterval;
-    return start_time_ + (num_vsyncs_elapsed + 1) * kVsyncInterval;
+    return now + kVsyncInterval - ((now - start_time_) % kVsyncInterval);
   }
 
   void AdvanceClockToNextVsync() {

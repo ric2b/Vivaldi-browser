@@ -13,6 +13,7 @@ const char kEventOnFullscreen[] = "webViewPrivate.onFullscreen";
 const char kEventContentAllowed[] = "webViewPrivate.onContentAllowed";
 const char kEventContentBlocked[] = "webViewPrivate.onContentBlocked";
 const char kEventWebContentsCreated[] = "webViewPrivate.onWebcontentsCreated";
+const char kEventWindowBlocked[] = "webViewPrivate.onWindowBlocked";
 
 const char kNewSearchName[] = "Name";
 const char kNewSearchUrl[] = "Url";

@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -24,6 +25,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/host_zoom_map.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -76,25 +78,21 @@ double GetRandomMultiplier(const std::string& host) {
 
 unsigned long RoundRtt(const std::string& host,
                        const base::Optional<base::TimeDelta>& rtt) {
-  // Limit the size of the buckets and the maximum reported value to reduce
-  // fingerprinting.
-  static const size_t kGranularityMsec = 50;
-  static const double kMaxRttMsec = 3.0 * 1000;
-
   if (!rtt.has_value()) {
     // RTT is unavailable. So, return the fastest value.
     return 0;
   }
 
-  double rtt_msec = static_cast<double>(rtt.value().InMilliseconds());
-  rtt_msec *= GetRandomMultiplier(host);
-  rtt_msec = std::min(rtt_msec, kMaxRttMsec);
+  // Limit the maximum reported value and the granularity to reduce
+  // fingerprinting.
+  constexpr base::TimeDelta kMaxRtt = base::TimeDelta::FromSeconds(3);
+  constexpr base::TimeDelta kGranularity =
+      base::TimeDelta::FromMilliseconds(50);
 
-  DCHECK_LE(0, rtt_msec);
-  DCHECK_GE(kMaxRttMsec, rtt_msec);
-
-  // Round down to the nearest kBucketSize msec value.
-  return std::round(rtt_msec / kGranularityMsec) * kGranularityMsec;
+  const base::TimeDelta modified_rtt =
+      std::min(rtt.value() * GetRandomMultiplier(host), kMaxRtt);
+  DCHECK_GE(modified_rtt, base::TimeDelta());
+  return modified_rtt.RoundToMultiple(kGranularity).InMilliseconds();
 }
 
 double RoundKbpsToMbps(const std::string& host,
@@ -367,6 +365,10 @@ bool IsValidURLForClientHints(const GURL& url) {
   return true;
 }
 
+bool LangClientHintEnabled() {
+  return base::FeatureList::IsEnabled(features::kLangClientHintHeader);
+}
+
 void AddUAHeader(net::HttpRequestHeaders* headers,
                  network::mojom::WebClientHintsType type,
                  const std::string& value) {
@@ -432,9 +434,9 @@ bool ShouldAddClientHint(const ClientHintsExtendedData& data,
 }
 
 bool IsJavascriptEnabled(FrameTreeNode* frame_tree_node) {
-  RenderViewHost* render_view_host =
-      frame_tree_node->current_frame_host()->GetRenderViewHost();
-  return render_view_host->GetWebkitPreferences().javascript_enabled;
+  return WebContents::FromRenderFrameHost(frame_tree_node->current_frame_host())
+      ->GetOrCreateWebPreferences()
+      .javascript_enabled;
 }
 
 bool ShouldAddClientHints(const GURL& url,
@@ -657,7 +659,8 @@ void AddNavigationRequestClientHintsHeaders(
   // scheme or a change in the origin.
 }
 
-void PersistAcceptCHAfterNagivationRequestRedirect(
+base::Optional<std::vector<network::mojom::WebClientHintsType>>
+ParseAndPersistAcceptCHForNagivation(
     const GURL& url,
     const ::network::mojom::ParsedHeadersPtr& headers,
     BrowserContext* context,
@@ -668,10 +671,10 @@ void PersistAcceptCHAfterNagivationRequestRedirect(
   DCHECK(headers);
 
   if (!headers->accept_ch)
-    return;
+    return base::nullopt;
 
   if (!IsValidURLForClientHints(url))
-    return;
+    return base::nullopt;
 
   // Client hints should only be enabled when JavaScript is enabled. Platforms
   // which enable/disable JavaScript on a per-origin basis should implement
@@ -680,28 +683,56 @@ void PersistAcceptCHAfterNagivationRequestRedirect(
   // WebPreferences setting.
   if (!delegate->IsJavaScriptAllowed(url) ||
       !IsJavascriptEnabled(frame_tree_node)) {
-    return;
+    return base::nullopt;
   }
 
   // Only the main frame should parse accept-CH.
   if (!frame_tree_node->IsMainFrame())
-    return;
+    return base::nullopt;
 
-  // TODO(morlovich): No browser-side knowledge on what permit_lang_hints should
-  // be, so this is failing shut for now.
   base::Optional<std::vector<network::mojom::WebClientHintsType>> parsed =
-      blink::FilterAcceptCH(headers->accept_ch.value(),
-                            false /* permit_lang_hints */,
+      blink::FilterAcceptCH(headers->accept_ch.value(), LangClientHintEnabled(),
                             delegate->UserAgentClientHintEnabled());
   if (!parsed.has_value())
-    return;
+    return base::nullopt;
 
-  // JSON cannot store "non-finite" values (i.e. NaN or infinite) so
-  // base::TimeDelta::Max cannot be used. As accept-ch-lifetime will be removed
-  // once the FeaturePolicyForClientHints feature is shipped, a reasonably large
-  // value was chosen instead.
+  base::TimeDelta persist_duration;
+  if (IsFeaturePolicyForClientHintsEnabled()) {
+    // JSON cannot store "non-finite" values (i.e. NaN or infinite) so
+    // base::TimeDelta::Max cannot be used. As this will be removed once
+    // the FeaturePolicyForClientHints feature is shipped, a reasonably
+    // large was chosen instead
+    persist_duration = base::TimeDelta::FromDays(1000000);
+  } else {
+    persist_duration = headers->accept_ch_lifetime;
+    if (persist_duration.is_zero())
+      return parsed;
+  }
+
   delegate->PersistClientHints(url::Origin::Create(url), parsed.value(),
-                               base::TimeDelta::FromDays(1000000));
+                               persist_duration);
+  return parsed;
+}
+
+CONTENT_EXPORT std::vector<::network::mojom::WebClientHintsType>
+LookupAcceptCHForCommit(const GURL& url,
+                        ClientHintsControllerDelegate* delegate,
+                        FrameTreeNode* frame_tree_node) {
+  std::vector<::network::mojom::WebClientHintsType> result;
+  if (!ShouldAddClientHints(url, IsJavascriptEnabled(frame_tree_node),
+                            delegate)) {
+    return result;
+  }
+
+  const ClientHintsExtendedData data(url, frame_tree_node, delegate);
+  for (int v = 0;
+       v <= static_cast<int>(network::mojom::WebClientHintsType::kMaxValue);
+       ++v) {
+    auto hint = static_cast<network::mojom::WebClientHintsType>(v);
+    if (data.hints.IsEnabled(hint))
+      result.push_back(hint);
+  }
+  return result;
 }
 
 }  // namespace content

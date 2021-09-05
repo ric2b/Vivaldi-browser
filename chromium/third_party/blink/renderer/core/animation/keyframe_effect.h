@@ -110,7 +110,8 @@ class CORE_EXPORT KeyframeEffect final : public AnimationEffect {
 
   CompositorAnimations::FailureReasons CheckCanStartAnimationOnCompositor(
       const PaintArtifactCompositor*,
-      double animation_playback_rate) const;
+      double animation_playback_rate,
+      PropertyHandleSet* unsupported_properties = nullptr) const;
   // Must only be called once.
   void StartAnimationOnCompositor(int group,
                                   base::Optional<double> start_time,
@@ -152,6 +153,7 @@ class CORE_EXPORT KeyframeEffect final : public AnimationEffect {
   void AttachTarget(Animation*);
   void DetachTarget(Animation*);
   void RefreshTarget();
+  void CountAnimatedProperties() const;
   AnimationTimeDelta CalculateTimeToEffectChange(
       bool forwards,
       base::Optional<double> inherited_time,

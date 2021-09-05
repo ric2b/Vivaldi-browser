@@ -86,6 +86,7 @@
 #endif
 
 #if defined(USE_OZONE)
+#include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_window_surface.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
@@ -99,7 +100,7 @@ base::AtomicSequenceNumber g_next_route_id;
 base::AtomicSequenceNumber g_next_image_id;
 
 CommandBufferId NextCommandBufferId() {
-  return CommandBufferIdFromChannelAndRoute(kInProcessCommandBufferClientId,
+  return CommandBufferIdFromChannelAndRoute(kDisplayCompositorClientId,
                                             g_next_route_id.GetNext() + 1);
 }
 
@@ -371,7 +372,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       task_executor_->passthrough_discardable_manager(),
       task_executor_->shared_image_manager());
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Virtualize GpuPreference:::kLowPower contexts by default on OS X to prevent
   // performance regressions when enabling FCM. https://crbug.com/180463
   use_virtualized_gl_context_ |=
@@ -449,7 +450,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
           break;
       }
 #if defined(USE_OZONE)
-      if (params.surface_handle != gpu::kNullSurfaceHandle) {
+      if (features::IsUsingOzonePlatform() &&
+          params.surface_handle != gpu::kNullSurfaceHandle) {
         window_surface_ =
             ui::OzonePlatform::GetInstance()
                 ->GetSurfaceFactoryOzone()
@@ -848,10 +850,16 @@ bool InProcessCommandBuffer::HasUnprocessedCommandsOnGpuThread() {
 
 void InProcessCommandBuffer::FlushOnGpuThread(
     int32_t put_offset,
-    const std::vector<SyncToken>& sync_token_fences) {
+    const std::vector<SyncToken>& sync_token_fences,
+    base::TimeTicks flush_timestamp) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
   TRACE_EVENT1("gpu", "InProcessCommandBuffer::FlushOnGpuThread", "put_offset",
                put_offset);
+
+  if (!flush_timestamp.is_null()) {
+    viz_scheduled_draw_ = flush_timestamp;
+    gpu_started_draw_ = base::TimeTicks::Now();
+  }
 
   ScopedEvent handle_flush(&flush_event_);
   // Check if sync token waits are invalid or already complete. Do not use
@@ -873,7 +881,7 @@ void InProcessCommandBuffer::FlushOnGpuThread(
   {
     base::Optional<raster::GrShaderCache::ScopedCacheUse> gr_cache_use;
     if (gr_shader_cache_)
-      gr_cache_use.emplace(gr_shader_cache_, kInProcessCommandBufferClientId);
+      gr_cache_use.emplace(gr_shader_cache_, kDisplayCompositorClientId);
     command_buffer_->Flush(put_offset, decoder_.get());
   }
   // Update state before signaling the flush event.
@@ -884,7 +892,8 @@ void InProcessCommandBuffer::FlushOnGpuThread(
   if (!command_buffer_->scheduled() || has_unprocessed_commands) {
     ContinueGpuTask(base::BindOnce(&InProcessCommandBuffer::FlushOnGpuThread,
                                    gpu_thread_weak_ptr_factory_.GetWeakPtr(),
-                                   put_offset, sync_token_fences));
+                                   put_offset, sync_token_fences,
+                                   base::TimeTicks()));
   }
 
   // If we've processed all pending commands but still have pending queries,
@@ -936,12 +945,19 @@ void InProcessCommandBuffer::Flush(int32_t put_offset) {
   std::vector<SyncToken> sync_token_fences;
   next_flush_sync_token_fences_.swap(sync_token_fences);
 
+  base::TimeTicks flush_timestamp;
+  if (should_measure_next_flush_) {
+    should_measure_next_flush_ = false;
+    flush_timestamp = base::TimeTicks::Now();
+  }
+
   // Don't use std::move() for |sync_token_fences| because evaluation order for
   // arguments is not defined.
-  ScheduleGpuTask(base::BindOnce(&InProcessCommandBuffer::FlushOnGpuThread,
-                                 gpu_thread_weak_ptr_factory_.GetWeakPtr(),
-                                 put_offset, sync_token_fences),
-                  sync_token_fences);
+  ScheduleGpuTask(
+      base::BindOnce(&InProcessCommandBuffer::FlushOnGpuThread,
+                     gpu_thread_weak_ptr_factory_.GetWeakPtr(), put_offset,
+                     sync_token_fences, flush_timestamp),
+      sync_token_fences);
 }
 
 void InProcessCommandBuffer::OrderingBarrier(int32_t put_offset) {
@@ -1005,7 +1021,8 @@ void InProcessCommandBuffer::SetGetBufferOnGpuThread(
 
 scoped_refptr<Buffer> InProcessCommandBuffer::CreateTransferBuffer(
     uint32_t size,
-    int32_t* id) {
+    int32_t* id,
+    TransferBufferAllocationOption option) {
   scoped_refptr<Buffer> buffer = MakeMemoryBuffer(size);
   *id = GetNextBufferId();
   ScheduleGpuTask(
@@ -1123,7 +1140,7 @@ void InProcessCommandBuffer::CreateImageOnGpuThread(
 
       scoped_refptr<gl::GLImage> image =
           image_factory_->CreateImageForGpuMemoryBuffer(
-              std::move(handle), size, format, kInProcessCommandBufferClientId,
+              std::move(handle), size, format, kDisplayCompositorClientId,
               kNullSurfaceHandle);
       if (!image.get()) {
         LOG(ERROR) << "Failed to create image for buffer.";
@@ -1166,8 +1183,8 @@ void InProcessCommandBuffer::CacheShader(const std::string& key,
                                          const std::string& shader) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
   if (gpu_channel_manager_delegate_)
-    gpu_channel_manager_delegate_->StoreShaderToDisk(
-        kInProcessCommandBufferClientId, key, shader);
+    gpu_channel_manager_delegate_->StoreShaderToDisk(kDisplayCompositorClientId,
+                                                     key, shader);
 }
 
 void InProcessCommandBuffer::OnFenceSyncRelease(uint64_t release) {
@@ -1193,8 +1210,11 @@ void InProcessCommandBuffer::OnRescheduleAfterFinished() {
 
 void InProcessCommandBuffer::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
-  pending_swap_completed_params_.push_back({swap_id, flags});
+  pending_swap_completed_params_.push_back(
+      {swap_id, flags, viz_scheduled_draw_, gpu_started_draw_});
   pending_presented_params_.push_back({swap_id, flags});
+  viz_scheduled_draw_ = base::TimeTicks();
+  gpu_started_draw_ = base::TimeTicks();
 }
 
 void InProcessCommandBuffer::ScheduleGrContextCleanup() {
@@ -1421,7 +1441,12 @@ void InProcessCommandBuffer::DidSwapBuffersComplete(
     SwapBuffersCompleteParams params) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
 
-  params.swap_response.swap_id = pending_swap_completed_params_.front().swap_id;
+  auto& pending_swap = pending_swap_completed_params_.front();
+
+  params.swap_response.timings.viz_scheduled_draw =
+      pending_swap.viz_scheduled_draw;
+  params.swap_response.timings.gpu_started_draw = pending_swap.gpu_started_draw;
+  params.swap_response.swap_id = pending_swap.swap_id;
   pending_swap_completed_params_.pop_front();
 
   PostOrRunClientCallback(base::BindOnce(
@@ -1542,6 +1567,10 @@ void InProcessCommandBuffer::HandleGpuVSyncOnOriginThread(
   DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
   if (gpu_vsync_callback_)
     gpu_vsync_callback_.Run(vsync_time, vsync_interval);
+}
+
+void InProcessCommandBuffer::SetNeedsMeasureNextDrawLatency() {
+  should_measure_next_flush_ = true;
 }
 
 }  // namespace gpu

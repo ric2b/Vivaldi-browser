@@ -69,6 +69,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/profiling.h"
+#include "ui/base/accelerators/menu_label_accelerator_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/models/button_menu_item_model.h"
@@ -106,7 +107,7 @@ namespace {
 
 constexpr size_t kMaxAppNameLength = 30;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // An empty command used because of a bug in AppKit menus.
 // See comment in CreateActionToolbarOverflowMenu().
 const int kEmptyMenuItemCommand = 0;
@@ -134,7 +135,8 @@ base::Optional<base::string16> GetInstallPWAAppMenuItemName(Browser* browser) {
       banners::AppBannerManager::GetInstallableWebAppName(web_contents);
   if (app_name.empty())
     return base::nullopt;
-  return l10n_util::GetStringFUTF16(IDS_INSTALL_TO_OS_LAUNCH_SURFACE, app_name);
+  return l10n_util::GetStringFUTF16(IDS_INSTALL_TO_OS_LAUNCH_SURFACE,
+                                    ui::EscapeMenuLabelAmpersands(app_name));
 }
 
 }  // namespace
@@ -295,7 +297,7 @@ bool AppMenuModel::DoesCommandIdDismissMenu(int command_id) const {
 
 bool AppMenuModel::IsItemForCommandIdDynamic(int command_id) const {
   return command_id == IDC_ZOOM_PERCENT_DISPLAY ||
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
          command_id == IDC_FULLSCREEN ||
 #elif defined(OS_WIN)
          command_id == IDC_PIN_TO_START_SCREEN ||
@@ -307,7 +309,7 @@ base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
   switch (command_id) {
     case IDC_ZOOM_PERCENT_DISPLAY:
       return zoom_label_;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     case IDC_FULLSCREEN: {
       int string_id = IDS_ENTER_FULLSCREEN_MAC;  // Default to Enter.
       // Note: On startup, |window()| may be NULL.
@@ -337,8 +339,7 @@ ui::ImageModel AppMenuModel::GetIconForCommandId(int command_id) const {
   if (command_id == IDC_UPGRADE_DIALOG) {
     DCHECK(browser_defaults::kShowUpgradeMenuItem);
     DCHECK(app_menu_icon_controller_);
-    return ui::ImageModel::FromImageSkia(
-        app_menu_icon_controller_->GetIconImage(false));
+    return app_menu_icon_controller_->GetIconImage(false);
   }
   return ui::ImageModel();
 }
@@ -701,7 +702,7 @@ bool AppMenuModel::IsCommandIdEnabled(int command_id) const {
 
 bool AppMenuModel::IsCommandIdVisible(int command_id) const {
   switch (command_id) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     case kEmptyMenuItemCommand:
       return false;  // Always hidden (see CreateActionToolbarOverflowMenu).
 #endif
@@ -822,7 +823,7 @@ void AppMenuModel::Build() {
                 ->GetActiveWebContents()
                 ->GetLastCommittedURL())) {
       // Show the menu option if we are on a distilled page.
-      AddItemWithStringId(IDC_DISTILL_PAGE, IDS_DISTILL_PAGE);
+      AddItemWithStringId(IDC_DISTILL_PAGE, IDS_EXIT_DISTILLED_PAGE);
     } else if (dom_distiller::ShowReaderModeOption(
                    browser_->profile()->GetPrefs())) {
       // Show the menu option if the page is distillable.

@@ -13,6 +13,7 @@
 #include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/unguessable_token.h"
 #include "chromeos/dbus/services/cros_dbus_service.h"
 #include "dbus/exported_object.h"
 
@@ -106,17 +107,19 @@ class VmPermissionServiceProvider
     enum VmType { CrostiniVm = 0, PluginVm = 1 };
     enum PermissionType { PermissionCamera = 0, PermissionMicrophone = 1 };
 
-    const std::string owner_id_;
-    const std::string name_;
-    const VmType type_;
+    const std::string owner_id;
+    const std::string name;
+    const VmType type;
 
-    base::flat_map<PermissionType, bool> permissions_;
+    base::flat_map<PermissionType, bool> permission_to_enabled_map;
 
     VmInfo(std::string owner_id, std::string name, VmType type);
     ~VmInfo();
   };
 
-  using VmMap = std::unordered_map<std::string, std::unique_ptr<VmInfo>>;
+  using VmMap = std::unordered_map<base::UnguessableToken,
+                                   std::unique_ptr<VmInfo>,
+                                   base::UnguessableTokenHash>;
 
   // Called from ExportedObject when GetLicenseDataResponse() is exported as a
   // D-Bus method or failed to be exported.

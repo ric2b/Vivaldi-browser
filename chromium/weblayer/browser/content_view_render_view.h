@@ -49,7 +49,8 @@ class ContentViewRenderView : public content::CompositorClient {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jweb_contents,
       jint width,
-      jint height);
+      jint height,
+      jboolean for_config_change);
   void SurfaceCreated(JNIEnv* env);
   void SurfaceDestroyed(JNIEnv* env, jboolean cache_back_buffer);
   void SurfaceChanged(JNIEnv* env,
@@ -61,6 +62,7 @@ class ContentViewRenderView : public content::CompositorClient {
   void SetNeedsRedraw(JNIEnv* env);
   void EvictCachedSurface(JNIEnv* env);
   base::android::ScopedJavaLocalRef<jobject> GetResourceManager(JNIEnv* env);
+  void UpdateBackgroundColor(JNIEnv* env);
 
   // CompositorClient implementation
   void UpdateLayerTreeHost() override;

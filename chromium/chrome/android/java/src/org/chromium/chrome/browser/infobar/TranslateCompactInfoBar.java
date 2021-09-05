@@ -19,18 +19,20 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.infobar.translate.TranslateMenu;
-import org.chromium.chrome.browser.infobar.translate.TranslateMenuHelper;
-import org.chromium.chrome.browser.infobar.translate.TranslateTabLayout;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBarCompactLayout;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.components.infobars.InfoBar;
+import org.chromium.components.infobars.InfoBarCompactLayout;
+import org.chromium.components.translate.TranslateMenu;
+import org.chromium.components.translate.TranslateMenuHelper;
+import org.chromium.components.translate.TranslateOption;
+import org.chromium.components.translate.TranslateOptions;
+import org.chromium.components.translate.TranslateTabLayout;
 import org.chromium.ui.widget.Toast;
 
 /**

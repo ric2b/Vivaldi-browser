@@ -34,9 +34,7 @@
 #include "content/public/common/impression.h"
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/page_state.h"
-#include "content/public/common/previews_state.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/three_d_api_types.h"
 #include "content/public/common/untrustworthy_context_menu_params.h"
@@ -49,6 +47,7 @@
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
@@ -153,6 +152,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::UntrustworthyContextMenuParams)
   IPC_STRUCT_TRAITS_MEMBER(y)
   IPC_STRUCT_TRAITS_MEMBER(link_url)
   IPC_STRUCT_TRAITS_MEMBER(link_text)
+  IPC_STRUCT_TRAITS_MEMBER(impression)
   IPC_STRUCT_TRAITS_MEMBER(unfiltered_link_url)
   IPC_STRUCT_TRAITS_MEMBER(src_url)
   IPC_STRUCT_TRAITS_MEMBER(has_image_contents)
@@ -225,13 +225,13 @@ IPC_STRUCT_TRAITS_BEGIN(blink::FramePolicy)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::ViewportIntersectionState)
-  IPC_STRUCT_TRAITS_MEMBER(viewport_offset)
   IPC_STRUCT_TRAITS_MEMBER(viewport_intersection)
-  IPC_STRUCT_TRAITS_MEMBER(main_frame_document_intersection)
+  IPC_STRUCT_TRAITS_MEMBER(main_frame_intersection)
   IPC_STRUCT_TRAITS_MEMBER(compositor_visible_rect)
   IPC_STRUCT_TRAITS_MEMBER(occlusion_state)
   IPC_STRUCT_TRAITS_MEMBER(main_frame_viewport_size)
   IPC_STRUCT_TRAITS_MEMBER(main_frame_scroll_offset)
+  IPC_STRUCT_TRAITS_MEMBER(main_frame_transform)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
@@ -247,9 +247,9 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
   IPC_STRUCT_TRAITS_MEMBER(contents_mime_type)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(content::ScreenInfo)
+IPC_STRUCT_TRAITS_BEGIN(blink::ScreenInfo)
   IPC_STRUCT_TRAITS_MEMBER(device_scale_factor)
-  IPC_STRUCT_TRAITS_MEMBER(color_space)
+  IPC_STRUCT_TRAITS_MEMBER(display_color_spaces)
   IPC_STRUCT_TRAITS_MEMBER(depth)
   IPC_STRUCT_TRAITS_MEMBER(depth_per_component)
   IPC_STRUCT_TRAITS_MEMBER(is_monochrome)
@@ -345,8 +345,8 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(blink::ParsedFeaturePolicyDeclaration)
   IPC_STRUCT_TRAITS_MEMBER(feature)
   IPC_STRUCT_TRAITS_MEMBER(allowed_origins)
-  IPC_STRUCT_TRAITS_MEMBER(fallback_value)
-  IPC_STRUCT_TRAITS_MEMBER(opaque_value)
+  IPC_STRUCT_TRAITS_MEMBER(matches_all_origins)
+  IPC_STRUCT_TRAITS_MEMBER(matches_opaque_src)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::FrameReplicationState)
@@ -428,20 +428,6 @@ IPC_MESSAGE_ROUTED2(FrameMsg_CustomContextMenuAction,
                     content::CustomContextMenuContext /* custom_context */,
                     unsigned /* action */)
 
-// Requests that the RenderFrame send back a response after waiting for the
-// commit, activation and frame swap of the current DOM tree in blink.
-IPC_MESSAGE_ROUTED1(FrameMsg_VisualStateRequest, uint64_t /* id */)
-
-// TODO(https://crbug.com/995428): Deprecated.
-// Tells the renderer to reload the frame.
-IPC_MESSAGE_ROUTED0(FrameMsg_Reload)
-
-// Update a proxy's window.name property.  Used when the frame's name is
-// changed in another process.
-IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateName,
-                    std::string /* name */,
-                    std::string /* unique_name */)
-
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Notifies the renderer of updates to the Plugin Power Saver origin allowlist.
 IPC_MESSAGE_ROUTED1(FrameMsg_UpdatePluginContentOriginAllowlist,
@@ -460,18 +446,12 @@ IPC_MESSAGE_ROUTED2(FrameMsg_SetPepperVolume,
 IPC_MESSAGE_ROUTED1(FrameMsg_MixedContentFound,
                     FrameMsg_MixedContentFound_Params)
 
-// Tell the renderer to add a property to the WebUI binding object.  This
-// only works if we allowed WebUI bindings.
-IPC_MESSAGE_ROUTED2(FrameMsg_SetWebUIProperty,
-                    std::string /* property_name */,
-                    std::string /* property_value_json */)
-
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.
 
 // Sent by the renderer when a child frame is created in the renderer.
 //
-// Each of these messages will have a corresponding FrameHostMsg_Detach message
+// Each of these messages will have a corresponding mojom::FrameHost::Detach API
 // sent when the frame is detached from the DOM.
 // Note that |params_reply| is an out parameter. Browser process defines it for
 // the renderer process.
@@ -480,13 +460,6 @@ IPC_SYNC_MESSAGE_CONTROL1_1(FrameHostMsg_CreateChildFrame,
                             FrameHostMsg_CreateChildFrame_Params,
                             // params_reply
                             FrameHostMsg_CreateChildFrame_Params_Reply)
-
-// Sent by the renderer to the parent RenderFrameHost when a child frame is
-// detached from the DOM.
-IPC_MESSAGE_ROUTED0(FrameHostMsg_Detach)
-
-// Sent when the renderer is done loading a page.
-IPC_MESSAGE_ROUTED0(FrameHostMsg_DidStopLoading)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Notification sent from a renderer to the browser that a Pepper plugin
@@ -658,39 +631,6 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_SelectionChanged,
                     base::string16 /* text covers the selection range */,
                     uint32_t /* the offset of the text in the document */,
                     gfx::Range /* selection range in the document */)
-
-// Sent as a response to FrameMsg_VisualStateRequest.
-// The message is delivered using RenderWidget::QueueMessage.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_VisualStateResponse, uint64_t /* id */)
-
-// Sent when the renderer runs insecure content in a secure origin.
-IPC_MESSAGE_ROUTED2(FrameHostMsg_DidRunInsecureContent,
-                    GURL /* security_origin */,
-                    GURL /* target URL */)
-
-// Sent when the renderer displays content that was loaded with
-// certificate errors.
-IPC_MESSAGE_ROUTED0(FrameHostMsg_DidDisplayContentWithCertificateErrors)
-
-// Sent when the renderer runs content that was loaded with certificate
-// errors.
-IPC_MESSAGE_ROUTED0(FrameHostMsg_DidRunContentWithCertificateErrors)
-
-// A message from HTML-based UI.  When (trusted) Javascript calls
-// send(message, args), this message is sent to the browser.
-IPC_MESSAGE_ROUTED2(FrameHostMsg_WebUISend,
-                    std::string /* message */,
-                    base::ListValue /* args */)
-
-// Ask the frame host to print a cross-process subframe.
-// The printed content of this subframe belongs to the document specified by
-// its document cookie. Document cookie is a unique id for a printed document
-// associated with a print job.
-// The content will be rendered in the specified rectangular area in its parent
-// frame.
-IPC_MESSAGE_ROUTED2(FrameHostMsg_PrintCrossProcessSubframe,
-                    gfx::Rect /* rect area of the frame content */,
-                    int /* rendered document cookie */)
 
 // Adding a new message? Stick to the sort order above: first platform
 // independent FrameMsg, then ifdefs for platform specific FrameMsg, then

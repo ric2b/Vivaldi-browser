@@ -67,6 +67,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       content::NavigationHandle* navigation_handle) override;
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
+      base::UkmSourceId ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories) override;
   void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
       content::BrowserContext* browser_context,
@@ -107,6 +108,7 @@ class ShellContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin& origin,
       bool is_for_isolated_world,
       network::mojom::URLLoaderFactoryParams* factory_params) override;
+  base::FilePath GetSandboxedStorageServiceDataDirectory() override;
   std::string GetUserAgent() override;
 
  protected:

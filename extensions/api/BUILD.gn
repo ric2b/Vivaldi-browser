@@ -1,4 +1,3 @@
-import("//build/config/jumbo.gni")
 
 config("delay_load_mf") {
   ldflags = [
@@ -48,13 +47,13 @@ static_library("apis") {
     "//extensions/browser",
     "//printing/buildflags",
     "//skia:skia",
-    "//third_party/cacheinvalidation",
     "//third_party/blink/public:blink_headers",
     #"//third_party/blink/renderer/platform",
     "//ui/shell_dialogs",
     "//ui/views",
     "//vivaldi/calendar",
     "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi/components/datasource:dataurl",
     "//vivaldi/contact",
     "//vivaldi/extensions/helper",
     "//vivaldi/extensions/helper:app_helper",
@@ -108,6 +107,8 @@ static_library("apis") {
     "devtools/devtools_private_api.h",
     "editcommand/editcommand_api.cc",
     "editcommand/editcommand_api.h",
+    "events/vivaldi_ui_events.cc",
+    "events/vivaldi_ui_events.h",
     "extension_action_utils/extension_action_utils_api.cc",
     "extension_action_utils/extension_action_utils_api.h",
     "extension_action_utils/vivaldi_extension_host.cc",

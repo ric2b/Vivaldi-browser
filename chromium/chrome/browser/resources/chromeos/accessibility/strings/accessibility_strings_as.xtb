@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">সূচীৰ বস্তু</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">দুটা আঙুলিৰে সোঁফাললৈ ছোৱাইপ কৰক</translation>
+<translation id="1016393160682012902">ইয়াৰ কাৰ্যকাৰিতাসমূহৰ বিষয়ে জানিবলৈ এটা qwerty কী অথবা ৰিফ্ৰেশ্ব কৰিব পৰা ব্ৰেইল কী টিপক অথবা নিৰ্দেশত স্পৰ্শ কৰক। বন্ধ কৰিবলৈ control আৰু w বা escape টিপক।</translation>
 <translation id="1022586497894531524">আপুনি প্ৰথমবাৰৰ বাবে ChromeVoxৰ কথিত প্ৰতিক্ৰিয়া ব্যৱহাৰ কৰিছে নেকি? এই দ্ৰুত টিউট’ৰিয়েলে ChromeVox আৰম্ভ কৰা সম্পৰ্কে গুৰুত্বপূৰ্ণ কথাবোৰ ব্যাখ্যা কৰে৷</translation>
 <translation id="1025074108959230262">Chrome Goodies অক্ষম কৰা আছে</translation>
 <translation id="1031961866430398710">তাৰ পিছত</translation>
@@ -503,7 +504,6 @@
 <translation id="489907760999452556">আভ্যন্তৰীণ লিংক</translation>
 <translation id="4909019435900810068">এটা শব্দ পিছলৈ নিয়ক</translation>
 <translation id="4911349081560453449">কোনো পূর্বৱর্তী চেকবাকচ নাই</translation>
-<translation id="4915087353619183190">শিক্ষণ ম’ড আৰম্ভ কৰি থকা হৈছে। ইয়াৰ কাৰ্যকলাপবোৰ শিকিবলৈ কোনো qwerty কী বা ৰিফ্ৰেশ্ব কৰিব পৰা ব্ৰেইলি কী টিপি বা আঙুলিৰ স্পৰ্শৰে নিৰ্দেশ দিয়ক। বন্ধ কৰিবলৈ control আৰু w বা escape টিপক।</translation>
 <translation id="492295894462528572">প্ৰস্তাৱনা</translation>
 <translation id="495046168593986294">ওপৰলৈ স্ক্ৰল কৰক</translation>
 <translation id="495170559598752135">কাৰ্যসমূহ</translation>
@@ -646,6 +646,7 @@
 <translation id="6017514345406065928">সেউজীয়া ৰং</translation>
 <translation id="602001110135236999">বাওঁফাললৈ স্ক্ৰ’ল কৰক</translation>
 <translation id="6034000775414344507">পাতল ধোঁৱাবৰণীয়া</translation>
+<translation id="6036135911048686884">স্পৰ্শেৰে অন্বেষণ কৰা</translation>
 <translation id="6037602951055904232">পেন ফৰৱার্ড</translation>
 <translation id="6044160928851315051">গাঢ় কৰা স্ক্ৰীণ</translation>
 <translation id="6082768461603900813">মূল নেভিগেশ্বন</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{পাউণ্ড}one{#টা পাউণ্ড চিহ্ন}other{#টা পাউণ্ড চিহ্ন}}</translation>
 <translation id="8378855320830505539">অঞ্চল</translation>
 <translation id="8382679411218029383">স্বয়ংক্রিয়ভাৱে সম্পূৰ্ণ হোৱা ইনলাইন আৰু তালিকা</translation>
+<translation id="8394908167088220973">মিডিয়া প্লে’/পজ</translation>
 <translation id="8428213095426709021">ছেটিংসমূহ</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" /> স্তৰ</translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">সুসংগঠিত সমল, যেনে তালিকা বাহিৰ কৰক</translation>
 <translation id="8779057862865475116">কোনো পূর্বৱর্তী লিংক নাই</translation>
 <translation id="8796411681063377102">পৰৱৰ্তী স্তৰ ৩ৰ শিৰোনাম</translation>
+<translation id="8823311177246872527"><ph name="TOTALPAGES" /> খন পৃষ্ঠাৰ <ph name="CURRENTPAGE" /> নম্বৰ পৃষ্ঠা</translation>
 <translation id="8825828890761629845">বেনাৰ</translation>
 <translation id="8851136666856101339">মুখ্য</translation>
 <translation id="8882002077197914455">শাৰীৰ হে’ডাৰ</translation>

@@ -21,8 +21,10 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.CalledByNativeJavaTest;
 import org.chromium.components.payments.PackageManagerDelegate;
 import org.chromium.components.payments.PaymentApp;
+import org.chromium.components.payments.PaymentAppFactoryParams;
 import org.chromium.components.payments.PaymentManifestDownloader;
 import org.chromium.components.payments.PaymentManifestParser;
+import org.chromium.components.payments.PaymentManifestWebDataService;
 import org.chromium.components.payments.WebAppManifestSection;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
@@ -81,7 +83,7 @@ public class AndroidPaymentAppFinderUnitTest {
         Mockito.when(params.getTopLevelOrigin()).thenReturn("https://chromium.org");
         Mockito.when(params.getPaymentRequestOrigin()).thenReturn("https://chromium.org");
         Mockito.when(params.getCertificateChain()).thenReturn(null);
-        Mockito.when(params.getModifiers())
+        Mockito.when(params.getUnmodifiableModifiers())
                 .thenReturn(new HashMap<String, PaymentDetailsModifier>());
         Mockito.when(params.getMayCrawl()).thenReturn(false);
         PaymentAppFactoryDelegate delegate = Mockito.mock(PaymentAppFactoryDelegate.class);

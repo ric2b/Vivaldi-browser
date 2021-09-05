@@ -123,17 +123,18 @@ void ANGLEPlatformImpl_histogramBoolean(PlatformMethods* platform,
   ANGLEPlatformImpl_histogramEnumeration(platform, name, sample ? 1 : 0, 2);
 }
 
+NO_SANITIZE("cfi-icall")
+void AnglePlatformImpl_runWorkerTask(PostWorkerTaskCallback callback, void* user_data) {
+  TRACE_EVENT0("toplevel", "ANGLEPlatformImpl::RunWorkerTask");
+  callback(user_data);
+}
+
 void ANGLEPlatformImpl_postWorkerTask(PlatformMethods* platform,
                                       PostWorkerTaskCallback callback,
                                       void* user_data) {
   base::ThreadPool::PostTask(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(
-          [](PostWorkerTaskCallback callback, void* user_data) {
-            TRACE_EVENT0("toplevel", "ANGLEPlatformImpl::RunWorkerTask");
-            callback(user_data);
-          },
-          callback, user_data));
+      base::BindOnce(&AnglePlatformImpl_runWorkerTask, callback, user_data));
 }
 
 }  // anonymous namespace

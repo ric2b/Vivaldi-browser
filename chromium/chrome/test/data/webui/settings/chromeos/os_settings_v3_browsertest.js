@@ -8,6 +8,7 @@ GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 GEN('#include "chrome/common/buildflags.h"');
 GEN('#include "content/public/test/browser_test.h"');
 GEN('#include "services/network/public/cpp/features.h"');
+GEN('#include "chromeos/constants/chromeos_features.h"');
 
 /** Test fixture for shared Polymer 3 elements. */
 // eslint-disable-next-line no-var
@@ -30,15 +31,42 @@ var OSSettingsV3BrowserTest = class extends PolymerTest {
     return {
       enabled: [
         'network::features::kOutOfBlinkCors',
+        'chromeos::features::kOsSettingsPolymer3',
       ],
     };
   }
 };
 
-[['ResetPage', 'os_reset_page_test.m.js'],
- ['LocalizedLink', 'localized_link_test.m.js'],
+[['AmbientModePage', 'ambient_mode_page_test.m.js'],
  ['BluetoothPage', 'bluetooth_page_tests.m.js'],
+ ['DateTimePage', 'date_time_page_tests.m.js'],
+ ['InputMethodOptionPage', 'input_method_options_page_test.m.js'],
+ ['InputPage', 'input_page_test.m.js'],
+ ['LocalizedLink', 'localized_link_test.m.js'],
+ ['MultideviceFeatureItem', 'multidevice_feature_item_tests.m.js'],
+ ['MultideviceFeatureToggle', 'multidevice_feature_toggle_tests.m.js'],
+ ['MultidevicePage', 'multidevice_page_tests.m.js'],
+ ['MultideviceSmartLockSubPage', 'multidevice_smartlock_subpage_test.m.js'],
+ ['MultideviceSubPage', 'multidevice_subpage_tests.m.js'],
+ ['OsLanguagesPage', 'os_languages_page_tests.m.js'],
+ ['OsLanguagesPageV2', 'os_languages_page_v2_tests.m.js'],
  ['NearbyShareSubPage', 'nearby_share_subpage_tests.m.js'],
+ ['ParentalControlsPage', 'parental_controls_page_test.m.js'],
+ ['PeoplePage', 'os_people_page_test.m.js'],
+ ['PeoplePageAccountManager', 'people_page_account_manager_test.m.js'],
+ ['PeoplePageChangePicture', 'people_page_change_picture_test.m.js'],
+ ['PeoplePageKerberosAccounts', 'people_page_kerberos_accounts_test.m.js'],
+ ['PersonalizationPage', 'personalization_page_test.m.js'],
+ ['PrivacyPage', 'os_privacy_page_test.m.js'],
+ ['SmbPage', 'smb_shares_page_tests.m.js'],
+ ['FilesPage', 'os_files_page_test.m.js'],
+ ['ResetPage', 'os_reset_page_test.m.js'],
+ ['SmartInputsPage', 'smart_inputs_page_test.m.js'],
+ ['TimezoneSelector', 'timezone_selector_test.m.js'],
+ ['TimezoneSubpage', 'timezone_subpage_test.m.js'],
+ ['CupsPrinterPage', 'cups_printer_page_tests.m.js'],
+ ['CupsPrinterLandingPage', 'cups_printer_landing_page_tests.m.js'],
+ ['CupsPrinterEntry', 'cups_printer_entry_tests.m.js'],
 ].forEach(test => registerTest(...test));
 
 function registerTest(testName, module, caseName) {

@@ -39,7 +39,7 @@ struct OperaPasswordInfo {
   const wchar_t* username;
   const wchar_t* password_field;
   const wchar_t* password;
-  const bool blacklisted;
+  const bool blocked_by_user;
 };
 
 struct OperaBookmarkInfo {
@@ -199,7 +199,7 @@ class OperaImportObserver : public ProfileWriter,
     EXPECT_EQ(base::WideToUTF16(p.username), form.username_value);
     EXPECT_EQ(base::WideToUTF16(p.password_field), form.password_element);
     EXPECT_EQ(base::WideToUTF16(p.password), form.password_value);
-    EXPECT_EQ(p.blacklisted, form.blacklisted_by_user);
+    EXPECT_EQ(p.blocked_by_user, form.blocked_by_user);
     ++password_count;
   }
   void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
@@ -240,7 +240,7 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
     vivaldi::RegisterVivaldiPaths();
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
     base::FilePath temp = temp_dir.GetPath().AppendASCII("OperaImportTest");
-    base::DeleteFile(temp, true);
+    base::DeleteFile(temp);
     base::CreateDirectory(temp);
     profile_dir = temp.AppendASCII("profile");
 

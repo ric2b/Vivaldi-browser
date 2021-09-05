@@ -30,8 +30,8 @@
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
 #include "chrome/browser/chromeos/policy/remote_commands/user_commands_factory_chromeos.h"
 #include "chrome/browser/chromeos/policy/wildcard_login_checker.h"
-#include "chrome/browser/enterprise/reporting/report_generator.h"
-#include "chrome/browser/enterprise/reporting/report_scheduler.h"
+#include "chrome/browser/enterprise/reporting/report_scheduler_desktop.h"
+#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_desktop.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/net/system_network_context_manager.h"
@@ -40,6 +40,8 @@
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_features.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "components/enterprise/browser/reporting/report_generator.h"
+#include "components/enterprise/browser/reporting/report_scheduler.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
@@ -55,7 +57,6 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/network_service_instance.h"
-#include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
@@ -778,9 +779,14 @@ void UserCloudPolicyManagerChromeOS::StartReportSchedulerIfReady(
     return;
   }
 
+  // TODO(crbug.com/1102047): Split up Chrome OS reporting code into its own
+  // delegates, then use the Chrome OS delegate factory here.
+  enterprise_reporting::ReportingDelegateFactoryDesktop delegate_factory;
   report_scheduler_ = std::make_unique<enterprise_reporting::ReportScheduler>(
-      client(), std::make_unique<enterprise_reporting::ReportGenerator>(),
-      profile_);
+      client(),
+      std::make_unique<enterprise_reporting::ReportGenerator>(
+          &delegate_factory),
+      std::make_unique<enterprise_reporting::ReportSchedulerDesktop>(profile_));
 
   report_scheduler_->OnDMTokenUpdated();
 }

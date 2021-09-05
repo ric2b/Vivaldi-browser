@@ -42,7 +42,7 @@
 #include "app/vivaldi_apptools.h"
 #include "base/vivaldi_switches.h"
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 
 namespace {
 
@@ -88,7 +88,7 @@ bool ServiceProcessState::GetServiceProcessData(std::string* version,
     *pid = service_data->service_process_pid;
   return true;
 }
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC
 
 // Return a name that is scoped to this instance of the service process. We
 // use the hash of the user-data-dir as a scoping prefix. We can't use
@@ -119,7 +119,7 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
   command_line->AppendArg(switches::kPrefetchArgumentOther);
 #endif  // defined(OS_WIN)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (crash_reporter::IsCrashpadEnabled()) {
     command_line->AppendSwitch(crash_reporter::kEnableCrashpad);
 
@@ -130,7 +130,7 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
           base::NumberToString(pid));
     }
   }
-#endif  // defined(OS_LINUX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
   if (vivaldi::IsVivaldiRunning())
     vivaldi::CommandLineAppendSwitchNoDup(command_line.get(),
@@ -144,9 +144,6 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
     switches::kCloudPrintSetupProxy,
     switches::kCloudPrintURL,
     switches::kCloudPrintXmppEndpoint,
-#if defined(OS_WIN)
-    switches::kEnableCloudPrintXps,
-#endif
     switches::kEnableLogging,
     switches::kLang,
     switches::kLoggingLevel,
@@ -170,23 +167,23 @@ ServiceProcessState::ServiceProcessState() : state_(nullptr) {
 }
 
 ServiceProcessState::~ServiceProcessState() {
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   if (service_process_data_region_.IsValid()) {
     service_process_data_region_ = {};
     DeleteServiceProcessDataRegion();
   }
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC
   TearDownState();
 }
 
 void ServiceProcessState::SignalStopped() {
   TearDownState();
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
   service_process_data_region_ = {};
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 bool ServiceProcessState::Initialize() {
   if (!TakeSingletonLock()) {
     return false;
@@ -300,4 +297,4 @@ ServiceProcessState::GetServiceProcessServerName() {
   return ::GetServiceProcessServerName();
 }
 
-#endif  // !OS_MACOSX
+#endif  // !OS_MAC

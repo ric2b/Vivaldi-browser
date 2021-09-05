@@ -40,13 +40,11 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/prefs/pref_service.h"
-#include "components/variations/variations_http_header_provider.h"
+#include "components/variations/variations_ids_provider.h"
 #include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "net/url_request/url_request_status.h"
-#include "net/url_request/url_request_test_util.h"
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_shared_url_loader_factory.h"
@@ -1392,10 +1390,10 @@ class AutofillServerCommunicationTest
     if (server_.Started())
       ASSERT_TRUE(server_.ShutdownAndWaitUntilComplete());
 
-    auto* variations_http_header_provider =
-        variations::VariationsHttpHeaderProvider::GetInstance();
-    if (variations_http_header_provider != nullptr)
-      variations_http_header_provider->ResetForTesting();
+    auto* variations_ids_provider =
+        variations::VariationsIdsProvider::GetInstance();
+    if (variations_ids_provider != nullptr)
+      variations_ids_provider->ResetForTesting();
   }
 
   // AutofillDownloadManager::Observer implementation.
@@ -1634,10 +1632,10 @@ TEST_P(AutofillQueryTest, SendsExperiment) {
   }
 
   // Add experiment/variation idd from the range reserved for autofill.
-  auto* variations_http_header_provider =
-      variations::VariationsHttpHeaderProvider::GetInstance();
-  ASSERT_TRUE(variations_http_header_provider != nullptr);
-  variations_http_header_provider->ForceVariationIds(
+  auto* variations_ids_provider =
+      variations::VariationsIdsProvider::GetInstance();
+  ASSERT_TRUE(variations_ids_provider != nullptr);
+  variations_ids_provider->ForceVariationIds(
       {"t3314883", "t3312923", "t3314885"},  // first two valid, out-of-order
       {});
 
@@ -2007,8 +2005,8 @@ TEST_P(AutofillUploadTest, RichMetadata) {
     EXPECT_TRUE(upload.randomized_form_metadata().has_id());
     EXPECT_TRUE(upload.randomized_form_metadata().has_name());
     EXPECT_TRUE(upload.randomized_form_metadata().has_url());
-    ASSERT_TRUE(upload.randomized_form_metadata().has_checksum_for_url());
-    EXPECT_EQ(upload.randomized_form_metadata().checksum_for_url(), 3608731642);
+    ASSERT_TRUE(upload.randomized_form_metadata().url().has_checksum());
+    EXPECT_EQ(upload.randomized_form_metadata().url().checksum(), 3608731642);
     EXPECT_EQ(3, upload.field_size());
     for (const auto& f : upload.field()) {
       ASSERT_TRUE(f.has_randomized_field_metadata());

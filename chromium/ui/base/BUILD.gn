@@ -3,10 +3,8 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
-import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
-import("//build/config/jumbo.gni")
 import("//build/config/linux/gtk/gtk.gni")
 import("//build/config/linux/pangocairo/pangocairo.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -67,7 +65,6 @@ buildflag_header("buildflags") {
   flags = [
     "ENABLE_HIDPI=$enable_hidpi",
     "ENABLE_MESSAGE_CENTER=$enable_message_center",
-    "LACROS=$chromeos_is_browser_only",
     "USE_ATK=$use_atk",
     "USE_XKBCOMMON=$use_xkbcommon",
     "HAS_NATIVE_ACCESSIBILITY=$has_native_accessibility",
@@ -89,7 +86,7 @@ source_set("hit_test") {
   }
 }
 
-jumbo_component("base") {
+component("base") {
   output_name = "ui_base"
 
   sources = [
@@ -121,6 +118,11 @@ jumbo_component("base") {
     "models/combobox_model.cc",
     "models/combobox_model.h",
     "models/combobox_model_observer.h",
+    "models/dialog_model.cc",
+    "models/dialog_model.h",
+    "models/dialog_model_field.cc",
+    "models/dialog_model_field.h",
+    "models/dialog_model_host.h",
     "models/image_model.cc",
     "models/image_model.h",
     "models/list_model.h",
@@ -354,7 +356,7 @@ jumbo_component("base") {
       "user_activity/user_activity_observer.h",
     ]
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       sources += [
         "accelerators/menu_label_accelerator_util_linux.cc",
         "accelerators/menu_label_accelerator_util_linux.h",
@@ -404,7 +406,7 @@ jumbo_component("base") {
     sources += [ "pointer/pointer_device_android.cc" ]
   } else if (is_ios) {
     sources += [ "pointer/pointer_device_ios.cc" ]
-  } else if (is_linux) {
+  } else if (is_linux || is_chromeos) {
     sources += [ "pointer/pointer_device_linux.cc" ]
   } else {
     # Empty implementation for all other cases.
@@ -430,6 +432,7 @@ jumbo_component("base") {
     ":ui_data_pack",
     "//base",
     "//skia",
+    "//third_party/abseil-cpp:absl",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -438,6 +441,7 @@ jumbo_component("base") {
     "//base:base_static",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//base/util/type_safety:type_safety",
     "//net",
     "//third_party/brotli:dec",
     "//third_party/icu",
@@ -515,11 +519,11 @@ jumbo_component("base") {
     }
   }
 
-  if (use_aura && is_linux) {
+  if (use_aura && (is_linux || is_chromeos)) {
     sources += [ "resource/resource_bundle_auralinux.cc" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     deps += [ "//third_party/fontconfig" ]
   }
 
@@ -532,7 +536,7 @@ jumbo_component("base") {
     ]
   }
 
-  if (is_chromeos || (use_aura && is_linux && !use_x11)) {
+  if (is_chromeos || (use_aura && is_linux)) {
     sources += [
       "dragdrop/os_exchange_data_provider_non_backed.cc",
       "dragdrop/os_exchange_data_provider_non_backed.h",
@@ -553,7 +557,7 @@ jumbo_component("base") {
   if (is_mac) {
     deps += [ "//third_party/mozilla" ]
 
-    libs += [
+    frameworks = [
       "Accelerate.framework",
       "AppKit.framework",
       "QuartzCore.framework",
@@ -636,7 +640,7 @@ component("features") {
 
 # TODO(crbug.com/1091985): Support CrOS.
 if (is_win || is_mac || (is_linux && !is_chromeos)) {
-  jumbo_static_library("pixel_diff_test_support") {
+  static_library("pixel_diff_test_support") {
     testonly = true
     sources = [
       "test/skia_gold_matching_algorithm.cc",
@@ -674,7 +678,7 @@ if (!is_ios) {
   }
 }
 
-jumbo_static_library("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "resource/mock_resource_bundle_delegate.cc",
@@ -869,6 +873,18 @@ test("ui_base_unittests") {
     "models/simple_menu_model_unittest.cc",
     "models/tree_node_iterator_unittest.cc",
     "pointer/touch_ui_controller_unittest.cc",
+    "prediction/empty_filter_unittests.cc",
+    "prediction/input_filter_unittest_helpers.cc",
+    "prediction/input_filter_unittest_helpers.h",
+    "prediction/input_predictor_unittest_helpers.cc",
+    "prediction/input_predictor_unittest_helpers.h",
+    "prediction/kalman_predictor_unittest.cc",
+    "prediction/least_squares_predictor_unittest.cc",
+    "prediction/linear_predictor_unittest.cc",
+    "prediction/linear_resampling_unittest.cc",
+    "prediction/one_euro_filter_unittests.cc",
+    "prediction/prediction_metrics_handler_unittest.cc",
+    "prediction/prediction_unittest_helpers.h",
     "resource/data_pack_literal.cc",
     "resource/data_pack_literal.h",
     "resource/data_pack_unittest.cc",
@@ -917,6 +933,7 @@ test("ui_base_unittests") {
     "//ui/base/clipboard:clipboard_test",
     "//ui/base/clipboard:clipboard_types",
     "//ui/base/cursor:unittests",
+    "//ui/base/prediction:prediction",
     "//ui/display",
     "//ui/events:events_base",
     "//ui/events:test_support",
@@ -955,7 +972,7 @@ test("ui_base_unittests") {
     ]
     deps += [ "//components/system_media_controls:test_support" ]
 
-    if (is_linux) {
+    if (is_linux || is_chromeos) {
       sources +=
           [ "accelerators/menu_label_accelerator_util_linux_unittest.cc" ]
     }
@@ -1114,7 +1131,7 @@ test("ui_base_unittests") {
     deps += [ "//ui/events:dom_keycode_converter" ]
   }
 
-  if (is_android || is_linux || is_mac || is_win || is_fuchsia) {
+  if (is_android || is_linux || is_chromeos || is_mac || is_win || is_fuchsia) {
     # TODO(brettw): We should be able to depend on //ui/resources:ui_test_pak
     # instead of depending directly on the non-test .pak files, but depending
     # on ui_test_pak seems to have no effect.
@@ -1127,7 +1144,7 @@ test("ui_base_unittests") {
       "//ui/resources:ui_test_pak",  # TODO(brettw): this does nothing.
     ]
   }
-  if (is_linux || is_win || is_fuchsia) {
+  if (is_linux || is_chromeos || is_win || is_fuchsia) {
     data += [
       # TODO(brettw): Remove these two lines.
       "$root_out_dir/ui/en-US.pak",
@@ -1163,7 +1180,7 @@ if (is_win) {
   }
 }
 
-if (is_linux) {
+if (is_linux || is_chromeos) {
   # This source set defines linux wm role names and must not have any external
   # dependencies and be kept as minimal as possible.
   source_set("wm_role_names") {

@@ -30,7 +30,6 @@
 #include <memory>
 
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/graphics/color_behavior.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
@@ -67,16 +66,24 @@ class PLATFORM_EXPORT ImagePlanes final {
 
  public:
   ImagePlanes();
+
+  // |color_type| is kGray_8_SkColorType if GetYUVBitDepth() == 8 and either
+  // kA16_float_SkColorType or kA16_unorm_SkColorType if GetYUVBitDepth() > 8.
+  //
   // TODO(crbug/910276): To support YUVA, ImagePlanes needs to support a
   // variable number of planes.
-  ImagePlanes(void* planes[3], const size_t row_bytes[3]);
+  ImagePlanes(void* planes[3],
+              const size_t row_bytes[3],
+              SkColorType color_type);
 
   void* Plane(int);
   size_t RowBytes(int) const;
+  SkColorType color_type() const { return color_type_; }
 
  private:
   void* planes_[3];
   size_t row_bytes_[3];
+  SkColorType color_type_;
 
   DISALLOW_COPY_AND_ASSIGN(ImagePlanes);
 };
@@ -121,8 +128,7 @@ class PLATFORM_EXPORT ImageDecoder {
   USING_FAST_MALLOC(ImageDecoder);
 
  public:
-  static const size_t kNoDecodedImageByteLimit =
-      Platform::kNoDecodedImageByteLimit;
+  static const size_t kNoDecodedImageByteLimit;
 
   enum AlphaOption { kAlphaPremultiplied, kAlphaNotPremultiplied };
   enum HighBitDepthDecodingOption {
@@ -149,6 +155,22 @@ class PLATFORM_EXPORT ImageDecoder {
     kDeny,
   };
 
+  // For images which contain both animations and still images, indicates which
+  // is preferred. When unspecified the decoder will use hints from the data
+  // stream to make a decision.
+  //
+  // Note: |animation_option| is unused by formats like GIF or APNG since they
+  // do not have distinct still and animated tracks. I.e., there is either only
+  // an animation or only a still image. If a caller only wants a still image
+  // from a GIF or APNG animation, they can choose to only decode the first
+  // frame. With a format like AVIF where there are distinct still and animation
+  // tracks, callers need a mechanism to choose.
+  enum class AnimationOption {
+    kUnspecified,
+    kPreferAnimation,
+    kPreferStillImage,
+  };
+
   virtual ~ImageDecoder() = default;
 
   // Returns a caller-owned decoder of the appropriate type.  Returns nullptr if
@@ -163,7 +185,8 @@ class PLATFORM_EXPORT ImageDecoder {
       const ColorBehavior&,
       const OverrideAllowDecodeToYuv allow_decode_to_yuv =
           OverrideAllowDecodeToYuv::kDefault,
-      const SkISize& desired_size = SkISize::MakeEmpty());
+      const SkISize& desired_size = SkISize::MakeEmpty(),
+      AnimationOption animation_option = AnimationOption::kUnspecified);
   static std::unique_ptr<ImageDecoder> Create(
       scoped_refptr<SharedBuffer> data,
       bool data_complete,
@@ -172,10 +195,12 @@ class PLATFORM_EXPORT ImageDecoder {
       const ColorBehavior& color_behavior,
       const OverrideAllowDecodeToYuv allow_decode_to_yuv =
           OverrideAllowDecodeToYuv::kDefault,
-      const SkISize& desired_size = SkISize::MakeEmpty()) {
+      const SkISize& desired_size = SkISize::MakeEmpty(),
+      AnimationOption animation_option = AnimationOption::kUnspecified) {
     return Create(SegmentReader::CreateFromSharedBuffer(std::move(data)),
                   data_complete, alpha_option, high_bit_depth_decoding_option,
-                  color_behavior, allow_decode_to_yuv, desired_size);
+                  color_behavior, allow_decode_to_yuv, desired_size,
+                  animation_option);
   }
 
   // Similar to above, but does not allow mime sniffing. Creates explicitly
@@ -189,7 +214,8 @@ class PLATFORM_EXPORT ImageDecoder {
       const ColorBehavior& color_behavior,
       const OverrideAllowDecodeToYuv allow_decode_to_yuv =
           OverrideAllowDecodeToYuv::kDefault,
-      const SkISize& desired_size = SkISize::MakeEmpty());
+      const SkISize& desired_size = SkISize::MakeEmpty(),
+      AnimationOption animation_option = AnimationOption::kUnspecified);
 
   virtual String FilenameExtension() const = 0;
 
@@ -261,6 +287,12 @@ class PLATFORM_EXPORT ImageDecoder {
     NOTREACHED();
     return SkYUVColorSpace::kIdentity_SkYUVColorSpace;
   }
+
+  // Image decoders that support high bit depth YUV decoding can override this.
+  //
+  // Note: If an implementation advertises a bit depth > 8 it must support both
+  // kA16_unorm_SkColorType and kA16_float_SkColorType ImagePlanes.
+  virtual uint8_t GetYUVBitDepth() const { return 8; }
 
   // Returns the information required to decide whether or not hardware
   // acceleration can be used to decode this image. Callers of this function
@@ -372,7 +404,14 @@ class PLATFORM_EXPORT ImageDecoder {
   virtual bool HotSpot(IntPoint&) const { return false; }
 
   virtual void SetMemoryAllocator(SkBitmap::Allocator* allocator) {
-    // FIXME: this doesn't work for images with multiple frames.
+    // This currently doesn't work for images with multiple frames.
+    // Some animated image formats require extra guarantees:
+    // 1. The memory is cheaply readable, which isn't true for GPU memory, and
+    // 2. The memory's lifetime will persist long enough to allow reading past
+    //   frames, which isn't true for discardable memory.
+    // Not all animated image formats share these requirements. Blocking
+    // all animated formats is overly aggressive. If a need arises for an
+    // external memory allocator for animated images, this should be changed.
     if (frame_buffer_cache_.IsEmpty()) {
       // Ensure that InitializeNewFrame is called, after parsing if
       // necessary.
@@ -390,6 +429,9 @@ class PLATFORM_EXPORT ImageDecoder {
   void SetImagePlanes(std::unique_ptr<ImagePlanes> image_planes) {
     image_planes_ = std::move(image_planes);
   }
+
+  // Indicates if the data contains both an animation and still image.
+  virtual bool ImageHasBothStillAndAnimatedSubImages() const { return false; }
 
  protected:
   ImageDecoder(AlphaOption alpha_option,
@@ -444,8 +486,8 @@ class PLATFORM_EXPORT ImageDecoder {
   // call.
   bool InitFrameBuffer(size_t);
 
-  // Performs any additional setup of the requested frame after it has been
-  // initially created, e.g. setting a duration or disposal method.
+  // Performs any decoder-specific setup of the requested frame after it has
+  // been newly created, e.g. setting the frame's duration or disposal method.
   virtual void InitializeNewFrame(size_t) {}
 
   // Decodes the requested frame.

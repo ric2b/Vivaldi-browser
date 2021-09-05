@@ -10,7 +10,6 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
@@ -48,6 +47,7 @@ class OmniboxEditModel {
           const AutocompleteInput& autocomplete_input);
     State(const State& other);
     ~State();
+    State& operator=(const State&) = delete;
 
     bool user_input_in_progress;
     const base::string16 user_text;
@@ -58,14 +58,14 @@ class OmniboxEditModel {
     OmniboxFocusState focus_state;
     OmniboxFocusSource focus_source;
     const AutocompleteInput autocomplete_input;
-   private:
-    DISALLOW_ASSIGN(State);
   };
 
   OmniboxEditModel(OmniboxView* view,
                    OmniboxEditController* controller,
                    std::unique_ptr<OmniboxClient> client);
   virtual ~OmniboxEditModel();
+  OmniboxEditModel(const OmniboxEditModel&) = delete;
+  OmniboxEditModel& operator=(const OmniboxEditModel&) = delete;
 
   // TODO(jdonnelly): Remove this accessor when the AutocompleteController has
   //     completely moved to OmniboxController.
@@ -299,10 +299,11 @@ class OmniboxEditModel {
   // control key is down (at the time we're gaining focus).
   void OnSetFocus(bool control_down);
 
-  // Shows On-Focus Suggestions (ZeroSuggest) if no query is currently running
-  // and the popup is closed. This can be called multiple times without harm,
-  // since it will early-exit if an earlier request is in progress (or done).
-  void ShowOnFocusSuggestionsIfAutocompleteIdle();
+  // Starts a request for zero-prefix suggestions if no query is currently
+  // running and the popup is closed. This can be called multiple times without
+  // harm, since it will early-exit if an earlier request is in progress or
+  // done.
+  void StartZeroSuggestRequest(bool user_clobbered_permanent_text = false);
 
   // Sets the visibility of the caret in the omnibox, if it has focus. The
   // visibility of the caret is reset to visible if either
@@ -549,6 +550,13 @@ class OmniboxEditModel {
   // there was no focus event.
   bool user_input_since_focus_;
 
+  // Indicates whether the current interaction with the Omnibox resulted in
+  // navigation (true), or user leaving the omnibox without taking any action
+  // (false).
+  // The value is initialized when the Omnibox receives focus and available for
+  // use when the focus is about to be cleared.
+  bool focus_resulted_in_navigation_;
+
   // We keep track of when the user began modifying the omnibox text.
   // This should be valid whenever user_input_in_progress_ is true.
   base::TimeTicks time_user_first_modified_omnibox_;
@@ -643,8 +651,6 @@ class OmniboxEditModel {
   // autocomplete query is started after a tab switch, it is possible for this
   // |input_| to differ from the one currently stored in AutocompleteController.
   AutocompleteInput input_;
-
-  DISALLOW_COPY_AND_ASSIGN(OmniboxEditModel);
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_OMNIBOX_EDIT_MODEL_H_

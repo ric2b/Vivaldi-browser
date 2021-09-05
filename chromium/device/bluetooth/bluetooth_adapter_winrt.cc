@@ -41,6 +41,7 @@
 #include "device/bluetooth/bluetooth_discovery_filter.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/event_utils_winrt.h"
+#include "device/bluetooth/public/cpp/bluetooth_address.h"
 
 namespace device {
 
@@ -483,8 +484,8 @@ std::string BluetoothAdapterWinrt::GetName() const {
 }
 
 void BluetoothAdapterWinrt::SetName(const std::string& name,
-                                    const base::Closure& callback,
-                                    const ErrorCallback& error_callback) {
+                                    base::OnceClosure callback,
+                                    ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -529,10 +530,9 @@ bool BluetoothAdapterWinrt::IsDiscoverable() const {
   return false;
 }
 
-void BluetoothAdapterWinrt::SetDiscoverable(
-    bool discoverable,
-    const base::Closure& callback,
-    const ErrorCallback& error_callback) {
+void BluetoothAdapterWinrt::SetDiscoverable(bool discoverable,
+                                            base::OnceClosure callback,
+                                            ErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -548,29 +548,29 @@ BluetoothAdapter::UUIDList BluetoothAdapterWinrt::GetUUIDs() const {
 void BluetoothAdapterWinrt::CreateRfcommService(
     const BluetoothUUID& uuid,
     const ServiceOptions& options,
-    const CreateServiceCallback& callback,
-    const CreateServiceErrorCallback& error_callback) {
+    CreateServiceCallback callback,
+    CreateServiceErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothAdapterWinrt::CreateL2capService(
     const BluetoothUUID& uuid,
     const ServiceOptions& options,
-    const CreateServiceCallback& callback,
-    const CreateServiceErrorCallback& error_callback) {
+    CreateServiceCallback callback,
+    CreateServiceErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
 void BluetoothAdapterWinrt::RegisterAdvertisement(
     std::unique_ptr<BluetoothAdvertisement::Data> advertisement_data,
-    const CreateAdvertisementCallback& callback,
-    const AdvertisementErrorCallback& error_callback) {
+    CreateAdvertisementCallback callback,
+    AdvertisementErrorCallback error_callback) {
   auto advertisement = CreateAdvertisement();
   if (!advertisement->Initialize(std::move(advertisement_data))) {
     BLUETOOTH_LOG(ERROR) << "Failed to Initialize Advertisement.";
     ui_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(error_callback,
+        base::BindOnce(std::move(error_callback),
                        BluetoothAdvertisement::ERROR_STARTING_ADVERTISEMENT));
     return;
   }
@@ -580,12 +580,14 @@ void BluetoothAdapterWinrt::RegisterAdvertisement(
   // in |pending_advertisements_|. When the callbacks are run, they will remove
   // the corresponding advertisement from the list of pending advertisements.
   advertisement->Register(
-      base::Bind(&BluetoothAdapterWinrt::OnRegisterAdvertisement,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 base::Unretained(advertisement.get()), callback),
-      base::Bind(&BluetoothAdapterWinrt::OnRegisterAdvertisementError,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 base::Unretained(advertisement.get()), error_callback));
+      base::BindOnce(&BluetoothAdapterWinrt::OnRegisterAdvertisement,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::Unretained(advertisement.get()),
+                     std::move(callback)),
+      base::BindOnce(&BluetoothAdapterWinrt::OnRegisterAdvertisementError,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::Unretained(advertisement.get()),
+                     std::move(error_callback)));
 
   pending_advertisements_.push_back(std::move(advertisement));
 }
@@ -1084,8 +1086,8 @@ void BluetoothAdapterWinrt::OnGetDefaultAdapter(
     return;
   }
 
-  address_ = BluetoothDevice::CanonicalizeAddress(
-      base::StringPrintf("%012llX", raw_address));
+  address_ =
+      CanonicalizeBluetoothAddress(base::StringPrintf("%012llX", raw_address));
   DCHECK(!address_.empty());
 
   HSTRING device_id;
@@ -1383,21 +1385,21 @@ void BluetoothAdapterWinrt::OnAdvertisementWatcherStopped(
 
 void BluetoothAdapterWinrt::OnRegisterAdvertisement(
     BluetoothAdvertisement* advertisement,
-    const CreateAdvertisementCallback& callback) {
+    CreateAdvertisementCallback callback) {
   DCHECK(base::Contains(pending_advertisements_, advertisement));
   auto wrapped_advertisement = base::WrapRefCounted(advertisement);
   base::Erase(pending_advertisements_, advertisement);
-  callback.Run(std::move(wrapped_advertisement));
+  std::move(callback).Run(std::move(wrapped_advertisement));
 }
 
 void BluetoothAdapterWinrt::OnRegisterAdvertisementError(
     BluetoothAdvertisement* advertisement,
-    const AdvertisementErrorCallback& error_callback,
+    AdvertisementErrorCallback error_callback,
     BluetoothAdvertisement::ErrorCode error_code) {
   // Note: We are not DCHECKing that |pending_advertisements_| contains
   // |advertisement|, as this method might be invoked during destruction.
   base::Erase(pending_advertisements_, advertisement);
-  error_callback.Run(error_code);
+  std::move(error_callback).Run(error_code);
 }
 
 void BluetoothAdapterWinrt::TryRemoveRadioStateChangedHandler() {

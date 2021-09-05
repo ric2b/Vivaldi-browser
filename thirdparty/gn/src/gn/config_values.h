@@ -50,6 +50,7 @@ class ConfigValues {
   DIR_VALUES_ACCESSOR(lib_dirs)
   STRING_VALUES_ACCESSOR(rustflags)
   STRING_VALUES_ACCESSOR(rustenv)
+  STRING_VALUES_ACCESSOR(swiftflags)
   // =================================================================
   // IMPORTANT: If you add a new one, be sure to update AppendValues()
   //            and command_desc.cc.
@@ -96,6 +97,7 @@ class ConfigValues {
   std::vector<LibFile> libs_;
   std::vector<std::string> rustflags_;
   std::vector<std::string> rustenv_;
+  std::vector<std::string> swiftflags_;
   std::vector<std::pair<std::string, LibFile>> externs_;
   // If you add a new one, be sure to update AppendValues().
 

@@ -595,11 +595,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       enable_low_latency_(gpu_preferences.enable_low_latency_dxva),
       support_share_nv12_textures_(
           gpu_preferences.enable_zero_copy_dxgi_video &&
-          !workarounds.disable_dxgi_zero_copy_video &&
-          /* Sharing will use an array texture, so avoid it if arrays are being
-           * worked around.  https://crbug.com/971952 .
-           */
-          !workarounds.use_single_video_decoder_texture),
+          !workarounds.disable_dxgi_zero_copy_video),
       num_picture_buffers_requested_(support_share_nv12_textures_
                                          ? kNumPictureBuffersForZeroCopy
                                          : kNumPictureBuffers),
@@ -1404,7 +1400,7 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
       return false;
     }
 
-    // Check version of DLL, version 6.1.7140 is blacklisted due to high crash
+    // Check version of DLL, version 6.1.7140 is blocked due to high crash
     // rates in browsers loading that DLL. If that is the version installed we
     // fall back to software decoding. See crbug/403440.
     std::unique_ptr<FileVersionInfo> version_info(
@@ -1413,7 +1409,7 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
                       false);
     base::string16 file_version = version_info->file_version();
     RETURN_ON_FAILURE(file_version.find(L"6.1.7140") == base::string16::npos,
-                      "blacklisted version of msmpeg2vdec.dll 6.1.7140", false);
+                      "blocked version of msmpeg2vdec.dll 6.1.7140", false);
     codec_ = kCodecH264;
     clsid = __uuidof(CMSH264DecoderMFT);
   } else if ((profile >= VP9PROFILE_PROFILE0 &&
@@ -1646,25 +1642,27 @@ bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
     RETURN_ON_HR_FAILURE(hr, "Failed to set interlace mode", false);
   }
 
+  Microsoft::WRL::ComPtr<IMFAttributes> out_attributes;
+  hr = decoder_->GetOutputStreamAttributes(0, &out_attributes);
+  RETURN_ON_HR_FAILURE(hr, "Failed to get stream attributes", false);
+
+  // On Intel Gen9 and older devices, textures need to be created with a share
+  // handle or they'll crash in CreateShaderResourceView. crbug.com/1107403
+  // Technically MF_SA_D3D11_SHARED_WITHOUT_MUTEX is only honored by the sample
+  // allocator, not by the media foundation transform, but Microsoft's h.264
+  // transform happens to pass it through.
+  out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, TRUE);
+
   // These bind flags _must_ be set before SetInputType or SetOutputType to
   // ensure that we get the proper surfaces created under the hood.
   if (GetPictureBufferMechanism() == PictureBufferMechanism::BIND) {
-    Microsoft::WRL::ComPtr<IMFAttributes> out_attributes;
-    HRESULT hr = decoder_->GetOutputStreamAttributes(0, &out_attributes);
-    RETURN_ON_HR_FAILURE(hr, "Failed to get stream attributes", false);
     out_attributes->SetUINT32(MF_SA_D3D11_BINDFLAGS,
                               D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_DECODER);
     // TODO(sunnyps): Find if we can always set resource sharing to disabled
     if (gl::DirectCompositionSurfaceWin::IsDecodeSwapChainSupported()) {
       // Decode swap chains do not support shared resources.
       out_attributes->SetUINT32(MF_SA_D3D11_SHARED, FALSE);
-    } else {
-      // For some reason newer Intel drivers need D3D11_BIND_DECODER textures to
-      // be created with a share handle or they'll crash in
-      // CreateShaderResourceView.  Technically MF_SA_D3D11_SHARED_WITHOUT_MUTEX
-      // is only honored by the sample allocator, not by the media foundation
-      // transform, but Microsoft's h.264 transform happens to pass it through.
-      out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, TRUE);
+      out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, FALSE);
     }
   }
 

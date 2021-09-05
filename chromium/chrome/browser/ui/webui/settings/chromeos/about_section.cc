@@ -4,19 +4,19 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/about_section.h"
 
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/i18n/message_formatter.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/ui/webui/management_ui.h"
 #include "chrome/browser/ui/webui/settings/about_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
+#include "chrome/browser/ui/webui/version_ui.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
@@ -141,19 +141,6 @@ std::string GetSafetyInfoLink() {
   return std::string();
 }
 
-// Returns true if the device is enterprise managed, false otherwise.
-bool IsEnterpriseManaged() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return connector->IsEnterpriseManaged();
-}
-
-bool IsDeviceManaged() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return connector->IsEnterpriseManaged();
-}
-
 }  // namespace
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -248,6 +235,8 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
     {"aboutChannelDev", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_DEV},
     {"aboutChannelLabel", IDS_SETTINGS_ABOUT_PAGE_CHANNEL},
     {"aboutChannelStable", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE},
+    {"aboutChannelLongTermStable",
+     IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE_TT},
     {"aboutCheckForUpdates", IDS_SETTINGS_ABOUT_PAGE_CHECK_FOR_UPDATES},
     {"aboutCurrentlyOnChannel", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL},
     {"aboutDetailedBuildInfo", IDS_SETTINGS_ABOUT_PAGE_DETAILED_BUILD_INFO},
@@ -279,7 +268,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   if (user_manager::UserManager::IsInitialized()) {
     user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-    if (!IsDeviceManaged() && !user_manager->IsCurrentUserOwner()) {
+    if (!webui::IsEnterpriseManaged() && !user_manager->IsCurrentUserOwner()) {
       html_source->AddString("ownerEmail",
                              user_manager->GetOwnerAccountId().GetUserEmail());
     }
@@ -294,9 +283,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                                         ? IDS_VERSION_UI_OFFICIAL
                                         : IDS_VERSION_UI_UNOFFICIAL),
           base::UTF8ToUTF16(chrome::GetChannelName()),
-          l10n_util::GetStringUTF16(sizeof(void*) == 8
-                                        ? IDS_VERSION_UI_64BIT
-                                        : IDS_VERSION_UI_32BIT)));
+          l10n_util::GetStringUTF16(VersionUI::VersionProcessorVariation())));
   html_source->AddString(
       "aboutProductCopyright",
       base::i18n::MessageFormatter::FormatWithNumberedArgs(
@@ -318,7 +305,8 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       base::ASCIIToUTF16(chrome::kChromeUICrostiniCreditsURL));
   html_source->AddString("aboutProductOsWithLinuxLicense",
                          os_with_linux_license);
-  html_source->AddBoolean("aboutEnterpriseManaged", IsEnterpriseManaged());
+  html_source->AddBoolean("aboutEnterpriseManaged",
+                          webui::IsEnterpriseManaged());
   html_source->AddBoolean("aboutIsArcEnabled",
                           arc::IsArcPlayStoreEnabledForProfile(profile()));
   html_source->AddBoolean("aboutIsDeveloperMode",
@@ -347,7 +335,8 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 }
 
 void AboutSection::AddHandlers(content::WebUI* web_ui) {
-  web_ui->AddMessageHandler(std::make_unique<::settings::AboutHandler>());
+  web_ui->AddMessageHandler(
+      std::make_unique<::settings::AboutHandler>(profile()));
 }
 
 int AboutSection::GetSectionNameMessageId() const {

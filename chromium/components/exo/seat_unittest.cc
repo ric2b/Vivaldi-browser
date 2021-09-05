@@ -16,6 +16,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 
@@ -109,7 +110,7 @@ TEST_F(SeatTest, SetSelection) {
 
   std::string clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadAsciiText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
 
   EXPECT_EQ(clipboard, std::string("TestData"));
 }
@@ -137,13 +138,14 @@ TEST_F(SeatTest, SetSelectionTextUTF8) {
 
   base::string16 clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, converted_data);
 
   std::string url;
   uint32_t start, end;
   ui::Clipboard::GetForCurrentThread()->ReadHTML(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard, &url, &start, &end);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard,
+      &url, &start, &end);
   EXPECT_EQ(clipboard, converted_data);
 }
 
@@ -169,7 +171,7 @@ TEST_F(SeatTest, SetSelectionTextUTF8Legacy) {
 
   base::string16 clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, converted_data);
 }
 
@@ -198,13 +200,14 @@ TEST_F(SeatTest, SetSelectionTextUTF16LE) {
 
   base::string16 clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, converted_data);
 
   std::string url;
   uint32_t start, end;
   ui::Clipboard::GetForCurrentThread()->ReadHTML(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard, &url, &start, &end);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard,
+      &url, &start, &end);
   EXPECT_EQ(clipboard, converted_data);
 }
 
@@ -233,13 +236,14 @@ TEST_F(SeatTest, SetSelectionTextUTF16BE) {
 
   base::string16 clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, converted_data);
 
   std::string url;
   uint32_t start, end;
   ui::Clipboard::GetForCurrentThread()->ReadHTML(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard, &url, &start, &end);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard,
+      &url, &start, &end);
   EXPECT_EQ(clipboard, converted_data);
 }
 
@@ -259,13 +263,14 @@ TEST_F(SeatTest, SetSelectionTextEmptyString) {
 
   base::string16 clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard.size(), 0u);
 
   std::string url;
   uint32_t start, end;
   ui::Clipboard::GetForCurrentThread()->ReadHTML(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard, &url, &start, &end);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard,
+      &url, &start, &end);
   EXPECT_EQ(clipboard.size(), 0u);
 }
 
@@ -280,8 +285,8 @@ TEST_F(SeatTest, SetSelectionRTF) {
   RunReadingTask();
 
   std::string clipboard;
-  ui::Clipboard::GetForCurrentThread()->ReadRTF(ui::ClipboardBuffer::kCopyPaste,
-                                                &clipboard);
+  ui::Clipboard::GetForCurrentThread()->ReadRTF(
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
 
   EXPECT_EQ(clipboard, std::string("TestData"));
 }
@@ -337,7 +342,7 @@ TEST_F(SeatTest, SetSelection_ClipboardChangedDuringSetSelection) {
 
   std::string clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadAsciiText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, "New data");
 }
 
@@ -359,7 +364,7 @@ TEST_F(SeatTest, SetSelection_ClipboardChangedAfterSetSelection) {
 
   std::string clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadAsciiText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, "New data");
 }
 
@@ -382,7 +387,7 @@ TEST_F(SeatTest, SetSelection_SourceDestroyedDuringSetSelection) {
 
   std::string clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadAsciiText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, "Original data");
 }
 
@@ -436,7 +441,7 @@ TEST_F(SeatTest, SetSelection_NullSource) {
 
   std::string clipboard;
   ui::Clipboard::GetForCurrentThread()->ReadAsciiText(
-      ui::ClipboardBuffer::kCopyPaste, &clipboard);
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &clipboard);
   EXPECT_EQ(clipboard, "Golden data");
 }
 
@@ -487,8 +492,7 @@ TEST_F(SeatTest, DragDropAbort) {
   // Give origin a root window for DragDropOperation.
   GetContext()->AddChild(origin.window());
 
-  seat.StartDrag(&source, &origin, &icon,
-                 ui::DragDropTypes::DragEventSource::DRAG_EVENT_SOURCE_MOUSE);
+  seat.StartDrag(&source, &origin, &icon, ui::mojom::DragEventSource::kMouse);
   EXPECT_TRUE(seat.get_drag_drop_operation_for_testing());
   seat.AbortPendingDragOperation();
   EXPECT_FALSE(seat.get_drag_drop_operation_for_testing());

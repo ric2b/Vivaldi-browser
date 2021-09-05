@@ -2,8 +2,6 @@ import("//build/config/ui.gni")
 
 if (!is_android && !is_mac) {
   update_target("//chrome:chrome_initial") {
-    deps += ["//vivaldi/browser:vivaldi_version_info"]
-
     if (is_linux && current_cpu == "x86") {
       ldflags += [
         "-z",
@@ -77,6 +75,9 @@ update_target("//chrome/browser/ui:ui") {
       "//components/guest_view/browser",
     ]
   }
+  deps += [
+    "//chrome/services/sharing/public/proto",
+  ]
 }
 
 update_target("//content/browser:browser") {

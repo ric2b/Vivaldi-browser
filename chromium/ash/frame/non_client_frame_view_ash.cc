@@ -205,6 +205,8 @@ NonClientFrameViewAsh::NonClientFrameViewAsh(views::Widget* frame)
     : frame_(frame),
       header_view_(new HeaderView(frame)),
       overlay_view_(new OverlayView(header_view_)) {
+  DCHECK(frame_);
+
   header_view_->set_immersive_mode_changed_callback(base::BindRepeating(
       &NonClientFrameViewAsh::InvalidateLayout, weak_factory_.GetWeakPtr()));
 
@@ -303,12 +305,6 @@ void NonClientFrameViewAsh::UpdateWindowTitle() {
 
 void NonClientFrameViewAsh::SizeConstraintsChanged() {
   header_view_->UpdateCaptionButtons();
-}
-
-void NonClientFrameViewAsh::PaintAsActiveChanged(bool active) {
-  // The icons differ between active and inactive.
-  header_view_->SchedulePaint();
-  frame_->non_client_view()->Layout();
 }
 
 gfx::Size NonClientFrameViewAsh::CalculatePreferredSize() const {
@@ -411,6 +407,12 @@ bool NonClientFrameViewAsh::DoesIntersectRect(const views::View* target,
 FrameCaptionButtonContainerView*
 NonClientFrameViewAsh::GetFrameCaptionButtonContainerViewForTest() {
   return header_view_->caption_button_container();
+}
+
+void NonClientFrameViewAsh::PaintAsActiveChanged() {
+  // The icons differ between active and inactive.
+  header_view_->SchedulePaint();
+  frame_->non_client_view()->Layout();
 }
 
 }  // namespace ash

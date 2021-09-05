@@ -428,6 +428,14 @@ void ShellSurfaceBase::SetStartupId(const char* startup_id) {
     SetShellStartupId(widget_->GetNativeWindow(), startup_id_);
 }
 
+void ShellSurfaceBase::SetUseImmersiveForFullscreen(bool value) {
+  // Store the value in case the window doesn't exist yet.
+  immersive_implied_by_fullscreen_ = value;
+
+  if (widget_ && widget_->GetNativeWindow())
+    SetShellUseImmersiveForFullscreen(widget_->GetNativeWindow(), value);
+}
+
 void ShellSurfaceBase::SetChildAxTreeId(ui::AXTreeID child_ax_tree_id) {
   if (child_ax_tree_id_ == child_ax_tree_id)
     return;
@@ -730,8 +738,8 @@ views::View* ShellSurfaceBase::GetContentsView() {
   return this;
 }
 
-views::NonClientFrameView* ShellSurfaceBase::CreateNonClientFrameView(
-    views::Widget* widget) {
+std::unique_ptr<views::NonClientFrameView>
+ShellSurfaceBase::CreateNonClientFrameView(views::Widget* widget) {
   return CreateNonClientFrameViewInternal(widget, /*client_controlled=*/false);
 }
 
@@ -851,6 +859,10 @@ void ShellSurfaceBase::OnWindowPropertyChanged(aura::Window* window,
   }
 }
 
+void ShellSurfaceBase::OnWindowAddedToRootWindow(aura::Window* window) {
+  UpdateDisplayOnTree();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // wm::ActivationChangeObserver overrides:
 
@@ -950,16 +962,13 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   SetShellApplicationId(window, application_id_);
   SetShellStartupId(window, startup_id_);
   SetShellMainSurface(window, root_surface());
-  SetArcAppType(window);
 
   // Start tracking changes to window bounds and window state.
   window->AddObserver(this);
   ash::WindowState* window_state = ash::WindowState::Get(window);
   InitializeWindowState(window_state);
 
-  // AutoHide shelf in fullscreen state.
-  if (window_state)
-    window_state->SetHideShelfWhenFullscreen(false);
+  SetShellUseImmersiveForFullscreen(window, immersive_implied_by_fullscreen_);
 
   // Fade visibility animations for non-activatable windows.
   if (!CanActivate()) {
@@ -978,6 +987,8 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   // Show widget next time Commit() is called.
   if (show_state != ui::SHOW_STATE_MINIMIZED)
     pending_show_widget_ = true;
+
+  UpdateDisplayOnTree();
 }
 
 bool ShellSurfaceBase::IsResizing() const {
@@ -1095,9 +1106,9 @@ void ShellSurfaceBase::InstallCustomWindowTargeter() {
   window->SetEventTargeter(std::make_unique<CustomWindowTargeter>(widget_));
 }
 
-views::NonClientFrameView* ShellSurfaceBase::CreateNonClientFrameViewInternal(
-    views::Widget* widget,
-    bool client_controlled) {
+std::unique_ptr<views::NonClientFrameView>
+ShellSurfaceBase::CreateNonClientFrameViewInternal(views::Widget* widget,
+                                                   bool client_controlled) {
   aura::Window* window = widget_->GetNativeWindow();
   // ShellSurfaces always use immersive mode.
   window->SetProperty(ash::kImmersiveIsActive, true);
@@ -1105,8 +1116,8 @@ views::NonClientFrameView* ShellSurfaceBase::CreateNonClientFrameViewInternal(
   if (!frame_enabled() && !window_state->HasDelegate()) {
     window_state->SetDelegate(std::make_unique<CustomWindowStateDelegate>());
   }
-  CustomFrameView* frame_view =
-      new CustomFrameView(widget, this, frame_enabled(), client_controlled);
+  auto frame_view = std::make_unique<CustomFrameView>(
+      widget, this, frame_enabled(), client_controlled);
   if (has_frame_colors_)
     frame_view->SetFrameColors(active_frame_color_, inactive_frame_color_);
   return frame_view;

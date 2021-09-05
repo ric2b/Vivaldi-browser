@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "browser/menus/vivaldi_menus.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
@@ -64,14 +65,17 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/site_instance.h"
-#include "extensions/api/tabs/tabs_private_api.h"
+#include "extensions/api/events/vivaldi_ui_events.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#include "extensions/api/window/window_private_api.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/browser/image_loader.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension_messages.h"
+#include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/mojom/app_window.mojom.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "extensions/schema/window_private.h"
@@ -79,17 +83,16 @@
 #include "renderer/vivaldi_render_messages.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/devtools/devtools_connector.h"
-#include "ui/gfx/geometry/rect.h"
+//#include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/vivaldi_native_app_window_views.h"
+#include "ui/vivaldi_quit_confirmation_dialog.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/win/jumplist_factory.h"
 #endif
-
-using web_modal::WebContentsModalDialogManager;
 
 VivaldiAutofillBubbleHandler::VivaldiAutofillBubbleHandler() {}
 VivaldiAutofillBubbleHandler::~VivaldiAutofillBubbleHandler() {}
@@ -206,8 +209,10 @@ base::TimeTicks VivaldiBrowserWindow::GetFirstWindowCreationTime() {
 }
 
 // static
-VivaldiBrowserWindow* VivaldiBrowserWindow::GetBrowserWindowForBrowser(
+VivaldiBrowserWindow* VivaldiBrowserWindow::FromBrowser(
     const Browser* browser) {
+  if (!browser || !browser->is_vivaldi())
+    return nullptr;
   return static_cast<VivaldiBrowserWindow*>(browser->window());
 }
 
@@ -254,7 +259,8 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   web_contents_delegate_.Initialize();
 
-  extensions::TabsPrivateAPI::SetupWebContents(web_contents());
+  extensions::VivaldiUIEvents::SetupWindowContents(web_contents(),
+                                                   browser_->session_id());
 
   SetViewType(web_contents(), extensions::VIEW_TYPE_APP_WINDOW);
 
@@ -297,8 +303,27 @@ void VivaldiBrowserWindow::CreateWebContents(
   // top.
   infobar_container_ = new vivaldi::InfoBarContainerWebProxy(this);
 
+  std::vector<extensions::ImageLoader::ImageRepresentation> info_list;
+  for (const auto& iter : extensions::IconsInfo::GetIcons(extension()).map()) {
+    extensions::ExtensionResource resource =
+        extension()->GetResource(iter.second);
+    if (!resource.empty()) {
+      info_list.push_back(extensions::ImageLoader::ImageRepresentation(
+        resource, extensions::ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
+        gfx::Size(iter.first, iter.first), ui::SCALE_FACTOR_100P));
+    }
+  }
+  extensions::ImageLoader* loader = extensions::ImageLoader::Get(GetProfile());
+  loader->LoadImageFamilyAsync(
+      extension(), info_list,
+      base::BindOnce(&VivaldiBrowserWindow::OnIconImagesLoaded,
+                     weak_ptr_factory_.GetWeakPtr()));
   // TODO(pettern): Crashes on shutdown, fix.
   // extensions::ExtensionRegistry::Get(browser_->profile())->AddObserver(this);
+}
+
+void VivaldiBrowserWindow::OnIconImagesLoaded(gfx::ImageFamily image_family) {
+  views_->SetIconFamily(std::move(image_family));
 }
 
 void VivaldiBrowserWindow::OnExtensionUnloaded(
@@ -325,6 +350,15 @@ void VivaldiBrowserWindow::LoadContents(
   web_contents()->GetController().LoadURL(resource_url, content::Referrer(),
                                           ui::PAGE_TRANSITION_LINK,
                                           std::string());
+}
+
+void VivaldiBrowserWindow::ContentsDidStartNavigation() {
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::window_private::OnWebContentsDidStartNavigation::
+          kEventName,
+      extensions::vivaldi::window_private::OnWebContentsDidStartNavigation::
+          Create(browser_->session_id().id()),
+      browser_->profile());
 }
 
 void VivaldiBrowserWindow::ForceShow() {
@@ -435,19 +469,120 @@ void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
   }
 }
 
+// Similar to |BrowserView::CanClose|
+bool VivaldiBrowserWindow::ConfirmWindowClose() {
+#if !defined(OS_MAC)
+  // Is window closing due to a profile being closed?
+  bool closed_due_to_profile =
+      extensions::VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(
+          browser());
+
+  int tabbed_windows_cnt = vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL);
+  const PrefService* prefs = GetProfile()->GetPrefs();
+  // Don't show exit dialog if the user explicitly selected exit
+  // from the menu.
+  if (!browser_shutdown::IsTryingToQuit() && !GetProfile()->IsGuestSession()) {
+    if (prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog)) {
+      if (!quit_dialog_shown_ && browser()->type() == Browser::TYPE_NORMAL &&
+          tabbed_windows_cnt == 1) {
+        if (IsMinimized()) {
+          // Dialog is not visible if the window is minimized, so restore it
+          // now.
+          Restore();
+        }
+        bool quiting = true;
+        new vivaldi::VivaldiQuitConfirmationDialog(
+            base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
+                           weak_ptr_factory_.GetWeakPtr(), quiting),
+            nullptr, GetNativeWindow(),
+            new vivaldi::VivaldiDialogQuitDelegate());
+        return false;
+      }
+    }
+  }
+  // If all tabs are gone there is no need to show a confirmation dialog. This
+  // is most likely a window that has been the source window of a move-tab
+  // operation.
+  if (!browser()->tab_strip_model()->empty() &&
+      !GetProfile()->IsGuestSession() && !closed_due_to_profile) {
+    if (prefs->GetBoolean(
+            vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog)) {
+      if (!close_dialog_shown_ && !quit_dialog_shown_ &&
+          !browser_shutdown::IsTryingToQuit() &&
+          browser()->type() == Browser::TYPE_NORMAL &&
+          tabbed_windows_cnt >= 1) {
+        if (IsMinimized()) {
+          // Dialog is not visible if the window is minimized, so restore it
+          // now.
+          Restore();
+        }
+        bool quiting = false;
+        new vivaldi::VivaldiQuitConfirmationDialog(
+            base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
+                           weak_ptr_factory_.GetWeakPtr(), quiting),
+            nullptr, GetNativeWindow(),
+            new vivaldi::VivaldiDialogCloseWindowDelegate());
+        return false;
+      }
+    }
+  }
+#endif  // !defined(OS_MAC)
+  if (!browser()->ShouldCloseWindow())
+    return false;
+
+  // This adds a quick hide code path to avoid VB-33480
+  int count;
+  if (browser()->OkToCloseWithInProgressDownloads(&count) ==
+      Browser::DownloadCloseType::kOk) {
+    Hide();
+  }
+  if (!browser()->tab_strip_model()->empty()) {
+    Hide();
+    browser()->OnWindowClosing();
+    return false;
+  }
+  return true;
+}
+
+void VivaldiBrowserWindow::ContinueClose(bool quiting,
+                                         bool close,
+                                         bool stop_asking) {
+  PrefService* prefs = GetProfile()->GetPrefs();
+  if (quiting) {
+    prefs->SetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog,
+                      !stop_asking);
+    quit_dialog_shown_ = close;
+  } else {
+    prefs->SetBoolean(vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog,
+                      !stop_asking);
+    close_dialog_shown_ = close;
+  }
+
+  if (close) {
+    Close();
+  } else {
+    // Notify about the cancellation of window close so
+    // events can be sent to the web ui.
+    content::NotificationService::current()->Notify(
+      chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
+      content::Source<Browser>(browser()),
+      content::NotificationService::NoDetails());
+  }
+}
+
 void VivaldiBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
     int download_count,
     Browser::DownloadCloseType dialog_type,
     bool app_modal,
     const base::Callback<void(bool)>& callback) {
-#ifdef OS_MACOSX
+#if defined(OS_MAC)
   // We allow closing the window here since the real quit decision on Mac is
   // made in [AppController quit:].
   callback.Run(true);
 #else
   DownloadInProgressDialogView::Show(GetNativeWindow(), download_count,
                                      dialog_type, app_modal, callback);
-#endif  // OS_MACOSX
+#endif  // OS_MAC
 }
 
 void VivaldiBrowserWindow::Activate() {
@@ -546,8 +681,8 @@ void VivaldiBrowserWindow::UpdateToolbar(content::WebContents* contents) {
 
 void VivaldiBrowserWindow::HandleMouseChange(bool motion) {
   if (last_motion_ != motion || motion == false) {
-    extensions::TabsPrivateAPI::SendMouseChangeEvent(browser_->profile(),
-                                                     motion);
+    extensions::VivaldiUIEvents::SendMouseChangeEvent(browser_->profile(),
+                                                      motion);
   }
   last_motion_ = motion;
 }
@@ -561,7 +696,7 @@ VivaldiBrowserWindow::PreHandleKeyboardEvent(
 bool VivaldiBrowserWindow::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   bool is_auto_repeat;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   is_auto_repeat = event.GetModifiers() & blink::WebInputEvent::kIsAutoRepeat;
 #else
   // Ideally we should do what we do above for Mac, but it is not 100% reliable
@@ -575,10 +710,10 @@ bool VivaldiBrowserWindow::HandleKeyboardEvent(
              event.GetType() != blink::WebInputEvent::Type::kChar) {
     last_key_code_ = 0;
   }
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
-  extensions::TabsPrivateAPI::SendKeyboardShortcutEvent(browser_->profile(),
-                                                        event, is_auto_repeat);
+  extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(browser_->profile(),
+                                                         event, is_auto_repeat);
 
   return unhandled_keyboard_event_handler_.HandleKeyboardEvent(
       event, views_->GetFocusManager());
@@ -628,7 +763,7 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
 #if defined(USE_AURA)
   PageInfoBubbleView::ShowPopupAtPos(pos, profile, web_contents, url,
                                      browser_.get(), GetNativeWindow());
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   gfx::Rect anchor_rect = gfx::Rect(pos, gfx::Size());
   views::BubbleDialogDelegateView* bubble =
       PageInfoBubbleView::CreatePageInfoBubble(
@@ -835,8 +970,8 @@ void VivaldiBrowserWindow::OnNativeWindowChanged(bool moved) {
 }
 
 void VivaldiBrowserWindow::OnNativeClose() {
-  WebContentsModalDialogManager* modal_dialog_manager =
-      WebContentsModalDialogManager::FromWebContents(web_contents());
+  web_modal::WebContentsModalDialogManager* modal_dialog_manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents());
   if (modal_dialog_manager) {
     modal_dialog_manager->SetDelegate(nullptr);
   }

@@ -96,6 +96,9 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   virtual ChromeClient* GetChromeClient() const { return nullptr; }
 
+  // Used to scale a length in dip units into a length in layout/paint units.
+  float ScaleFromDIP() const;
+
   virtual SmoothScrollSequencer* GetSmoothScrollSequencer() const {
     return nullptr;
   }
@@ -292,6 +295,11 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     NOTREACHED();
     return point_in_root_frame;
   }
+  virtual IntPoint ConvertFromRootFrameToVisualViewport(
+      const IntPoint& point_in_root_frame) const {
+    NOTREACHED();
+    return point_in_root_frame;
+  }
 
   virtual Scrollbar* HorizontalScrollbar() const { return nullptr; }
   virtual Scrollbar* VerticalScrollbar() const { return nullptr; }
@@ -472,6 +480,10 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual bool IsPaintLayerScrollableArea() const { return false; }
   virtual bool IsRootFrameViewport() const { return false; }
 
+  // Returns true if this is the layout viewport associated with the
+  // RootFrameViewport.
+  virtual bool IsRootFrameLayoutViewport() const { return false; }
+
   virtual bool VisualViewportSuppliesScrollbars() const { return false; }
 
   // Returns true if the scroller adjusts the scroll offset to compensate
@@ -539,6 +551,7 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     vertical_scrollbar_needs_paint_invalidation_ = false;
     scroll_corner_needs_paint_invalidation_ = false;
   }
+
   void ShowNonMacOverlayScrollbars();
 
   // Called when scrollbar hides/shows for overlay scrollbars. This callback

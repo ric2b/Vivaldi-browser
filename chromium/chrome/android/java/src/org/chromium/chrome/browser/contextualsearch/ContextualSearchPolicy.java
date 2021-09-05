@@ -75,10 +75,6 @@ class ContextualSearchPolicy {
         mSearchPanel = panel;
     }
 
-    // TODO(donnd): Consider adding a test-only constructor that uses dependency injection of a
-    // preference manager and PrefServiceBridge.  Currently this is not possible because the
-    // PrefServiceBridge is final.
-
     /**
      * @return The number of additional times to show the promo on tap, 0 if it should not be shown,
      *         or a negative value if the counter has been disabled or the user has accepted
@@ -136,11 +132,12 @@ class ContextualSearchPolicy {
             return false;
         }
 
-        // We never preload on a regular long-press so users can cut & paste without hitting the
-        // servers.
-        return mSelectionController.getSelectionType() == SelectionType.TAP
-                || mSelectionController.getSelectionType() == SelectionType.RESOLVING_LONG_PRESS
-                || isRelatedSearchesEnabled();
+        // We never preload unless we have sent page context (done through a Resolve request).
+        // Only some gestures can resolve, and only when resolve privacy rules are met.
+        return (mSelectionController.getSelectionType() == SelectionType.TAP
+                       || mSelectionController.getSelectionType()
+                               == SelectionType.RESOLVING_LONG_PRESS)
+                && shouldPreviousGestureResolve();
     }
 
     /**
@@ -153,7 +150,8 @@ class ContextualSearchPolicy {
             return false;
         }
 
-        return isPromoAvailable() ? isBasePageHTTP(mNetworkCommunicator.getBasePageUrl()) : true;
+        // The user must have decided on privacy to resolve page content on HTTPS.
+        return !isUserUndecided() || doesLegacyHttpPolicyApply();
     }
 
     /** @return Whether a long-press gesture can resolve. */
@@ -169,7 +167,8 @@ class ContextualSearchPolicy {
     boolean canSendSurroundings() {
         if (mDidOverrideDecidedStateForTesting) return mDecidedStateForTesting;
 
-        return isPromoAvailable() ? isBasePageHTTP(mNetworkCommunicator.getBasePageUrl()) : true;
+        // The user must have decided on privacy to send page content on HTTPS.
+        return !isUserUndecided() || doesLegacyHttpPolicyApply();
     }
 
     /**
@@ -272,6 +271,19 @@ class ContextualSearchPolicy {
     }
 
     /**
+     * Determines the policy for sending page content when on plain HTTP pages.
+     * Checks a Feature to use our legacy HTTP policy instead of treating HTTP just like HTTPS.
+     * See https://crbug.com/1129969 for details.
+     * @return whether the legacy policy for plain HTTP pages currently applies.
+     */
+    private boolean doesLegacyHttpPolicyApply() {
+        if (!isBasePageHTTP(mNetworkCommunicator.getBasePageUrl())) return false;
+
+        // Check if the legacy behavior is enabled through a feature.
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_SEARCH_LEGACY_HTTP_POLICY);
+    }
+
+    /**
      * Determines whether an error from a search term resolution request should
      * be shown to the user, or not.
      */
@@ -331,9 +343,6 @@ class ContextualSearchPolicy {
      *         to see if all privacy-related conditions are met to send the base page URL.
      */
     boolean maySendBasePageUrl() {
-        // TODO(donnd): revisit for related searches privacy review. https://crbug.com/1064141.
-        if (isRelatedSearchesEnabled()) return true;
-
         return !isUserUndecided();
     }
 
@@ -489,7 +498,6 @@ class ContextualSearchPolicy {
      *         on enabling or disabling the feature.
      */
     boolean isUserUndecided() {
-        // TODO(donnd) use dependency injection for the PrefServiceBridge instead!
         if (mDidOverrideDecidedStateForTesting) return !mDecidedStateForTesting;
 
         return ContextualSearchManager.isContextualSearchUninitialized();
@@ -547,6 +555,12 @@ class ContextualSearchPolicy {
     String overrideSelectionIfProcessingRelatedSearches(
             String selection, String relatedSearchesWord) {
         return isProcessingRelatedSearch() ? relatedSearchesWord : selection;
+    }
+
+    /** @return whether doing Related Searches should be part of processing the current request. */
+    boolean doRelatedSearches() {
+        // TODO(donnd): Update this along with crbug.com/1119585.
+        return isProcessingRelatedSearch();
     }
 
     // --------------------------------------------------------------------------------------------

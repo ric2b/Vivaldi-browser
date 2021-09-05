@@ -18,7 +18,7 @@ update_template_instance("//third_party/blink/renderer/core/layout:layout") {
   ]
 }
 
-update_template_instance("//content/renderer:renderer") {
+update_target("//content/renderer:renderer") {
   sources += [
     "//vivaldi/renderer/vivaldi_media_element_event_sender.cc",
     "//vivaldi/renderer/vivaldi_media_element_event_sender.h",

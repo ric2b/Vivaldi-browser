@@ -10,11 +10,13 @@
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/location.h"
+#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/apps/app_service/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "components/account_id/account_id.h"
 #include "components/services/app_service/app_service_impl.h"
@@ -23,6 +25,7 @@
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/url_data_source.h"
+#include "ui/display/types/display_constants.h"
 #include "url/url_constants.h"
 
 #if defined(OS_CHROMEOS)
@@ -68,14 +71,14 @@ AppServiceProxy::InnerIconLoader::LoadIconFromIconKey(
     apps::mojom::AppType app_type,
     const std::string& app_id,
     apps::mojom::IconKeyPtr icon_key,
-    apps::mojom::IconCompression icon_compression,
+    apps::mojom::IconType icon_type,
     int32_t size_hint_in_dip,
     bool allow_placeholder_icon,
     apps::mojom::Publisher::LoadIconCallback callback) {
   if (overriding_icon_loader_for_testing_) {
     return overriding_icon_loader_for_testing_->LoadIconFromIconKey(
-        app_type, app_id, std::move(icon_key), icon_compression,
-        size_hint_in_dip, allow_placeholder_icon, std::move(callback));
+        app_type, app_id, std::move(icon_key), icon_type, size_hint_in_dip,
+        allow_placeholder_icon, std::move(callback));
   }
 
   if (host_->app_service_.is_connected() && icon_key) {
@@ -86,7 +89,7 @@ AppServiceProxy::InnerIconLoader::LoadIconFromIconKey(
     // yet and you resolve old one instead. Now new icon arrives asynchronously
     // but you no longer notify the app or do?"
     host_->app_service_->LoadIcon(app_type, app_id, std::move(icon_key),
-                                  icon_compression, size_hint_in_dip,
+                                  icon_type, size_hint_in_dip,
                                   allow_placeholder_icon, std::move(callback));
   } else {
     std::move(callback).Run(apps::mojom::IconValue::New());
@@ -149,7 +152,8 @@ void AppServiceProxy::Initialize() {
   browser_app_launcher_ = std::make_unique<apps::BrowserAppLauncher>(profile_);
 
   app_service_impl_ = std::make_unique<apps::AppServiceImpl>(
-      profile_->GetPrefs(), profile_->GetPath());
+      profile_->GetPrefs(), profile_->GetPath(),
+      base::FeatureList::IsEnabled(features::kIntentHandlingSharing));
   app_service_impl_->BindReceiver(app_service_.BindNewPipeAndPassReceiver());
 
   if (app_service_.is_connected()) {
@@ -198,6 +202,8 @@ void AppServiceProxy::Initialize() {
       extension_web_apps_ = std::make_unique<ExtensionApps>(
           app_service_, profile_, apps::mojom::AppType::kWeb);
     }
+    extension_apps_ = std::make_unique<ExtensionApps>(
+        app_service_, profile_, apps::mojom::AppType::kExtension);
 #endif
 
     // Asynchronously add app icon source, so we don't do too much work in the
@@ -224,8 +230,8 @@ apps::InstanceRegistry& AppServiceProxy::InstanceRegistry() {
 }
 #endif
 
-BrowserAppLauncher& AppServiceProxy::BrowserAppLauncher() {
-  return *browser_app_launcher_;
+BrowserAppLauncher* AppServiceProxy::BrowserAppLauncher() {
+  return browser_app_launcher_.get();
 }
 
 apps::PreferredAppsList& AppServiceProxy::PreferredApps() {
@@ -241,12 +247,12 @@ AppServiceProxy::LoadIconFromIconKey(
     apps::mojom::AppType app_type,
     const std::string& app_id,
     apps::mojom::IconKeyPtr icon_key,
-    apps::mojom::IconCompression icon_compression,
+    apps::mojom::IconType icon_type,
     int32_t size_hint_in_dip,
     bool allow_placeholder_icon,
     apps::mojom::Publisher::LoadIconCallback callback) {
   return outer_icon_loader_.LoadIconFromIconKey(
-      app_type, app_id, std::move(icon_key), icon_compression, size_hint_in_dip,
+      app_type, app_id, std::move(icon_key), icon_type, size_hint_in_dip,
       allow_placeholder_icon, std::move(callback));
 }
 
@@ -262,7 +268,13 @@ void AppServiceProxy::Launch(const std::string& app_id,
         return;
       }
 #endif
-      RecordAppLaunch(update.AppId(), launch_source);
+      // Don't record system apps metric here, they are handled in
+      // LaunchSystemWebApp.
+      base::Optional<web_app::SystemAppType> system_app_type =
+          web_app::GetSystemWebAppTypeForAppId(profile_, update.AppId());
+      if (!system_app_type) {
+        RecordAppLaunch(update.AppId(), launch_source);
+      }
       app_service_->Launch(update.AppType(), update.AppId(), event_flags,
                            launch_source, display_id);
     });
@@ -283,11 +295,28 @@ void AppServiceProxy::LaunchAppWithFiles(
         return;
       }
 #endif
+      // TODO(crbug/1117655): Presently, app launch metrics are recorded in the
+      // caller. We should record them here, with the same SWA logic as
+      // AppServiceProxy::Launch. There is an if statement to detect launches
+      // from the file manager in LaunchSystemWebApp that should be removed at
+      // the same time.
       app_service_->LaunchAppWithFiles(update.AppType(), update.AppId(),
                                        container, event_flags, launch_source,
                                        std::move(file_paths));
     });
   }
+}
+
+void AppServiceProxy::LaunchAppWithFileUrls(
+    const std::string& app_id,
+    int32_t event_flags,
+    apps::mojom::LaunchSource launch_source,
+    const std::vector<GURL>& file_urls,
+    const std::vector<std::string>& mime_types) {
+  LaunchAppWithIntent(
+      app_id, event_flags,
+      apps_util::CreateShareIntentFromFiles(file_urls, mime_types),
+      launch_source, display::kDefaultDisplayId);
 }
 
 void AppServiceProxy::LaunchAppWithIntent(
@@ -304,7 +333,13 @@ void AppServiceProxy::LaunchAppWithIntent(
         return;
       }
 #endif
-      RecordAppLaunch(update.AppId(), launch_source);
+      base::Optional<web_app::SystemAppType> system_app_type =
+          web_app::GetSystemWebAppTypeForAppId(profile_, update.AppId());
+      if (!system_app_type) {
+        // Don't record system apps metric here, they are handled in
+        // LaunchSystemWebApp.
+        RecordAppLaunch(update.AppId(), launch_source);
+      }
       app_service_->LaunchAppWithIntent(update.AppType(), update.AppId(),
                                         event_flags, std::move(intent),
                                         launch_source, display_id);
@@ -350,9 +385,11 @@ void AppServiceProxy::Uninstall(const std::string& app_id,
 #endif
 }
 
-void AppServiceProxy::UninstallSilently(const std::string& app_id) {
+void AppServiceProxy::UninstallSilently(
+    const std::string& app_id,
+    apps::mojom::UninstallSource uninstall_source) {
   if (app_service_.is_connected()) {
-    app_service_->Uninstall(cache_.GetAppType(app_id), app_id,
+    app_service_->Uninstall(cache_.GetAppType(app_id), app_id, uninstall_source,
                             /*clear_site_data=*/false, /*report_abuse=*/false);
   }
 }
@@ -488,26 +525,62 @@ void AppServiceProxy::UninstallForTesting(const std::string& app_id,
 
 #endif
 
-std::vector<std::string> AppServiceProxy::GetAppIdsForUrl(const GURL& url) {
-  return GetAppIdsForIntent(apps_util::CreateIntentFromUrl(url));
+std::vector<std::string> AppServiceProxy::GetAppIdsForUrl(
+    const GURL& url,
+    bool exclude_browsers) {
+  auto intent_launch_info =
+      GetAppsForIntent(apps_util::CreateIntentFromUrl(url), exclude_browsers);
+  std::vector<std::string> app_ids;
+  for (auto& entry : intent_launch_info) {
+    app_ids.push_back(std::move(entry.app_id));
+  }
+  return app_ids;
 }
 
-std::vector<std::string> AppServiceProxy::GetAppIdsForIntent(
-    apps::mojom::IntentPtr intent) {
-  std::vector<std::string> app_ids;
+std::vector<IntentLaunchInfo> AppServiceProxy::GetAppsForIntent(
+    const apps::mojom::IntentPtr& intent,
+    bool exclude_browsers) {
+  std::vector<IntentLaunchInfo> intent_launch_info;
   if (app_service_.is_bound()) {
-    cache_.ForEachApp([&app_ids, &intent](const apps::AppUpdate& update) {
+    cache_.ForEachApp([&intent_launch_info, &intent,
+                       &exclude_browsers](const apps::AppUpdate& update) {
       if (update.Readiness() == apps::mojom::Readiness::kUninstalledByUser) {
         return;
       }
+      std::set<std::string> existing_activities;
       for (const auto& filter : update.IntentFilters()) {
+        if (exclude_browsers && apps_util::IsBrowserFilter(filter)) {
+          continue;
+        }
         if (apps_util::IntentMatchesFilter(intent, filter)) {
-          app_ids.push_back(update.AppId());
+          IntentLaunchInfo entry;
+          entry.app_id = update.AppId();
+          std::string activity_label;
+          if (filter->activity_label &&
+              !filter->activity_label.value().empty()) {
+            activity_label = filter->activity_label.value();
+          } else {
+            activity_label = update.Name();
+          }
+          if (base::Contains(existing_activities, activity_label)) {
+            continue;
+          }
+          existing_activities.insert(activity_label);
+          entry.activity_label = activity_label;
+          entry.activity_name = filter->activity_name.value_or("");
+          intent_launch_info.push_back(entry);
         }
       }
     });
   }
-  return app_ids;
+  return intent_launch_info;
+}
+
+std::vector<IntentLaunchInfo> AppServiceProxy::GetAppsForFiles(
+    const std::vector<GURL>& filesystem_urls,
+    const std::vector<std::string>& mime_types) {
+  return GetAppsForIntent(
+      apps_util::CreateShareIntentFromFiles(filesystem_urls, mime_types));
 }
 
 void AppServiceProxy::SetArcIsRegistered() {
@@ -625,7 +698,9 @@ void AppServiceProxy::OnUninstallDialogClosed(
   if (uninstall) {
     cache_.ForOneApp(app_id, RecordAppBounce);
 
-    app_service_->Uninstall(app_type, app_id, clear_site_data, report_abuse);
+    app_service_->Uninstall(app_type, app_id,
+                            apps::mojom::UninstallSource::kUser,
+                            clear_site_data, report_abuse);
   }
 
   DCHECK(uninstall_dialog);
@@ -682,6 +757,10 @@ void AppServiceProxy::LoadIconForDialog(
   apps::mojom::IconKeyPtr icon_key = update.IconKey();
   constexpr bool kAllowPlaceholderIcon = false;
   constexpr int32_t kIconSize = 48;
+  auto icon_type =
+      (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
+          ? apps::mojom::IconType::kStandard
+          : apps::mojom::IconType::kUncompressed;
 
   // For browser tests, load the app icon, because there is no family link
   // logo for browser tests.
@@ -690,23 +769,26 @@ void AppServiceProxy::LoadIconForDialog(
   // admin.
   if (!dialog_created_callback_.is_null() || !profile_->IsChild()) {
     LoadIconFromIconKey(update.AppType(), update.AppId(), std::move(icon_key),
-                        apps::mojom::IconCompression::kUncompressed, kIconSize,
-                        kAllowPlaceholderIcon, std::move(callback));
+                        icon_type, kIconSize, kAllowPlaceholderIcon,
+                        std::move(callback));
     return;
   }
 
   // Load the family link kite logo icon for the app pause dialog or the app
   // block dialog for the child profile.
-  LoadIconFromResource(apps::mojom::IconCompression::kUncompressed, kIconSize,
-                       IDR_SUPERVISED_USER_ICON, kAllowPlaceholderIcon,
-                       IconEffects::kNone, std::move(callback));
+  LoadIconFromResource(icon_type, kIconSize, IDR_SUPERVISED_USER_ICON,
+                       kAllowPlaceholderIcon, IconEffects::kNone,
+                       std::move(callback));
 }
 
 void AppServiceProxy::OnLoadIconForBlockDialog(
     const std::string& app_name,
     apps::mojom::IconValuePtr icon_value) {
-  if (icon_value->icon_compression !=
-      apps::mojom::IconCompression::kUncompressed) {
+  auto icon_type =
+      (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
+          ? apps::mojom::IconType::kStandard
+          : apps::mojom::IconType::kUncompressed;
+  if (icon_value->icon_type != icon_type) {
     return;
   }
 
@@ -725,8 +807,11 @@ void AppServiceProxy::OnLoadIconForPauseDialog(
     const std::string& app_name,
     const PauseData& pause_data,
     apps::mojom::IconValuePtr icon_value) {
-  if (icon_value->icon_compression !=
-      apps::mojom::IconCompression::kUncompressed) {
+  auto icon_type =
+      (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
+          ? apps::mojom::IconType::kStandard
+          : apps::mojom::IconType::kUncompressed;
+  if (icon_value->icon_type != icon_type) {
     OnPauseDialogClosed(app_type, app_id);
     return;
   }

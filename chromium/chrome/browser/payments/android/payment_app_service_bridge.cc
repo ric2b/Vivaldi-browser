@@ -14,6 +14,7 @@
 #include "base/check_op.h"
 #include "base/memory/singleton.h"
 #include "base/notreached.h"
+#include "chrome/browser/autofill/android/internal_authenticator_android.h"
 #include "chrome/browser/payments/android/jni_headers/PaymentAppServiceBridge_jni.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_data_service_factory.h"
@@ -87,12 +88,16 @@ void JNI_PaymentAppServiceBridge_Create(
     const JavaParamRef<jobject>& jrender_frame_host,
     const JavaParamRef<jstring>& jtop_origin,
     const JavaParamRef<jobject>& jpayment_request_spec,
+    const JavaParamRef<jstring>& jtwa_package_name,
     jboolean jmay_crawl_for_installable_payment_apps,
     const JavaParamRef<jobject>& jcallback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   auto* render_frame_host =
       content::RenderFrameHost::FromJavaRenderFrameHost(jrender_frame_host);
+  if (!render_frame_host)  // The frame is being unloaded.
+    return;
+
   std::string top_origin = ConvertJavaStringToUTF8(jtop_origin);
 
   scoped_refptr<payments::PaymentManifestWebDataService> web_data_service =
@@ -108,6 +113,7 @@ void JNI_PaymentAppServiceBridge_Create(
       service->GetNumberOfFactories(), render_frame_host, GURL(top_origin),
       payments::android::PaymentRequestSpec::FromJavaPaymentRequestSpec(
           env, jpayment_request_spec),
+      jtwa_package_name ? ConvertJavaStringToUTF8(env, jtwa_package_name) : "",
       web_data_service, jmay_crawl_for_installable_payment_apps,
       base::BindOnce(&OnCanMakePaymentCalculated,
                      ScopedJavaGlobalRef<jobject>(env, jcallback)),
@@ -161,15 +167,18 @@ PaymentAppServiceBridge* PaymentAppServiceBridge::Create(
     content::RenderFrameHost* render_frame_host,
     const GURL& top_origin,
     PaymentRequestSpec* spec,
+    const std::string& twa_package_name,
     scoped_refptr<PaymentManifestWebDataService> web_data_service,
     bool may_crawl_for_installable_payment_apps,
     CanMakePaymentCalculatedCallback can_make_payment_calculated_callback,
     PaymentAppCreatedCallback payment_app_created_callback,
     PaymentAppCreationErrorCallback payment_app_creation_error_callback,
     base::OnceClosure done_creating_payment_apps_callback) {
+  // Not using std::make_unique, because that requires a public constructor.
   std::unique_ptr<PaymentAppServiceBridge> bridge(new PaymentAppServiceBridge(
       number_of_factories, render_frame_host, top_origin, spec,
-      std::move(web_data_service), may_crawl_for_installable_payment_apps,
+      twa_package_name, std::move(web_data_service),
+      may_crawl_for_installable_payment_apps,
       std::move(can_make_payment_calculated_callback),
       std::move(payment_app_created_callback),
       std::move(payment_app_creation_error_callback),
@@ -182,6 +191,7 @@ PaymentAppServiceBridge::PaymentAppServiceBridge(
     content::RenderFrameHost* render_frame_host,
     const GURL& top_origin,
     PaymentRequestSpec* spec,
+    const std::string& twa_package_name,
     scoped_refptr<PaymentManifestWebDataService> web_data_service,
     bool may_crawl_for_installable_payment_apps,
     CanMakePaymentCalculatedCallback can_make_payment_calculated_callback,
@@ -196,7 +206,8 @@ PaymentAppServiceBridge::PaymentAppServiceBridge(
       frame_origin_(url_formatter::FormatUrlForSecurityDisplay(
           render_frame_host->GetLastCommittedURL())),
       frame_security_origin_(render_frame_host->GetLastCommittedOrigin()),
-      spec_(spec),
+      spec_(spec->GetWeakPtr()),
+      twa_package_name_(twa_package_name),
       payment_manifest_web_data_service_(web_data_service),
       may_crawl_for_installable_payment_apps_(
           may_crawl_for_installable_payment_apps),
@@ -236,7 +247,19 @@ content::RenderFrameHost* PaymentAppServiceBridge::GetInitiatorRenderFrameHost()
 
 const std::vector<PaymentMethodDataPtr>&
 PaymentAppServiceBridge::GetMethodData() const {
+  DCHECK(spec_);
   return spec_->method_data();
+}
+
+std::unique_ptr<autofill::InternalAuthenticator>
+PaymentAppServiceBridge::CreateInternalAuthenticator() const {
+  // This authenticator can be used in a cross-origin iframe only if the
+  // top-level frame allowed it with Feature Policy, e.g., with allow="payment"
+  // iframe attribute. The secure payment confirmation dialog displays the
+  // top-level origin in its UI before the user can click on the [Verify] button
+  // to invoke this authenticator.
+  return std::make_unique<InternalAuthenticatorAndroid>(
+      web_contents_->GetMainFrame());
 }
 
 scoped_refptr<PaymentManifestWebDataService>
@@ -279,7 +302,11 @@ void PaymentAppServiceBridge::ShowProcessingSpinner() {
 }
 
 PaymentRequestSpec* PaymentAppServiceBridge::GetSpec() const {
-  return spec_;
+  return spec_.get();
+}
+
+std::string PaymentAppServiceBridge::GetTwaPackageName() const {
+  return twa_package_name_;
 }
 
 void PaymentAppServiceBridge::OnPaymentAppCreated(
@@ -312,6 +339,10 @@ void PaymentAppServiceBridge::OnDoneCreatingPaymentApps() {
 
   std::move(done_creating_payment_apps_callback_).Run();
   PaymentAppServiceBridgeStorage::GetInstance()->Remove(this);
+}
+
+void PaymentAppServiceBridge::SetCanMakePaymentEvenWithoutApps() {
+  NOTREACHED();
 }
 
 }  // namespace payments

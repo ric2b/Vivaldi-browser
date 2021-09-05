@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/scoped_observer.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
@@ -129,7 +130,7 @@ ArchivableCredential* CredentialFromForm(const PasswordForm& form,
     // Verify that the credential is nil because it's an Android one or
     // blacklisted.
     DCHECK(password_manager::IsValidAndroidFacetURI(form.signon_realm) ||
-           form.blacklisted_by_user);
+           form.blocked_by_user);
   }
   return credential;
 }

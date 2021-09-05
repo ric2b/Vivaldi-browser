@@ -5,7 +5,10 @@
 #ifndef ASH_SHELF_HOTSEAT_WIDGET_H_
 #define ASH_SHELF_HOTSEAT_WIDGET_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
+#include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/shelf/hotseat_transition_animator.h"
@@ -149,7 +152,7 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   // Returns whether the translucent background is visible, for tests.
   bool GetIsTranslucentBackgroundVisibleForTest() const;
 
-  ui::AnimationMetricsReporter* GetTranslucentBackgroundMetricsReporter();
+  metrics_util::ReportCallback GetTranslucentBackgroundReportCallback();
 
   void SetState(HotseatState state);
   HotseatState state() const { return state_; }
@@ -202,11 +205,10 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   void LayoutHotseatByAnimation(double target_opacity,
                                 const gfx::Rect& target_bounds);
 
-  // Animates the hotseat for the transition between the home launcher state
-  // and the extended state.
-  void StartHomeLauncherExtendedTransitionAnimation(
-      double target_opacity,
-      const gfx::Rect& target_bounds);
+  // Start the animation designed specifically for |state_transition|.
+  void StartHotseatTransitionAnimation(StateTransition state_transition,
+                                       double target_opacity,
+                                       const gfx::Rect& target_bounds);
 
   // Starts the default bounds/opacity animation.
   void StartNormalBoundsAnimation(double target_opacity,

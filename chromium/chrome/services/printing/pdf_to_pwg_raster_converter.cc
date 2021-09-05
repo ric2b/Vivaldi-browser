@@ -12,7 +12,6 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "components/pwg_encoder/bitmap_image.h"
 #include "components/pwg_encoder/pwg_encoder.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "pdf/pdf.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/pdf_render_settings.h"
@@ -58,7 +57,7 @@ base::ReadOnlySharedMemoryRegion RenderPdfPagesToPwgRaster(
     if (!chrome_pdf::RenderPDFPageToBitmap(
             pdf_data, page_number, image.pixel_data(), image.size().width(),
             image.size().height(), settings.dpi.width(), settings.dpi.height(),
-            settings.autorotate, settings.use_color)) {
+            false, true, settings.autorotate, settings.use_color)) {
       return invalid_pwg_region;
     }
 

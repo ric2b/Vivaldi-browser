@@ -14,6 +14,7 @@
 
 namespace cc {
 class ThroughputUkmReporter;
+class JankMetrics;
 
 enum class FrameSequenceTrackerType {
   // Used as an enum for metrics. DO NOT reorder or delete values. Rather,
@@ -106,9 +107,6 @@ class CC_EXPORT FrameSequenceMetrics {
   bool HasDataLeftForReporting() const;
   // Report related metrics: throughput, checkboarding...
   void ReportMetrics();
-  void ComputeAggregatedThroughputForTesting() {
-    ComputeAggregatedThroughput();
-  }
 
   ThroughputData& impl_throughput() { return impl_throughput_; }
   ThroughputData& main_throughput() { return main_throughput_; }
@@ -129,9 +127,11 @@ class CC_EXPORT FrameSequenceMetrics {
   void AdoptTrace(FrameSequenceMetrics* adopt_from);
   void AdvanceTrace(base::TimeTicks timestamp);
 
- private:
-  void ComputeAggregatedThroughput();
+  void ComputeJank(FrameSequenceMetrics::ThreadType thread_type,
+                   base::TimeTicks presentation_time,
+                   base::TimeDelta frame_interval);
 
+ private:
   const FrameSequenceTrackerType type_;
 
   // Tracks some data to generate useful trace events.
@@ -164,6 +164,8 @@ class CC_EXPORT FrameSequenceMetrics {
 
   // Callback invoked to report metrics for kCustom typed sequence.
   CustomReporter custom_reporter_;
+
+  std::unique_ptr<JankMetrics> jank_reporter_;
 };
 
 }  // namespace cc

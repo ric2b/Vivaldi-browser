@@ -88,11 +88,6 @@ class CONTENT_EXPORT TextInputClientMac {
                         const gfx::Point& point,
                         GetStringCallback callback);
 
-  // This is called on the IO thread when we get the renderer's reply for
-  // GetStringAtPoint.
-  void GetStringAtPointReply(ui::mojom::AttributedStringPtr string,
-                             const gfx::Point& point);
-
   // This async method is invoked when browser tries to retreive the text for
   // certain range and doesn't want to wait for the reply from blink.
   // The reply callback will be invoked from the IO thread; the caller is
@@ -102,11 +97,6 @@ class CONTENT_EXPORT TextInputClientMac {
   void GetStringFromRange(RenderWidgetHost* rwh,
                           const gfx::Range& range,
                           GetStringCallback callback);
-
-  // This is called on the IO thread when we get the renderer's reply for
-  // GetStringFromRange.
-  void GetStringFromRangeReply(ui::mojom::AttributedStringPtr string,
-                               const gfx::Point& point);
 
  private:
   friend struct base::DefaultSingletonTraits<TextInputClientMac>;
@@ -127,12 +117,6 @@ class CONTENT_EXPORT TextInputClientMac {
 
   base::Lock lock_;
   base::ConditionVariable condition_;
-
-  // The callback when received IPC TextInputClientReplyMsg_GotStringAtPoint.
-  GetStringCallback replyForPointHandler_;
-
-  // The callback when received IPC TextInputClientReplyMsg_GotStringForRange.
-  GetStringCallback replyForRangeHandler_;
 
   DISALLOW_COPY_AND_ASSIGN(TextInputClientMac);
 };

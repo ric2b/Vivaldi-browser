@@ -7,6 +7,7 @@
 #include <limits.h>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/safe_conversions.h"
@@ -126,6 +127,7 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       NOTREACHED() << "Access point " << static_cast<int>(access_point)
                    << " is only used on Android, where"
                    << " RecordSigninUserActionForAccessPoint is not used"
@@ -204,6 +206,7 @@ void RecordSigninWithDefaultUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       NOTREACHED() << "Signin_SigninWithDefault_From* user actions"
                    << " are not recorded for access_point "
                    << static_cast<int>(access_point)
@@ -282,6 +285,7 @@ void RecordSigninNotDefaultUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       NOTREACHED() << "Signin_SigninNotDefault_From* user actions"
                    << " are not recorded for access point "
                    << static_cast<int>(access_point)
@@ -364,6 +368,7 @@ void RecordSigninNewAccountNoExistingAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       // These access points do not support personalized sign-in promos, so
       // |Signin_SigninNewAccountNoExistingAccount_From*| user actions should
       // not be recorded for them. Note: To avoid bloating the sign-in APIs, the
@@ -449,6 +454,7 @@ void RecordSigninNewAccountExistingAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       // These access points do not support personalized sign-in promos, so
       // |Signin_SigninNewAccountExistingAccount_From*| user actions should not
       // be recorded for them. Note: To avoid bloating the sign-in APIs, the
@@ -718,6 +724,33 @@ void LogIsShared(const bool is_shared, const ReportingType type) {
   INVESTIGATOR_HISTOGRAM_BOOLEAN("Signin.IsShared", type, is_shared);
 }
 
+void LogSignedInCookiesCountsPerPrimaryAccountType(int signed_in_accounts_count,
+                                                   bool primary_syncing,
+                                                   bool primary_managed) {
+  constexpr int kMaxBucket = 10;
+  if (primary_syncing) {
+    if (primary_managed) {
+      base::UmaHistogramExactLinear(
+          "Signin.CookieJar.SignedInCountWithPrimary.SyncEnterprise",
+          signed_in_accounts_count, kMaxBucket);
+    } else {
+      base::UmaHistogramExactLinear(
+          "Signin.CookieJar.SignedInCountWithPrimary.SyncConsumer",
+          signed_in_accounts_count, kMaxBucket);
+    }
+  } else {
+    if (primary_managed) {
+      base::UmaHistogramExactLinear(
+          "Signin.CookieJar.SignedInCountWithPrimary.NoSyncEnterprise",
+          signed_in_accounts_count, kMaxBucket);
+    } else {
+      base::UmaHistogramExactLinear(
+          "Signin.CookieJar.SignedInCountWithPrimary.NoSyncConsumer",
+          signed_in_accounts_count, kMaxBucket);
+    }
+  }
+}
+
 void RecordRefreshTokenUpdatedFromSource(
     bool refresh_token_is_valid,
     SourceForRefreshTokenOperation source) {
@@ -856,6 +889,7 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       NOTREACHED() << "Signin_Impression_From* user actions"
                    << " are not recorded for access point "
                    << static_cast<int>(access_point);
@@ -989,6 +1023,7 @@ void RecordSigninImpressionWithAccountUserActionForAccessPoint(
     case AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
     case AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case AccessPoint::ACCESS_POINT_SAFETY_CHECK:
       NOTREACHED() << "Signin_Impression{With|WithNo}Account_From* user actions"
                    << " are not recorded for access point "
                    << static_cast<int>(access_point)

@@ -18,7 +18,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_hit_test_options_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_render_state_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_transient_input_hit_test_options_init.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_xr_world_tracking_state_init.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
@@ -50,6 +49,7 @@
 #include "third_party/blink/renderer/modules/xr/xr_webgl_layer.h"
 #include "third_party/blink/renderer/modules/xr/xr_world_information.h"
 #include "third_party/blink/renderer/modules/xr/xr_world_tracking_state.h"
+#include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/geometry/float_point_3d.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -70,7 +70,9 @@ const char kIncompatibleLayer[] =
 const char kInlineVerticalFOVNotSupported[] =
     "This session does not support inlineVerticalFieldOfView";
 
-const char kAnchorsNotSupported[] = "Device does not support anchors!";
+const char kAnchorsNotSupportedByDevice[] = "Device does not support anchors!";
+
+const char kHitTestNotSupportedByDevice[] = "Device does not support hit test!";
 
 const char kDeviceDisconnected[] = "The XR device has been disconnected.";
 
@@ -182,8 +184,8 @@ Vector<device::mojom::blink::EntityTypeForHitTest> GetEntityTypesForHitTest(
       if (maybe_entity_type) {
         result_set.insert(*maybe_entity_type);
       } else {
-        DVLOG(1) << __func__
-                 << ": entityTypes entry ignored:" << entity_type_string;
+        DVLOG(1) << __func__ << ": entityTypes entry ignored:"
+                 << IDLEnumAsString(entity_type_string);
       }
     }
   } else {
@@ -200,52 +202,31 @@ Vector<device::mojom::blink::EntityTypeForHitTest> GetEntityTypesForHitTest(
   return result;
 }
 
-// Helper that will remove all entries present in the |id_to_hit_test_source|
-// that map to nullptr due to usage of WeakPtr.
-// T can be either XRHitTestSource or XRTransientInputHitTestSource.
 template <typename T>
-void CleanUpUnusedHitTestSourcesHelper(
-    HeapHashMap<uint64_t, WeakMember<T>>* id_to_hit_test_source) {
-  DCHECK(id_to_hit_test_source);
-
-  // Gather all IDs of unused hit test sources for non-transient input
-  // sources.
+HashSet<uint64_t> GetIdsOfUnusedHitTestSources(
+    const HeapHashMap<uint64_t, WeakMember<T>>& id_to_hit_test_source,
+    const HashSet<uint64_t>& all_ids) {
+  // Gather all IDs of unused hit test sources:
   HashSet<uint64_t> unused_hit_test_source_ids;
-  for (auto& id_and_hit_test_source : *id_to_hit_test_source) {
-    if (!id_and_hit_test_source.value) {
-      unused_hit_test_source_ids.insert(id_and_hit_test_source.key);
+  for (auto& id : all_ids) {
+    if (!base::Contains(id_to_hit_test_source, id)) {
+      unused_hit_test_source_ids.insert(id);
     }
   }
 
-  // Remove all of the unused hit test sources.
-  id_to_hit_test_source->RemoveAll(unused_hit_test_source_ids);
-}
-
-// Helper that will validate that the passed in |hit_test_source| exists in
-// |id_to_hit_test_source| map. The entry can be present but map to nullptr due
-// to usage of WeakPtr - in that case, the entry will be removed.
-// T can be either XRHitTestSource or XRTransientInputHitTestSource.
-template <typename T>
-bool ValidateHitTestSourceExistsHelper(
-    HeapHashMap<uint64_t, WeakMember<T>>* id_to_hit_test_source,
-    T* hit_test_source) {
-  DCHECK(id_to_hit_test_source);
-  DCHECK(hit_test_source);
-
-  auto it = id_to_hit_test_source->find(hit_test_source->id());
-  if (it == id_to_hit_test_source->end()) {
-    return false;
-  }
-
-  if (!it->value) {
-    id_to_hit_test_source->erase(it);
-    return false;
-  }
-
-  return true;
+  return unused_hit_test_source_ids;
 }
 
 }  // namespace
+
+#define DCHECK_HIT_TEST_SOURCES()                                         \
+  do {                                                                    \
+    DCHECK_EQ(hit_test_source_ids_.size(),                                \
+              hit_test_source_ids_to_hit_test_sources_.size());           \
+    DCHECK_EQ(                                                            \
+        hit_test_source_for_transient_input_ids_.size(),                  \
+        hit_test_source_ids_to_transient_input_hit_test_sources_.size()); \
+  } while (0)
 
 constexpr char XRSession::kNoRigidTransformSpecified[];
 constexpr char XRSession::kUnableToRetrieveMatrix[];
@@ -310,6 +291,7 @@ void XRSession::MetricsReporter::ReportFeatureUsed(
     case XRSessionFeature::LIGHT_ESTIMATION:
     case XRSessionFeature::ANCHORS:
     case XRSessionFeature::CAMERA_ACCESS:
+    case XRSessionFeature::PLANE_DETECTION:
       // Not recording metrics for these features currently.
       break;
   }
@@ -329,7 +311,6 @@ XRSession::XRSession(
       mode_(mode),
       environment_integration_(
           mode == device::mojom::blink::XRSessionMode::kImmersiveAr),
-      world_tracking_state_(MakeGarbageCollected<XRWorldTrackingState>()),
       world_information_(MakeGarbageCollected<XRWorldInformation>(this)),
       enabled_features_(std::move(enabled_features)),
       input_sources_(MakeGarbageCollected<XRInputSourceArray>()),
@@ -346,6 +327,9 @@ XRSession::XRSession(
   render_state_ = MakeGarbageCollected<XRRenderState>(immersive());
   // Ensure that frame focus is considered in the initial visibilityState.
   UpdateVisibilityState();
+
+  world_tracking_state_ = MakeGarbageCollected<XRWorldTrackingState>(
+      IsFeatureEnabled(device::mojom::XRSessionFeature::PLANE_DETECTION));
 
   switch (environment_blend_mode) {
     case kBlendModeOpaque:
@@ -464,21 +448,6 @@ void XRSession::updateRenderState(XRRenderStateInit* init,
   // should be requesting frames again. Kick off a new frame request in case
   // there are any pending callbacks to flush them out.
   MaybeRequestFrame();
-}
-
-void XRSession::updateWorldTrackingState(
-    XRWorldTrackingStateInit* world_tracking_state_init,
-    ExceptionState& exception_state) {
-  DVLOG(3) << __func__;
-
-  if (ended_) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      kSessionEnded);
-    return;
-  }
-
-  world_tracking_state_ =
-      MakeGarbageCollected<XRWorldTrackingState>(world_tracking_state_init);
 }
 
 void XRSession::UpdateEyeParameters(
@@ -602,7 +571,7 @@ ScriptPromise XRSession::CreateAnchorHelper(
   // Reject the promise if device doesn't support the anchors API.
   if (!xr_->xrEnvironmentProviderRemote()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      kAnchorsNotSupported);
+                                      kAnchorsNotSupportedByDevice);
     return ScriptPromise();
   }
 
@@ -652,7 +621,7 @@ ScriptPromise XRSession::CreatePlaneAnchorHelper(
   // Reject the promise if device doesn't support the anchors API.
   if (!xr_->xrEnvironmentProviderRemote()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      kAnchorsNotSupported);
+                                      kAnchorsNotSupportedByDevice);
     return ScriptPromise();
   }
 
@@ -761,6 +730,12 @@ ScriptPromise XRSession::requestHitTestSource(
     return {};
   }
 
+  if (!xr_->xrEnvironmentProviderRemote()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kHitTestNotSupportedByDevice);
+    return {};
+  }
+
   // 1. Grab the native origin from the passed in XRSpace.
   base::Optional<device::mojom::blink::XRNativeOriginInformation>
       maybe_native_origin = options_init && options_init->hasSpace()
@@ -850,6 +825,12 @@ ScriptPromise XRSession::requestHitTestSourceForTransientInput(
     return {};
   }
 
+  if (!xr_->xrEnvironmentProviderRemote()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kHitTestNotSupportedByDevice);
+    return {};
+  }
+
   if (RuntimeEnabledFeatures::WebXRHitTestEntityTypesEnabled() &&
       options_init->hasEntityTypes() && options_init->entityTypes().IsEmpty()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
@@ -903,6 +884,7 @@ void XRSession::OnSubscribeToHitTestResult(
 
   hit_test_source_ids_to_hit_test_sources_.insert(subscription_id,
                                                   hit_test_source);
+  hit_test_source_ids_.insert(subscription_id);
 
   resolver->Resolve(hit_test_source);
 }
@@ -929,6 +911,7 @@ void XRSession::OnSubscribeToHitTestForTransientInputResult(
 
   hit_test_source_ids_to_transient_input_hit_test_sources_.insert(
       subscription_id, hit_test_source);
+  hit_test_source_for_transient_input_ids_.insert(subscription_id);
 
   resolver->Resolve(hit_test_source);
 }
@@ -1021,6 +1004,9 @@ void XRSession::ProcessAnchorsData(
       updated_anchors.insert(anchor->id, it->value);
       it->value->Update(*anchor);
     } else {
+      DVLOG(3) << __func__ << ": processing newly created anchor, anchor->id="
+               << anchor->id;
+
       auto resolver_it =
           anchor_ids_to_pending_anchor_promises_.find(anchor->id);
       if (resolver_it == anchor_ids_to_pending_anchor_promises_.end()) {
@@ -1065,15 +1051,30 @@ void XRSession::ProcessAnchorsData(
 }
 
 void XRSession::CleanUpUnusedHitTestSources() {
-  CleanUpUnusedHitTestSourcesHelper(&hit_test_source_ids_to_hit_test_sources_);
+  auto unused_hit_test_source_ids = GetIdsOfUnusedHitTestSources(
+      hit_test_source_ids_to_hit_test_sources_, hit_test_source_ids_);
+  for (auto id : unused_hit_test_source_ids) {
+    xr_->xrEnvironmentProviderRemote()->UnsubscribeFromHitTest(id);
+  }
 
-  CleanUpUnusedHitTestSourcesHelper(
-      &hit_test_source_ids_to_transient_input_hit_test_sources_);
+  hit_test_source_ids_.RemoveAll(unused_hit_test_source_ids);
+
+  auto unused_transient_hit_source_ids = GetIdsOfUnusedHitTestSources(
+      hit_test_source_ids_to_transient_input_hit_test_sources_,
+      hit_test_source_for_transient_input_ids_);
+  for (auto id : unused_transient_hit_source_ids) {
+    xr_->xrEnvironmentProviderRemote()->UnsubscribeFromHitTest(id);
+  }
+
+  hit_test_source_for_transient_input_ids_.RemoveAll(
+      unused_transient_hit_source_ids);
+
+  DCHECK_HIT_TEST_SOURCES();
 
   DVLOG(3) << __func__ << ": Number of active hit test sources: "
-           << hit_test_source_ids_to_hit_test_sources_.size()
+           << hit_test_source_ids_.size()
            << ", number of active hit test sources for transient input: "
-           << hit_test_source_ids_to_transient_input_hit_test_sources_.size();
+           << hit_test_source_for_transient_input_ids_.size();
 }
 
 void XRSession::ProcessHitTestData(
@@ -1081,13 +1082,16 @@ void XRSession::ProcessHitTestData(
         hit_test_subscriptions_data) {
   DVLOG(2) << __func__;
 
+  // Application's code can just drop references to hit test sources w/o first
+  // canceling them - ensure that we communicate that the subscriptions are no
+  // longer present to the device.
   CleanUpUnusedHitTestSources();
 
   if (hit_test_subscriptions_data) {
     // We have received hit test results for hit test subscriptions - process
     // each result and notify its corresponding hit test source about new
     // results for the current frame.
-    DVLOG(3) << __func__ << "hit_test_subscriptions_data->results.size()="
+    DVLOG(3) << __func__ << ": hit_test_subscriptions_data->results.size()="
              << hit_test_subscriptions_data->results.size() << ", "
              << "hit_test_subscriptions_data->transient_input_results.size()="
              << hit_test_subscriptions_data->transient_input_results.size();
@@ -1250,7 +1254,10 @@ void XRSession::HandleShutdown() {
     return;
   }
 
-  // Notify the frame provider that we've ended
+  // Notify the frame provider that we've ended. Do this before notifying the
+  // page, so that if the page tries (and is able to) create a session within
+  // either the promise or the event callback, it's not blocked by the frame
+  // provider thinking there's still an active immersive session.
   xr_->frameProvider()->OnSessionEnded(this);
 
   if (end_session_resolver_) {
@@ -1261,6 +1268,11 @@ void XRSession::HandleShutdown() {
 
   DispatchEvent(*XRSessionEvent::Create(event_type_names::kEnd, this));
   DVLOG(3) << __func__ << ": session end event dispatched";
+
+  // Now that we've notified the page that we've ended, try to restart the non-
+  // immersive frame loop. Note that if the page was able to request a new
+  // session in the end event, this may be a no-op.
+  xr_->frameProvider()->RestartNonImmersiveFrameLoop();
 }
 
 double XRSession::NativeFramebufferScale() const {
@@ -1548,7 +1560,8 @@ void XRSession::SetMetricsReporter(std::unique_ptr<MetricsReporter> reporter) {
 
 void XRSession::OnFrame(
     double timestamp,
-    const base::Optional<gpu::MailboxHolder>& output_mailbox_holder) {
+    const base::Optional<gpu::MailboxHolder>& output_mailbox_holder,
+    const base::Optional<gpu::MailboxHolder>& camera_image_mailbox_holder) {
   TRACE_EVENT0("gpu", __func__);
   DVLOG(2) << __func__ << ": ended_=" << ended_
            << ", pending_frame_=" << pending_frame_;
@@ -1575,7 +1588,8 @@ void XRSession::OnFrame(
       if (prev_base_layer_) {
         DVLOG(2) << __func__
                  << ": prev_base_layer_ is valid, submitting frame to it";
-        prev_base_layer_->OnFrameStart(output_mailbox_holder);
+        prev_base_layer_->OnFrameStart(output_mailbox_holder,
+                                       camera_image_mailbox_holder);
         prev_base_layer_->OnFrameEnd();
         prev_base_layer_ = nullptr;
       }
@@ -1591,7 +1605,8 @@ void XRSession::OnFrame(
       return;
     }
 
-    frame_base_layer->OnFrameStart(output_mailbox_holder);
+    frame_base_layer->OnFrameStart(output_mailbox_holder,
+                                   camera_image_mailbox_holder);
 
     // Don't allow frames to be processed if the session's visibility state is
     // "hidden".
@@ -1631,13 +1646,12 @@ void XRSession::OnFrame(
 }
 
 void XRSession::LogGetPose() const {
-  LocalDOMWindow* window = To<LocalDOMWindow>(GetExecutionContext());
-  if (!did_log_getViewerPose_ && window) {
+  if (!did_log_getViewerPose_ && GetExecutionContext()) {
     did_log_getViewerPose_ = true;
 
     ukm::builders::XR_WebXR(xr_->GetSourceId())
         .SetDidRequestPose(1)
-        .Record(window->UkmRecorder());
+        .Record(GetExecutionContext()->UkmRecorder());
   }
 }
 
@@ -1848,7 +1862,11 @@ void XRSession::RemoveTransientInputSource(XRInputSource* input_source) {
 }
 
 void XRSession::OnMojoSpaceReset() {
-  for (const auto& reference_space : reference_spaces_) {
+  // Since this eventually dispatches an event to the page, the page could
+  // create a new reference space which would invalidate our iterators; so
+  // iterate over a copy of the reference space list.
+  HeapVector<Member<XRReferenceSpace>> ref_spaces_copy = reference_spaces_;
+  for (const auto& reference_space : ref_spaces_copy) {
     reference_space->OnReset();
   }
 }
@@ -1868,39 +1886,94 @@ void XRSession::OnExitPresent() {
   }
 }
 
-bool XRSession::ValidateHitTestSourceExists(XRHitTestSource* hit_test_source) {
-  return ValidateHitTestSourceExistsHelper(
-      &hit_test_source_ids_to_hit_test_sources_, hit_test_source);
+bool XRSession::ValidateHitTestSourceExists(
+    XRHitTestSource* hit_test_source) const {
+  DCHECK(hit_test_source);
+  return base::Contains(hit_test_source_ids_, hit_test_source->id());
 }
 
 bool XRSession::ValidateHitTestSourceExists(
-    XRTransientInputHitTestSource* hit_test_source) {
-  return ValidateHitTestSourceExistsHelper(
-      &hit_test_source_ids_to_transient_input_hit_test_sources_,
-      hit_test_source);
+    XRTransientInputHitTestSource* hit_test_source) const {
+  DCHECK(hit_test_source);
+  return base::Contains(hit_test_source_for_transient_input_ids_,
+                        hit_test_source->id());
 }
 
 bool XRSession::RemoveHitTestSource(XRHitTestSource* hit_test_source) {
+  DVLOG(2) << __func__;
+
   DCHECK(hit_test_source);
-  bool result = ValidateHitTestSourceExistsHelper(
-      &hit_test_source_ids_to_hit_test_sources_, hit_test_source);
+
+  if (!base::Contains(hit_test_source_ids_, hit_test_source->id())) {
+    DVLOG(2) << __func__
+             << ": hit test source was already removed, hit_test_source->id()="
+             << hit_test_source->id();
+    return false;
+  }
+
+  if (ended_) {
+    DVLOG(1) << __func__
+             << ": attempted to remove a hit test source on a session that has "
+                "already ended.";
+    // Since the session has ended, we won't be able to reach out to the device
+    // to remove a hit test source subscription. Just notify the caller that the
+    // removal was successful.
+    return true;
+  }
+
+  DCHECK_HIT_TEST_SOURCES();
 
   hit_test_source_ids_to_hit_test_sources_.erase(hit_test_source->id());
+  hit_test_source_ids_.erase(hit_test_source->id());
 
-  return result;
+  DCHECK(xr_->xrEnvironmentProviderRemote());
+
+  xr_->xrEnvironmentProviderRemote()->UnsubscribeFromHitTest(
+      hit_test_source->id());
+
+  DCHECK_HIT_TEST_SOURCES();
+
+  return true;
 }
 
 bool XRSession::RemoveHitTestSource(
     XRTransientInputHitTestSource* hit_test_source) {
+  DVLOG(2) << __func__;
+
   DCHECK(hit_test_source);
-  bool result = ValidateHitTestSourceExistsHelper(
-      &hit_test_source_ids_to_transient_input_hit_test_sources_,
-      hit_test_source);
+
+  if (!base::Contains(hit_test_source_for_transient_input_ids_,
+                      hit_test_source->id())) {
+    DVLOG(2) << __func__
+             << ": hit test source was already removed, hit_test_source->id()="
+             << hit_test_source->id();
+    return false;
+  }
+
+  if (ended_) {
+    DVLOG(1) << __func__
+             << ": attempted to remove a hit test source on a session that has "
+                "already ended.";
+    // Since the session has ended, we won't be able to reach out to the device
+    // to remove a hit test source subscription. Just notify the caller that the
+    // removal was successful.
+    return true;
+  }
+
+  DCHECK_HIT_TEST_SOURCES();
 
   hit_test_source_ids_to_transient_input_hit_test_sources_.erase(
       hit_test_source->id());
+  hit_test_source_for_transient_input_ids_.erase(hit_test_source->id());
 
-  return result;
+  DCHECK(xr_->xrEnvironmentProviderRemote());
+
+  xr_->xrEnvironmentProviderRemote()->UnsubscribeFromHitTest(
+      hit_test_source->id());
+
+  DCHECK_HIT_TEST_SOURCES();
+
+  return true;
 }
 
 void XRSession::SetXRDisplayInfo(

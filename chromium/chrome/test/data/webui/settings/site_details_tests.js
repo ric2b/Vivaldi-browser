@@ -136,7 +136,7 @@ suite('SiteDetails', function() {
               ContentSettingsTypes.BLUETOOTH_SCANNING,
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
-              ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE,
+              ContentSettingsTypes.FILE_SYSTEM_WRITE,
               [createRawSiteException('https://foo.com:443', {
                 setting: ContentSetting.BLOCK,
               })]),
@@ -157,6 +157,9 @@ suite('SiteDetails', function() {
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.WINDOW_PLACEMENT,
+              [createRawSiteException('https://foo.com:443')]),
+          createContentSettingTypeToValuePair(
+              ContentSettingsTypes.FONT_ACCESS,
               [createRawSiteException('https://foo.com:443')]),
         ],
         [
@@ -210,16 +213,14 @@ suite('SiteDetails', function() {
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .BLUETOOTH_SCANNING] =
         'enableExperimentalWebPlatformFeatures';
-    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes.HID_DEVICES] =
-        'enableExperimentalWebPlatformFeatures';
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .WINDOW_PLACEMENT] =
         'enableExperimentalWebPlatformFeatures';
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes.MIXEDSCRIPT] =
         'enableInsecureContentContentSetting';
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
-                                                .NATIVE_FILE_SYSTEM_WRITE] =
-        'enableNativeFileSystemWriteContentSetting';
+                                                .FILE_SYSTEM_WRITE] =
+        'enableFileSystemWriteContentSetting';
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .PAYMENT_HANDLER] =
         'enablePaymentHandlerContentSetting';
@@ -228,12 +229,15 @@ suite('SiteDetails', function() {
     optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes
                                                 .BLUETOOTH_DEVICES] =
         'enableWebBluetoothNewPermissionsBackend';
+    optionalSiteDetailsContentSettingsTypes[ContentSettingsTypes.FONT_ACCESS] =
+        'enableFontAccessContentSetting';
 
     const controlledSettingsCount = /** @type{string : int } */ ({});
 
-    controlledSettingsCount['enableExperimentalWebPlatformFeatures'] = 3;
+    controlledSettingsCount['enableExperimentalWebPlatformFeatures'] = 2;
     controlledSettingsCount['enableInsecureContentContentSetting'] = 1;
-    controlledSettingsCount['enableNativeFileSystemWriteContentSetting'] = 1;
+    controlledSettingsCount['enableFileSystemWriteContentSetting'] = 1;
+    controlledSettingsCount['enableFontAccessContentSetting'] = 1;
     controlledSettingsCount['enablePaymentHandlerContentSetting'] = 1;
     controlledSettingsCount['enableSafeBrowsingSubresourceFilter'] = 1;
     controlledSettingsCount['enableWebBluetoothNewPermissionsBackend'] = 1;
@@ -364,7 +368,8 @@ suite('SiteDetails', function() {
     loadTimeData.overrideValues({
       enableExperimentalWebPlatformFeatures: true,
       enableInsecureContentContentSetting: true,
-      enableNativeFileSystemWriteContentSetting: true,
+      enableFileSystemWriteContentSetting: true,
+      enableFontAccessContentSetting: true,
       enablePaymentHandlerContentSetting: true,
       enableSafeBrowsingSubresourceFilter: true,
       enableWebBluetoothNewPermissionsBackend: true,
@@ -402,7 +407,7 @@ suite('SiteDetails', function() {
                     siteDetailsPermission.category ===
                         ContentSettingsTypes.POPUPS ||
                     siteDetailsPermission.category ===
-                        ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE) {
+                        ContentSettingsTypes.FILE_SYSTEM_WRITE) {
                   expectedSetting =
                       prefs.exceptions[siteDetailsPermission.category][0]
                           .setting;

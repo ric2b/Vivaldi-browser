@@ -7,11 +7,12 @@
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/predictors/predictor_database_factory.h"
-#include "chrome/browser/prerender/prerender_manager.h"
+#include "chrome/browser/prerender/chrome_prerender_manager_delegate.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/prerender/browser/prerender_manager.h"
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -53,7 +54,10 @@ PrerenderManagerFactory::~PrerenderManagerFactory() {
 
 KeyedService* PrerenderManagerFactory::BuildServiceInstanceFor(
     content::BrowserContext* browser_context) const {
-  return new PrerenderManager(Profile::FromBrowserContext(browser_context));
+  return new PrerenderManager(
+      Profile::FromBrowserContext(browser_context),
+      std::make_unique<ChromePrerenderManagerDelegate>(
+          Profile::FromBrowserContext(browser_context)));
 }
 
 content::BrowserContext* PrerenderManagerFactory::GetBrowserContextToUse(

@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "base/bind.h"
+
 namespace chromeos {
 namespace cros_healthd {
 
@@ -25,6 +27,19 @@ void FakeCrosHealthdService::GetDiagnosticsService(
 void FakeCrosHealthdService::GetEventService(
     mojom::CrosHealthdEventServiceRequest service) {
   event_receiver_set_.Add(this, std::move(service));
+}
+
+void FakeCrosHealthdService::SendNetworkHealthService(
+    mojo::PendingRemote<chromeos::network_health::mojom::NetworkHealthService>
+        remote) {
+  network_health_remote_.Bind(std::move(remote));
+}
+
+void FakeCrosHealthdService::SendNetworkDiagnosticsRoutines(
+    mojo::PendingRemote<
+        chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>
+        network_diagnostics_routines) {
+  network_diagnostics_routines_.Bind(std::move(network_diagnostics_routines));
 }
 
 void FakeCrosHealthdService::GetAvailableRoutines(
@@ -148,6 +163,12 @@ void FakeCrosHealthdService::ProbeTelemetryInfo(
   std::move(callback).Run(telemetry_response_info_.Clone());
 }
 
+void FakeCrosHealthdService::ProbeProcessInfo(
+    const uint32_t process_id,
+    ProbeProcessInfoCallback callback) {
+  std::move(callback).Run(process_response_.Clone());
+}
+
 void FakeCrosHealthdService::SetAvailableRoutinesForTesting(
     const std::vector<mojom::DiagnosticRoutineEnum>& available_routines) {
   available_routines_ = available_routines;
@@ -168,6 +189,11 @@ void FakeCrosHealthdService::SetProbeTelemetryInfoResponseForTesting(
   telemetry_response_info_.Swap(&response_info);
 }
 
+void FakeCrosHealthdService::SetProbeProcessInfoResponseForTesting(
+    mojom::ProcessResultPtr& result) {
+  process_response_.Swap(&result);
+}
+
 void FakeCrosHealthdService::EmitAcInsertedEventForTesting() {
   for (auto& observer : power_observers_)
     observer->OnAcInserted();
@@ -181,6 +207,18 @@ void FakeCrosHealthdService::EmitAdapterAddedEventForTesting() {
 void FakeCrosHealthdService::EmitLidClosedEventForTesting() {
   for (auto& observer : lid_observers_)
     observer->OnLidClosed();
+}
+
+void FakeCrosHealthdService::RequestNetworkHealthForTesting(
+    chromeos::network_health::mojom::NetworkHealthService::
+        GetHealthSnapshotCallback callback) {
+  network_health_remote_->GetHealthSnapshot(std::move(callback));
+}
+
+void FakeCrosHealthdService::RunLanConnectivityRoutineForTesting(
+    chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines::
+        LanConnectivityCallback callback) {
+  network_diagnostics_routines_->LanConnectivity(std::move(callback));
 }
 
 }  // namespace cros_healthd

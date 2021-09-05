@@ -6,23 +6,22 @@
 #define COMPONENTS_FEATURE_ENGAGEMENT_PUBLIC_EVENT_CONSTANTS_H_
 
 #include "build/build_config.h"
-#include "components/feature_engagement/buildflags.h"
 
 namespace feature_engagement {
 
 namespace events {
 
 // Desktop and IOS.
-#if defined(OS_IOS) || defined(OS_WIN) || defined(OS_MACOSX) || \
-    defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
+    defined(OS_CHROMEOS)
 // The user has explicitly opened a new tab via an entry point from inside of
 // Chrome.
 extern const char kNewTabOpened[];
-#endif  // defined(OS_IOS) || defined(OS_WIN) || defined(OS_MACOSX) ||
+#endif  // defined(OS_WIN) || defined(OS_APPLE) ||
         // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 // Desktop
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+#if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
 // A new tab was opened when 5 (or more) tabs were already open.
 extern const char kSixthTabOpened[];
@@ -55,37 +54,7 @@ extern const char kWebUITabStripClosed[];
 // The WebUI tab strip was opened by the user.
 extern const char kWebUITabStripOpened[];
 
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-// All the events declared below are the string names of deferred onboarding
-// events for the Bookmark feature.
-
-// The user has added a Bookmark (one-off event).
-extern const char kBookmarkAdded[];
-// The user has satisfied the session time requirement to show the BookmarkPromo
-// by accumulating 5 hours of active session time (one-off event).
-extern const char kBookmarkSessionTimeMet[];
-
-// All the events declared below are the string names of deferred onboarding
-// events for the New Tab.
-
-// The user has interacted with the omnibox.
-extern const char kOmniboxInteraction[];
-// The user has satisfied the session time requirement to show the NewTabPromo
-// by accumulating 2 hours of active session time (one-off event).
-extern const char kNewTabSessionTimeMet[];
-
-// All the events declared below are the string names of deferred onboarding
-// events for the Incognito Window.
-
-// The user has opened an incognito window.
-extern const char kIncognitoWindowOpened[];
-// The user has satisfied the session time requirement to show the
-// IncognitoWindowPromo by accumulating 2 hours of active session time (one-off
-// event).
-extern const char kIncognitoWindowSessionTimeMet[];
-#endif  // BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-
-#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
+#endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
 #if defined(OS_IOS)
@@ -106,6 +75,9 @@ extern const char kTriggeredTranslateInfobar[];
 
 // The user has viewed the the BottomToolbar tip.
 extern const char kBottomToolbarOpened[];
+
+// The Discover feed has loaded content in the NTP.
+extern const char kDiscoverFeedLoaded[];
 #endif  // defined(OS_IOS)
 
 }  // namespace events

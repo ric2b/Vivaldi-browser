@@ -2237,30 +2237,30 @@ IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
                        EntireMarkupSuccessiveMoveByWord) {
-  AssertMoveByUnitForMarkup(TextUnit_Word, "this is a test.",
-                            {L"this ", L"is ", L"a ", L"test."});
+  AssertMoveByUnitForMarkup(TextUnit_Word, "This is a test.",
+                            {L"This ", L"is ", L"a ", L"test", L"."});
 
   AssertMoveByUnitForMarkup(TextUnit_Word,
-                            "    this    is      a      test.    ",
-                            {L"this ", L"is ", L"a ", L"test."});
+                            "    This    is      a      test.    ",
+                            {L"This ", L"is ", L"a ", L"test", L"."});
 
   AssertMoveByUnitForMarkup(
       TextUnit_Word, "It said: to be continued...",
-      {L"It ", L"said: ", L"to ", L"be ", L"continued..."});
+      {L"It ", L"said", L": ", L"to ", L"be ", L"continued", L"..."});
 
   AssertMoveByUnitForMarkup(TextUnit_Word,
-                            "a <a>link with multiple words</a> and text after.",
-                            {L"a ", L"link ", L"with ", L"multiple ", L"words",
-                             L"and ", L"text ", L"after."});
+                            "A <a>link with multiple words</a> and text after.",
+                            {L"A ", L"link ", L"with ", L"multiple ", L"words",
+                             L"and ", L"text ", L"after", L"."});
 
   AssertMoveByUnitForMarkup(TextUnit_Word,
-                            "a <span aria-hidden='true'>span with ignored "
+                            "A <span aria-hidden='true'>span with ignored "
                             "text</span> and text after.",
-                            {L"a ", L"and ", L"text ", L"after."});
+                            {L"A ", L"and ", L"text ", L"after", L"."});
 
   AssertMoveByUnitForMarkup(
       TextUnit_Word, "<ol><li>item one</li><li>item two</li></ol>",
-      {L"1. ", L"item ", L"one", L"2. ", L"item ", L"two"});
+      {L"1", L". ", L"item ", L"one", L"2", L". ", L"item ", L"two"});
 
   // The following test should be enabled when crbug.com/1028830 is fixed.
   // AssertMoveByUnitForMarkup(TextUnit_Word,
@@ -2486,6 +2486,64 @@ IN_PROC_BROWSER_TEST_F(
       L"\nParagraph Two"};
 
   AssertMoveByUnitForMarkup(TextUnit_Format, html_markup, format_units);
+}
+
+IN_PROC_BROWSER_TEST_F(AXPlatformNodeTextRangeProviderWinBrowserTest,
+                       IframeSelect) {
+  LoadInitialAccessibilityTreeFromHtmlFilePath(
+      "/accessibility/html/iframe-cross-process.html");
+
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Text in iframe");
+
+  auto* node = FindNode(ax::mojom::Role::kStaticText, "Text in iframe");
+  ASSERT_NE(nullptr, node);
+
+  ComPtr<ITextRangeProvider> text_range_provider;
+  GetTextRangeProviderFromTextNode(*node, &text_range_provider);
+  ASSERT_NE(nullptr, text_range_provider.Get());
+  EXPECT_UIA_TEXTRANGE_EQ(text_range_provider, L"Text in iframe");
+
+  // First select text entirely in the iframe. To prevent test timeouts, only
+  // validate the next selection, which spans outside of the iframe.
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->Select());
+
+  // Move the endpoint so it spans outside of the text range and ensure
+  // selection still works.
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Document,
+      /*count*/ 1,
+      /*expected_text*/ L"Text in iframe\nAfter frame",
+      /*expected_count*/ 1);
+
+  // Validiate this selection with a waiter.
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kDocumentSelectionChanged);
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->Select());
+
+  waiter.WaitForNotification();
+  ui::AXTree::Selection selection = node->GetUnignoredSelection();
+  EXPECT_EQ(selection.anchor_object_id, node->GetId());
+  EXPECT_EQ(selection.anchor_offset, 0);
+  EXPECT_EQ(selection.focus_object_id, node->GetId());
+  EXPECT_EQ(selection.focus_offset, 14);
+
+  // Now move the start position to outside of the iframe and select.
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Document,
+      /*count*/ -1,
+      /*expected_text*/ L"Before frame\nText in iframe\nAfter frame",
+      /*expected_count*/ -1);
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->Select());
+
+  // Now move the end position so it's inside of the iframe.
+  EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
+      text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Character,
+      /*count*/ -12,
+      /*expected_text*/ L"Before frame\nText in ifram",
+      /*expected_count*/ -12);
+  EXPECT_HRESULT_SUCCEEDED(text_range_provider->Select());
 }
 
 }  // namespace content

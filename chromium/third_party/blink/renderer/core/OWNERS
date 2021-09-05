@@ -51,6 +51,7 @@ mstensho@chromium.org
 # and related code in core/dom and core/layout.
 nainar@chromium.org
 nhiroki@chromium.org
+obrufau@igalia.com
 # pdr reviews many svg and text autosizing patches.
 pdr@chromium.org
 pfeldman@chromium.org
@@ -68,7 +69,7 @@ thakis@chromium.org
 timloh@chromium.org
 tkent@chromium.org
 tonyg@chromium.org
-# vollick reviews compositor integration, accelerated transitions, animations and scrolling, scrolling coordinator, CSS transforms
+vmpstr@chromium.org
 vollick@chromium.org
 wangxianzhu@chromium.org
 yhirano@chromium.org

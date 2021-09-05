@@ -1092,14 +1092,14 @@ void ProfileImpl::SetExitType(ExitType exit_type) {
   }
 }
 
-Profile::ExitType ProfileImpl::GetLastSessionExitType() {
+Profile::ExitType ProfileImpl::GetLastSessionExitType() const {
   // last_session_exited_cleanly_ is set when the preferences are loaded. Force
   // it to be set by asking for the prefs.
   GetPrefs();
   return last_session_exit_type_;
 }
 
-bool ProfileImpl::ShouldRestoreOldSessionCookies() {
+bool ProfileImpl::ShouldRestoreOldSessionCookies() const {
 #if defined(OS_ANDROID)
   SessionStartupPref::Type startup_pref_type =
       SessionStartupPref::GetDefaultStartupType();
@@ -1113,7 +1113,7 @@ bool ProfileImpl::ShouldRestoreOldSessionCookies() {
          startup_pref_type == SessionStartupPref::LAST;
 }
 
-bool ProfileImpl::ShouldPersistSessionCookies() {
+bool ProfileImpl::ShouldPersistSessionCookies() const {
   return true;
 }
 
@@ -1320,19 +1320,6 @@ ProfileImpl::GetSharedCorsOriginAccessList() {
 }
 
 bool ProfileImpl::ShouldEnableOutOfBlinkCors() {
-  // Obtains the applied policy at most one time per profile, and reuse the
-  // same value for the whole session so that CORS implementations distributed
-  // in multi-processes work consistently. Profile-bound renderers and
-  // NetworkContexts will be initialized based on this returned mode.
-  if (!cors_legacy_mode_enabled_.has_value()) {
-    cors_legacy_mode_enabled_ =
-        base::FeatureList::IsEnabled(
-            features::kHideCorsLegacyModeEnabledPolicySupport)
-            ? false
-            : GetPrefs()->GetBoolean(prefs::kCorsLegacyModeEnabled);
-  }
-  if (cors_legacy_mode_enabled_.value())
-    return false;
   return base::FeatureList::IsEnabled(network::features::kOutOfBlinkCors);
 }
 

@@ -106,9 +106,7 @@ PRUNE_PATHS = set([
 
 # Directories we don't scan through.
 VCS_METADATA_DIRS = ('.svn', '.git')
-PRUNE_DIRS = (VCS_METADATA_DIRS +
-              ('out', 'Debug', 'Release',  # build files
-               'layout_tests'))            # lots of subdirs
+PRUNE_DIRS = VCS_METADATA_DIRS + ('layout_tests', )  # lots of subdirs
 
 # A third_party directory can define this file, containing a list of
 # subdirectories to process in addition to itself. Intended for directories
@@ -333,7 +331,6 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'ashmem'),
     os.path.join('third_party', 'blink'),
     os.path.join('third_party', 'bspatch'),
-    os.path.join('third_party', 'cacheinvalidation'),
     os.path.join('third_party', 'cld'),
     os.path.join('third_party', 'flot'),
     os.path.join('third_party', 'gtk+'),
@@ -491,7 +488,8 @@ def FindThirdPartyDirs(prune_paths, root):
   for path, dirs, files in os.walk(root):
     path = path[len(root) + 1:]  # Pretty up the path.
 
-    if path in prune_paths:
+    # .gitignore ignores /out*/, so do the same here.
+    if path in prune_paths or path.startswith('out'):
       dirs[:] = []
       continue
 

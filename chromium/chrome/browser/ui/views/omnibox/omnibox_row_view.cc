@@ -38,16 +38,18 @@ class OmniboxRowView::HeaderView : public views::View,
     views::BoxLayout* layout =
         SetLayoutManager(std::make_unique<views::BoxLayout>(
             views::BoxLayout::Orientation::kHorizontal));
+    // The icons in the header view match their sizing to the location bar.
+    layout->set_between_child_spacing(
+        GetLayoutConstant(LOCATION_BAR_CHILD_INTERIOR_PADDING));
 
-    header_text_ = AddChildView(std::make_unique<views::Label>());
-    header_text_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
-    layout->SetFlexForView(header_text_, 1);
+    header_label_ = AddChildView(std::make_unique<views::Label>());
+    header_label_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
 
     const gfx::FontList& font =
         views::style::GetFont(CONTEXT_OMNIBOX_PRIMARY,
                               views::style::STYLE_PRIMARY)
             .DeriveWithWeight(gfx::Font::Weight::MEDIUM);
-    header_text_->SetFontList(font);
+    header_label_->SetFontList(font);
 
     header_toggle_button_ =
         AddChildView(views::CreateVectorToggleImageButton(this));
@@ -57,16 +59,13 @@ class OmniboxRowView::HeaderView : public views::View,
         views::FocusRing::Install(header_toggle_button_);
     header_toggle_button_focus_ring_->SetHasFocusPredicate([&](View* view) {
       return view->GetVisible() &&
-             row_view_->popup_model_->selection() ==
-                 OmniboxPopupModel::Selection(
-                     row_view_->line_,
-                     OmniboxPopupModel::HEADER_BUTTON_FOCUSED);
+             row_view_->popup_model_->selection() == HeaderSelection();
     });
 
     if (row_view_->pref_service_) {
       pref_change_registrar_.Init(row_view_->pref_service_);
       // Unretained is appropriate here. 'this' will outlive the registrar.
-      pref_change_registrar_.Add(omnibox::kOmniboxHiddenGroupIds,
+      pref_change_registrar_.Add(omnibox::kSuggestionGroupVisibility,
                                  base::BindRepeating(&HeaderView::OnPrefChanged,
                                                      base::Unretained(this)));
     }
@@ -74,15 +73,17 @@ class OmniboxRowView::HeaderView : public views::View,
 
   void SetHeader(int suggestion_group_id, const base::string16& header_text) {
     suggestion_group_id_ = suggestion_group_id;
+    header_text_ = header_text;
 
     // TODO(tommycli): Our current design calls for uppercase text here, but
     // it seems like an open question what should happen for non-Latin locales.
     // Moreover, it seems unusual to do case conversion in Views in general.
-    header_text_->SetText(base::i18n::ToUpper(header_text));
+    header_label_->SetText(base::i18n::ToUpper(header_text_));
 
     if (row_view_->pref_service_) {
-      suggestion_group_hidden_ = omnibox::IsSuggestionGroupIdHidden(
-          row_view_->pref_service_, suggestion_group_id_);
+      suggestion_group_hidden_ =
+          row_view_->popup_model_->result().IsSuggestionGroupIdHidden(
+              row_view_->pref_service_, suggestion_group_id_);
 
       header_toggle_button_->SetToggled(suggestion_group_hidden_);
     }
@@ -104,6 +105,13 @@ class OmniboxRowView::HeaderView : public views::View,
 
     return gfx::Insets(vertical, left_inset, vertical,
                        OmniboxMatchCellView::kMarginRight);
+  }
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    // Needed to receive the OnMouseReleased event.
+    return true;
+  }
+  void OnMouseReleased(const ui::MouseEvent& event) override {
+    row_view_->popup_model_->TriggerSelectionAction(HeaderSelection());
   }
   void OnMouseEntered(const ui::MouseEvent& event) override { UpdateUI(); }
   void OnMouseExited(const ui::MouseEvent& event) override { UpdateUI(); }
@@ -127,18 +135,14 @@ class OmniboxRowView::HeaderView : public views::View,
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     DCHECK_EQ(sender, header_toggle_button_);
-    row_view_->popup_model_->TriggerSelectionAction(
-        OmniboxPopupModel::Selection(row_view_->line_,
-                                     OmniboxPopupModel::HEADER_BUTTON_FOCUSED));
+    row_view_->popup_model_->TriggerSelectionAction(HeaderSelection());
     // The PrefChangeRegistrar will update the actual button toggle state.
   }
 
   // Updates the UI state for the new hover or selection state.
   void UpdateUI() {
     OmniboxPartState part_state = OmniboxPartState::NORMAL;
-    if (row_view_->popup_model_->selection() ==
-        OmniboxPopupModel::Selection(
-            row_view_->line_, OmniboxPopupModel::HEADER_BUTTON_FOCUSED)) {
+    if (row_view_->popup_model_->selection() == HeaderSelection()) {
       part_state = OmniboxPartState::SELECTED;
     } else if (IsMouseHovered()) {
       part_state = OmniboxPartState::HOVERED;
@@ -146,7 +150,7 @@ class OmniboxRowView::HeaderView : public views::View,
 
     SkColor text_color = GetOmniboxColor(
         GetThemeProvider(), OmniboxPart::RESULTS_TEXT_DIMMED, part_state);
-    header_text_->SetEnabledColor(text_color);
+    header_label_->SetEnabledColor(text_color);
 
     SkColor icon_color = GetOmniboxColor(GetThemeProvider(),
                                          OmniboxPart::RESULTS_ICON, part_state);
@@ -164,6 +168,8 @@ class OmniboxRowView::HeaderView : public views::View,
     header_toggle_button_->SetImage(views::Button::STATE_NORMAL, arrow_up);
     header_toggle_button_->SetTooltipText(
         l10n_util::GetStringUTF16(IDS_TOOLTIP_HEADER_HIDE_SUGGESTIONS_BUTTON));
+    header_toggle_button_->SetAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_ACC_HEADER_HIDE_SUGGESTIONS_BUTTON, header_text_));
 
     // The "toggled" button state corresponds with the group being hidden.
     // The button's action is therefore to Show the group, when clicked.
@@ -171,6 +177,9 @@ class OmniboxRowView::HeaderView : public views::View,
                                            &arrow_down);
     header_toggle_button_->SetToggledTooltipText(
         l10n_util::GetStringUTF16(IDS_TOOLTIP_HEADER_SHOW_SUGGESTIONS_BUTTON));
+    header_toggle_button_->SetToggledAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_ACC_HEADER_SHOW_SUGGESTIONS_BUTTON, header_text_));
+
     header_toggle_button_focus_ring_->SchedulePaint();
 
     // It's a little hokey that we're stealing the logic for the background
@@ -186,13 +195,28 @@ class OmniboxRowView::HeaderView : public views::View,
   void OnPrefChanged() {
     DCHECK(row_view_->pref_service_);
     bool was_hidden = suggestion_group_hidden_;
-    suggestion_group_hidden_ = omnibox::IsSuggestionGroupIdHidden(
-        row_view_->pref_service_, suggestion_group_id_);
+    suggestion_group_hidden_ =
+        row_view_->popup_model_->result().IsSuggestionGroupIdHidden(
+            row_view_->pref_service_, suggestion_group_id_);
 
-    if (was_hidden != suggestion_group_hidden_)
+    if (was_hidden != suggestion_group_hidden_) {
       NotifyAccessibilityEvent(ax::mojom::Event::kExpandedChanged, true);
 
+      // Because this view doesn't have true focus (it stays on the textfield),
+      // we also need to manually announce state changes.
+      GetViewAccessibility().AnnounceText(l10n_util::GetStringFUTF16(
+          suggestion_group_hidden_ ? IDS_ACC_HEADER_SECTION_HIDDEN
+                                   : IDS_ACC_HEADER_SECTION_SHOWN,
+          header_text_));
+    }
+
     header_toggle_button_->SetToggled(suggestion_group_hidden_);
+  }
+
+  // Convenience method to get the OmniboxPopupModel::Selection for this view.
+  OmniboxPopupModel::Selection HeaderSelection() {
+    return OmniboxPopupModel::Selection(
+        row_view_->line_, OmniboxPopupModel::FOCUSED_BUTTON_HEADER);
   }
 
   // Non-owning pointer our parent row view. We access a lot of private members
@@ -200,7 +224,7 @@ class OmniboxRowView::HeaderView : public views::View,
   OmniboxRowView* const row_view_;
 
   // The Label containing the header text. This is never nullptr.
-  views::Label* header_text_;
+  views::Label* header_label_;
 
   // The button used to toggle hiding suggestions with this header.
   views::ToggleImageButton* header_toggle_button_;
@@ -208,6 +232,9 @@ class OmniboxRowView::HeaderView : public views::View,
 
   // The group ID associated with this header.
   int suggestion_group_id_ = 0;
+
+  // The unmodified header text for this header.
+  base::string16 header_text_;
 
   // Stores whether or not the group was hidden. This is used to fire correct
   // accessibility change events.
@@ -255,7 +282,7 @@ void OmniboxRowView::OnSelectionStateChanged() {
 views::View* OmniboxRowView::GetActiveAuxiliaryButtonForAccessibility() const {
   DCHECK(popup_model_->selection().IsButtonFocused());
   if (popup_model_->selected_line_state() ==
-      OmniboxPopupModel::HEADER_BUTTON_FOCUSED) {
+      OmniboxPopupModel::FOCUSED_BUTTON_HEADER) {
     return header_view_->header_toggle_button();
   }
 
@@ -267,7 +294,7 @@ views::View* OmniboxRowView::GetActiveAuxiliaryButtonForAccessibility() const {
 gfx::Insets OmniboxRowView::GetInsets() const {
   // A visible header means this is the start of a new section. Give the section
   // that just ended an extra 4dp of padding. https://crbug.com/1076646
-  if (header_view_ && header_view_->GetVisible())
+  if (line_ != 0 && header_view_ && header_view_->GetVisible())
     return gfx::Insets(4, 0, 0, 0);
 
   return gfx::Insets();

@@ -45,6 +45,7 @@
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
 #include "chrome/browser/chromeos/login/reauth_stats.h"
+#include "chrome/browser/chromeos/login/screens/gaia_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -54,7 +55,6 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -72,6 +72,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -223,9 +224,6 @@ SigninScreenHandler::SigninScreenHandler(
       network_state_informer_(network_state_informer),
       error_screen_(error_screen),
       core_oobe_view_(core_oobe_view),
-      caps_lock_enabled_(chromeos::input_method::InputMethodManager::Get()
-                             ->GetImeKeyboard()
-                             ->CapsLockIsEnabled()),
       proxy_auth_dialog_reload_times_(kMaxGaiaReloadForProxyAuthDialog),
       gaia_screen_handler_(gaia_screen_handler),
       histogram_helper_(new ErrorScreensHistogramHelper("Signin")) {
@@ -317,10 +315,8 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("ownerUserPattern", IDS_LOGIN_POD_OWNER_USER);
   builder->Add("removeUser", IDS_LOGIN_POD_REMOVE_USER);
 
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
   builder->Add("disabledAddUserTooltip",
-               connector->IsEnterpriseManaged()
+               webui::IsEnterpriseManaged()
                    ? IDS_DISABLED_ADD_USER_TOOLTIP_ENTERPRISE
                    : IDS_DISABLED_ADD_USER_TOOLTIP);
 
@@ -411,16 +407,11 @@ void SigninScreenHandler::RegisterMessages() {
   AddCallback("completeOfflineAuthentication",
               &SigninScreenHandler::HandleCompleteOfflineAuthentication);
   AddCallback("launchIncognito", &SigninScreenHandler::HandleLaunchIncognito);
-  AddCallback("launchPublicSession",
-              &SigninScreenHandler::HandleLaunchPublicSession);
   AddCallback("launchSAMLPublicSession",
               &SigninScreenHandler::HandleLaunchSAMLPublicSession);
   AddRawCallback("offlineLogin", &SigninScreenHandler::HandleOfflineLogin);
-  AddCallback("rebootSystem", &SigninScreenHandler::HandleRebootSystem);
   AddCallback("toggleEnrollmentScreen",
               &SigninScreenHandler::HandleToggleEnrollmentScreen);
-  AddCallback("toggleEnableDebuggingScreen",
-              &SigninScreenHandler::HandleToggleEnableDebuggingScreen);
   AddCallback("toggleKioskEnableScreen",
               &SigninScreenHandler::HandleToggleKioskEnableScreen);
   AddCallback("accountPickerReady",
@@ -528,11 +519,9 @@ void SigninScreenHandler::UpdateUIState(UIState ui_state) {
   switch (ui_state) {
     case UI_STATE_GAIA_SIGNIN:
       ui_state_ = UI_STATE_GAIA_SIGNIN;
-      ShowScreen(GaiaView::kScreenId);
       break;
     case UI_STATE_ACCOUNT_PICKER:
       ui_state_ = UI_STATE_ACCOUNT_PICKER;
-      gaia_screen_handler_->CancelShowGaiaAsync();
       ShowScreen(OobeScreen::SCREEN_ACCOUNT_PICKER);
       break;
     default:
@@ -730,7 +719,7 @@ void SigninScreenHandler::SetupAndShowOfflineMessage(
   if (GetCurrentScreen() != ErrorScreenView::kScreenId) {
     error_screen_->SetUIState(NetworkError::UI_STATE_SIGNIN);
     error_screen_->SetParentScreen(GaiaView::kScreenId);
-    error_screen_->Show();
+    error_screen_->Show(nullptr);
     histogram_helper_->OnErrorShow(error_screen_->GetErrorState());
   }
 }
@@ -841,13 +830,6 @@ void SigninScreenHandler::PreloadPinKeyboard(bool should_preload) {
     CallJS("cr.ui.Oobe.preloadPinKeyboard");
 }
 
-void SigninScreenHandler::OnUserRemoved(const AccountId& account_id,
-                                        bool last_user_removed) {
-  CallJS("login.AccountPickerScreen.removeUser", account_id);
-  if (last_user_removed)
-    gaia_screen_handler_->OnShowAddUser();
-}
-
 void SigninScreenHandler::OnUserImageChanged(const user_manager::User& user) {
   if (page_is_ready()) {
     CallJS("login.AccountPickerScreen.updateUserImage", user.GetAccountId());
@@ -883,7 +865,9 @@ void SigninScreenHandler::OnPreferencesChanged() {
     // We need to reload GAIA if UI_STATE_UNKNOWN or the allow new user setting
     // has changed so that reloaded GAIA shows/hides the option to create a new
     // account.
-    UpdateUIState(UI_STATE_ACCOUNT_PICKER);
+    GaiaScreen* gaia_screen = GaiaScreen::Get(
+        WizardController::default_controller()->screen_manager());
+    gaia_screen->LoadOnline(EmptyAccountId());
   }
 }
 
@@ -903,8 +887,8 @@ void SigninScreenHandler::ShowSigninUI(const std::string& email) {
   core_oobe_view_->ShowSignInUI(email);
 }
 
-void SigninScreenHandler::ShowWhitelistCheckFailedError() {
-  gaia_screen_handler_->ShowWhitelistCheckFailedError();
+void SigninScreenHandler::ShowAllowlistCheckFailedError() {
+  gaia_screen_handler_->ShowAllowlistCheckFailedError();
 }
 
 void SigninScreenHandler::Observe(int type,
@@ -1053,22 +1037,13 @@ void SigninScreenHandler::HandleLaunchIncognito() {
 
 void SigninScreenHandler::HandleLaunchSAMLPublicSession(
     const std::string& email) {
-  const AccountId account_id = user_manager::known_user::GetAccountId(
-      email, std::string() /* id */, AccountType::UNKNOWN);
-  SigninScreenHandler::HandleLaunchPublicSession(account_id, std::string(),
-                                                 std::string());
-}
-
-void SigninScreenHandler::HandleLaunchPublicSession(
-    const AccountId& account_id,
-    const std::string& locale,
-    const std::string& input_method) {
   if (!delegate_)
     return;
 
+  const AccountId account_id = user_manager::known_user::GetAccountId(
+      email, std::string() /* id */, AccountType::UNKNOWN);
+
   UserContext context(user_manager::USER_TYPE_PUBLIC_ACCOUNT, account_id);
-  context.SetPublicSessionLocale(locale),
-  context.SetPublicSessionInputMethod(input_method);
   delegate_->Login(context, SigninSpecifics());
 }
 
@@ -1080,14 +1055,14 @@ void SigninScreenHandler::HandleOfflineLogin(const base::ListValue* args) {
   std::string email;
   args->GetString(0, &email);
 
-  gaia_screen_handler_->set_populated_account(AccountId::FromUserEmail(email));
-  gaia_screen_handler_->LoadAuthExtension(true /* force */, true /* offline */);
-  UpdateUIState(UI_STATE_GAIA_SIGNIN);
-}
+  GaiaScreen* gaia_screen =
+      GaiaScreen::Get(WizardController::default_controller()->screen_manager());
+  gaia_screen->LoadOffline(AccountId::FromUserEmail(email));
+  HideOfflineMessage(NetworkStateInformer::OFFLINE,
+                     NetworkError::ERROR_REASON_NONE);
+  LoginDisplayHost::default_host()->StartWizard(GaiaView::kScreenId);
 
-void SigninScreenHandler::HandleRebootSystem() {
-  chromeos::PowerManagerClient::Get()->RequestRestart(
-      power_manager::REQUEST_RESTART_FOR_USER, "WebUI signin screen");
+  UpdateUIState(UI_STATE_GAIA_SIGNIN);
 }
 
 void SigninScreenHandler::HandleToggleEnrollmentScreen() {
@@ -1095,15 +1070,8 @@ void SigninScreenHandler::HandleToggleEnrollmentScreen() {
     delegate_->ShowEnterpriseEnrollmentScreen();
 }
 
-void SigninScreenHandler::HandleToggleEnableDebuggingScreen() {
-  if (delegate_)
-    delegate_->ShowEnableDebuggingScreen();
-}
-
 void SigninScreenHandler::HandleToggleKioskEnableScreen() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (delegate_ && !connector->IsEnterpriseManaged() &&
+  if (delegate_ && !webui::IsEnterpriseManaged() &&
       KioskAppManager::IsConsumerKioskEnabled() &&
       LoginDisplayHost::default_host()) {
     delegate_->ShowKioskEnableScreen();
@@ -1111,9 +1079,7 @@ void SigninScreenHandler::HandleToggleKioskEnableScreen() {
 }
 
 void SigninScreenHandler::HandleToggleKioskAutolaunchScreen() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (delegate_ && !connector->IsEnterpriseManaged())
+  if (delegate_ && !webui::IsEnterpriseManaged())
     delegate_->ShowKioskAutolaunchScreen();
 }
 
@@ -1317,7 +1283,7 @@ void SigninScreenHandler::HandleSendFeedback() {
                                     weak_factory_.GetWeakPtr()));
 }
 
-bool SigninScreenHandler::AllWhitelistedUsersPresent() {
+bool SigninScreenHandler::AllAllowlistedUsersPresent() {
   CrosSettings* cros_settings = CrosSettings::Get();
   bool allow_new_user = false;
   cros_settings->GetBoolean(kAccountsPrefAllowNewUser, &allow_new_user);
@@ -1328,15 +1294,15 @@ bool SigninScreenHandler::AllWhitelistedUsersPresent() {
   if (!delegate_ || users.size() > kMaxUsers) {
     return false;
   }
-  const base::ListValue* whitelist = nullptr;
-  if (!cros_settings->GetList(kAccountsPrefUsers, &whitelist) || !whitelist)
+  const base::ListValue* allowlist = nullptr;
+  if (!cros_settings->GetList(kAccountsPrefUsers, &allowlist) || !allowlist)
     return false;
-  for (size_t i = 0; i < whitelist->GetSize(); ++i) {
-    std::string whitelisted_user;
-    // NB: Wildcards in the whitelist are also detected as not present here.
-    if (!whitelist->GetString(i, &whitelisted_user) ||
+  for (size_t i = 0; i < allowlist->GetSize(); ++i) {
+    std::string allowlisted_user;
+    // NB: Wildcards in the allowlist are also detected as not present here.
+    if (!allowlist->GetString(i, &allowlisted_user) ||
         !user_manager->IsKnownUser(
-            AccountId::FromUserEmail(whitelisted_user))) {
+            AccountId::FromUserEmail(allowlisted_user))) {
       return false;
     }
   }
@@ -1363,9 +1329,8 @@ net::Error SigninScreenHandler::FrameError() const {
 }
 
 void SigninScreenHandler::OnCapsLockChanged(bool enabled) {
-  caps_lock_enabled_ = enabled;
   if (page_is_ready())
-    CallJS("login.AccountPickerScreen.setCapsLockState", caps_lock_enabled_);
+    CallJS("login.AccountPickerScreen.setCapsLockState", enabled);
 }
 
 void SigninScreenHandler::OnFeedbackFinished() {

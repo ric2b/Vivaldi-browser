@@ -35,6 +35,7 @@
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/input/input_handler_proxy_client.h"
 #include "third_party/blink/renderer/platform/widget/input/compositor_thread_event_queue.h"
+#include "third_party/blink/renderer/platform/widget/input/elastic_overscroll_controller.h"
 #include "third_party/blink/renderer/platform/widget/input/event_with_callback.h"
 #include "third_party/blink/renderer/platform/widget/input/momentum_scroll_jank_tracker.h"
 #include "third_party/blink/renderer/platform/widget/input/scroll_predictor.h"
@@ -46,6 +47,8 @@
 
 using perfetto::protos::pbzero::ChromeLatencyInfo;
 using perfetto::protos::pbzero::TrackEvent;
+
+using ScrollThread = cc::InputHandler::ScrollThread;
 
 namespace blink {
 namespace {
@@ -179,6 +182,9 @@ cc::ScrollBeginThreadState RecordScrollingThread(
     UMA_HISTOGRAM_ENUMERATION(kTouchHistogramName, status);
   } else if (device == WebGestureDevice::kTouchpad) {
     UMA_HISTOGRAM_ENUMERATION(kWheelHistogramName, status);
+  } else if (device == WebGestureDevice::kScrollbar) {
+    // TODO(crbug.com/1101502): Add support for
+    // Renderer4.ScrollingThread.Scrollbar
   } else {
     NOTREACHED();
   }
@@ -593,7 +599,7 @@ void InputHandlerProxy::InjectScrollbarGestureScroll(
 }
 
 bool HasScrollbarJumpKeyModifier(const WebInputEvent& event) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Mac uses the "Option" key (which is mapped to the enum "kAltKey").
   return event.GetModifiers() & WebInputEvent::kAltKey;
 #else
@@ -804,6 +810,10 @@ InputHandlerProxy::RouteToTypeSpecificHandler(
 
 WebInputEventAttribution InputHandlerProxy::PerformEventAttribution(
     const WebInputEvent& event) {
+  if (!event_attribution_enabled_) {
+    return WebInputEventAttribution(WebInputEventAttribution::kUnknown);
+  }
+
   if (WebInputEvent::IsKeyboardEventType(event.GetType())) {
     // Keyboard events should be dispatched to the focused frame.
     return WebInputEventAttribution(WebInputEventAttribution::kFocusedFrame);
@@ -818,8 +828,29 @@ WebInputEventAttribution InputHandlerProxy::PerformEventAttribution(
     return WebInputEventAttribution(
         WebInputEventAttribution::kTargetedFrame,
         input_handler_->FindFrameElementIdAtPoint(point));
+  } else if (WebInputEvent::IsGestureEventType(event.GetType())) {
+    gfx::PointF point =
+        static_cast<const WebGestureEvent&>(event).PositionInWidget();
+    return WebInputEventAttribution(
+        WebInputEventAttribution::kTargetedFrame,
+        input_handler_->FindFrameElementIdAtPoint(point));
+  } else if (WebInputEvent::IsTouchEventType(event.GetType())) {
+    const auto& touch_event = static_cast<const WebTouchEvent&>(event);
+    if (touch_event.touches_length == 0) {
+      return WebInputEventAttribution(WebInputEventAttribution::kTargetedFrame,
+                                      cc::ElementId());
+    }
+
+    // Use the first touch location to perform frame attribution, similar to
+    // how the renderer host performs touch event dispatch.
+    // https://cs.chromium.org/chromium/src/content/browser/renderer_host/render_widget_host_input_event_router.cc?l=808&rcl=10fe9d0a725d4ed7b69266a5936c525f0a5b26d3
+    gfx::PointF point = touch_event.touches[0].PositionInWidget();
+    const cc::ElementId targeted_element =
+        input_handler_->FindFrameElementIdAtPoint(point);
+
+    return WebInputEventAttribution(WebInputEventAttribution::kTargetedFrame,
+                                    targeted_element);
   } else {
-    // TODO(acomminos): implement for more event types (pointer, touch)
     return WebInputEventAttribution(WebInputEventAttribution::kUnknown);
   }
 }
@@ -833,6 +864,7 @@ void InputHandlerProxy::RecordMainThreadScrollingReasons(
       "Renderer4.MainThreadWheelScrollReason";
 
   if (device != WebGestureDevice::kTouchpad &&
+      device != WebGestureDevice::kScrollbar &&
       device != WebGestureDevice::kTouchscreen) {
     return;
   }
@@ -1040,7 +1072,7 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureScrollBegin(
   scroll_sequence_ignored_ = false;
   in_inertial_scrolling_ = false;
   switch (scroll_status.thread) {
-    case cc::InputHandler::SCROLL_ON_IMPL_THREAD:
+    case ScrollThread::SCROLL_ON_IMPL_THREAD:
       TRACE_EVENT_INSTANT0("input", "Handle On Impl", TRACE_EVENT_SCOPE_THREAD);
       handling_gesture_on_impl_thread_ = true;
       if (input_handler_->IsCurrentlyScrollingViewport())
@@ -1051,12 +1083,12 @@ InputHandlerProxy::EventDisposition InputHandlerProxy::HandleGestureScrollBegin(
       else
         result = DID_HANDLE;
       break;
-    case cc::InputHandler::SCROLL_UNKNOWN:
-    case cc::InputHandler::SCROLL_ON_MAIN_THREAD:
+    case ScrollThread::SCROLL_UNKNOWN:
+    case ScrollThread::SCROLL_ON_MAIN_THREAD:
       TRACE_EVENT_INSTANT0("input", "Handle On Main", TRACE_EVENT_SCOPE_THREAD);
       result = DID_NOT_HANDLE;
       break;
-    case cc::InputHandler::SCROLL_IGNORED:
+    case ScrollThread::SCROLL_IGNORED:
       TRACE_EVENT_INSTANT0("input", "Ignore Scroll", TRACE_EVENT_SCOPE_THREAD);
       scroll_sequence_ignored_ = true;
       result = DROP_EVENT;
@@ -1387,6 +1419,11 @@ void InputHandlerProxy::Animate(base::TimeTicks time) {
     elastic_overscroll_controller_->Animate(time);
 
   snap_fling_controller_->Animate(time);
+
+  // These animations can change the root scroll offset, so inform the
+  // synchronous input handler.
+  if (synchronous_input_handler_)
+    input_handler_->RequestUpdateForSynchronousInputHandler();
 }
 
 void InputHandlerProxy::ReconcileElasticOverscrollAndRootScroll() {

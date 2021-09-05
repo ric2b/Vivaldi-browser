@@ -8,6 +8,7 @@
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
@@ -77,7 +78,7 @@ void MediaControlDownloadButtonElement::DefaultEventHandler(Event& event) {
     ResourceRequest request(url);
     request.SetSuggestedFilename(MediaElement().title());
     request.SetRequestContext(mojom::RequestContextType::DOWNLOAD);
-    request.SetRequestorOrigin(GetDocument().GetSecurityOrigin());
+    request.SetRequestorOrigin(GetExecutionContext()->GetSecurityOrigin());
     GetDocument().GetFrame()->DownloadURL(
         request, network::mojom::blink::RedirectMode::kError);
   }

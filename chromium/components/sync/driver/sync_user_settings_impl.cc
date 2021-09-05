@@ -202,6 +202,13 @@ bool SyncUserSettingsImpl::IsTrustedVaultKeyRequiredForPreferredDataTypes()
   return IsEncryptedDatatypeEnabled() && crypto_->IsTrustedVaultKeyRequired();
 }
 
+bool SyncUserSettingsImpl::IsTrustedVaultRecoverabilityDegraded() const {
+  // TODO(crbug.com/1081649): This should verify that at least one sync entity
+  // is affected.
+  return IsEncryptedDatatypeEnabled() &&
+         crypto_->IsTrustedVaultRecoverabilityDegraded();
+}
+
 bool SyncUserSettingsImpl::IsUsingSecondaryPassphrase() const {
   return crypto_->IsUsingSecondaryPassphrase();
 }
@@ -249,6 +256,7 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
   types.PutAll(ControlTypes());
   if (prefs_->IsLocalSyncEnabled()) {
     types.Remove(APP_LIST);
+    types.Remove(AUTOFILL_WALLET_OFFER);
     types.Remove(SECURITY_EVENTS);
     types.Remove(SEND_TAB_TO_SELF);
     types.Remove(SHARING_MESSAGE);

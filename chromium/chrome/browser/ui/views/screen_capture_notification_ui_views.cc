@@ -85,7 +85,7 @@ class ScreenCaptureNotificationUIViews : public ScreenCaptureNotificationUI,
   // views::WidgetDelegateView:
   void DeleteDelegate() override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
-  views::NonClientFrameView* CreateNonClientFrameView(
+  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
       views::Widget* widget) override;
   base::string16 GetWindowTitle() const override;
   bool ShouldShowWindowTitle() const override;
@@ -136,11 +136,12 @@ ScreenCaptureNotificationUIViews::ScreenCaptureNotificationUIViews(
 
   base::string16 source_text =
       l10n_util::GetStringUTF16(IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_SOURCE);
-  source_button_ = AddChildView(views::MdTextButton::Create(this, source_text));
+  source_button_ =
+      AddChildView(std::make_unique<views::MdTextButton>(this, source_text));
 
   base::string16 stop_text =
       l10n_util::GetStringUTF16(IDS_MEDIA_SCREEN_CAPTURE_NOTIFICATION_STOP);
-  auto stop_button = views::MdTextButton::Create(this, stop_text);
+  auto stop_button = std::make_unique<views::MdTextButton>(this, stop_text);
   stop_button->SetProminent(true);
   stop_button_ = AddChildView(std::move(stop_button));
 
@@ -236,12 +237,12 @@ views::ClientView* ScreenCaptureNotificationUIViews::CreateClientView(
   return client_view_;
 }
 
-views::NonClientFrameView*
+std::unique_ptr<views::NonClientFrameView>
 ScreenCaptureNotificationUIViews::CreateNonClientFrameView(
     views::Widget* widget) {
   constexpr auto kPadding = gfx::Insets(5, 10);
-  views::BubbleFrameView* frame =
-      new views::BubbleFrameView(gfx::Insets(), kPadding);
+  auto frame =
+      std::make_unique<views::BubbleFrameView>(gfx::Insets(), kPadding);
   SkColor color = widget->GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_DialogBackground);
   frame->SetBubbleBorder(std::unique_ptr<views::BubbleBorder>(

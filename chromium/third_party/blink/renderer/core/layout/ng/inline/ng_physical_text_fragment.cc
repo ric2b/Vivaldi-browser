@@ -15,6 +15,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
 namespace blink {
 
@@ -25,9 +26,7 @@ struct SameSizeAsNGPhysicalTextFragment : NGPhysicalFragment {
   unsigned offsets[2];
 };
 
-static_assert(sizeof(NGPhysicalTextFragment) ==
-                  sizeof(SameSizeAsNGPhysicalTextFragment),
-              "NGPhysicalTextFragment should stay small");
+ASSERT_SIZE(NGPhysicalTextFragment, SameSizeAsNGPhysicalTextFragment);
 
 }  // anonymous namespace
 
@@ -52,7 +51,7 @@ NGPhysicalTextFragment::NGPhysicalTextFragment(
   DCHECK_LE(text_offset_.end, source.EndOffset());
   DCHECK(shape_result_ || IsFlowControl()) << *this;
   base_or_resolved_direction_ = source.base_or_resolved_direction_;
-  ink_overflow_computed_or_mathml_paint_info_ = false;
+  ink_overflow_computed_ = false;
 }
 
 NGPhysicalTextFragment::NGPhysicalTextFragment(NGTextFragmentBuilder* builder)
@@ -65,7 +64,7 @@ NGPhysicalTextFragment::NGPhysicalTextFragment(NGTextFragmentBuilder* builder)
   DCHECK(shape_result_ || IsFlowControl()) << *this;
   base_or_resolved_direction_ =
       static_cast<unsigned>(builder->ResolvedDirection());
-  ink_overflow_computed_or_mathml_paint_info_ = false;
+  ink_overflow_computed_ = false;
 }
 
 bool NGPhysicalTextFragment::IsGeneratedText() const {
@@ -187,23 +186,31 @@ PhysicalRect NGFragmentItem::LocalRect(StringView text,
 }
 
 PhysicalRect NGPhysicalTextFragment::SelfInkOverflow() const {
-  if (!ink_overflow_computed_or_mathml_paint_info_)
+  if (!ink_overflow_computed_)
     ComputeSelfInkOverflow();
   if (ink_overflow_)
-    return ink_overflow_->self_ink_overflow;
+    return ink_overflow_->ink_overflow;
   return LocalRect();
 }
 
 void NGPhysicalTextFragment::ComputeSelfInkOverflow() const {
-  ink_overflow_computed_or_mathml_paint_info_ = true;
+  ink_overflow_computed_ = true;
 
   if (UNLIKELY(!shape_result_)) {
     ink_overflow_ = nullptr;
     return;
   }
 
-  NGInkOverflow::ComputeTextInkOverflow(PaintInfo(), Style(), Size(),
-                                        &ink_overflow_);
+  base::Optional<PhysicalRect> ink_overflow =
+      NGInkOverflow::ComputeTextInkOverflow(PaintInfo(), Style(), Size());
+  if (!ink_overflow) {
+    ink_overflow_.reset();
+    return;
+  }
+  if (ink_overflow_)
+    ink_overflow_->ink_overflow = *ink_overflow;
+  else
+    ink_overflow_ = std::make_unique<NGSingleInkOverflow>(*ink_overflow);
 }
 
 scoped_refptr<const NGPhysicalTextFragment>

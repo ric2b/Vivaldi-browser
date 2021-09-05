@@ -21,22 +21,41 @@
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/form_field_data_predictions.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
 #include "components/prefs/testing_pref_store.h"
+#include "components/security_interstitials/core/pref_names.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect.h"
 
 using base::ASCIIToUTF16;
 
 namespace autofill {
+
+bool operator==(const FormFieldDataPredictions& a,
+                const FormFieldDataPredictions& b) {
+  auto members = [](const FormFieldDataPredictions& p) {
+    return std::tie(p.signature, p.heuristic_type, p.server_type,
+                    p.overall_type, p.parseable_name, p.section);
+  };
+  return members(a) == members(b);
+}
+
+bool operator==(const FormDataPredictions& a, const FormDataPredictions& b) {
+  return a.data.SameFormAs(b.data) && a.signature == b.signature &&
+         a.fields == b.fields;
+}
+
 namespace test {
 
 namespace {
@@ -69,6 +88,7 @@ std::unique_ptr<PrefService> PrefServiceForTesting() {
       new user_prefs::PrefRegistrySyncable());
   registry->RegisterBooleanPref(
       RandomizedEncoder::kUrlKeyedAnonymizedDataCollectionEnabled, false);
+  registry->RegisterBooleanPref(::prefs::kMixedFormsWarningsEnabled, true);
   return PrefServiceForTesting(registry.get());
 }
 
@@ -182,6 +202,10 @@ void CreateTestAddressFormData(FormData* form,
   form->fields.push_back(field);
   type_set.clear();
   type_set.insert(NAME_LAST);
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForMoreStructureInNames)) {
+    type_set.insert(NAME_LAST_SECOND);
+  }
   types->push_back(type_set);
   test::CreateTestFormField("Address Line 1", "addr1", "", "text", &field);
   form->fields.push_back(field);
@@ -303,8 +327,11 @@ void CreateTestCreditCardFormData(FormData* form,
 inline void check_and_set(FormGroup* profile,
                           ServerFieldType type,
                           const char* value) {
-  if (value)
-    profile->SetRawInfo(type, base::UTF8ToUTF16(value));
+  if (value) {
+    profile->SetRawInfoWithVerificationStatus(
+        type, base::UTF8ToUTF16(value),
+        structured_address::VerificationStatus::kObserved);
+  }
 }
 
 AutofillProfile GetFullValidProfileForCanada() {
@@ -566,7 +593,8 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* state,
                     const char* zipcode,
                     const char* country,
-                    const char* phone) {
+                    const char* phone,
+                    bool finalize) {
   check_and_set(profile, NAME_FIRST, first_name);
   check_and_set(profile, NAME_MIDDLE, middle_name);
   check_and_set(profile, NAME_LAST, last_name);
@@ -580,6 +608,8 @@ void SetProfileInfo(AutofillProfile* profile,
   check_and_set(profile, ADDRESS_HOME_ZIP, zipcode);
   check_and_set(profile, ADDRESS_HOME_COUNTRY, country);
   check_and_set(profile, PHONE_HOME_WHOLE_NUMBER, phone);
+  if (finalize)
+    profile->FinalizeAfterImport();
 }
 
 void SetProfileInfo(AutofillProfile* profile,
@@ -594,7 +624,8 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* state,
                     const char* zipcode,
                     const char* country,
-                    const char* phone) {
+                    const char* phone,
+                    bool finalize) {
   check_and_set(profile, NAME_FIRST, first_name);
   check_and_set(profile, NAME_MIDDLE, middle_name);
   check_and_set(profile, NAME_LAST, last_name);
@@ -607,6 +638,8 @@ void SetProfileInfo(AutofillProfile* profile,
   check_and_set(profile, ADDRESS_HOME_ZIP, zipcode);
   check_and_set(profile, ADDRESS_HOME_COUNTRY, country);
   check_and_set(profile, PHONE_HOME_WHOLE_NUMBER, phone);
+  if (finalize)
+    profile->FinalizeAfterImport();
 }
 
 void SetProfileInfoWithGuid(AutofillProfile* profile,
@@ -622,11 +655,13 @@ void SetProfileInfoWithGuid(AutofillProfile* profile,
                             const char* state,
                             const char* zipcode,
                             const char* country,
-                            const char* phone) {
+                            const char* phone,
+                            bool finalize) {
   if (guid)
     profile->set_guid(guid);
   SetProfileInfo(profile, first_name, middle_name, last_name, email, company,
-                 address1, address2, city, state, zipcode, country, phone);
+                 address1, address2, city, state, zipcode, country, phone,
+                 finalize);
 }
 
 void SetCreditCardInfo(CreditCard* credit_card,

@@ -14,8 +14,8 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/strings/string_util.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/gfx/geometry/point.h"
@@ -52,6 +52,7 @@ constexpr uint32_t kMaxXdgShellVersion = 1;
 constexpr uint32_t kMaxDeviceManagerVersion = 3;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
 constexpr uint32_t kMaxTextInputManagerVersion = 1;
+constexpr uint32_t kMinAuraShellVersion = 10;
 constexpr uint32_t kMinWlDrmVersion = 2;
 constexpr uint32_t kMinWlOutputVersion = 2;
 }  // namespace
@@ -117,7 +118,7 @@ void WaylandConnection::ScheduleFlush() {
   // When we are in tests, the message loop is set later when the
   // initialization of the OzonePlatform complete. Thus, just
   // flush directly. This doesn't happen in normal run.
-  if (!base::MessageLoopCurrentForUI::IsSet()) {
+  if (!base::CurrentUIThread::IsSet()) {
     Flush();
   } else if (!scheduled_flush_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -140,6 +141,12 @@ bool WaylandConnection::IsDragInProgress() const {
                                       WaylandDataDragController::State::kIdle;
 }
 
+wl::Object<wl_surface> WaylandConnection::CreateSurface() {
+  DCHECK(compositor_);
+  return wl::Object<wl_surface>(
+      wl_compositor_create_surface(compositor_.get()));
+}
+
 void WaylandConnection::Flush() {
   wl_display_flush(display_.get());
   scheduled_flush_ = false;
@@ -157,26 +164,33 @@ void WaylandConnection::UpdateInputDevices(wl_seat* seat,
     pointer_.reset();
     cursor_.reset();
     wayland_cursor_position_.reset();
-  } else if (wl_pointer* pointer = wl_seat_get_pointer(seat)) {
-    pointer_ = std::make_unique<WaylandPointer>(pointer, this, event_source());
-    cursor_ = std::make_unique<WaylandCursor>(pointer_.get(), this);
-    wayland_cursor_position_ = std::make_unique<WaylandCursorPosition>();
-  } else {
-    LOG(ERROR) << "Failed to get wl_pointer from seat";
+  } else if (!pointer_) {
+    if (wl_pointer* pointer = wl_seat_get_pointer(seat)) {
+      pointer_ =
+          std::make_unique<WaylandPointer>(pointer, this, event_source());
+      cursor_ = std::make_unique<WaylandCursor>(pointer_.get(), this);
+      wayland_cursor_position_ = std::make_unique<WaylandCursorPosition>();
+    } else {
+      LOG(ERROR) << "Failed to get wl_pointer from seat";
+    }
   }
 
   if (!has_keyboard) {
     keyboard_.reset();
-  } else if (!CreateKeyboard()) {
-    LOG(ERROR) << "Failed to create WaylandKeyboard";
+  } else if (!keyboard_) {
+    if (!CreateKeyboard()) {
+      LOG(ERROR) << "Failed to create WaylandKeyboard";
+    }
   }
 
   if (!has_touch) {
     touch_.reset();
-  } else if (wl_touch* touch = wl_seat_get_touch(seat)) {
-    touch_ = std::make_unique<WaylandTouch>(touch, this, event_source());
-  } else {
-    LOG(ERROR) << "Failed to get wl_touch from seat";
+  } else if (!touch_) {
+    if (wl_touch* touch = wl_seat_get_touch(seat)) {
+      touch_ = std::make_unique<WaylandTouch>(touch, this, event_source());
+    } else {
+      LOG(ERROR) << "Failed to get wl_touch from seat";
+    }
   }
 }
 
@@ -352,6 +366,15 @@ void WaylandConnection::Global(void* data,
     auto wayland_drm = wl::Bind<struct wl_drm>(registry, name, version);
     connection->drm_ =
         std::make_unique<WaylandDrm>(wayland_drm.release(), connection);
+  } else if (!connection->aura_shell_ &&
+             (strcmp(interface, "zaura_shell") == 0) &&
+             version >= kMinAuraShellVersion) {
+    connection->aura_shell_ =
+        wl::Bind<struct zaura_shell>(registry, name, version);
+    if (!connection->aura_shell_) {
+      LOG(ERROR) << "Failed to bind zaura_shell";
+      return;
+    }
   }
 
   connection->ScheduleFlush();

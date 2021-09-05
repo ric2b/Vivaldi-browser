@@ -19,12 +19,13 @@ android_library("java") {
     "//chrome/browser/preferences:java",
     "//chrome/browser/profiles/android:java",
     "//components/browser_ui/widget/android:java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//ui/android:ui_full_java",
   ]
+  resources_package = "org.chromium.chrome.browser.ui.default_browser_promo"
 }
 
 android_resources("java_resources") {
-  custom_package = "org.chromium.chrome.browser.ui.default_browser_promo"
   sources = [
     "java/res/drawable/default_browser_promo_illustration.xml",
     "java/res/drawable/ic_illustration_aroundlogo.xml",
@@ -34,6 +35,7 @@ android_resources("java_resources") {
     "//components/browser_ui/widget/android:java_resources",
     "//ui/android:ui_java_resources",
   ]
+  create_srcjar = false
 }
 
 java_library("junit") {
@@ -62,11 +64,13 @@ android_library("javatests") {
     "//base:base_java_test_support",
     "//chrome/android:chrome_java",
     "//chrome/browser/android/lifecycle:java",
+    "//chrome/browser/flags:java",
     "//chrome/test/android:chrome_java_test_support",
     "//components/browser_ui/widget/android:java",
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_deps:android_support_v7_appcompat_java",
     "//third_party/android_deps:androidx_preference_preference_java",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_deps:espresso_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",

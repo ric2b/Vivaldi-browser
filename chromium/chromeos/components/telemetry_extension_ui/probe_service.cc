@@ -23,12 +23,12 @@ void ProbeService::ProbeTelemetryInfo(
     const std::vector<health::mojom::ProbeCategoryEnum>& categories,
     ProbeTelemetryInfoCallback callback) {
   GetService()->ProbeTelemetryInfo(
-      probe_service_converters::Convert(categories),
+      probe_service_converters::ConvertCategoryVector(categories),
       base::BindOnce(
           [](health::mojom::ProbeService::ProbeTelemetryInfoCallback callback,
              cros_healthd::mojom::TelemetryInfoPtr ptr) {
             std::move(callback).Run(
-                probe_service_converters::Convert(std::move(ptr)));
+                probe_service_converters::ConvertPtr(std::move(ptr)));
           },
           std::move(callback)));
 }

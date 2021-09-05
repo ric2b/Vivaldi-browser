@@ -148,7 +148,7 @@ void SniffReadDone(std::unique_ptr<uint8_t[]> data,
 // static
 bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
   bool should_sniff = !IPCDemuxer::CanPlayType(content_type);
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // NOTE(jarle@vivalid.com): We cannot trust this mime type. Use the sniffer
   // to determine the content type, so the correct decoder can be selected.
   // Ref. VB-40530, VB-43812.

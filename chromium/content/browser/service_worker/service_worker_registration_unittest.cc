@@ -186,13 +186,10 @@ class ServiceWorkerRegistrationTest : public testing::Test {
     storage_partition_impl_->Initialize();
     helper_->context_wrapper()->set_storage_partition(
         storage_partition_impl_.get());
-
-    context()->storage()->LazyInitializeForTest();
   }
 
   ServiceWorkerContextCore* context() { return helper_->context(); }
   ServiceWorkerRegistry* registry() { return helper_->context()->registry(); }
-  ServiceWorkerStorage* storage() { return helper_->context()->storage(); }
 
   class RegistrationListener : public ServiceWorkerRegistration::Listener {
    public:
@@ -250,11 +247,15 @@ TEST_F(ServiceWorkerRegistrationTest, SetAndUnsetVersions) {
   scoped_refptr<ServiceWorkerVersion> version_1 =
       base::MakeRefCounted<ServiceWorkerVersion>(
           registration.get(), kScript, blink::mojom::ScriptType::kClassic,
-          version_1_id, context()->AsWeakPtr());
+          version_1_id,
+          mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+          context()->AsWeakPtr());
   scoped_refptr<ServiceWorkerVersion> version_2 =
       base::MakeRefCounted<ServiceWorkerVersion>(
           registration.get(), kScript, blink::mojom::ScriptType::kClassic,
-          version_2_id, context()->AsWeakPtr());
+          version_2_id,
+          mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+          context()->AsWeakPtr());
 
   RegistrationListener listener;
   registration->AddListener(&listener);
@@ -404,7 +405,7 @@ class ServiceWorkerActivationTest : public ServiceWorkerRegistrationTest,
     // Store the registration.
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records_1;
     records_1.push_back(WriteToDiskCacheSync(
-        helper_->context()->storage(), version_1->script_url(),
+        helper_->context()->GetStorageControl(), version_1->script_url(),
         {} /* headers */, "I'm the body", "I'm the meta data"));
     version_1->script_cache_map()->SetResources(records_1);
     version_1->SetMainScriptResponse(
@@ -446,7 +447,7 @@ class ServiceWorkerActivationTest : public ServiceWorkerRegistrationTest,
                                       blink::mojom::ScriptType::kClassic);
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records_2;
     records_2.push_back(WriteToDiskCacheSync(
-        helper_->context()->storage(), version_2->script_url(),
+        helper_->context()->GetStorageControl(), version_2->script_url(),
         {} /* headers */, "I'm the body", "I'm the meta data"));
     version_2->script_cache_map()->SetResources(records_2);
     version_2->SetMainScriptResponse(
@@ -890,9 +891,9 @@ class ServiceWorkerRegistrationObjectHostTest
         context()->registry(), registration, script_url,
         blink::mojom::ScriptType::kClassic);
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
-    records.push_back(WriteToDiskCacheSync(storage(), version->script_url(),
-                                           {} /* headers */, "I'm the body",
-                                           "I'm the meta data"));
+    records.push_back(WriteToDiskCacheSync(
+        helper_->context()->GetStorageControl(), version->script_url(),
+        {} /* headers */, "I'm the body", "I'm the meta data"));
     version->script_cache_map()->SetResources(records);
     version->SetMainScriptResponse(
         EmbeddedWorkerTestHelper::CreateMainScriptResponse());
@@ -903,8 +904,6 @@ class ServiceWorkerRegistrationObjectHostTest
   }
 
   int64_t SetUpRegistration(const GURL& scope, const GURL& script_url) {
-    storage()->LazyInitializeForTest();
-
     // Prepare ServiceWorkerRegistration and ServiceWorkerVersion.
     scoped_refptr<ServiceWorkerRegistration> registration =
         CreateNewRegistration(scope);
@@ -1264,11 +1263,15 @@ TEST_F(ServiceWorkerRegistrationObjectHostTest, SetVersionAttributes) {
   scoped_refptr<ServiceWorkerVersion> version_1 =
       base::MakeRefCounted<ServiceWorkerVersion>(
           registration, kScriptUrl, blink::mojom::ScriptType::kClassic,
-          version_1_id, context()->AsWeakPtr());
+          version_1_id,
+          mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+          context()->AsWeakPtr());
   scoped_refptr<ServiceWorkerVersion> version_2 =
       base::MakeRefCounted<ServiceWorkerVersion>(
           registration, kScriptUrl, blink::mojom::ScriptType::kClassic,
-          version_2_id, context()->AsWeakPtr());
+          version_2_id,
+          mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
+          context()->AsWeakPtr());
 
   // Set an active worker.
   registration->SetActiveVersion(version_1);

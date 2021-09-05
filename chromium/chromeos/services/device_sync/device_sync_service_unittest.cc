@@ -43,7 +43,9 @@
 #include "chromeos/services/device_sync/fake_device_sync_observer.h"
 #include "chromeos/services/device_sync/fake_remote_device_provider.h"
 #include "chromeos/services/device_sync/fake_software_feature_manager.h"
+#include "chromeos/services/device_sync/proto/cryptauth_client_app_metadata.pb.h"
 #include "chromeos/services/device_sync/proto/cryptauth_common.pb.h"
+#include "chromeos/services/device_sync/proto/cryptauth_v2_test_util.h"
 #include "chromeos/services/device_sync/public/cpp/fake_client_app_metadata_provider.h"
 #include "chromeos/services/device_sync/public/cpp/fake_gcm_device_info_provider.h"
 #include "chromeos/services/device_sync/public/mojom/device_sync.mojom.h"
@@ -188,6 +190,10 @@ class FakeCryptAuthGCMManagerFactory : public CryptAuthGCMManagerImpl::Factory {
 
   FakeCryptAuthGCMManager* instance() { return instance_; }
 
+  void SetInitialRegistrationId(const std::string& registration_id) {
+    initial_registration_id_ = registration_id;
+  }
+
  private:
   // CryptAuthGCMManagerImpl::Factory:
   std::unique_ptr<CryptAuthGCMManager> CreateInstance(
@@ -199,8 +205,8 @@ class FakeCryptAuthGCMManagerFactory : public CryptAuthGCMManagerImpl::Factory {
     // Only one instance is expected to be created per test.
     EXPECT_FALSE(instance_);
 
-    auto instance = std::make_unique<FakeCryptAuthGCMManager>(
-        kTestCryptAuthGCMRegistrationId);
+    auto instance =
+        std::make_unique<FakeCryptAuthGCMManager>(initial_registration_id_);
     instance_ = instance.get();
 
     return std::move(instance);
@@ -208,7 +214,7 @@ class FakeCryptAuthGCMManagerFactory : public CryptAuthGCMManagerImpl::Factory {
 
   gcm::FakeGCMDriver* fake_gcm_driver_;
   TestingPrefServiceSimple* test_pref_service_;
-
+  std::string initial_registration_id_;
   FakeCryptAuthGCMManager* instance_ = nullptr;
 };
 
@@ -371,13 +377,13 @@ class FakeCryptAuthV2DeviceManagerFactory
     : public CryptAuthV2DeviceManagerImpl::Factory {
  public:
   FakeCryptAuthV2DeviceManagerFactory(
-      FakeClientAppMetadataProvider* fake_client_app_metadata_provider,
+      const cryptauthv2::ClientAppMetadata& client_app_metadata,
       FakeCryptAuthDeviceRegistryFactory* fake_device_registry_factory,
       FakeCryptAuthKeyRegistryFactory* fake_key_registry_factory,
       FakeCryptAuthGCMManagerFactory* fake_gcm_manager_factory,
       FakeCryptAuthSchedulerFactory* fake_scheduler_factory,
       TestingPrefServiceSimple* test_pref_service)
-      : fake_client_app_metadata_provider_(fake_client_app_metadata_provider),
+      : client_app_metadata_(client_app_metadata),
         fake_device_registry_factory_(fake_device_registry_factory),
         fake_key_registry_factory_(fake_key_registry_factory),
         fake_gcm_manager_factory_(fake_gcm_manager_factory),
@@ -391,16 +397,16 @@ class FakeCryptAuthV2DeviceManagerFactory
  private:
   // CryptAuthV2DeviceManagerImpl::Factory:
   std::unique_ptr<CryptAuthV2DeviceManager> CreateInstance(
-      ClientAppMetadataProvider* client_app_metadata_provider,
+      const cryptauthv2::ClientAppMetadata& client_app_metadata,
       CryptAuthDeviceRegistry* device_registry,
       CryptAuthKeyRegistry* key_registry,
       CryptAuthClientFactory* client_factory,
       CryptAuthGCMManager* gcm_manager,
       CryptAuthScheduler* scheduler,
-      PrefService* pref_service,
-      std::unique_ptr<base::OneShotTimer> timer) override {
+      PrefService* pref_service) override {
     EXPECT_TRUE(features::ShouldUseV2DeviceSync());
-    EXPECT_EQ(fake_client_app_metadata_provider_, client_app_metadata_provider);
+    EXPECT_EQ(client_app_metadata_.SerializeAsString(),
+              client_app_metadata.SerializeAsString());
     EXPECT_EQ(fake_device_registry_factory_->instance(), device_registry);
     EXPECT_EQ(fake_key_registry_factory_->instance(), key_registry);
     EXPECT_EQ(fake_gcm_manager_factory_->instance(), gcm_manager);
@@ -416,7 +422,7 @@ class FakeCryptAuthV2DeviceManagerFactory
     return std::move(instance);
   }
 
-  FakeClientAppMetadataProvider* fake_client_app_metadata_provider_ = nullptr;
+  cryptauthv2::ClientAppMetadata client_app_metadata_;
   FakeCryptAuthDeviceRegistryFactory* fake_device_registry_factory_ = nullptr;
   FakeCryptAuthKeyRegistryFactory* fake_key_registry_factory_ = nullptr;
   FakeCryptAuthGCMManagerFactory* fake_gcm_manager_factory_ = nullptr;
@@ -485,13 +491,13 @@ class FakeCryptAuthV2EnrollmentManagerFactory
     : public CryptAuthV2EnrollmentManagerImpl::Factory {
  public:
   FakeCryptAuthV2EnrollmentManagerFactory(
-      FakeClientAppMetadataProvider* fake_client_app_metadata_provider,
+      const cryptauthv2::ClientAppMetadata& client_app_metadata,
       FakeCryptAuthKeyRegistryFactory* fake_cryptauth_key_registry_factory,
       FakeCryptAuthGCMManagerFactory* fake_cryptauth_gcm_manager_factory,
       FakeCryptAuthSchedulerFactory* fake_cryptauth_scheduler_factory,
       TestingPrefServiceSimple* test_pref_service,
       base::SimpleTestClock* simple_test_clock)
-      : fake_client_app_metadata_provider_(fake_client_app_metadata_provider),
+      : client_app_metadata_(client_app_metadata),
         fake_cryptauth_key_registry_factory_(
             fake_cryptauth_key_registry_factory),
         fake_cryptauth_gcm_manager_factory_(fake_cryptauth_gcm_manager_factory),
@@ -511,16 +517,16 @@ class FakeCryptAuthV2EnrollmentManagerFactory
 
   // CryptAuthV2EnrollmentManagerImpl::Factory:
   std::unique_ptr<CryptAuthEnrollmentManager> CreateInstance(
-      ClientAppMetadataProvider* client_app_metadata_provider,
+      const cryptauthv2::ClientAppMetadata& client_app_metadata,
       CryptAuthKeyRegistry* key_registry,
       CryptAuthClientFactory* client_factory,
       CryptAuthGCMManager* gcm_manager,
       CryptAuthScheduler* scheduler,
       PrefService* pref_service,
-      base::Clock* clock,
-      std::unique_ptr<base::OneShotTimer> timer) override {
+      base::Clock* clock) override {
     EXPECT_TRUE(base::FeatureList::IsEnabled(features::kCryptAuthV2Enrollment));
-    EXPECT_EQ(fake_client_app_metadata_provider_, client_app_metadata_provider);
+    EXPECT_EQ(client_app_metadata_.SerializeAsString(),
+              client_app_metadata.SerializeAsString());
     EXPECT_EQ(fake_cryptauth_key_registry_factory_->instance(), key_registry);
     EXPECT_EQ(fake_cryptauth_gcm_manager_factory_->instance(), gcm_manager);
     EXPECT_EQ(fake_cryptauth_scheduler_factory_->instance(), scheduler);
@@ -539,7 +545,7 @@ class FakeCryptAuthV2EnrollmentManagerFactory
   }
 
  private:
-  FakeClientAppMetadataProvider* fake_client_app_metadata_provider_;
+  cryptauthv2::ClientAppMetadata client_app_metadata_;
   FakeCryptAuthKeyRegistryFactory* fake_cryptauth_key_registry_factory_;
   FakeCryptAuthGCMManagerFactory* fake_cryptauth_gcm_manager_factory_;
   FakeCryptAuthSchedulerFactory* fake_cryptauth_scheduler_factory_;
@@ -772,7 +778,7 @@ class DeviceSyncServiceTest
 
     fake_cryptauth_v2_enrollment_manager_factory_ =
         std::make_unique<FakeCryptAuthV2EnrollmentManagerFactory>(
-            fake_client_app_metadata_provider_.get(),
+            cryptauthv2::GetClientAppMetadataForTest(),
             fake_cryptauth_key_registry_factory_.get(),
             fake_cryptauth_gcm_manager_factory_.get(),
             fake_cryptauth_scheduler_factory_.get(), test_pref_service_.get(),
@@ -813,7 +819,7 @@ class DeviceSyncServiceTest
 
     fake_cryptauth_v2_device_manager_factory_ =
         std::make_unique<FakeCryptAuthV2DeviceManagerFactory>(
-            fake_client_app_metadata_provider_.get(),
+            cryptauthv2::GetClientAppMetadataForTest(),
             fake_cryptauth_device_registry_factory_.get(),
             fake_cryptauth_key_registry_factory_.get(),
             fake_cryptauth_gcm_manager_factory_.get(),
@@ -910,10 +916,41 @@ class DeviceSyncServiceTest
         kTestEmail);
   }
 
+  void SetInitialRegistrationId(const std::string& registration_id) {
+    fake_cryptauth_gcm_manager_factory_->SetInitialRegistrationId(
+        registration_id);
+  }
+
+  void SucceedGcmRegistration() {
+    FakeCryptAuthGCMManager* manager =
+        fake_cryptauth_gcm_manager_factory_->instance();
+    ASSERT_TRUE(manager);
+    EXPECT_TRUE(manager->IsListening());
+    EXPECT_TRUE(manager->GetRegistrationId().empty());
+    EXPECT_TRUE(manager->registration_in_progress());
+    manager->CompleteRegistration(kTestCryptAuthGCMRegistrationId);
+    EXPECT_FALSE(manager->registration_in_progress());
+  }
+
+  void SucceedClientAppMetadataFetch() {
+    if (!base::FeatureList::IsEnabled(
+            chromeos::features::kCryptAuthV2Enrollment)) {
+      return;
+    }
+
+    ASSERT_EQ(1u,
+              fake_client_app_metadata_provider_->metadata_requests().size());
+    EXPECT_EQ(kTestCryptAuthGCMRegistrationId,
+              fake_client_app_metadata_provider_->metadata_requests()
+                  .back()
+                  .gcm_registration_id);
+    std::move(
+        fake_client_app_metadata_provider_->metadata_requests().back().callback)
+        .Run(cryptauthv2::GetClientAppMetadataForTest());
+  }
+
   void FinishInitialization() {
     // CryptAuth classes are expected to be created and initialized.
-    EXPECT_TRUE(fake_cryptauth_gcm_manager_factory_->instance()
-                    ->has_started_listening());
     EXPECT_TRUE(fake_cryptauth_enrollment_manager()->has_started());
 
     // If the device was already enrolled in CryptAuth, initialization should
@@ -1016,6 +1053,8 @@ class DeviceSyncServiceTest
     // In most login scenarios the primary account is available immediately.
     MakePrimaryAccountAvailable();
     InitializeDeviceSync(true /* device_already_enrolled_in_cryptauth */);
+    SucceedGcmRegistration();
+    SucceedClientAppMetadataFetch();
     FinishInitialization();
     VerifyInitializationStatus(true /* expected_to_be_initialized */);
 
@@ -1044,6 +1083,14 @@ class DeviceSyncServiceTest
 
   base::MockOneShotTimer* mock_timer() { return mock_timer_; }
 
+  FakeClientAppMetadataProvider* fake_client_app_metadata_provider() {
+    return fake_client_app_metadata_provider_.get();
+  }
+
+  FakeCryptAuthGCMManager* fake_cryptauth_gcm_manager() {
+    return fake_cryptauth_gcm_manager_factory_->instance();
+  }
+
   FakeCryptAuthEnrollmentManager* fake_cryptauth_enrollment_manager() {
     return base::FeatureList::IsEnabled(features::kCryptAuthV2Enrollment)
                ? fake_cryptauth_v2_enrollment_manager_factory_->instance()
@@ -1067,6 +1114,10 @@ class DeviceSyncServiceTest
       return nullptr;
 
     EXPECT_EQ(1u, fake_feature_status_setter_factory_->instances().size());
+    EXPECT_EQ(cryptauthv2::GetClientAppMetadataForTest().instance_id(),
+              fake_device_notifier_factory_->last_instance_id());
+    EXPECT_EQ(cryptauthv2::GetClientAppMetadataForTest().instance_id_token(),
+              fake_device_notifier_factory_->last_instance_id_token());
     return fake_feature_status_setter_factory_->instances()[0];
   }
 
@@ -1079,6 +1130,10 @@ class DeviceSyncServiceTest
       return nullptr;
 
     EXPECT_EQ(1u, fake_device_notifier_factory_->instances().size());
+    EXPECT_EQ(cryptauthv2::GetClientAppMetadataForTest().instance_id(),
+              fake_device_notifier_factory_->last_instance_id());
+    EXPECT_EQ(cryptauthv2::GetClientAppMetadataForTest().instance_id_token(),
+              fake_device_notifier_factory_->last_instance_id_token());
     return fake_device_notifier_factory_->instances()[0];
   }
 
@@ -1590,6 +1645,8 @@ TEST_P(DeviceSyncServiceTest, PrimaryAccountAvailableLater) {
   EXPECT_EQ(0u, fake_device_sync_observer()->num_sync_events());
 
   MakePrimaryAccountAvailable();
+  SucceedGcmRegistration();
+  SucceedClientAppMetadataFetch();
   FinishInitialization();
   VerifyInitializationStatus(true /* expected_to_be_initialized */);
 
@@ -1599,10 +1656,91 @@ TEST_P(DeviceSyncServiceTest, PrimaryAccountAvailableLater) {
   EXPECT_EQ(test_devices(), CallGetSyncedDevices());
 }
 
+TEST_P(DeviceSyncServiceTest, GcmRegistration) {
+  MakePrimaryAccountAvailable();
+  InitializeDeviceSync(true /* device_already_enrolled_in_cryptauth */);
+
+  // Registers with GCM, failing twice then succeeding.
+  VerifyApiFunctionsFailBeforeInitialization();
+  ASSERT_TRUE(fake_cryptauth_gcm_manager());
+  EXPECT_TRUE(fake_cryptauth_gcm_manager()->IsListening());
+  for (size_t num_retries = 0; num_retries < 2; ++num_retries) {
+    EXPECT_TRUE(fake_cryptauth_gcm_manager()->GetRegistrationId().empty());
+    EXPECT_TRUE(fake_cryptauth_gcm_manager()->registration_in_progress());
+    fake_cryptauth_gcm_manager()->CompleteRegistration(
+        std::string() /* registration_id */);
+    EXPECT_TRUE(mock_timer()->IsRunning());
+    mock_timer()->Fire();
+  }
+  fake_cryptauth_gcm_manager()->CompleteRegistration(
+      kTestCryptAuthGCMRegistrationId);
+  EXPECT_FALSE(fake_cryptauth_gcm_manager()->registration_in_progress());
+
+  SucceedClientAppMetadataFetch();
+  FinishInitialization();
+}
+
+TEST_P(DeviceSyncServiceTest, GcmRegistration_SkipIfAlreadyRegistered) {
+  // Assume GCM registration already happened. Then, no need to register again.
+  SetInitialRegistrationId(kTestCryptAuthGCMRegistrationId);
+
+  MakePrimaryAccountAvailable();
+  InitializeDeviceSync(true /* device_already_enrolled_in_cryptauth */);
+  SucceedClientAppMetadataFetch();
+  FinishInitialization();
+}
+
+TEST_P(DeviceSyncServiceTest, ClientAppMetadataFetch) {
+  if (!base::FeatureList::IsEnabled(features::kCryptAuthV2Enrollment)) {
+    return;
+  }
+
+  MakePrimaryAccountAvailable();
+  InitializeDeviceSync(true /* device_already_enrolled_in_cryptauth */);
+  SucceedGcmRegistration();
+
+  // Fetch ClientAppMetadata by failing twice, timing out once, then succeeding.
+  VerifyApiFunctionsFailBeforeInitialization();
+  EXPECT_TRUE(mock_timer()->IsRunning());  // Timeout timer is running.
+  for (size_t attempt = 1; attempt <= 4; ++attempt) {
+    ASSERT_EQ(attempt,
+              fake_client_app_metadata_provider()->metadata_requests().size());
+    EXPECT_EQ(kTestCryptAuthGCMRegistrationId,
+              fake_client_app_metadata_provider()
+                  ->metadata_requests()[attempt - 1]
+                  .gcm_registration_id);
+    if (attempt <= 2) {
+      // Fail and retry.
+      std::move(fake_client_app_metadata_provider()
+                    ->metadata_requests()[attempt - 1]
+                    .callback)
+          .Run(base::nullopt /* client_app_metadata */);
+      EXPECT_TRUE(mock_timer()->IsRunning());  // Retry timer is running.
+      mock_timer()->Fire();
+    } else if (attempt == 3) {
+      // Time out and retry.
+      EXPECT_TRUE(mock_timer()->IsRunning());  // Timeout timer is running.
+      mock_timer()->Fire();
+      EXPECT_TRUE(mock_timer()->IsRunning());  // Retry timer is running.
+      mock_timer()->Fire();
+    } else {
+      // Succeed.
+      std::move(fake_client_app_metadata_provider()
+                    ->metadata_requests()[attempt - 1]
+                    .callback)
+          .Run(cryptauthv2::GetClientAppMetadataForTest());
+    }
+  }
+
+  FinishInitialization();
+}
+
 TEST_P(DeviceSyncServiceTest,
        DeviceNotAlreadyEnrolledInCryptAuth_FailsEnrollment) {
   MakePrimaryAccountAvailable();
   InitializeDeviceSync(false /* device_already_enrolled_in_cryptauth */);
+  SucceedGcmRegistration();
+  SucceedClientAppMetadataFetch();
   FinishInitialization();
 
   // Simulate enrollment failing.
@@ -1626,6 +1764,8 @@ TEST_P(DeviceSyncServiceTest,
        DeviceNotAlreadyEnrolledInCryptAuth_FailsEnrollment_ThenSucceeds) {
   MakePrimaryAccountAvailable();
   InitializeDeviceSync(false /* device_already_enrolled_in_cryptauth */);
+  SucceedGcmRegistration();
+  SucceedClientAppMetadataFetch();
   FinishInitialization();
 
   // Initialization has not yet completed, so no devices should be available.

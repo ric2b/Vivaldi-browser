@@ -28,6 +28,7 @@
 #import "components/signin/ios/browser/manage_accounts_delegate.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/translate_manager.h"
+#import "ios/chrome/app/application_delegate/app_state.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/download/download_manager_tab_helper.h"
@@ -94,6 +95,8 @@
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #import "ios/chrome/browser/ui/infobars/infobar_positioner.h"
 #include "ios/chrome/browser/ui/location_bar/location_bar_model_delegate_ios.h"
+#import "ios/chrome/browser/ui/main/scene_state.h"
+#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui_broadcasting_util.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui_state.h"
@@ -101,6 +104,7 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_presenter.h"
+#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 #import "ios/chrome/browser/ui/presenters/vertical_animation_container.h"
 #import "ios/chrome/browser/ui/sad_tab/sad_tab_coordinator.h"
@@ -108,7 +112,6 @@
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
 #import "ios/chrome/browser/ui/side_swipe/swipe_view.h"
-#import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
 #import "ios/chrome/browser/ui/tabs/background_tab_animation_view.h"
 #import "ios/chrome/browser/ui/tabs/foreground_tab_animation_view.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_presentation.h"
@@ -165,6 +168,7 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/public/provider/chrome/browser/signin/signin_presenter.h"
 #import "ios/public/provider/chrome/browser/ui/fullscreen_provider.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_controller.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
@@ -1596,9 +1600,17 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // Update the tab strip visibility.
   if (self.tabStripView) {
     [self showTabStripView:self.tabStripView];
+    [self.tabStripView layoutSubviews];
     [self.tabStripCoordinator hideTabStrip:![self canShowTabStrip]];
     _fakeStatusBarView.hidden = ![self canShowTabStrip];
     [self addConstraintsToPrimaryToolbar];
+    // If tabstrip is coming back due to a window resize or screen rotation,
+    // reset the full screen controller to adjust the tabstrip position.
+    if (ShouldShowCompactToolbar(previousTraitCollection) &&
+        !ShouldShowCompactToolbar()) {
+      [self
+          updateForFullscreenProgress:self.fullscreenController->GetProgress()];
+    }
   }
 
   [self setNeedsStatusBarAppearanceUpdate];
@@ -1612,6 +1624,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
   [self dismissPopups];
 
+  __weak BrowserViewController* weakSelf = self;
+
   [coordinator
       animateAlongsideTransition:^(
           id<UIViewControllerTransitionCoordinatorContext> context) {
@@ -1619,7 +1633,13 @@ NSString* const kBrowserViewControllerSnackbarCategory =
         // change on rotation.
         [_toolbarUIUpdater updateState];
       }
-                      completion:nil];
+      completion:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        BrowserViewController* strongSelf = weakSelf;
+        weakSelf.fullscreenController->ResizeViewport();
+        if (strongSelf.tabStripView) {
+          [strongSelf.tabStripCoordinator tabStripSizeDidChange];
+        }
+      }];
 }
 
 - (void)dismissViewControllerAnimated:(BOOL)flag
@@ -2199,6 +2219,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
       kNewTabButtonGuide,
       kSecondaryToolbarGuide,
       kVoiceSearchButtonGuide,
+      kDiscoverFeedHeaderMenuGuide,
     ];
     AddNamedGuidesToView(guideNames, self.view);
 
@@ -2393,7 +2414,8 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   // be unrecognized.
   if (_isShutdown)
     return;
-  if ([self.dispatcher respondsToSelector:@selector(hidePageInfo)])
+  if (!base::FeatureList::IsEnabled(kPageInfoRefactoring) &&
+      [self.dispatcher respondsToSelector:@selector(hidePageInfo)])
     [self.dispatcher hidePageInfo];
   [self.dispatcher dismissPopupMenuAnimated:NO];
   [self.helpHandler hideAllHelpBubbles];
@@ -2509,6 +2531,15 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   _lastTapPoint = [[view superview] convertPoint:viewCoordinate
                                           toView:self.view];
   _lastTapTime = CACurrentMediaTime();
+
+  // This is a workaround for a bug in iOS multiwindow, in which you can touch a
+  // webView without the window getting the keyboard focus.
+  // The result is that a field in the new window gains focus, but keyboard
+  // typing continue to happen in the other window.
+  // TODO(crbug.com/1109124): Remove this workaround.
+  SceneStateBrowserAgent::FromBrowser(self.browser)
+      ->GetSceneState()
+      .appState.lastTappedWindow = view.window;
 }
 
 #pragma mark - Private Methods: Tab creation and selection
@@ -3010,7 +3041,7 @@ NSString* const kBrowserViewControllerSnackbarCategory =
                                          action:action
                                           style:UIAlertActionStyleDefault];
 
-      if (IsMultiwindowSupported()) {
+      if (IsMultipleScenesSupported()) {
         // Open in New Window.
         title = l10n_util::GetNSStringWithFixup(
             IDS_IOS_CONTENT_CONTEXT_OPENINNEWWINDOW);

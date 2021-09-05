@@ -29,6 +29,8 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_mode.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "third_party/blink/public/mojom/gpu/gpu.mojom.h"
 #include "ui/display/display_observer.h"
 
 class GURL;
@@ -51,7 +53,7 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
   static bool Initialized();
 
   // GpuDataManager implementation.
-  void BlacklistWebGLForTesting() override;
+  void BlocklistWebGLForTesting() override;
   gpu::GPUInfo GetGPUInfo() override;
   gpu::GpuFeatureStatus GetFeatureStatus(gpu::GpuFeatureType feature) override;
   bool GpuAccessAllowed(std::string* reason) override;
@@ -96,7 +98,7 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
   void OnBrowserThreadsStarted();
   void TerminateInfoCollectionGpuProcess();
 #endif
-  // Update the GPU feature info. This updates the blacklist and enabled status
+  // Update the GPU feature info. This updates the blocklist and enabled status
   // of GPU rasterization. In the future this will be used for more features.
   void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info,
                             const base::Optional<gpu::GpuFeatureInfo>&
@@ -117,7 +119,7 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
   // software compositing.
   void SetGpuCompositingDisabled();
 
-  // Update GpuPreferences based on blacklisting decisions.
+  // Update GpuPreferences based on blocklisting decisions.
   void UpdateGpuPreferences(gpu::GpuPreferences* gpu_preferences,
                             GpuProcessKind kind) const;
 
@@ -143,8 +145,6 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
   // or a full URL to a page.
   void BlockDomainFrom3DAPIs(const GURL& url, gpu::DomainGuilt guilt);
   bool Are3DAPIsBlocked(const GURL& top_origin_url,
-                        int render_process_id,
-                        int render_frame_id,
                         ThreeDAPIType requester);
   void UnblockDomainFrom3DAPIs(const GURL& url);
 
@@ -175,6 +175,10 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager,
   // DisplayObserver overrides.
   void OnDisplayAdded(const display::Display& new_display) override;
   void OnDisplayRemoved(const display::Display& old_display) override;
+
+  // Binds a new Mojo receiver to handle requests from a renderer.
+  static void BindReceiver(
+      mojo::PendingReceiver<blink::mojom::GpuDataManager> receiver);
 
  private:
   friend class GpuDataManagerImplPrivate;

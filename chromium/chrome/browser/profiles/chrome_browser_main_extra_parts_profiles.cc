@@ -58,7 +58,6 @@
 #include "chrome/browser/prefs/pref_metrics_service.h"
 #include "chrome/browser/prerender/prerender_link_manager_factory.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
-#include "chrome/browser/prerender/prerender_message_filter.h"
 #include "chrome/browser/profiles/gaia_info_update_service_factory.h"
 #include "chrome/browser/profiles/renderer_updater_factory.h"
 #include "chrome/browser/safe_browsing/certificate_reporting_service_factory.h"
@@ -75,6 +74,7 @@
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_profile_attributes_updater_factory.h"
+#include "chrome/browser/ssl/sct_reporting_service_factory.h"
 #include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
@@ -84,8 +84,10 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/find_bar/find_bar_state_factory.h"
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
+#include "chrome/browser/ui/read_later/reading_list_model_factory.h"
 #include "chrome/browser/ui/tabs/pinned_tab_service_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model_factory.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache_factory.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
@@ -93,7 +95,6 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "components/captive_portal/core/buildflags.h"
-#include "components/feature_engagement/buildflags.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -105,13 +106,15 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/explore_sites/explore_sites_service_factory.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
+#include "chrome/browser/android/thin_webview/chrome_thin_webview_initializer.h"
 #include "chrome/browser/media/android/cdm/media_drm_origin_id_manager_factory.h"
 #else
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/feedback/feedback_uploader_factory_chrome.h"
 #include "chrome/browser/media/feeds/media_feeds_service_factory.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_profile_session_durations_service_factory.h"
-#include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
+#include "chrome/browser/performance_manager/persistence/site_data/site_data_cache_facade_factory.h"
+#include "chrome/browser/profiles/profile_theme_update_service_factory.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/storage/storage_notification_service_factory.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
@@ -135,12 +138,6 @@
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/signin/signin_manager_factory.h"
-#endif
-
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-#include "chrome/browser/feature_engagement/bookmark/bookmark_tracker_factory.h"
-#include "chrome/browser/feature_engagement/incognito_window/incognito_window_tracker_factory.h"
-#include "chrome/browser/feature_engagement/new_tab/new_tab_tracker_factory.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -184,7 +181,7 @@
 namespace chrome {
 
 void AddProfilesExtraParts(ChromeBrowserMainParts* main_parts) {
-  main_parts->AddParts(new ChromeBrowserMainExtraPartsProfiles());
+  main_parts->AddParts(std::make_unique<ChromeBrowserMainExtraPartsProfiles>());
 }
 
 }  // namespace chrome
@@ -266,11 +263,6 @@ void ChromeBrowserMainExtraPartsProfiles::
   explore_sites::ExploreSitesServiceFactory::GetInstance();
 #endif
   FaviconServiceFactory::GetInstance();
-#if BUILDFLAG(ENABLE_LEGACY_DESKTOP_IN_PRODUCT_HELP)
-  feature_engagement::BookmarkTrackerFactory::GetInstance();
-  feature_engagement::IncognitoWindowTrackerFactory::GetInstance();
-  feature_engagement::NewTabTrackerFactory::GetInstance();
-#endif
   feature_engagement::TrackerFactory::GetInstance();
 #if !defined(OS_ANDROID)
   feedback::FeedbackUploaderFactoryChrome::GetInstance();
@@ -309,7 +301,7 @@ void ChromeBrowserMainExtraPartsProfiles::
 #if !defined(OS_ANDROID)
   media_router::MediaRouterUIServiceFactory::GetInstance();
 #endif
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
+#if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
   metrics::DesktopProfileSessionDurationsServiceFactory::GetInstance();
 #endif
@@ -340,14 +332,22 @@ void ChromeBrowserMainExtraPartsProfiles::
   prerender::PrerenderLinkManagerFactory::GetInstance();
   prerender::PrerenderManagerFactory::GetInstance();
   ProfileSyncServiceFactory::GetInstance();
+#if !defined(OS_ANDROID)
+  ProfileThemeUpdateServiceFactory::GetInstance();
+#endif
   ProtocolHandlerRegistryFactory::GetInstance();
+#if !defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kReadLater))
+    ReadingListModelFactory::GetInstance();
+#endif
   RendererUpdaterFactory::GetInstance();
 #if !defined(OS_ANDROID)
-  resource_coordinator::LocalSiteCharacteristicsDataStoreFactory::GetInstance();
+  performance_manager::SiteDataCacheFacadeFactory::GetInstance();
 #endif
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   safe_browsing::AdvancedProtectionStatusManagerFactory::GetInstance();
 #endif
+  SCTReportingServiceFactory::GetInstance();
 #if defined(OS_ANDROID)
   SearchPermissionsService::Factory::GetInstance();
 #endif
@@ -379,6 +379,9 @@ void ChromeBrowserMainExtraPartsProfiles::
   TemplateURLServiceFactory::GetInstance();
 #if !defined(OS_ANDROID)
   ThemeServiceFactory::GetInstance();
+#endif
+#if defined(OS_ANDROID)
+  thin_webview::android::ChromeThinWebViewInitializer::Initialize();
 #endif
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   ToolbarActionsModelFactory::GetInstance();

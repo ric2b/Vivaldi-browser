@@ -214,6 +214,8 @@ bool IsValidMimeType(const String& content_type, const String& prefix) {
   if (!parsed_content_type.IsValid())
     return false;
 
+  // Valid ParsedContentType implies we have a mime type.
+  DCHECK(parsed_content_type.MimeType());
   if (!parsed_content_type.MimeType().StartsWith(prefix) &&
       !parsed_content_type.MimeType().StartsWith(kApplicationMimeTypePrefix)) {
     return false;
@@ -1053,8 +1055,7 @@ void MediaCapabilities::GetPerfInfo(
   if (!execution_context || execution_context->IsContextDestroyed())
     return;
 
-  const VideoConfiguration* video_config = decoding_config->video();
-  if (!video_config) {
+  if (!decoding_config->hasVideo()) {
     // Audio-only is always smooth and power efficient.
     MediaCapabilitiesDecodingInfo* info = CreateDecodingInfoWith(true);
     info->setKeySystemAccess(access);
@@ -1062,6 +1063,7 @@ void MediaCapabilities::GetPerfInfo(
     return;
   }
 
+  const VideoConfiguration* video_config = decoding_config->video();
   String key_system = "";
   bool use_hw_secure_codecs = false;
 
@@ -1147,8 +1149,13 @@ void MediaCapabilities::GetGpuFactoriesSupport(
   DCHECK(pending_cb_map_.Contains(callback_id));
 
   PendingCallbackState* pending_cb = pending_cb_map_.at(callback_id);
+  if (!pending_cb) {
+    // TODO(crbug.com/1125956): Determine how this can happen and prevent it.
+    return;
+  }
+
   ExecutionContext* execution_context =
-      pending_cb_map_.at(callback_id)->resolver->GetExecutionContext();
+      pending_cb->resolver->GetExecutionContext();
 
   DCHECK(UseGpuFactoriesForPowerEfficient(execution_context,
                                           pending_cb->key_system_access));
@@ -1188,7 +1195,7 @@ void MediaCapabilities::GetGpuFactoriesSupport(
   // A few things aren't known until demuxing time. These include: coded size,
   // visible rect, and extra data. Make reasonable guesses below. Ideally the
   // differences won't be make/break GPU acceleration support.
-  VideoConfiguration* video_config = decoding_config->video();
+  const VideoConfiguration* video_config = decoding_config->video();
   gfx::Size natural_size(video_config->width(), video_config->height());
   media::VideoDecoderConfig config(
       video_codec, video_profile, alpha_mode, video_color_space,
@@ -1365,7 +1372,13 @@ void MediaCapabilities::OnGpuFactoriesSupport(int callback_id,
 }
 
 int MediaCapabilities::CreateCallbackId() {
-  ++last_callback_id_;
+  // Search for the next available callback ID. 0 and -1 are reserved by
+  // wtf::HashMap (meaning "empty" and "deleted").
+  do {
+    ++last_callback_id_;
+  } while (last_callback_id_ == 0 || last_callback_id_ == -1 ||
+           pending_cb_map_.Contains(last_callback_id_));
+
   return last_callback_id_;
 }
 

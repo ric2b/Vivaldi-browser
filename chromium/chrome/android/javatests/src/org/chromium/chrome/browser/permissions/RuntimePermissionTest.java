@@ -13,6 +13,7 @@ import android.widget.TextView;
 import androidx.annotation.StringRes;
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -21,7 +22,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.DownloadItem;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadManagerService.DownloadObserver;
@@ -138,7 +139,7 @@ public class RuntimePermissionTest {
     private static final String MEDIA_TEST = "/content/test/data/media/getusermedia.html";
     private static final String DOWNLOAD_TEST = "/chrome/test/data/android/download/get.html";
 
-    private TestAndroidPermissionDelegate mTestAndroidPermissionDelegate = null;
+    private TestAndroidPermissionDelegate mTestAndroidPermissionDelegate;
 
     @Before
     public void setUp() throws Exception {
@@ -146,13 +147,11 @@ public class RuntimePermissionTest {
     }
 
     private void waitUntilDifferentDialogIsShowing(final PropertyModel currentDialog) {
-        CriteriaHelper.pollUiThread(new Criteria("Dialog not displayed.") {
-            @Override
-            public boolean isSatisfied() {
-                final ModalDialogManager manager =
-                        mPermissionTestRule.getActivity().getModalDialogManager();
-                return manager.isShowing() && currentDialog != manager.getCurrentDialogForTest();
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            final ModalDialogManager manager =
+                    mPermissionTestRule.getActivity().getModalDialogManager();
+            Criteria.checkThat(manager.isShowing(), Matchers.is(true));
+            Criteria.checkThat(manager.getCurrentDialogForTest(), Matchers.not(currentDialog));
         });
     }
 

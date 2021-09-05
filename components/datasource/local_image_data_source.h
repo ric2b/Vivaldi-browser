@@ -9,19 +9,16 @@
 
 class LocalImageDataClassHandler : public VivaldiDataClassHandler {
  public:
-  LocalImageDataClassHandler(
-      content::BrowserContext* browser_context,
-      extensions::VivaldiDataSourcesAPI::UrlKind url_kind);
+  LocalImageDataClassHandler(VivaldiDataSourcesAPI::UrlKind url_kind);
 
   ~LocalImageDataClassHandler() override;
 
-  void GetData(
-      const std::string& data_id,
-      content::URLDataSource::GotDataCallback callback) override;
+  void GetData(Profile* profile,
+               const std::string& data_id,
+               content::URLDataSource::GotDataCallback callback) override;
 
  private:
-  scoped_refptr<extensions::VivaldiDataSourcesAPI> data_sources_api_;
-  const extensions::VivaldiDataSourcesAPI::UrlKind url_kind_;
+  const VivaldiDataSourcesAPI::UrlKind url_kind_;
 };
 
 #endif  // COMPONENTS_DATASOURCE_LOCAL_IMAGE_DATA_SOURCE_H_

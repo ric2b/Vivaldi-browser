@@ -37,10 +37,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/optional.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "content/browser/media/media_devices_util.h"
@@ -55,6 +55,7 @@
 #include "third_party/blink/public/common/mediastream/media_stream_controls.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
+#include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
 
 namespace media {
 class AudioSystem;
@@ -72,13 +73,14 @@ class FakeMediaStreamUIProxy;
 class MediaStreamUIProxy;
 class VideoCaptureManager;
 class VideoCaptureProvider;
+class PermissionControllerImpl;
 
 // MediaStreamManager is used to generate and close new media devices, not to
 // start the media flow. The classes requesting new media streams are answered
 // using callbacks.
 class CONTENT_EXPORT MediaStreamManager
     : public MediaStreamProviderListener,
-      public base::MessageLoopCurrent::DestructionObserver,
+      public base::CurrentThread::DestructionObserver,
       public base::PowerObserver {
  public:
   // Callback to deliver the result of a media access request.
@@ -320,6 +322,16 @@ class CONTENT_EXPORT MediaStreamManager
       std::string hmac_device_id,
       scoped_refptr<base::SequencedTaskRunner> task_runner,
       base::OnceCallback<void(const base::Optional<std::string>&)> callback);
+  // Overload that allows for a blink::MediaDeviceType to be specified instead
+  // of a blink::mojom::MediaStreamType. This allows for getting the raw device
+  // ID from the HMAC of an audio output device.
+  static void GetMediaDeviceIDForHMAC(
+      blink::MediaDeviceType device_type,
+      std::string salt,
+      url::Origin security_origin,
+      std::string hmac_device_id,
+      scoped_refptr<base::SequencedTaskRunner> task_runner,
+      base::OnceCallback<void(const base::Optional<std::string>&)> callback);
 
   // Returns true if the renderer process identified with |render_process_id|
   // is allowed to access |origin|.
@@ -523,6 +535,48 @@ class CONTENT_EXPORT MediaStreamManager
 
   // Activate the specified tab and bring it to the front.
   void ActivateTabOnUIThread(const DesktopMediaID source);
+
+  // Get the permission controller for a particular RFH. Must be called on the
+  // UI thread.
+  static PermissionControllerImpl* GetPermissionController(
+      int requesting_process_id,
+      int requesting_frame_id);
+
+  // Subscribe to the permission controller in order to monitor camera/mic
+  // permission updates for a particular DeviceRequest. All the additional
+  // information is needed because `FindRequest` can't be called on the UI
+  // thread.
+  void SubscribeToPermissionControllerOnUIThread(const std::string& label,
+                                                 int requesting_process_id,
+                                                 int requesting_frame_id,
+                                                 int requester_id,
+                                                 int page_request_id,
+                                                 bool is_audio_request,
+                                                 bool is_video_request,
+                                                 const GURL& origin);
+
+  // Store the subscription ids on a DeviceRequest in order to allow
+  // unsubscribing when the request is deleted.
+  void SetPermissionSubscriptionIDs(const std::string& label,
+                                    int requesting_process_id,
+                                    int requesting_frame_id,
+                                    int audio_subscription_id,
+                                    int video_subscription_id);
+
+  // Unsubscribe from following permission updates for the two specified
+  // subscription IDs. Called when a request is deleted.
+  static void UnsubscribeFromPermissionControllerOnUIThread(
+      int requesting_process_id,
+      int requesting_frame_id,
+      int audio_subscription_id,
+      int video_subscription_id);
+
+  // Callback that the PermissionController calls when a permission is updated.
+  void PermissionChangedCallback(int requesting_process_id,
+                                 int requesting_frame_id,
+                                 int requester_id,
+                                 int page_request_id,
+                                 blink::mojom::PermissionStatus status);
 
   media::AudioSystem* const audio_system_;  // not owned
   scoped_refptr<AudioInputDeviceManager> audio_input_device_manager_;

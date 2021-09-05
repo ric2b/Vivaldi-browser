@@ -26,32 +26,18 @@ class KeyboardNode extends NodeWrapper {
 
   /** @override */
   asRootNode() {
-    if (!this.isGroup()) {
-      return null;
-    }
+    return null;
+  }
 
-    const node = this.automationNode;
-    if (!node) {
-      setTimeout(NavigationManager.moveToValidNode, 0);
-      throw SwitchAccess.error(
-          SAConstants.ErrorType.MISSING_BASE_NODE,
-          'Keyboard nodes must have an automation node.');
-    }
-
-    const root = new RootNodeWrapper(node);
-    KeyboardNode.findAndSetChildren(root);
-    return root;
+  /** @override */
+  isGroup() {
+    return false;
   }
 
   /** @override */
   performAction(action) {
     if (action !== SwitchAccessMenuAction.SELECT) {
       return SAConstants.ActionResponse.NO_ACTION_TAKEN;
-    }
-
-    if (this.isGroup()) {
-      NavigationManager.enterGroup();
-      return SAConstants.ActionResponse.CLOSE_MENU;
     }
 
     const keyLocation = this.location;
@@ -66,26 +52,6 @@ class KeyboardNode extends NodeWrapper {
         center.x, center.y, SAConstants.VK_KEY_PRESS_DURATION_MS);
 
     return SAConstants.ActionResponse.CLOSE_MENU;
-  }
-
-  // ================= Static methods =================
-
-  /**
-   * Helper function to connect tree elements, given the root node.
-   * @param {!RootNodeWrapper} root
-   */
-  static findAndSetChildren(root) {
-    const childConstructor = (node) => new KeyboardNode(node, root);
-
-    /** @type {!Array<!AutomationNode>} */
-    const interestingChildren = RootNodeWrapper.getInterestingChildren(root);
-    let children = interestingChildren.map(childConstructor);
-    if (interestingChildren.length > SAConstants.KEYBOARD_MAX_ROW_LENGTH) {
-      children = GroupNode.separateByRow(children);
-    }
-
-    children.push(new BackButtonNode(root));
-    root.children = children;
   }
 }
 
@@ -124,6 +90,11 @@ class KeyboardRootNode extends RootNodeWrapper {
     AutoScanManager.setInKeyboard(false);
   }
 
+  /** @override */
+  refreshChildren() {
+    KeyboardRootNode.findAndSetChildren_(this);
+  }
+
   // ================= Static methods =================
 
   /**
@@ -134,22 +105,15 @@ class KeyboardRootNode extends RootNodeWrapper {
     KeyboardRootNode.loadKeyboard_();
     AutoScanManager.setInKeyboard(true);
 
-    if (!KeyboardRootNode.keyboardObject_) {
+    const keyboard = KeyboardRootNode.getKeyboardObject();
+    if (!keyboard) {
       throw SwitchAccess.error(
           SAConstants.ErrorType.MISSING_KEYBOARD,
-          'Could not find keyboard in the automation tree');
+          'Could not find keyboard in the automation tree',
+          true /* shouldRecover */);
     }
-    const keyboard =
-        new AutomationTreeWalker(
-            KeyboardRootNode.keyboardObject_, constants.Dir.FORWARD, {
-              visit: (node) => SwitchAccessPredicate.isGroup(node, null),
-              root: (node) => node === KeyboardRootNode.keyboardObject_
-            })
-            .next()
-            .node;
-
     const root = new KeyboardRootNode(keyboard);
-    KeyboardNode.findAndSetChildren(root);
+    KeyboardRootNode.findAndSetChildren_(root);
     return root;
   }
 
@@ -157,12 +121,21 @@ class KeyboardRootNode extends RootNodeWrapper {
    * Start listening for keyboard open/closed.
    */
   static startWatchingVisibility() {
-    KeyboardRootNode.isVisible_ =
-        SwitchAccessPredicate.isVisible(KeyboardRootNode.keyboardObject_);
+    const keyboardObject = KeyboardRootNode.getKeyboardObject();
+    if (!keyboardObject) {
+      SwitchAccess.findNodeMatching(
+          {role: chrome.automation.RoleType.KEYBOARD},
+          KeyboardRootNode.startWatchingVisibility);
+      return;
+    }
 
-    KeyboardRootNode.keyboardObject_.addEventListener(
-        chrome.automation.EventType.ARIA_ATTRIBUTE_CHANGED,
-        KeyboardRootNode.checkVisibilityChanged_, false /* capture */);
+    KeyboardRootNode.isVisible_ =
+        SwitchAccessPredicate.isVisible(keyboardObject);
+
+    new EventHandler(
+        keyboardObject, chrome.automation.EventType.ARIA_ATTRIBUTE_CHANGED,
+        KeyboardRootNode.checkVisibilityChanged_, {exactMatch: true})
+        .start();
   }
 
   // ================= Private static methods =================
@@ -173,7 +146,7 @@ class KeyboardRootNode extends RootNodeWrapper {
    */
   static checkVisibilityChanged_(event) {
     const currentlyVisible =
-        SwitchAccessPredicate.isVisible(KeyboardRootNode.keyboardObject_);
+        SwitchAccessPredicate.isVisible(KeyboardRootNode.getKeyboardObject());
     if (currentlyVisible === KeyboardRootNode.isVisible_) {
       return;
     }
@@ -195,10 +168,27 @@ class KeyboardRootNode extends RootNodeWrapper {
   }
 
   /**
+   * Helper function to connect tree elements, given the root node.
+   * @param {!KeyboardRootNode} root
+   * @private
+   */
+  static findAndSetChildren_(root) {
+    const childConstructor = (node) => new KeyboardNode(node, root);
+    const interestingChildren =
+        root.automationNode.findAll({role: chrome.automation.RoleType.BUTTON});
+    /** @type {!Array<!SAChildNode>} */
+    const children =
+        GroupNode.separateByRow(interestingChildren.map(childConstructor));
+
+    children.push(new BackButtonNode(root));
+    root.children = children;
+  }
+
+  /**
    * @return {AutomationNode}
    * @private
    */
-  static get keyboardObject_() {
+  static getKeyboardObject() {
     if (!this.object_ || !this.object_.role) {
       this.object_ = NavigationManager.desktopNode.find(
           {role: chrome.automation.RoleType.KEYBOARD});

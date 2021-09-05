@@ -119,7 +119,8 @@ HardwareRendererViz::OnViz::OnViz(
 
   display_ = std::make_unique<viz::Display>(
       nullptr /* shared_bitmap_manager */,
-      output_surface_provider->renderer_settings(), frame_sink_id_,
+      output_surface_provider->renderer_settings(),
+      output_surface_provider->debug_settings(), frame_sink_id_,
       std::move(output_surface), std::move(overlay_processor),
       std::move(scheduler), nullptr /* current_task_runner */);
   display_->Initialize(this, GetFrameSinkManager()->surface_manager(),
@@ -171,7 +172,8 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
   // Create a frame with a single SurfaceDrawQuad referencing the child
   // Surface and transformed using the given transform.
   std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
-  render_pass->SetNew(1, gfx::Rect(viewport), clip, gfx::Transform());
+  render_pass->SetNew(viz::RenderPassId{1}, gfx::Rect(viewport), clip,
+                      gfx::Transform());
   render_pass->has_transparent_background = false;
 
   viz::SharedQuadState* quad_state =

@@ -56,7 +56,7 @@ class EmuTarget(target.Target):
 
     # Zircon sends debug logs to serial port (see kernel.serial=legacy flag
     # above). Serial port is redirected to a file through emulator stdout.
-    # Unless runner_pogs are enabled, we output the kernel serial log
+    # If runner_logs are not enabled, we output the kernel serial log
     # to a temporary file, and print that out if we are unable to connect to
     # the emulator guest, to make it easier to diagnose connectivity issues.
     temporary_log_file = None
@@ -65,6 +65,10 @@ class EmuTarget(target.Target):
     else:
       temporary_log_file = tempfile.NamedTemporaryFile('w')
       stdout = temporary_log_file
+
+    # TODO(crbug.com/1100402): Delete when no longer needed for debug info.
+    # Log system statistics at the start of the emulator run.
+    _LogSystemStatistics('system_start_statistics_log')
 
     self._emu_process = subprocess.Popen(emu_command,
                                          stdin=open(os.devnull),
@@ -104,6 +108,11 @@ class EmuTarget(target.Target):
       logging.error('%s quit unexpectedly with exit code %d' %
                     (self._GetEmulatorName(), returncode))
 
+    # TODO(crbug.com/1100402): Delete when no longer needed for debug info.
+    # Log system statistics at the end of the emulator run.
+    _LogSystemStatistics('system_end_statistics_log')
+
+
   def _IsEmuStillRunning(self):
     if not self._emu_process:
       return False
@@ -116,3 +125,17 @@ class EmuTarget(target.Target):
 
   def _GetSshConfigPath(self):
     return boot_data.GetSSHConfigPath(self._output_dir)
+
+
+# TODO(crbug.com/1100402): Delete when no longer needed for debug info.
+def _LogSystemStatistics(log_file_name):
+  statistics_log = runner_logs.FileStreamFor(log_file_name)
+  # Log the cpu load and process information.
+  subprocess.call(['top', '-b', '-n', '1'],
+                  stdin=open(os.devnull),
+                  stdout=statistics_log,
+                  stderr=subprocess.STDOUT)
+  subprocess.call(['ps', '-ax'],
+                  stdin=open(os.devnull),
+                  stdout=statistics_log,
+                  stderr=subprocess.STDOUT)

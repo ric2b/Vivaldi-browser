@@ -33,6 +33,7 @@
 #include "content/shell/browser/web_test/fake_bluetooth_chooser.h"
 #include "content/shell/browser/web_test/fake_bluetooth_chooser_factory.h"
 #include "content/shell/browser/web_test/fake_bluetooth_delegate.h"
+#include "content/shell/browser/web_test/mojo_echo.h"
 #include "content/shell/browser/web_test/mojo_web_test_helper.h"
 #include "content/shell/browser/web_test/web_test_bluetooth_fake_adapter_setter_impl.h"
 #include "content/shell/browser/web_test/web_test_browser_context.h"
@@ -40,6 +41,7 @@
 #include "content/shell/browser/web_test/web_test_client_impl.h"
 #include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/browser/web_test/web_test_permission_manager.h"
+#include "content/shell/browser/web_test/web_test_storage_access_manager.h"
 #include "content/shell/browser/web_test/web_test_tts_platform.h"
 #include "content/shell/common/web_test/web_test_bluetooth_fake_adapter_setter.mojom.h"
 #include "content/shell/common/web_test/web_test_switches.h"
@@ -53,6 +55,7 @@
 #include "gpu/config/gpu_switches.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "net/net_buildflags.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/service_manager/public/cpp/manifest.h"
 #include "services/service_manager/public/cpp/manifest_builder.h"
@@ -63,8 +66,8 @@
 
 #if defined(OS_WIN)
 #include "base/strings/utf_string_conversions.h"
+#include "sandbox/policy/win/sandbox_win.h"
 #include "sandbox/win/src/sandbox.h"
-#include "services/service_manager/sandbox/win/sandbox_win.h"
 #endif
 
 namespace content {
@@ -76,20 +79,6 @@ void BindWebTestHelper(
     RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<mojom::MojoWebTestHelper> receiver) {
   MojoWebTestHelper::Create(std::move(receiver));
-}
-
-const service_manager::Manifest& GetWebTestContentBrowserOverlayManifest() {
-  static base::NoDestructor<service_manager::Manifest> manifest{
-      service_manager::ManifestBuilder()
-          .ExposeCapability(
-              "renderer",
-              service_manager::Manifest::InterfaceList<
-                  mojom::MojoWebTestHelper, mojom::FakeBluetoothChooser,
-                  mojom::FakeBluetoothChooserFactory,
-                  mojom::WebTestBluetoothFakeAdapterSetter,
-                  bluetooth::mojom::FakeBluetooth>())
-          .Build()};
-  return *manifest;
 }
 
 // An OverlayWindow that returns the last given video natural size as the
@@ -216,6 +205,7 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
     RenderProcessHost* render_process_host) {
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
       content::GetUIThreadTaskRunner({});
+  registry->AddInterface(base::BindRepeating(&MojoEcho::Bind), ui_task_runner);
   registry->AddInterface(
       base::BindRepeating(&WebTestBluetoothFakeAdapterSetterImpl::Create),
       ui_task_runner);
@@ -231,15 +221,16 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
           base::Unretained(this)),
       ui_task_runner);
   registry->AddInterface(base::BindRepeating(&MojoWebTestHelper::Create));
+
   registry->AddInterface(
       base::BindRepeating(
-          &WebTestContentBrowserClient::BindClientHintsControllerDelegate,
+          &WebTestContentBrowserClient::BindPermissionAutomation,
           base::Unretained(this)),
       ui_task_runner);
 
   registry->AddInterface(
       base::BindRepeating(
-          &WebTestContentBrowserClient::BindPermissionAutomation,
+          &WebTestContentBrowserClient::BindStorageAccessAutomation,
           base::Unretained(this)),
       ui_task_runner);
 
@@ -252,25 +243,16 @@ void WebTestContentBrowserClient::ExposeInterfacesToRenderer(
       BrowserContext::GetDefaultStoragePartition(browser_context())));
 }
 
-base::Optional<service_manager::Manifest>
-WebTestContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
-  if (name == content::mojom::kBrowserServiceName)
-    return GetWebTestContentBrowserOverlayManifest();
-
-  return base::nullopt;
-}
-
-void WebTestContentBrowserClient::BindClientHintsControllerDelegate(
-    mojo::PendingReceiver<client_hints::mojom::ClientHints> receiver) {
-  ClientHintsControllerDelegate* delegate =
-      browser_context()->GetClientHintsControllerDelegate();
-  DCHECK(delegate);
-  delegate->Bind(std::move(receiver));
-}
-
 void WebTestContentBrowserClient::BindPermissionAutomation(
     mojo::PendingReceiver<blink::test::mojom::PermissionAutomation> receiver) {
   GetWebTestBrowserContext()->GetWebTestPermissionManager()->Bind(
+      std::move(receiver));
+}
+
+void WebTestContentBrowserClient::BindStorageAccessAutomation(
+    mojo::PendingReceiver<blink::test::mojom::StorageAccessAutomation>
+        receiver) {
+  GetWebTestBrowserContext()->GetWebTestStorageAccessManager()->Bind(
       std::move(receiver));
 }
 
@@ -519,10 +501,7 @@ void WebTestContentBrowserClient::BindWebTestClient(
     int render_process_id,
     StoragePartition* partition,
     mojo::PendingAssociatedReceiver<mojom::WebTestClient> receiver) {
-  WebTestClientImpl::Create(render_process_id, partition->GetQuotaManager(),
-                            partition->GetDatabaseTracker(),
-                            partition->GetNetworkContext(),
-                            std::move(receiver));
+  WebTestClientImpl::Create(render_process_id, std::move(receiver));
 }
 
 #if defined(OS_WIN)

@@ -153,6 +153,8 @@ const IDNTestCase kIdnCases[] = {
     {"xn--0-6ee.com", L"੨0.com", kUnsafe},
     // Block fully numeric lookalikes (৪੨.com using U+09EA and U+0A68).
     {"xn--47b6w.com", L"৪੨.com", kUnsafe},
+    // Block single script digit lookalikes (using three U+0A68 characters).
+    {"xn--qccaa.com", L"੨੨੨.com", kUnsafe},
 
     // URL test with mostly numbers and one confusable character
     // Georgian 'd' 4000.com
@@ -876,7 +878,7 @@ const IDNTestCase kIdnCases[] = {
      kInvalid},
     // Hebrew Gershayim with Arabic is disallowed.
     {"xn--5eb7h.eg", L"\x0628\x05f4.eg", kUnsafe},
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
     // These characters are blocked due to a font issue on Mac.
     // Tibetan transliteration characters.
     {"xn--com-lum.test.pl", L"com\u0f8c.test.pl", kUnsafe},
@@ -1505,6 +1507,16 @@ TEST(IDNSpoofCheckerNoFixtureTest, Skeletons) {
     EXPECT_EQ(1u, skeletons.size());
     EXPECT_EQ(test_case.expected_skeleton, *skeletons.begin());
   }
+}
+
+TEST(IDNSpoofCheckerNoFixtureTest, MultipleSkeletons) {
+  IDNSpoofChecker checker;
+  // apple with U+04CF (ӏ)
+  const GURL url("http://appӏe.com");
+  const url_formatter::IDNConversionResult result =
+      UnsafeIDNToUnicodeWithDetails(url.host());
+  Skeletons skeletons = checker.GetSkeletons(result.result);
+  EXPECT_EQ(Skeletons({"apple.corn", "appie.corn"}), skeletons);
 }
 
 }  // namespace url_formatter

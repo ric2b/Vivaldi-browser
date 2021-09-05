@@ -15,6 +15,7 @@
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/child_accounts/child_status_reporting_service_factory.h"
 #include "chrome/browser/chromeos/child_accounts/child_user_service_factory.h"
+#include "chrome/browser/chromeos/child_accounts/family_user_metrics_service_factory.h"
 #include "chrome/browser/chromeos/child_accounts/screen_time_controller_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
@@ -99,6 +100,8 @@ void UserSessionInitializer::OnUserProfileLoaded(const AccountId& account_id) {
     InitializeCRLSetFetcher(user);
     InitializeCertificateTransparencyComponents(user);
     InitializePrimaryProfileServices(profile, user);
+
+    FamilyUserMetricsServiceFactory::GetForBrowserContext(profile);
   }
 
   if (user->GetType() == user_manager::USER_TYPE_CHILD)
@@ -123,7 +126,7 @@ void UserSessionInitializer::InitRlz(Profile* profile) {
           ->GetString()
           .empty()) {
     // Read brand code asynchronously from an OEM data and repost ourselves.
-    google_brand::chromeos::InitBrand(base::Bind(
+    google_brand::chromeos::InitBrand(base::BindOnce(
         &UserSessionInitializer::InitRlz, weak_factory_.GetWeakPtr(), profile));
     return;
   }

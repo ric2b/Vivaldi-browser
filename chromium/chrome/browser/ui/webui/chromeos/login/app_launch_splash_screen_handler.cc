@@ -9,7 +9,6 @@
 
 #include "base/values.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
-#include "chrome/browser/chromeos/login/app_launch_controller.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
@@ -125,12 +124,6 @@ void AppLaunchSplashScreenHandler::UpdateAppLaunchState(AppLaunchState state) {
         l10n_util::GetStringUTF8(GetProgressMessageFromState(state_)));
   }
 
-  // When we are asked to initialize network, we should remember that this app
-  // requires network.
-  if (state_ == AppLaunchState::APP_LAUNCH_STATE_PREPARING_NETWORK) {
-    network_required_ = true;
-  }
-
   UpdateState(NetworkError::ERROR_REASON_UPDATE);
 }
 
@@ -145,7 +138,7 @@ void AppLaunchSplashScreenHandler::ShowNetworkConfigureUI() {
 
   // We should not block users when the network was not required by the
   // controller.
-  if (!network_required_) {
+  if (!delegate_->IsNetworkRequired()) {
     state = NetworkStateInformer::ONLINE;
   }
 
@@ -188,7 +181,7 @@ void AppLaunchSplashScreenHandler::ShowNetworkConfigureUI() {
 
   if (GetCurrentScreen() != ErrorScreenView::kScreenId)
     error_screen_->SetParentScreen(kScreenId);
-  error_screen_->Show();
+  error_screen_->Show(nullptr);
 }
 
 bool AppLaunchSplashScreenHandler::IsNetworkReady() {

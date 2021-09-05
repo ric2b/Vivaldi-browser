@@ -720,4 +720,65 @@ IN_PROC_BROWSER_TEST_F(SmsBrowserTest, SmsFetcherUAF) {
   navigate.Run();
 }
 
+IN_PROC_BROWSER_TEST_F(SmsBrowserTest, ReportWebOTPInUseCounter) {
+  GURL url = GetTestUrl(nullptr, "simple_page.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  shell()->web_contents()->SetDelegate(&delegate_);
+
+  ExpectSmsPrompt();
+  auto provider = std::make_unique<MockSmsProvider>();
+  MockSmsProvider* mock_provider_ptr = provider.get();
+  BrowserMainLoop::GetInstance()->SetSmsProviderForTesting(std::move(provider));
+
+  EXPECT_CALL(*mock_provider_ptr, Retrieve(_)).WillOnce(Invoke([&]() {
+    mock_provider_ptr->NotifyReceive(url::Origin::Create(url), "hello");
+    ConfirmPrompt();
+  }));
+  base::HistogramTester histogram_tester;
+  std::string script = R"(
+    (async () => {
+      let cred = await navigator.credentials.get({otp: {transport: ["sms"]}});
+      return cred.code;
+    }) ();
+  )";
+  EXPECT_EQ("hello", EvalJs(shell(), script));
+
+  content::FetchHistogramsFromChildProcesses();
+  histogram_tester.ExpectBucketCount("Blink.UseCounter.Features",
+                                     blink::mojom::WebFeature::kWebOTP, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(SmsBrowserTest, UpdateRenderFrameHostWithWebOTPUsage) {
+  base::HistogramTester histogram_tester;
+  GURL url = GetTestUrl(nullptr, "simple_page.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  shell()->web_contents()->SetDelegate(&delegate_);
+
+  ExpectSmsPrompt();
+  auto provider = std::make_unique<MockSmsProvider>();
+  MockSmsProvider* mock_provider_ptr = provider.get();
+  BrowserMainLoop::GetInstance()->SetSmsProviderForTesting(std::move(provider));
+
+  EXPECT_CALL(*mock_provider_ptr, Retrieve(_)).WillOnce(Invoke([&]() {
+    mock_provider_ptr->NotifyReceive(url::Origin::Create(url), "hello");
+    ConfirmPrompt();
+  }));
+
+  RenderFrameHost* render_frame_host = shell()->web_contents()->GetMainFrame();
+  EXPECT_FALSE(render_frame_host->DocumentUsedWebOTP());
+  // navigator.credentials.get() creates an SmsService which will notify the
+  // RenderFrameHost that WebOTP has been used.
+  std::string script = R"(
+    (async () => {
+      let cred = await navigator.credentials.get({otp: {transport: ["sms"]}});
+      return cred.code;
+    }) ();
+  )";
+  EXPECT_EQ("hello", EvalJs(shell(), script));
+
+  EXPECT_TRUE(render_frame_host->DocumentUsedWebOTP());
+}
+
 }  // namespace content

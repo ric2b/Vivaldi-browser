@@ -12,6 +12,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "cc/base/features.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_smooth_scroll_gesture.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -171,7 +172,7 @@ class CompositedScrollingBrowserTest : public ContentBrowserTest {
 // Disabled on MacOS because it doesn't support touch input.
 // Disabled on Android due to flakiness, see https://crbug.com/376668.
 // Flaky on Windows: crbug.com/804009
-#if defined(OS_MACOSX) || defined(OS_ANDROID) || defined(OS_WIN)
+#if defined(OS_MAC) || defined(OS_ANDROID) || defined(OS_WIN)
 #define MAYBE_Scroll3DTransformedScroller DISABLED_Scroll3DTransformedScroller
 #else
 #define MAYBE_Scroll3DTransformedScroller Scroll3DTransformedScroller
@@ -257,6 +258,12 @@ IN_PROC_BROWSER_TEST_P(CompositedScrollingMetricTest,
 
   base::HistogramBase::Sample expected_bucket =
       CompositingEnabled() ? kScrollingOnCompositor : kScrollingOnMain;
+  if (base::FeatureList::IsEnabled(::features::kScrollUnification)) {
+    // TODO: crbug.com/1082590
+    // After ScrollUnification all scrolls happen on the compositor thread
+    // but some will still force blocking on main thread
+    expected_bucket = kScrollingOnCompositor;
+  }
 
   histograms.ExpectUniqueSample(kTouchHistogramName, expected_bucket, 2);
   histograms.ExpectUniqueSample(kWheelHistogramName, expected_bucket, 1);
@@ -304,6 +311,12 @@ IN_PROC_BROWSER_TEST_P(CompositedScrollingMetricTest, BlockingEventHandlers) {
   base::HistogramBase::Sample expected_bucket =
       CompositingEnabled() ? kScrollingOnCompositorBlockedOnMain
                            : kScrollingOnMain;
+  if (base::FeatureList::IsEnabled(::features::kScrollUnification)) {
+    // TODO: crbug.com/1082590
+    // After ScrollUnification all scrolls happen on the compositor thread
+    // but some will still force blocking on main thread
+    expected_bucket = kScrollingOnCompositorBlockedOnMain;
+  }
 
   histograms.ExpectUniqueSample(kTouchHistogramName, expected_bucket, 2);
   histograms.ExpectUniqueSample(kWheelHistogramName, expected_bucket, 1);
@@ -351,6 +364,12 @@ IN_PROC_BROWSER_TEST_P(CompositedScrollingMetricTest, PassiveEventHandlers) {
 
   base::HistogramBase::Sample expected_bucket =
       CompositingEnabled() ? kScrollingOnCompositor : kScrollingOnMain;
+  if (base::FeatureList::IsEnabled(::features::kScrollUnification)) {
+    // TODO: crbug.com/1082590
+    // After ScrollUnification all scrolls happen on the compositor thread
+    // but some will still force blocking on main thread
+    expected_bucket = kScrollingOnCompositor;
+  }
 
   histograms.ExpectUniqueSample(kTouchHistogramName, expected_bucket, 2);
   histograms.ExpectUniqueSample(kWheelHistogramName, expected_bucket, 1);

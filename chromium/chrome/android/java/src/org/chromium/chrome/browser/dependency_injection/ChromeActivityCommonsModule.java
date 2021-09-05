@@ -15,18 +15,22 @@ import android.view.View;
 
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.content_public.browser.ScreenOrientationProvider;
@@ -59,10 +63,7 @@ public class ChromeActivityCommonsModule {
 
     @Provides
     public BottomSheetController provideBottomSheetController() {
-        // Once the BottomSheetController is in the dependency graph, this method would no longer
-        // be necessary, as well as the getter in ChromeActivity. Same is true for a few other
-        // methods below.
-        return mActivity.getBottomSheetController();
+        return BottomSheetControllerProvider.from(mActivity.getWindowAndroid());
     }
 
     @Provides
@@ -71,7 +72,22 @@ public class ChromeActivityCommonsModule {
     }
 
     @Provides
-    public ChromeFullscreenManager provideChromeFullscreenManager() {
+    public BrowserControlsManager provideBrowserControlsManager() {
+        return mActivity.getBrowserControlsManager();
+    }
+
+    @Provides
+    public BrowserControlsVisibilityManager provideBrowserControlsVisibilityManager() {
+        return mActivity.getBrowserControlsManager();
+    }
+
+    @Provides
+    public BrowserControlsSizer provideBrowserControlsSizer() {
+        return mActivity.getBrowserControlsManager();
+    }
+
+    @Provides
+    public FullscreenManager provideFullscreenManager() {
         return mActivity.getFullscreenManager();
     }
 

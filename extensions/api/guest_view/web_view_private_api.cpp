@@ -35,16 +35,12 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scrollbar_size.h"
 #include "ui/gfx/skbitmap_operations.h"
-#include "ui/vivaldi_skia_utils.h"
-#include "ui/vivaldi_ui_utils.h"
 
 using content::BrowserPluginGuest;
 using content::RenderViewHost;
 using content::RenderViewHostImpl;
 using content::WebContents;
 using content::WebContentsImpl;
-using vivaldi::ui_tools::EncodeBitmap;
-using vivaldi::skia_utils::SmartCropAndSize;
 
 namespace extensions {
 namespace vivaldi {
@@ -77,12 +73,7 @@ const float kDefaultThumbnailScale = 1.0f;
 
 WebViewPrivateGetThumbnailFunction::WebViewPrivateGetThumbnailFunction()
     : image_quality_(90 /*kDefaultQuality*/),  // Default quality setting.
-      scale_(kDefaultThumbnailScale),  // Scale of window dimension to thumb.
-      height_(0),
-      width_(0),
-      image_format_(api::extension_types::IMAGE_FORMAT_JPEG)  // Default
-                                                              // format is
-                                                              // PNG.
+      scale_(kDefaultThumbnailScale)  // Scale of window dimension to thumb.
 {}
 
 WebViewPrivateGetThumbnailFunction::~WebViewPrivateGetThumbnailFunction() =
@@ -146,72 +137,60 @@ ExtensionFunction::ResponseAction WebViewPrivateGetThumbnailFunction::RunImpl(
 
 void WebViewPrivateGetThumbnailFunction::CopyFromBackingStoreComplete(
     const SkBitmap& bitmap) {
-  base::PostTask(
+  base::ThreadPool::PostTaskAndReply(
       FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(
           &WebViewPrivateGetThumbnailFunction::ScaleAndEncodeOnWorkerThread,
-          this, bitmap));
+          this, bitmap),
+      base::BindOnce(&WebViewPrivateGetThumbnailFunction::SendResult, this));
 }
 
 void WebViewPrivateGetThumbnailFunction::ScaleAndEncodeOnWorkerThread(
     SkBitmap bitmap) {
-  bool success = false;
-  std::string base64_result;
-  do {
-    if (bitmap.drawsNothing()) {
-      LOG(ERROR) << "No image from backing store.";
-      break;
-    }
-    VLOG(1) << "captureVisibleTab() got image from backing store.";
+  if (bitmap.drawsNothing()) {
+    LOG(ERROR) << "No image from backing store.";
+    return;
+  }
+  VLOG(1) << "captureVisibleTab() got image from backing store.";
 
-    if (scale_ != kDefaultThumbnailScale) {
-      // Scale has changed, use that.
-      gfx::Size dst_size_pixels = gfx::ScaleToRoundedSize(
-          gfx::Size(bitmap.width(), bitmap.height()), scale_);
-      bitmap = skia::ImageOperations::Resize(
-          bitmap, skia::ImageOperations::RESIZE_BEST, dst_size_pixels.width(),
-          dst_size_pixels.height());
-    } else if (width_ != 0 && height_ != 0) {
-      bitmap = SmartCropAndSize(bitmap, width_, height_);
-    }
+  if (scale_ != kDefaultThumbnailScale) {
+    // Scale has changed, use that.
+    gfx::Size dst_size_pixels = gfx::ScaleToRoundedSize(
+        gfx::Size(bitmap.width(), bitmap.height()), scale_);
+    bitmap = skia::ImageOperations::Resize(
+        bitmap, skia::ImageOperations::RESIZE_BEST, dst_size_pixels.width(),
+        dst_size_pixels.height());
+  } else if (width_ != 0 && height_ != 0) {
+    bitmap = ::vivaldi::skia_utils::SmartCropAndSize(bitmap, width_, height_);
+  }
 
-    std::vector<unsigned char> data;
-    std::string mime_type;
-    bool encoded = EncodeBitmap(bitmap, &data, &mime_type, image_format_,
-                                image_quality_);
-    if (!encoded)
-      break;
+  std::vector<unsigned char> data;
+  std::string mime_type;
+  bool encoded = ::vivaldi::skia_utils::EncodeBitmap(
+      bitmap, image_format_, image_quality_, data, mime_type);
+  if (!encoded)
+    return;
 
-    // Release no longer needed bitmap.
-    bitmap = SkBitmap();
-    base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
-                                      data.size());
+  // Release no longer needed bitmap.
+  bitmap = SkBitmap();
+  base::StringPiece stream_as_string(reinterpret_cast<const char*>(data.data()),
+                                    data.size());
 
-    base::Base64Encode(stream_as_string, &base64_result);
-    base64_result.insert(
-        0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
-    success = true;
-  } while (false);
-
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
-      base::BindOnce(
-          &WebViewPrivateGetThumbnailFunction::SendResult,
-          this, success, std::move(base64_result)));
+  base::Base64Encode(stream_as_string, &base64_result_);
+  base64_result_.insert(
+      0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
 }
 
-void WebViewPrivateGetThumbnailFunction::SendResult(
-    bool success,
-    const std::string& base64_result) {
+void WebViewPrivateGetThumbnailFunction::SendResult() {
   namespace Results = vivaldi::web_view_private::GetThumbnail::Results;
 
-  if (!success) {
+  if (base64_result_.empty()) {
     Respond(Error("Internal Thumbnail error"));
     return;
   }
-  Respond(ArgumentList(Results::Create(base64_result)));
+  Respond(ArgumentList(Results::Create(base64_result_)));
 }
 
 ExtensionFunction::ResponseAction WebViewPrivateShowPageInfoFunction::Run() {

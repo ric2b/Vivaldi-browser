@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/test/pixel_test.h"
 #include "cc/test/pixel_test_utils.h"
@@ -95,8 +96,8 @@ class CopyOutputScalingPixelTest
     // Create the render passes drawn on top of the root render pass.
     RenderPass* smaller_passes[4];
     gfx::Rect smaller_pass_rects[4];
-    int pass_id = 5;
-    for (int i = 0; i < 4; ++i, --pass_id) {
+    RenderPassId pass_id{5};
+    for (int i = 0; i < 4; ++i, pass_id = RenderPassId{pass_id.value() - 1}) {
       smaller_pass_rects[i] = gfx::Rect(
           i % 2 == 0 ? x_block : (viewport_size.width() - 2 * x_block),
           i / 2 == 0 ? y_block : (viewport_size.height() - 2 * y_block),
@@ -145,6 +146,8 @@ class CopyOutputScalingPixelTest
       // results of the main copy request (below) if the GL state is not
       // properly restored.
       request->SetUniformScaleRatio(1, 10);
+      // Ensure the result callback is run on test main thread.
+      request->set_result_task_runner(base::SequencedTaskRunnerHandle::Get());
       list.front()->copy_requests.push_back(std::move(request));
 
       // Add a copy request to the root RenderPass, to capture the results of
@@ -164,6 +167,8 @@ class CopyOutputScalingPixelTest
       request->set_result_selection(
           copy_output::ComputeResultRect(copy_rect, scale_from_, scale_to_));
       request->SetScaleRatio(scale_from_, scale_to_);
+      // Ensure the result callback is run on test main thread.
+      request->set_result_task_runner(base::SequencedTaskRunnerHandle::Get());
       list.back()->copy_requests.push_back(std::move(request));
 
       renderer()->DecideRenderPassAllocationsForFrame(list);

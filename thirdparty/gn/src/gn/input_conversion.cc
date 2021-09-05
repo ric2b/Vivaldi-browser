@@ -138,7 +138,7 @@ Value ParseJSONValue(const Settings* settings,
       return Value();
     case base::Value::Type::DICTIONARY: {
       std::unique_ptr<Scope> scope = std::make_unique<Scope>(settings);
-      for (const auto& it : value.DictItems()) {
+      for (auto it : value.DictItems()) {
         Value parsed_value =
             ParseJSONValue(settings, it.second, origin, input_file, err);
         if (!IsIdentifier(it.first)) {

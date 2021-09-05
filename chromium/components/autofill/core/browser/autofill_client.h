@@ -274,6 +274,10 @@ class AutofillClient : public RiskDataLoader {
   // Gets an AddressNormalizer instance (can be null).
   virtual AddressNormalizer* GetAddressNormalizer() = 0;
 
+  // Gets the virtual URL of the last committed page of this client's
+  // associated WebContents.
+  virtual const GURL& GetLastCommittedURL() = 0;
+
   // Gets the security level used for recording histograms for the current
   // context if possible, SECURITY_LEVEL_COUNT otherwise.
   virtual security_state::SecurityLevel GetSecurityLevelForUmaHistograms() = 0;
@@ -305,9 +309,9 @@ class AutofillClient : public RiskDataLoader {
   virtual void OnUnmaskVerificationResult(PaymentsRpcResult result) = 0;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  // Returns the whitelists for virtual cards. Used on desktop platforms only.
-  virtual std::vector<std::string> GetMerchantWhitelistForVirtualCards() = 0;
-  virtual std::vector<std::string> GetBinRangeWhitelistForVirtualCards() = 0;
+  // Returns the list of allowed merchants and BIN ranges for virtual cards.
+  virtual std::vector<std::string> GetAllowedMerchantsForVirtualCards() = 0;
+  virtual std::vector<std::string> GetAllowedBinRangesForVirtualCards() = 0;
 
   // Runs |show_migration_dialog_closure| if the user accepts the card migration
   // offer. This causes the card migration dialog to be shown.

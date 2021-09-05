@@ -23,7 +23,7 @@ class ImageResourceContent;
 class LargestContentfulPaintCalculator;
 class LayoutObject;
 class LocalFrameView;
-class PropertyTreeState;
+class PropertyTreeStateOrAlias;
 class StyleFetchedImage;
 class TextPaintTimingDetector;
 struct WebFloatRect;
@@ -60,8 +60,6 @@ class PaintTimingCallbackManager : public GarbageCollectedMixin {
 class PaintTimingCallbackManagerImpl final
     : public GarbageCollected<PaintTimingCallbackManagerImpl>,
       public PaintTimingCallbackManager {
-  USING_GARBAGE_COLLECTED_MIXIN(PaintTimingCallbackManagerImpl);
-
  public:
   PaintTimingCallbackManagerImpl(LocalFrameView* frame_view)
       : frame_view_(frame_view),
@@ -125,13 +123,14 @@ class CORE_EXPORT PaintTimingDetector
       const Node*,
       const Image*,
       const StyleFetchedImage*,
-      const PropertyTreeState& current_paint_chunk_properties,
+      const PropertyTreeStateOrAlias& current_paint_chunk_properties,
       const IntRect& image_border);
   static void NotifyImagePaint(
       const LayoutObject&,
       const IntSize& intrinsic_size,
       const ImageResourceContent* cached_image,
-      const PropertyTreeState& current_paint_chunk_properties);
+      const PropertyTreeStateOrAlias& current_paint_chunk_properties,
+      const IntRect& image_border);
   inline static void NotifyTextPaint(const IntRect& text_visual_rect);
 
   void NotifyImageFinished(const LayoutObject&, const ImageResourceContent*);
@@ -166,7 +165,7 @@ class CORE_EXPORT PaintTimingDetector
 
   void ConvertViewportToWindow(WebFloatRect* float_rect) const;
   FloatRect CalculateVisualRect(const IntRect& visual_rect,
-                                const PropertyTreeState&) const;
+                                const PropertyTreeStateOrAlias&) const;
 
   TextPaintTimingDetector* GetTextPaintTimingDetector() const {
     DCHECK(text_paint_timing_detector_);
@@ -205,6 +204,10 @@ class CORE_EXPORT PaintTimingDetector
   }
 
   void UpdateLargestContentfulPaintCandidate();
+
+  // Reports the largest image and text candidates painted under non-nested 0
+  // opacity layer.
+  void ReportIgnoredContent();
 
   base::Optional<PaintTimingVisualizer>& Visualizer() { return visualizer_; }
   void Trace(Visitor* visitor) const;
@@ -267,8 +270,13 @@ class ScopedPaintTimingDetectorBlockPaintHook {
   // the object helps keeping the lifetime of |reset_top_| and |data_| to the
   // appropriate scope.
   ScopedPaintTimingDetectorBlockPaintHook() {}
+  ScopedPaintTimingDetectorBlockPaintHook(
+      const ScopedPaintTimingDetectorBlockPaintHook&) = delete;
+  ScopedPaintTimingDetectorBlockPaintHook& operator=(
+      const ScopedPaintTimingDetectorBlockPaintHook&) = delete;
 
-  void EmplaceIfNeeded(const LayoutBoxModelObject&, const PropertyTreeState&);
+  void EmplaceIfNeeded(const LayoutBoxModelObject&,
+                       const PropertyTreeStateOrAlias&);
   ~ScopedPaintTimingDetectorBlockPaintHook();
 
  private:
@@ -291,18 +299,16 @@ class ScopedPaintTimingDetectorBlockPaintHook {
 
    public:
     Data(const LayoutBoxModelObject& aggregator,
-         const PropertyTreeState&,
+         const PropertyTreeStateOrAlias&,
          TextPaintTimingDetector*);
 
     const LayoutBoxModelObject& aggregator_;
-    const PropertyTreeState& property_tree_state_;
+    const PropertyTreeStateOrAlias& property_tree_state_;
     TextPaintTimingDetector* detector_;
     IntRect aggregated_visual_rect_;
   };
   base::Optional<Data> data_;
   static ScopedPaintTimingDetectorBlockPaintHook* top_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedPaintTimingDetectorBlockPaintHook);
 };
 
 // static

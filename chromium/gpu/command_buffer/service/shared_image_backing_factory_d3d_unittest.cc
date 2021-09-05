@@ -121,12 +121,14 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, InvalidFormat) {
   auto back_buffer_mailbox = Mailbox::GenerateForSharedImage();
   gfx::Size size(1, 1);
   auto color_space = gfx::ColorSpace::CreateSRGB();
+  auto surface_origin = kTopLeft_GrSurfaceOrigin;
+  auto alpha_type = kPremul_SkAlphaType;
   uint32_t usage = gpu::SHARED_IMAGE_USAGE_SCANOUT;
   {
     auto valid_format = viz::RGBA_8888;
     auto backings = shared_image_factory_->CreateSwapChain(
         front_buffer_mailbox, back_buffer_mailbox, valid_format, size,
-        color_space, usage);
+        color_space, surface_origin, alpha_type, usage);
     EXPECT_TRUE(backings.front_buffer);
     EXPECT_TRUE(backings.back_buffer);
   }
@@ -134,7 +136,7 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, InvalidFormat) {
     auto valid_format = viz::BGRA_8888;
     auto backings = shared_image_factory_->CreateSwapChain(
         front_buffer_mailbox, back_buffer_mailbox, valid_format, size,
-        color_space, usage);
+        color_space, surface_origin, alpha_type, usage);
     EXPECT_TRUE(backings.front_buffer);
     EXPECT_TRUE(backings.back_buffer);
   }
@@ -142,7 +144,7 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, InvalidFormat) {
     auto valid_format = viz::RGBA_F16;
     auto backings = shared_image_factory_->CreateSwapChain(
         front_buffer_mailbox, back_buffer_mailbox, valid_format, size,
-        color_space, usage);
+        color_space, surface_origin, alpha_type, usage);
     EXPECT_TRUE(backings.front_buffer);
     EXPECT_TRUE(backings.back_buffer);
   }
@@ -150,7 +152,7 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, InvalidFormat) {
     auto invalid_format = viz::RGBA_4444;
     auto backings = shared_image_factory_->CreateSwapChain(
         front_buffer_mailbox, back_buffer_mailbox, invalid_format, size,
-        color_space, usage);
+        color_space, surface_origin, alpha_type, usage);
     EXPECT_FALSE(backings.front_buffer);
     EXPECT_FALSE(backings.back_buffer);
   }
@@ -165,6 +167,8 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, CreateAndPresentSwapChain) {
   auto format = viz::RGBA_8888;
   gfx::Size size(1, 1);
   auto color_space = gfx::ColorSpace::CreateSRGB();
+  auto surface_origin = kTopLeft_GrSurfaceOrigin;
+  auto alpha_type = kPremul_SkAlphaType;
   uint32_t usage = gpu::SHARED_IMAGE_USAGE_GLES2 |
                    gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
                    gpu::SHARED_IMAGE_USAGE_DISPLAY |
@@ -172,7 +176,7 @@ TEST_F(SharedImageBackingFactoryD3DTestSwapChain, CreateAndPresentSwapChain) {
 
   auto backings = shared_image_factory_->CreateSwapChain(
       front_buffer_mailbox, back_buffer_mailbox, format, size, color_space,
-      usage);
+      surface_origin, alpha_type, usage);
   EXPECT_TRUE(backings.front_buffer);
   EXPECT_TRUE(backings.back_buffer);
 
@@ -399,7 +403,7 @@ class SharedImageBackingFactoryD3DTest
   }
 
  protected:
-  GrContext* gr_context() const { return context_state_->gr_context(); }
+  GrDirectContext* gr_context() const { return context_state_->gr_context(); }
 
   void CheckSkiaPixels(const Mailbox& mailbox,
                        const gfx::Size& size,
@@ -465,7 +469,8 @@ TEST_F(SharedImageBackingFactoryD3DTest, GL_SkiaGL) {
   const uint32_t usage = SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_DISPLAY;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
-      mailbox, format, surface_handle, size, color_space, usage,
+      mailbox, format, surface_handle, size, color_space,
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
       false /* is_thread_safe */);
   ASSERT_NE(backing, nullptr);
 
@@ -541,7 +546,8 @@ TEST_F(SharedImageBackingFactoryD3DTest, Dawn_SkiaGL) {
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   const uint32_t usage = SHARED_IMAGE_USAGE_WEBGPU | SHARED_IMAGE_USAGE_DISPLAY;
   auto backing = shared_image_factory_->CreateSharedImage(
-      mailbox, format, surface_handle, size, color_space, usage,
+      mailbox, format, surface_handle, size, color_space,
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
       false /* is_thread_safe */);
   ASSERT_NE(backing, nullptr);
 
@@ -571,7 +577,7 @@ TEST_F(SharedImageBackingFactoryD3DTest, Dawn_SkiaGL) {
     color_desc.storeOp = wgpu::StoreOp::Store;
     color_desc.clearColor = {0, 255, 0, 255};
 
-    wgpu::RenderPassDescriptor renderPassDesc;
+    wgpu::RenderPassDescriptor renderPassDesc = {};
     renderPassDesc.colorAttachmentCount = 1;
     renderPassDesc.colorAttachments = &color_desc;
     renderPassDesc.depthStencilAttachment = nullptr;
@@ -611,7 +617,8 @@ TEST_F(SharedImageBackingFactoryD3DTest, GL_Dawn_Skia_UnclearTexture) {
                          SHARED_IMAGE_USAGE_WEBGPU;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
-      mailbox, format, surface_handle, size, color_space, usage,
+      mailbox, format, surface_handle, size, color_space,
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
       false /* is_thread_safe */);
   ASSERT_NE(backing, nullptr);
 
@@ -686,7 +693,7 @@ TEST_F(SharedImageBackingFactoryD3DTest, GL_Dawn_Skia_UnclearTexture) {
     color_desc.loadOp = wgpu::LoadOp::Load;
     color_desc.storeOp = wgpu::StoreOp::Store;
 
-    wgpu::RenderPassDescriptor renderPassDesc;
+    wgpu::RenderPassDescriptor renderPassDesc = {};
     renderPassDesc.colorAttachmentCount = 1;
     renderPassDesc.colorAttachments = &color_desc;
     renderPassDesc.depthStencilAttachment = nullptr;
@@ -729,7 +736,8 @@ TEST_F(SharedImageBackingFactoryD3DTest, UnclearDawn_SkiaFails) {
                          SHARED_IMAGE_USAGE_WEBGPU;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
-      mailbox, format, surface_handle, size, color_space, usage,
+      mailbox, format, surface_handle, size, color_space,
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
       false /* is_thread_safe */);
   ASSERT_NE(backing, nullptr);
 
@@ -771,7 +779,7 @@ TEST_F(SharedImageBackingFactoryD3DTest, UnclearDawn_SkiaFails) {
     color_desc.storeOp = wgpu::StoreOp::Clear;
     color_desc.clearColor = {0, 255, 0, 255};
 
-    wgpu::RenderPassDescriptor renderPassDesc;
+    wgpu::RenderPassDescriptor renderPassDesc = {};
     renderPassDesc.colorAttachmentCount = 1;
     renderPassDesc.colorAttachments = &color_desc;
     renderPassDesc.depthStencilAttachment = nullptr;
@@ -817,7 +825,8 @@ TEST_F(SharedImageBackingFactoryD3DTest, SkiaAccessFirstFails) {
   const uint32_t usage = SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_DISPLAY;
   const gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   auto backing = shared_image_factory_->CreateSharedImage(
-      mailbox, format, surface_handle, size, color_space, usage,
+      mailbox, format, surface_handle, size, color_space,
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
       false /* is_thread_safe */);
   ASSERT_NE(backing, nullptr);
 

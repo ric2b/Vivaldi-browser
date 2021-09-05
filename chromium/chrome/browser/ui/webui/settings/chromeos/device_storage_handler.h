@@ -8,6 +8,7 @@
 #include <string>
 
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/ui/webui/settings/chromeos/calculator/size_calculator.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chromeos/disks/disk_mount_manager.h"
@@ -41,7 +42,7 @@ const int64_t kSpaceCriticallyLowBytes = 512 * 1024 * 1024;
 const int64_t kSpaceLowBytes = 1 * 1024 * 1024 * 1024;
 
 class StorageHandler : public ::settings::SettingsPageUIHandler,
-                       public arc::ArcSessionManager::Observer,
+                       public arc::ArcSessionManagerObserver,
                        public chromeos::disks::DiskMountManager::Observer,
                        public calculator::SizeCalculator::Observer {
  public:
@@ -53,7 +54,7 @@ class StorageHandler : public ::settings::SettingsPageUIHandler,
   void OnJavascriptAllowed() override;
   void OnJavascriptDisallowed() override;
 
-  // arc::ArcSessionManager::Observer:
+  // arc::ArcSessionManagerObserver:
   void OnArcPlayStoreEnabledChanged(bool enabled) override;
 
   // chromeos::disks::DiskMountManager::Observer:
@@ -113,7 +114,6 @@ class StorageHandler : public ::settings::SettingsPageUIHandler,
   calculator::AppsSizeCalculator apps_size_calculator_;
   calculator::CrostiniSizeCalculator crostini_size_calculator_;
   calculator::OtherUsersSizeCalculator other_users_size_calculator_;
-  calculator::DlcsSizeCalculator dlcs_size_calculator_;
 
   // Controls if the size of each storage item has been calculated.
   std::bitset<calculator::SizeCalculator::kCalculationTypeCount>
@@ -125,7 +125,7 @@ class StorageHandler : public ::settings::SettingsPageUIHandler,
 
   Profile* const profile_;
   const std::string source_name_;
-  ScopedObserver<arc::ArcSessionManager, arc::ArcSessionManager::Observer>
+  ScopedObserver<arc::ArcSessionManager, arc::ArcSessionManagerObserver>
       arc_observer_;
   const re2::RE2 special_volume_path_pattern_;
 

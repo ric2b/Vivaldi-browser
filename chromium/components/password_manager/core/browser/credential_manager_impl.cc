@@ -64,8 +64,9 @@ void CredentialManagerImpl::Store(const CredentialInfo& credential,
 
   // Create a custom form fetcher without HTTP->HTTPS migration as the API is
   // only available on HTTPS origins.
-  auto form_fetcher =
-      std::make_unique<FormFetcherImpl>(observed_digest, client_, false);
+  std::unique_ptr<FormFetcherImpl> form_fetcher =
+      FormFetcherImpl::CreateFormFetcherImpl(
+          observed_digest, client_, /*should_migrate_http_passwords=*/false);
   form_manager_ = std::make_unique<CredentialManagerPasswordFormManager>(
       client_, std::move(form), this, nullptr, std::move(form_fetcher));
 }
@@ -79,7 +80,7 @@ void CredentialManagerImpl::PreventSilentAccess(
   // Send acknowledge response back.
   std::move(callback).Run();
 
-  PasswordStore* store = GetPasswordStore();
+  PasswordStore* store = GetProfilePasswordStore();
   if (!store || !client_->IsSavingAndFillingEnabled(GetOrigin().GetURL()))
     return;
 
@@ -96,7 +97,7 @@ void CredentialManagerImpl::Get(CredentialMediationRequirement mediation,
                                 GetCallback callback) {
   using metrics_util::LogCredentialManagerGetResult;
 
-  PasswordStore* store = GetPasswordStore();
+  PasswordStore* store = GetProfilePasswordStore();
   if (password_manager_util::IsLoggingActive(client_)) {
     CredentialManagerLogger(client_->GetLogManager())
         .LogRequestCredential(GetOrigin(), mediation, federations);
@@ -129,7 +130,7 @@ void CredentialManagerImpl::Get(CredentialMediationRequirement mediation,
     return;
   }
   // Return an empty credential while autofill-assistant is running.
-  if (client_->GetAutofillAssistantMode() == AutofillAssistantMode::kRunning) {
+  if (client_->GetAutofillAssistantMode() == AutofillAssistantMode::kUIShown) {
     // Callback with empty credential info.
     std::move(callback).Run(CredentialManagerError::SUCCESS, CredentialInfo());
     LogCredentialManagerGetResult(
@@ -146,14 +147,20 @@ void CredentialManagerImpl::Get(CredentialMediationRequirement mediation,
         metrics_util::CredentialManagerGetResult::kNoneZeroClickOff, mediation);
     return;
   }
-
+  StoresToQuery stores_to_query = GetAccountPasswordStore()
+                                      ? StoresToQuery::kProfileAndAccountStores
+                                      : StoresToQuery::kProfileStore;
   pending_request_ = std::make_unique<CredentialManagerPendingRequestTask>(
       this, base::BindOnce(&RunGetCallback, std::move(callback)), mediation,
-      include_passwords, federations);
+      include_passwords, federations, stores_to_query);
   // This will result in a callback to
   // PendingRequestTask::OnGetPasswordStoreResults().
-  GetPasswordStore()->GetLogins(GetSynthesizedFormForOrigin(),
-                                pending_request_.get());
+  GetProfilePasswordStore()->GetLogins(GetSynthesizedFormForOrigin(),
+                                       pending_request_.get());
+  if (GetAccountPasswordStore()) {
+    GetAccountPasswordStore()->GetLogins(GetSynthesizedFormForOrigin(),
+                                         pending_request_.get());
+  }
 }
 
 bool CredentialManagerImpl::IsZeroClickAllowed() const {
@@ -195,7 +202,10 @@ void CredentialManagerImpl::SendPasswordForm(
             ? CredentialType::CREDENTIAL_TYPE_PASSWORD
             : CredentialType::CREDENTIAL_TYPE_FEDERATED;
     info = CredentialInfo(*form, type_to_return);
-    if (PasswordStore* store = GetPasswordStore()) {
+    PasswordStore* store = form->IsUsingAccountStore()
+                               ? GetAccountPasswordStore()
+                               : GetProfilePasswordStore();
+    if (store) {
       if (form->skip_zero_click && IsZeroClickAllowed()) {
         autofill::PasswordForm update_form = *form;
         update_form.skip_zero_click = false;
@@ -219,8 +229,12 @@ PasswordManagerClient* CredentialManagerImpl::client() const {
   return client_;
 }
 
-PasswordStore* CredentialManagerImpl::GetPasswordStore() {
+PasswordStore* CredentialManagerImpl::GetProfilePasswordStore() {
   return client_ ? client_->GetProfilePasswordStore() : nullptr;
+}
+
+PasswordStore* CredentialManagerImpl::GetAccountPasswordStore() {
+  return client_ ? client_->GetAccountPasswordStore() : nullptr;
 }
 
 void CredentialManagerImpl::DoneRequiringUserMediation() {

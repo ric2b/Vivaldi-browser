@@ -32,8 +32,7 @@ static bool IsFrameRateRelativelyHigh(base::TimeDelta rendering_interval,
 
   constexpr double kThreshold = 0.05;
   return kThreshold >
-         std::abs(1.0 - (rendering_interval.InMillisecondsF() /
-                         average_frame_duration.InMillisecondsF()));
+         std::abs(1.0 - (rendering_interval / average_frame_duration));
 }
 
 }  // namespace
@@ -212,23 +211,22 @@ void VideoFrameCallbackRequesterImpl::OnRenderingSteps(double high_res_now_ms) {
 // static
 double VideoFrameCallbackRequesterImpl::GetClampedTimeInMillis(
     base::TimeDelta time) {
-  constexpr double kSecondsToMillis = 1000.0;
-  return Performance::ClampTimeResolution(time.InSecondsF()) * kSecondsToMillis;
+  return Performance::ClampTimeResolution(time.InSecondsF()) *
+         base::Time::kMillisecondsPerSecond;
 }
 
 // static
 double VideoFrameCallbackRequesterImpl::GetCoarseClampedTimeInSeconds(
     base::TimeDelta time) {
-  constexpr double kCoarseResolutionInSeconds = 100e-6;
+  constexpr auto kCoarseResolution = base::TimeDelta::FromMicroseconds(100);
   // Add this assert, in case TimeClamper's resolution were to change to be
   // stricter.
-  static_assert(kCoarseResolutionInSeconds >= TimeClamper::kResolutionSeconds,
-                "kCoarseResolutionInSeconds should be at least "
-                "as coarse as other clock resolutions");
-  double interval = floor(time.InSecondsF() / kCoarseResolutionInSeconds);
-  double clamped_time = interval * kCoarseResolutionInSeconds;
+  static_assert(kCoarseResolution >= base::TimeDelta::FromSecondsD(
+                                         TimeClamper::kResolutionSeconds),
+                "kCoarseResolution should be at least as coarse as other clock "
+                "resolutions");
 
-  return clamped_time;
+  return time.FloorToMultiple(kCoarseResolution).InSecondsF();
 }
 
 int VideoFrameCallbackRequesterImpl::requestVideoFrameCallback(

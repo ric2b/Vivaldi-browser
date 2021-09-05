@@ -75,7 +75,7 @@ const int kDefaultCustomLinkMaxCount = 10;
 // Name for the Most Visited iframe in the NTP.
 const char kMostVisitedIframe[] = "mv-single";
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
 // Name for the edit/add custom link iframe in the NTP.
 const char kEditCustomLinkIframe[] = "custom-links-edit";
 #endif
@@ -109,7 +109,9 @@ class LocalNTPTest : public InProcessBrowserTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIOnlyAvailableOnNTP) {
+// Disabled for being flaky. crbug.com/1096976
+IN_PROC_BROWSER_TEST_F(LocalNTPTest,
+                       DISABLED_EmbeddedSearchAPIOnlyAvailableOnNTP) {
   // Set up a test server, so we have some arbitrary non-NTP URL to navigate to.
   net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   test_server.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
@@ -936,7 +938,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPRTLTest, RightToLeft) {
 
 // TODO(crbug/980638): Update/Remove when Linux and/or ChromeOS support dark
 // mode.
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MAC)
 
 // Tests that dark mode styling is properly applied to the local NTP.
 class LocalNTPDarkModeTest : public LocalNTPTest, public DarkModeTestBase {

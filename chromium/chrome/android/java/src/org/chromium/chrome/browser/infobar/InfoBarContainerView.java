@@ -15,11 +15,13 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.chrome.browser.banners.SwipableOverlayView;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
-import org.chromium.chrome.browser.ui.messages.infobar.InfoBarUiItem;
+import org.chromium.components.browser_ui.banners.SwipableOverlayView;
+import org.chromium.components.infobars.InfoBar;
+import org.chromium.components.infobars.InfoBarAnimationListener;
+import org.chromium.components.infobars.InfoBarContainerLayout;
+import org.chromium.components.infobars.InfoBarUiItem;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
 
@@ -30,7 +32,7 @@ public class InfoBarContainerView extends SwipableOverlayView {
     /**
      * Observes container view changes.
      */
-    public interface ContainerViewObserver extends InfoBarContainer.InfoBarAnimationListener {
+    public interface ContainerViewObserver extends InfoBarAnimationListener {
         /**
          * Called when the height of shown content changed.
          * @param shownFraction The ratio of height of shown content to the height of the container
@@ -87,8 +89,8 @@ public class InfoBarContainerView extends SwipableOverlayView {
         updateLayoutParams(context, isTablet);
 
         Runnable makeContainerVisibleRunnable = () -> runUpEventAnimation(true);
-        mLayout = new InfoBarContainerLayout(context, makeContainerVisibleRunnable,
-                new InfoBarContainer.InfoBarAnimationListener() {
+        mLayout = new InfoBarContainerLayout(
+                context, makeContainerVisibleRunnable, new InfoBarAnimationListener() {
                     @Override
                     public void notifyAnimationFinished(int animationType) {
                         mContainerViewObserver.notifyAnimationFinished(animationType);

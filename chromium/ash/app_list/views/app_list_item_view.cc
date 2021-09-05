@@ -403,6 +403,7 @@ void AppListItemView::ScaleAppIcon(bool scale_up) {
   ui::ScopedLayerAnimationSettings settings(layer()->GetAnimator());
   settings.SetTransitionDuration(
       base::TimeDelta::FromMilliseconds((kDragDropAppIconScaleTransitionInMs)));
+  settings.SetTweenType(gfx::Tween::EASE_OUT_2);
   if (scale_up) {
     if (is_folder_) {
       const gfx::Rect bounds(layer()->bounds().size());
@@ -783,7 +784,7 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
       }
       break;
     case ui::ET_GESTURE_TAP_DOWN:
-      if (state() != STATE_DISABLED) {
+      if (GetState() != STATE_DISABLED) {
         SetState(STATE_PRESSED);
         touch_drag_timer_.Start(
             FROM_HERE,
@@ -796,7 +797,7 @@ void AppListItemView::OnGestureEvent(ui::GestureEvent* event) {
       break;
     case ui::ET_GESTURE_TAP:
     case ui::ET_GESTURE_TAP_CANCEL:
-      if (state() != STATE_DISABLED) {
+      if (GetState() != STATE_DISABLED) {
         touch_drag_timer_.Stop();
         SetState(STATE_NORMAL);
       }
@@ -886,7 +887,7 @@ void AppListItemView::AnimationProgressed(const gfx::Animation* animation) {
 
   preview_circle_radius_ = gfx::Tween::IntValueBetween(
       animation->GetCurrentValue(), 0,
-      GetAppListConfig().folder_dropping_circle_radius());
+      GetAppListConfig().folder_dropping_circle_radius() * icon_scale_);
   SchedulePaint();
 }
 

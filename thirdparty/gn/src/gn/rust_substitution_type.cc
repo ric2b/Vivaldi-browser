@@ -14,6 +14,7 @@ const SubstitutionTypes RustSubstitutions = {
     &kRustSubstitutionCrateName,       &kRustSubstitutionCrateType,
     &kRustSubstitutionRustDeps,        &kRustSubstitutionRustFlags,
     &kRustSubstitutionRustEnv,         &kRustSubstitutionExterns,
+    &kRustSubstitutionSources,
 };
 
 // Valid for Rust tools.
@@ -25,6 +26,7 @@ const Substitution kRustSubstitutionExterns = {"{{externs}}", "externs"};
 const Substitution kRustSubstitutionRustDeps = {"{{rustdeps}}", "rustdeps"};
 const Substitution kRustSubstitutionRustEnv = {"{{rustenv}}", "rustenv"};
 const Substitution kRustSubstitutionRustFlags = {"{{rustflags}}", "rustflags"};
+const Substitution kRustSubstitutionSources = {"{{sources}}", "sources"};
 
 bool IsValidRustSubstitution(const Substitution* type) {
   return IsValidToolSubstitution(type) || IsValidSourceSubstitution(type) ||
@@ -35,5 +37,6 @@ bool IsValidRustSubstitution(const Substitution* type) {
          type == &kRustSubstitutionExterns ||
          type == &kRustSubstitutionRustDeps ||
          type == &kRustSubstitutionRustEnv ||
-         type == &kRustSubstitutionRustFlags;
+         type == &kRustSubstitutionRustFlags ||
+         type == &kRustSubstitutionSources;
 }

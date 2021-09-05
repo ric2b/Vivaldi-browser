@@ -199,7 +199,7 @@ PaymentRequestSheetController::PaymentRequestSheetController(
     PaymentRequestSpec* spec,
     PaymentRequestState* state,
     PaymentRequestDialogView* dialog)
-    : spec_(spec), state_(state), dialog_(dialog) {}
+    : spec_(spec->GetWeakPtr()), state_(state), dialog_(dialog) {}
 
 PaymentRequestSheetController::~PaymentRequestSheetController() = default;
 
@@ -419,13 +419,13 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateFooterView() {
           views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
           kPaymentRequestButtonSpacing));
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   AddSecondaryButton(trailing_buttons_container.get());
   AddPrimaryButton(trailing_buttons_container.get());
 #else
   AddPrimaryButton(trailing_buttons_container.get());
   AddSecondaryButton(trailing_buttons_container.get());
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
   if (container->children().empty() &&
       trailing_buttons_container->children().empty()) {
@@ -479,7 +479,7 @@ void PaymentRequestSheetController::AddPrimaryButton(views::View* container) {
 void PaymentRequestSheetController::AddSecondaryButton(views::View* container) {
   if (ShouldShowSecondaryButton()) {
     secondary_button_ = container->AddChildView(
-        views::MdTextButton::Create(this, GetSecondaryButtonLabel()));
+        std::make_unique<views::MdTextButton>(this, GetSecondaryButtonLabel()));
     secondary_button_->set_tag(GetSecondaryButtonTag());
     secondary_button_->SetID(GetSecondaryButtonId());
     secondary_button_->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);

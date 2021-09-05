@@ -4,8 +4,6 @@
 
 #include "base/system/sys_info.h"
 
-#include <ApplicationServices/ApplicationServices.h>
-#include <CoreServices/CoreServices.h>
 #import <Foundation/Foundation.h>
 #include <mach/mach_host.h>
 #include <mach/mach_init.h>
@@ -63,6 +61,19 @@ void SysInfo::OperatingSystemVersionNumbers(int32_t* major_version,
   *major_version = version.majorVersion;
   *minor_version = version.minorVersion;
   *bugfix_version = version.patchVersion;
+
+  // TODO(https://crbug.com/1108832): If an app is built against a pre-macOS
+  // 11.0 SDK, macOS will lie as to what version it is, saying that it is macOS
+  // "10.16" rather than "11.0". The problem is that the "IsOS/IsAtLeastOS/
+  // IsAtMostOS" functions are driven from the Darwin version number, which
+  // isn't lied about, and therefore the values returned by this function and
+  // those functions are inconsistent. Therefore, unlie about these values.
+
+  if (*major_version == 10 && *minor_version >= 16) {
+    *major_version = *minor_version - 5;
+    *minor_version = *bugfix_version;
+    *bugfix_version = 0;
+  }
 }
 
 // static

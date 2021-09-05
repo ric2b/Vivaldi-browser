@@ -2092,7 +2092,8 @@ void AXTree::ComputeSetSizePosInSetAndCache(const AXNode& node,
   // would like it to inherit the SetSize from the kMenuListPopUp it wraps. To
   // do this, we treat the kMenuListPopUp as the ordered_set and eventually
   // assign its SetSize value to the kPopUpButton.
-  if (node.data().role == ax::mojom::Role::kPopUpButton) {
+  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+      node.GetUnignoredChildCount() > 0) {
     // kPopUpButtons are only allowed to contain one kMenuListPopUp.
     // The single element is guaranteed to be a kMenuListPopUp because that is
     // the only item role that matches the ordered set role of kPopUpButton.
@@ -2208,6 +2209,12 @@ void AXTree::ComputeSetSizePosInSetAndCacheHelper(
 }
 
 base::Optional<int> AXTree::GetPosInSet(const AXNode& node) {
+  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+      node.GetUnignoredChildCount() == 0 &&
+      node.HasIntAttribute(ax::mojom::IntAttribute::kPosInSet)) {
+    return node.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet);
+  }
+
   if (node_set_size_pos_in_set_info_map_.find(node.id()) !=
       node_set_size_pos_in_set_info_map_.end()) {
     // If item's id is in the cache, return stored PosInSet value.
@@ -2237,6 +2244,12 @@ base::Optional<int> AXTree::GetPosInSet(const AXNode& node) {
 }
 
 base::Optional<int> AXTree::GetSetSize(const AXNode& node) {
+  if (node.data().role == ax::mojom::Role::kPopUpButton &&
+      node.GetUnignoredChildCount() == 0 &&
+      node.HasIntAttribute(ax::mojom::IntAttribute::kSetSize)) {
+    return node.GetIntAttribute(ax::mojom::IntAttribute::kSetSize);
+  }
+
   if (node_set_size_pos_in_set_info_map_.find(node.id()) !=
       node_set_size_pos_in_set_info_map_.end()) {
     // If item's id is in the cache, return stored SetSize value.
@@ -2261,6 +2274,23 @@ base::Optional<int> AXTree::GetSetSize(const AXNode& node) {
     ordered_set = node.GetOrderedSet();
   if (!ordered_set)
     return base::nullopt;
+
+  // For popup buttons that control a single element, inherit the controlled
+  // item's SetSize. Skip this block if the popup button controls itself.
+  if (node.data().role == ax::mojom::Role::kPopUpButton) {
+    const auto& controls_ids = node.data().GetIntListAttribute(
+        ax::mojom::IntListAttribute::kControlsIds);
+    if (controls_ids.size() == 1 && GetFromId(controls_ids[0]) &&
+        controls_ids[0] != node.id()) {
+      const AXNode& controlled_item = *GetFromId(controls_ids[0]);
+
+      base::Optional<int> controlled_item_set_size =
+          GetSetSize(controlled_item);
+      node_set_size_pos_in_set_info_map_[node.id()].set_size =
+          controlled_item_set_size;
+      return controlled_item_set_size;
+    }
+  }
 
   // Compute, cache, then return.
   ComputeSetSizePosInSetAndCache(node, ordered_set);

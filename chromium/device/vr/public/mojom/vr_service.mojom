@@ -59,8 +59,9 @@ enum XRSessionFeature {
   DOM_OVERLAY = 6,
   HIT_TEST = 7,
   LIGHT_ESTIMATION = 8, // Experimental feature.
-  ANCHORS = 9,  // Experimental feature.
+  ANCHORS = 9,
   CAMERA_ACCESS = 10, // Experimental feature.
+  PLANE_DETECTION = 11, // Experimental feature.
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -284,7 +285,7 @@ struct VREyeParameters {
 };
 
 struct VRStageParameters {
-  gfx.mojom.Transform standing_transform;
+  gfx.mojom.Transform mojo_from_floor;
 
   // If present, indicates that the device supports a bounded reference space
   // (https://immersive-web.github.io/webxr/#xrboundedreferencespace-interface).
@@ -543,12 +544,12 @@ struct XRFrameData {
   VRPose? pose;
   // Time delta from an unspecified origin.
   mojo_base.mojom.TimeDelta time_delta;
-  // The buffer_holder is used for sending data imagery back and forth across
-  // the process boundary. For application with pass through camera, it holds
-  // the camera image to be passed to the renderer. For immersive sessions, it
-  // is the place for the renderer to draw into to pass imagery to the device
-  // for rendering.
+  // The buffer_holder is used for sending imagery data back and forth across
+  // the process boundary.
   gpu.mojom.MailboxHolder? buffer_holder;
+  // The camera_image_buffer_holder is used to send a copy of the camera image
+  // across the process boundary for immersive-ar sessions.
+  gpu.mojom.MailboxHolder? camera_image_buffer_holder;
 
   // Indicates that there has been a significant discontinuity in the mojo space
   // coordinate system, and that poses from this point forward with the same
@@ -837,10 +838,6 @@ interface XRInputSourceButtonListener {
 };
 
 struct XRFrameDataRequestOptions {
-  // Controls whether |XRFrameData.detected_planes| should be populated by the
-  // request to |XRFrameDataProvider.GetFrameData()|.
-  bool include_plane_data;
-
   // Controls whether |XRFrameData.light_estimation_data| should be populated
   // by the request to |XRFrameDataProvider.GetFrameData()|.
   bool include_lighting_estimation_data;

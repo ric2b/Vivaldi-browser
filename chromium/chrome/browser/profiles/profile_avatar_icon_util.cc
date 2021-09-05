@@ -287,6 +287,28 @@ void AvatarImageSource::Draw(gfx::Canvas* canvas) {
   }
 }
 
+class ImageWithBackgroundSource : public gfx::CanvasImageSource {
+ public:
+  ImageWithBackgroundSource(const gfx::ImageSkia& image, SkColor background)
+      : gfx::CanvasImageSource(image.size()),
+        image_(image),
+        background_(background) {}
+
+  ~ImageWithBackgroundSource() override = default;
+
+  // gfx::CanvasImageSource override.
+  void Draw(gfx::Canvas* canvas) override {
+    canvas->DrawColor(background_);
+    canvas->DrawImageInt(image_, 0, 0);
+  }
+
+ private:
+  const gfx::ImageSkia image_;
+  const SkColor background_;
+
+  DISALLOW_COPY_AND_ASSIGN(ImageWithBackgroundSource);
+};
+
 }  // namespace
 
 namespace profiles {
@@ -344,9 +366,9 @@ constexpr size_t kPlaceholderAvatarIndex = 26;
 constexpr size_t kPlaceholderAvatarIndex = 0;
 #endif
 
-gfx::ImageSkia GetGuestAvatar(int size) {
-  return gfx::CreateVectorIcon(kUserAccountAvatarIcon, size,
-                               gfx::kGoogleGrey500);
+ui::ImageModel GetGuestAvatar(int size) {
+  return ui::ImageModel::FromVectorIcon(kUserAccountAvatarIcon,
+                                        gfx::kGoogleGrey500, size);
 }
 
 gfx::Image GetSizedAvatarIcon(const gfx::Image& image,
@@ -404,7 +426,7 @@ gfx::Image GetAvatarIconForTitleBar(const gfx::Image& image,
   return gfx::Image(gfx::ImageSkia(std::move(source), dst_size));
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 gfx::Image GetAvatarIconForNSMenu(const base::FilePath& profile_path) {
   // Always use the low-res, small default avatars in the menu.
   gfx::Image icon;
@@ -473,10 +495,18 @@ bool IsModernAvatarIconIndex(size_t icon_index) {
 }
 
 int GetPlaceholderAvatarIconResourceID() {
+  // TODO(crbug.com/1100835): Replace with the new icon. Consider coloring the
+  // icon (i.e. providing the image through
+  // ProfileAttributesEntry::GetAvatarIcon(), instead) which would require more
+  // refactoring.
   return IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE;
 }
 
 std::string GetPlaceholderAvatarIconUrl() {
+  // TODO(crbug.com/1100835): Replace with the new icon. Consider coloring the
+  // icon (i.e. providing the image through
+  // ProfileAttributesEntry::GetAvatarIcon(), instead) which would require more
+  // refactoring.
   return "chrome://theme/IDR_PROFILE_AVATAR_PLACEHOLDER_LARGE";
 }
 
@@ -680,6 +710,20 @@ const IconResourceInfo* GetDefaultAvatarIconResourceInfo(size_t index) {
   };
 #endif  // VIVALDI_BUILD
   return &resource_info[index];
+}
+
+gfx::Image GetPlaceholderAvatarIconWithColors(SkColor fill_color,
+                                              SkColor stroke_color,
+                                              int size) {
+  const gfx::VectorIcon& person_icon =
+      size >= 40 ? kPersonFilledPaddedLargeIcon : kPersonFilledPaddedSmallIcon;
+  gfx::ImageSkia icon_without_background = gfx::CreateVectorIcon(
+      gfx::IconDescription(person_icon, size, stroke_color));
+  gfx::ImageSkia icon_with_background(
+      std::make_unique<ImageWithBackgroundSource>(icon_without_background,
+                                                  fill_color),
+      gfx::Size(size, size));
+  return gfx::Image(icon_with_background);
 }
 
 int GetDefaultAvatarIconResourceIDAtIndex(size_t index) {

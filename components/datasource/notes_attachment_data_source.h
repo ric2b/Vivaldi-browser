@@ -10,15 +10,9 @@
 
 class NotesAttachmentDataClassHandler : public VivaldiDataClassHandler {
  public:
-  NotesAttachmentDataClassHandler(Profile* profile);
-
-  ~NotesAttachmentDataClassHandler() override;
-
-  void GetData(const std::string& data_id,
+  void GetData(Profile* profile,
+               const std::string& data_id,
                content::URLDataSource::GotDataCallback callback) override;
-
- private:
-  Profile* const profile_;
 };
 
 #endif  // COMPONENTS_DATASOURCE_NOTES_ATTACHMENT_DATA_SOURCE_H_

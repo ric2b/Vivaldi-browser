@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -18,6 +19,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
 #include "chrome/browser/prerender/isolated/prefetched_mainframe_response_container.h"
+#include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -67,6 +69,9 @@ class IsolatedPrerenderTabHelper
 
     // Called when a NoStatePrefetch finishes loading.
     virtual void OnNoStatePrefetchFinished() {}
+
+    // Called when a url's eligiblity checks are done and fully processed.
+    virtual void OnNewEligiblePrefetchStarted() {}
   };
 
   // The various states that a prefetch can go through or terminate with. Used
@@ -224,6 +229,13 @@ class IsolatedPrerenderTabHelper
     base::Optional<base::TimeDelta> probe_latency_;
   };
 
+  // Checks if a |service_worker_context_for_test_| is available, and if not,
+  // returns the real service worker context from the default storage partition.
+  // This is used for passing the |service_worker_context| to
+  // CheckEligibilityOfURL().
+  static content::ServiceWorkerContext* GetServiceWorkerContext(
+      Profile* profile);
+
   // Used to determine if |url| is eligible for isolated prefetching. Also gives
   // a reason in |status| if one is applicable.
   using OnEligibilityResultCallback = base::OnceCallback<void(
@@ -276,6 +288,12 @@ class IsolatedPrerenderTabHelper
 
   network::mojom::NetworkContext* GetIsolatedContextForTesting() const;
 
+  // Sets the service_worker_context_for_test_ with a FakeServiceWorkerContext
+  // for the the purpose of testing.
+  // Used in the SetUp() method in isolated_prerender_tab_helper_unittest.cc.
+  static void SetServiceWorkerContextForTest(
+      content::ServiceWorkerContext* context);
+
  protected:
   // Exposed for testing.
   explicit IsolatedPrerenderTabHelper(content::WebContents* web_contents);
@@ -323,8 +341,11 @@ class IsolatedPrerenderTabHelper
     // prediction.
     std::map<GURL, size_t> original_prediction_ordering_;
 
-    // The url loader that does all the prefetches. Set only when active.
-    std::unique_ptr<network::SimpleURLLoader> url_loader_;
+    // The url loaders that do all the prefetches. Only active loaders are in
+    // this set.
+    std::set<std::unique_ptr<network::SimpleURLLoader>,
+             base::UniquePtrComparator>
+        url_loaders_;
 
     // An ordered list of the URLs to prefetch.
     std::vector<GURL> urls_to_prefetch_;
@@ -377,22 +398,35 @@ class IsolatedPrerenderTabHelper
     scoped_refptr<network::SharedURLLoaderFactory> isolated_url_loader_factory_;
   };
 
+  // Computes the AfterSRPMetrics that would be returned for the next
+  // navigation, when it commits. This method exists to allow the PLM Observer
+  // to get the AfterSRPMetrics if the navigation fails to commit, so that
+  // metrics can be logged anyways. Returns nullptr if the after srp metrics
+  // wouldn't be set on the next commit.
+  std::unique_ptr<IsolatedPrerenderTabHelper::AfterSRPMetrics>
+  ComputeAfterSRPMetricsBeforeCommit(content::NavigationHandle* handle) const;
+
   // A helper method to make it easier to tell when prefetching is already
   // active.
   bool PrefetchingActive() const;
 
-  // Prefetches the front of |urls_to_prefetch_|.
+  // Starts prefetching the next eligible links.
   void Prefetch();
 
-  // Called when |url_loader_| encounters a redirect.
-  void OnPrefetchRedirect(const GURL& original_url,
+  // Helper method for |Prefetch| which starts a single prefetch.
+  void StartSinglePrefetch();
+
+  // Called when |loader| encounters a redirect.
+  void OnPrefetchRedirect(network::SimpleURLLoader* loader,
+                          const GURL& original_url,
                           const net::RedirectInfo& redirect_info,
                           const network::mojom::URLResponseHead& response_head,
                           std::vector<std::string>* removed_headers);
 
-  // Called when |url_loader_| completes. |url| is the url that was requested
+  // Called when |loader| completes. |url| is the url that was requested
   // and |key| is the temporary NIK used during the request.
-  void OnPrefetchComplete(const GURL& url,
+  void OnPrefetchComplete(network::SimpleURLLoader* loader,
+                          const GURL& url,
                           const net::IsolationInfo& isolation_info,
                           std::unique_ptr<std::string> response_body);
 

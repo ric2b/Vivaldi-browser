@@ -250,7 +250,7 @@ class PlatformAppWithFileBrowserTest : public PlatformAppBrowserTest {
     params.current_directory = test_data_dir_;
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(params);
+        ->LaunchAppWithParams(params);
 
     if (!catcher.GetNextResult()) {
       message_ = catcher.message();
@@ -473,7 +473,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
 }
 
 // Failing on some Win and Linux buildbots.  See crbug.com/354425.
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_Iframes DISABLED_Iframes
 #else
 #define MAYBE_Iframes Iframes
@@ -592,12 +592,12 @@ IN_PROC_BROWSER_TEST_F(PlatformAppWithFileBrowserTest,
       << message_;
 }
 
-// Tests that launch data is sent through to a whitelisted extension if the file
-// extension matches.
+// Tests that launch data is sent through to an allowlisted extension if the
+// file extension matches.
 IN_PROC_BROWSER_TEST_F(PlatformAppWithFileBrowserTest,
-                       LaunchWhiteListedExtensionWithFile) {
+                       LaunchAllowListedExtensionWithFile) {
   ASSERT_TRUE(RunPlatformAppTestWithFileInTestDataDir(
-      "platform_apps/launch_whitelisted_ext_with_file", kTestFilePath))
+      "platform_apps/launch_allowlisted_ext_with_file", kTestFilePath))
       << message_;
 }
 
@@ -791,7 +791,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, MutationEventsDisabled) {
 // This appears to be unreliable.
 // TODO(stevenjb): Investigate and enable
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS) || defined(OS_WIN) || \
-    defined(OS_MACOSX)
+    defined(OS_MAC)
 #define MAYBE_AppWindowRestoreState DISABLED_AppWindowRestoreState
 #else
 #define MAYBE_AppWindowRestoreState AppWindowRestoreState
@@ -891,7 +891,7 @@ void PlatformAppDevToolsBrowserTest::RunTestWithDevTools(const char* name,
         content::NotificationService::AllSources());
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(apps::AppLaunchParams(
+        ->LaunchAppWithParams(apps::AppLaunchParams(
             extension->id(), LaunchContainer::kLaunchContainerNone,
             WindowOpenDisposition::NEW_WINDOW,
             apps::mojom::AppLaunchSource::kSourceTest));
@@ -918,7 +918,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppDevToolsBrowserTest, ReOpenedWithURL) {
 
 // Test that showing a permission request as a constrained window works and is
 // correctly parented.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_ConstrainedWindowRequest DISABLED_ConstrainedWindowRequest
 #else
 // TODO(sail): Enable this on other platforms once http://crbug.com/95455 is
@@ -1040,7 +1040,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
   ExtensionTestMessageListener launched_listener("Launched", false);
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), LaunchContainer::kLaunchContainerNone,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceTest));
@@ -1065,7 +1065,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, PRE_ComponentAppBackgroundPage) {
   ExtensionTestMessageListener launched_listener("Launched", false);
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), LaunchContainer::kLaunchContainerNone,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceTest));
@@ -1106,7 +1106,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, ComponentAppBackgroundPage) {
   ExtensionTestMessageListener launched_listener("Launched", false);
   apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), LaunchContainer::kLaunchContainerNone,
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::AppLaunchSource::kSourceTest));
@@ -1134,7 +1134,7 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
     ExtensionTestMessageListener launched_listener("Launched", false);
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(apps::AppLaunchParams(
+        ->LaunchAppWithParams(apps::AppLaunchParams(
             extension->id(), LaunchContainer::kLaunchContainerNone,
             WindowOpenDisposition::NEW_WINDOW,
             apps::mojom::AppLaunchSource::kSourceTest));
@@ -1227,7 +1227,7 @@ class PlatformAppIncognitoBrowserTest : public PlatformAppBrowserTest,
 };
 
 // Seen to fail repeatedly on CrOS; crbug.com/774011.
-#ifndef OS_CHROMEOS
+#if !defined(OS_CHROMEOS)
 #define MAYBE_IncognitoComponentApp IncognitoComponentApp
 #else
 #define MAYBE_IncognitoComponentApp DISABLED_IncognitoComponentApp

@@ -149,6 +149,11 @@ class CONTENT_EXPORT RenderFrameProxyHost
   const mojo::AssociatedRemote<blink::mojom::RemoteFrame>&
   GetAssociatedRemoteFrame();
 
+  // Returns associated remote for the blink::mojom::RemoteMainFrame Mojo
+  // interface.
+  const mojo::AssociatedRemote<blink::mojom::RemoteMainFrame>&
+  GetAssociatedRemoteMainFrame();
+
   // blink::mojom::RemoteFrameHost
   void SetInheritedEffectiveTouchAction(cc::TouchAction touch_action) override;
   void UpdateRenderThrottlingStatus(bool is_throttled,
@@ -169,9 +174,13 @@ class CONTENT_EXPORT RenderFrameProxyHost
       const base::string16& source_origin,
       const base::string16& target_origin,
       blink::TransferableMessage message) override;
+  void PrintCrossProcessSubframe(const gfx::Rect& rect,
+                                 int document_cookie) override;
+  void Detach() override;
 
   // blink::mojom::RemoteMainFrameHost overrides:
   void FocusPage() override;
+  void RouteCloseEvent() override;
 
   // mojom::RenderFrameProxyHost:
   void OpenURL(mojom::OpenURLParamsPtr params) override;
@@ -197,10 +206,6 @@ class CONTENT_EXPORT RenderFrameProxyHost
  private:
   // The interceptor needs access to frame_host_receiver_for_testing().
   friend class RouteMessageEventInterceptor;
-
-  // IPC Message handlers.
-  void OnDetach();
-  void OnPrintCrossProcessSubframe(const gfx::Rect& rect, int document_cookie);
 
   // IPC::Listener
   void OnAssociatedInterfaceRequest(
@@ -257,6 +262,10 @@ class CONTENT_EXPORT RenderFrameProxyHost
 
   // Holder of Mojo connection with the Frame service in Blink.
   mojo::AssociatedRemote<blink::mojom::RemoteFrame> remote_frame_;
+
+  // Holder of Mojo connection with the RemoteMainFrame in Blink. This remote
+  // will be valid when the frame is the active main frame.
+  mojo::AssociatedRemote<blink::mojom::RemoteMainFrame> remote_main_frame_;
 
   // Holder of Mojo connection with the content::mojom::RenderFrameProxy.
   mojo::AssociatedRemote<mojom::RenderFrameProxy> render_frame_proxy_;

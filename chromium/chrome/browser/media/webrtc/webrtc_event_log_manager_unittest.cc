@@ -175,8 +175,10 @@ bool CreateRemoteBoundLogFile(const base::FilePath& dir,
 class NullWebRtcEventLogUploader : public WebRtcEventLogUploader {
  public:
   NullWebRtcEventLogUploader(const WebRtcLogFileInfo& log_file,
+                             UploadResultCallback callback,
                              bool cancellation_expected)
       : log_file_(log_file),
+        callback_(std::move(callback)),
         cancellation_expected_(cancellation_expected),
         was_cancelled_(false) {}
 
@@ -191,6 +193,11 @@ class NullWebRtcEventLogUploader : public WebRtcEventLogUploader {
   void Cancel() override {
     EXPECT_TRUE(cancellation_expected_);
     was_cancelled_ = true;
+    if (callback_) {
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(std::move(callback_), log_file_.path, false));
+    }
   }
 
   class Factory : public WebRtcEventLogUploader::Factory {
@@ -214,7 +221,7 @@ class NullWebRtcEventLogUploader : public WebRtcEventLogUploader {
         EXPECT_LE(++instance_count_, expected_instance_count_.value());
       }
       return std::make_unique<NullWebRtcEventLogUploader>(
-          log_file, cancellation_expected_);
+          log_file, std::move(callback), cancellation_expected_);
     }
 
    private:
@@ -225,6 +232,7 @@ class NullWebRtcEventLogUploader : public WebRtcEventLogUploader {
 
  private:
   const WebRtcLogFileInfo log_file_;
+  UploadResultCallback callback_;
   const bool cancellation_expected_;
   bool was_cancelled_;
 };
@@ -663,8 +671,8 @@ class WebRtcEventLogManagerTestBase : public ::testing::Test {
     if (has_device_level_policies) {
       policy_map.Set("test-policy", policy::POLICY_LEVEL_MANDATORY,
                      policy::POLICY_SCOPE_MACHINE,
-                     policy::POLICY_SOURCE_PLATFORM,
-                     std::make_unique<base::Value>("test"), nullptr);
+                     policy::POLICY_SOURCE_PLATFORM, base::Value("test"),
+                     nullptr);
     }
     provider_.UpdateChromePolicy(policy_map);
 #else
@@ -2592,7 +2600,7 @@ TEST_F(WebRtcEventLogManagerTest,
   // Unload the profile, delete its remove logs directory, and remove write
   // permissions from it, thereby preventing it from being created again.
   UnloadMainTestProfile();
-  ASSERT_TRUE(base::DeleteFileRecursively(remote_logs_path));
+  ASSERT_TRUE(base::DeletePathRecursively(remote_logs_path));
   RemoveWritePermissions(browser_context_dir);
 
   // Graceful handling by BrowserContext::EnableForBrowserContext, despite

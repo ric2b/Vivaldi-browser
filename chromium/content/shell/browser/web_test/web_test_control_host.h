@@ -42,7 +42,6 @@ class SkBitmap;
 
 namespace content {
 class DevToolsProtocolTestBindings;
-class JavaScriptDialogManager;
 class RenderFrameHost;
 class Shell;
 class WebTestBluetoothChooserFactory;
@@ -127,13 +126,11 @@ class WebTestControlHost : public WebContentsObserver,
       int sender_process_host_id,
       const base::DictionaryValue& changed_web_test_runtime_flags);
 
-  void DidOpenNewWindowOrTab(WebContents* web_contents);
-
-  // Creates a JavascriptDialogManager to be used in web tests.
-  std::unique_ptr<JavaScriptDialogManager> CreateJavaScriptDialogManager();
+  // Allows WebTestControlHost to track all WebContents created by tests, either
+  // by Javascript or by C++ code in the browser.
+  void DidCreateOrAttachWebContents(WebContents* web_contents);
 
   void SetTempPath(const base::FilePath& temp_path);
-  void RendererUnresponsive();
   void OverrideWebkitPrefs(WebPreferences* prefs);
   void OpenURL(const GURL& url);
   bool IsMainWindow(WebContents* web_contents) const;
@@ -176,9 +173,10 @@ class WebTestControlHost : public WebContentsObserver,
   }
 
   // WebTestControlHost implementation.
-  void InitiateLayoutDump() override;
-  void InitiateCaptureDump(bool capture_navigation_history,
-                           bool capture_pixels) override;
+  void InitiateCaptureDump(
+      mojom::WebTestRendererDumpResultPtr renderer_dump_result,
+      bool capture_navigation_history,
+      bool capture_pixels) override;
   void TestFinishedInSecondaryRenderer() override;
   void ResetRendererAfterWebTestDone() override;
   void PrintMessageToStderr(const std::string& message) override;
@@ -192,14 +190,31 @@ class WebTestControlHost : public WebContentsObserver,
   void SendBluetoothManualChooserEvent(const std::string& event,
                                        const std::string& argument) override;
   void SetBluetoothManualChooser(bool enable) override;
-  void GetBluetoothManualChooserEvents() override;
+  void GetBluetoothManualChooserEvents(
+      GetBluetoothManualChooserEventsCallback reply) override;
   void SetPopupBlockingEnabled(bool block_popups) override;
   void LoadURLForFrame(const GURL& url, const std::string& frame_name) override;
   void SetScreenOrientationChanged() override;
+  void SetPermission(const std::string& name,
+                     blink::mojom::PermissionStatus status,
+                     const GURL& origin,
+                     const GURL& embedding_origin) override;
   void BlockThirdPartyCookies(bool block) override;
-  void GetWritableDirectory(GetWritableDirectoryCallback callback) override;
+  void GetWritableDirectory(GetWritableDirectoryCallback reply) override;
   void SetFilePathForMockFileDialog(const base::FilePath& path) override;
   void FocusDevtoolsSecondaryWindow() override;
+  void SetTrustTokenKeyCommitments(const std::string& raw_commitments,
+                                   base::OnceClosure callback) override;
+  void ClearTrustTokenState(base::OnceClosure callback) override;
+  void SetDatabaseQuota(int32_t quota) override;
+  void ClearAllDatabases() override;
+  void SimulateWebNotificationClick(
+      const std::string& title,
+      int32_t action_index,
+      const base::Optional<base::string16>& reply) override;
+  void SimulateWebNotificationClose(const std::string& title,
+                                    bool by_user) override;
+  void SimulateWebContentIndexDelete(const std::string& id) override;
 
  private:
   enum TestPhase { BETWEEN_TESTS, DURING_TEST, CLEAN_UP };
@@ -242,7 +257,6 @@ class WebTestControlHost : public WebContentsObserver,
                            const LeakDetector::LeakDetectionReport& report);
 
   void OnCleanupFinished();
-  void OnCaptureDumpCompleted(mojom::WebTestDumpPtr dump);
   void OnPixelDumpCaptured(const SkBitmap& snapshot);
   void ReportResults();
   void EnqueueSurfaceCopyRequest();
@@ -269,7 +283,7 @@ class WebTestControlHost : public WebContentsObserver,
   void CompositeNodeQueueThen(base::OnceCallback<void()> callback);
   void BuildDepthFirstQueue(Node* node);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Bypasses system APIs to force a resize on the RenderWidgetHostView when in
   // headless web tests.
   static void PlatformResizeWindowMac(Shell* shell, const gfx::Size& size);
@@ -316,11 +330,6 @@ class WebTestControlHost : public WebContentsObserver,
 
   std::unique_ptr<WebTestBluetoothChooserFactory> bluetooth_chooser_factory_;
 
-  // Map from frame_tree_node_id into frame-specific dumps.
-  std::map<int, std::string> frame_to_layout_dump_map_;
-  // Number of WebTestRenderFrame.DumpFrameLayout responses we are waiting for.
-  int pending_layout_dumps_;
-
   // Observe windows opened by tests.
   base::flat_map<WebContents*, std::unique_ptr<WebTestWindowObserver>>
       test_opened_window_observers_;
@@ -337,17 +346,22 @@ class WebTestControlHost : public WebContentsObserver,
   // renderer created while test is in progress).
   base::DictionaryValue accumulated_web_test_runtime_flags_changes_;
 
+  mojom::WebTestRendererDumpResultPtr renderer_dump_result_;
   std::string navigation_history_dump_;
   base::Optional<SkBitmap> pixel_dump_;
+  base::Optional<std::string> layout_dump_;
   std::string actual_pixel_hash_;
-  mojom::WebTestDumpPtr main_frame_dump_;
   // By default a test that opens other windows will have them closed at the end
   // of the test before checking for leaks. It may specify that it has closed
   // any windows it opened, and thus look for leaks from them with this flag.
   bool check_for_leaked_windows_ = false;
   bool waiting_for_pixel_results_ = false;
-  bool waiting_for_main_frame_dump_ = false;
+  int waiting_for_layout_dumps_ = 0;
   int waiting_for_reset_done_ = 0;
+
+  // Map from frame_tree_node_id into frame-specific dumps while collecting
+  // text dumps from all frames, before stitching them together.
+  std::map<int, std::string> frame_to_layout_dump_map_;
 
   std::vector<std::unique_ptr<Node>> composite_all_frames_node_storage_;
   std::queue<Node*> composite_all_frames_node_queue_;

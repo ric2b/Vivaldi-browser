@@ -20,10 +20,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "net/cookies/cookie_monster.h"
-#include "net/cookies/cookie_store.h"
-#include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_context_getter.h"
 
 using base::UserMetricsAction;
 
@@ -120,9 +116,9 @@ void LoginPerformer::OnOldEncryptionDetected(const UserContext& user_context,
 ////////////////////////////////////////////////////////////////////////////////
 // LoginPerformer, public:
 
-void LoginPerformer::NotifyWhitelistCheckFailure() {
+void LoginPerformer::NotifyAllowlistCheckFailure() {
   if (delegate_)
-    delegate_->WhiteListCheckFailed(
+    delegate_->AllowlistCheckFailed(
         user_context_.GetAccountId().GetUserEmail());
   else
     NOTREACHED();
@@ -146,8 +142,8 @@ void LoginPerformer::DoPerformLogin(const UserContext& user_context,
   bool wildcard_match = false;
 
   const AccountId& account_id = user_context.GetAccountId();
-  if (!IsUserWhitelisted(account_id, &wildcard_match)) {
-    NotifyWhitelistCheckFailure();
+  if (!IsUserAllowlisted(account_id, &wildcard_match)) {
+    NotifyAllowlistCheckFailure();
     return;
   }
 
@@ -156,11 +152,11 @@ void LoginPerformer::DoPerformLogin(const UserContext& user_context,
 
   switch (auth_mode_) {
     case AuthorizationMode::kExternal: {
-      RunOnlineWhitelistCheck(
+      RunOnlineAllowlistCheck(
           account_id, wildcard_match, user_context.GetRefreshToken(),
           base::BindOnce(&LoginPerformer::StartLoginCompletion,
                          weak_factory_.GetWeakPtr()),
-          base::BindOnce(&LoginPerformer::NotifyWhitelistCheckFailure,
+          base::BindOnce(&LoginPerformer::NotifyAllowlistCheckFailure,
                          weak_factory_.GetWeakPtr()));
       break;
     }
@@ -193,7 +189,7 @@ void LoginPerformer::TrustedLoginAsSupervisedUser(
     const UserContext& user_context) {
   if (!AreSupervisedUsersAllowed()) {
     LOG(ERROR) << "Login attempt of supervised user detected.";
-    delegate_->WhiteListCheckFailed(user_context.GetAccountId().GetUserEmail());
+    delegate_->AllowlistCheckFailed(user_context.GetAccountId().GetUserEmail());
     return;
   }
 

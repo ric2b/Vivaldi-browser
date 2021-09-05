@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,7 +19,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -98,32 +99,22 @@ public class AutofillPopupWithKeyboardTest {
         DOMUtils.clickNode(webContentsRef.get(), "fn");
 
         // Wait until the keyboard is showing.
-        CriteriaHelper.pollUiThread(new Criteria("Keyboard was never shown.") {
-            @Override
-            public boolean isSatisfied() {
-                return mActivityTestRule.getKeyboardDelegate().isKeyboardShowing(
-                        mActivityTestRule.getActivity(),
-                        mActivityTestRule.getActivity().getActivityTab().getContentView());
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> {
+            return mActivityTestRule.getKeyboardDelegate().isKeyboardShowing(
+                    mActivityTestRule.getActivity(),
+                    mActivityTestRule.getActivity().getActivityTab().getContentView());
+        }, "Keyboard was never shown.");
 
         // Verify that the autofill popup is showing.
-        CriteriaHelper.pollUiThread(
-                new Criteria("Autofill Popup anchor view was never added.") {
-                    @Override
-                    public boolean isSatisfied() {
-                        return viewRef.get().findViewById(R.id.dropdown_popup_window) != null;
-                    }
-                });
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat("Autofill Popup anchor view was never added.",
+                    viewRef.get().findViewById(R.id.dropdown_popup_window),
+                    Matchers.notNullValue());
+        });
         Object popupObject = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> viewRef.get().findViewById(R.id.dropdown_popup_window).getTag());
         Assert.assertTrue(popupObject instanceof DropdownPopupWindowInterface);
         final DropdownPopupWindowInterface popup = (DropdownPopupWindowInterface) popupObject;
-        CriteriaHelper.pollUiThread(new Criteria("Autofill Popup was never shown.") {
-            @Override
-            public boolean isSatisfied() {
-                return popup.isShowing();
-            }
-        });
+        CriteriaHelper.pollUiThread(() -> popup.isShowing(), "Autofill Popup was never shown.");
     }
 }

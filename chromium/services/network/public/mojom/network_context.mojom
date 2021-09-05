@@ -441,9 +441,6 @@ struct NetworkContextParams {
   // policy.
   array<string> hsts_policy_bypass_list;
 
-  // Extra CORS safelisted request headers names.
-  array<string> cors_extra_safelisted_request_header_names;
-
   // Specifies the CORS mode.
   //   kDefault - Decided by base::Feature
   //   kEnable  - Enable CORS in Network Service (aka OOR-CORS)
@@ -574,16 +571,35 @@ struct URLLoaderFactoryOverride {
   bool skip_cors_enabled_scheme_check = false;
 };
 
+// How to treat private network requests.
+//
+// Private network requests are any requests to a resource served by a
+// non-public IP address.
+//
+// See the CORS-RFC1918 spec for details: https://wicg.github.io/cors-rfc1918.
+enum PrivateNetworkRequestPolicy {
+  // Allow all requests.
+  kAllow,
+
+  // Forbid requests to more-private address spaces than that of the initiator,
+  // when the initiator is not in a secure context.
+  kBlockFromInsecureToMorePrivate,
+};
+
 struct ClientSecurityState {
   // https://mikewest.github.io/corpp/#integration-html
   // https://mikewest.github.io/corpp/#initialize-embedder-policy-for-global
   CrossOriginEmbedderPolicy cross_origin_embedder_policy;
 
   // Whether the initiator of the requests is in a web secure context.
+  // See: https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts
   bool is_web_secure_context = false;
 
   // The initiator's IP AddressSpace.
-  IPAddressSpace ip_address_space = IPAddressSpace.kUnknown;
+  IPAddressSpace ip_address_space = kUnknown;
+
+  // The policy to apply to private network requests.
+  PrivateNetworkRequestPolicy private_network_request_policy = kAllow;
 };
 
 // Whether to forbid all Trust Tokens redemption and signing operations
@@ -598,11 +614,14 @@ struct URLLoaderFactoryParams {
   // Set to kBrowserProcessId to indicate the browser process.
   int32 process_id = kInvalidProcessId;
 
-  // If specified, then |request_initiator_site_lock| locks
+  // If specified, then |request_initiator_origin_lock| locks
   // |ResourceRequest::request_initiator| to the specified origin.
-  // TODO(lukasza): https://crbug.com/891872: 1) Make this non-optional,
-  // 2) Make this an *origin* lock (rather than a *site* lock).
-  url.mojom.Origin? request_initiator_site_lock;
+  //
+  // SECURITY NOTE: |request_initiator_origin_lock| should be present in all
+  // factories that may be vended to a Renderer process.
+  // |request_initiator_origin_lock| may be missing only in factories used by
+  // the Browser process.
+  url.mojom.Origin? request_initiator_origin_lock;
 
   // Cross-origin read blocking (CORB) configuration.
   bool is_corb_enabled = true;
@@ -844,6 +863,10 @@ interface NetworkContextClient {
   // Notification that a trust anchor was used for the given user.
   [EnableIf=is_chromeos]
   OnTrustAnchorUsed();
+
+  // Notification that a report was enqueued in the SCT auditing cache.
+  [EnableIf=is_ct_supported]
+  OnSCTReportReady(string cache_key);
 };
 
 // Represents a distinct context for making network requests, with its own
@@ -1183,6 +1206,11 @@ interface NetworkContext {
   // performance impact because of the extra process hops, so use should be
   // minimized.
   //
+  // Requests from a system context should set |process_id| to
+  // |kBrowserProcessId|. In that case |render_frame_id| MUST be zero. These
+  // values will still be passed to |OnSSLCertificateError| as needed but no
+  // throttling will be performed for such WebSockets.
+  //
   // Detect mojo connection errors on |handshake_client| until the connection
   // is established.
   // Do *NOT* interpret mojo connection errors on |auth_handler| and
@@ -1199,6 +1227,7 @@ interface NetworkContext {
         int32 render_frame_id,
         url.mojom.Origin origin,
         uint32 options,
+        MutableNetworkTrafficAnnotationTag traffic_annotation,
         pending_remote<WebSocketHandshakeClient> handshake_client,
         pending_remote<AuthenticationHandler>? auth_handler,
         pending_remote<TrustedHeaderClient>? header_client);
@@ -1322,11 +1351,6 @@ interface NetworkContext {
       url.mojom.Origin source_origin, array<CorsOriginPattern> allow_patterns,
       array<CorsOriginPattern> block_patterns) => ();
 
-  // Sets extra CORS safelisted request headers names dynamically. Headers need
-  // to be in lower case.
-  SetCorsExtraSafelistedRequestHeaderNames(
-      array<string> cors_extra_safelisted_request_header_names);
-
   // Deletes any dynamic data stored for |host| from the transport
   // security state. Returns true iff an entry was deleted.
   // See net::TransportSecurityState::DeleteDynamicDataForHost for more detail.
@@ -1376,6 +1400,16 @@ interface NetworkContext {
       NetworkIsolationKey network_isolation_key)
       => (AuthCredentials? credentials);
 
+  // Looks up the proxy authentication credentials associated with
+  // |proxy_server|, |auth_scheme| and |realm| in the HttpAuthCache.
+  // |auth_scheme| is the authentication scheme of the challenge and it's
+  // specified as a case-insensitive string. Unlike server credentials, proxy
+  // credentials are not keyed on NetworkIsolationKey.
+  [EnableIf=is_chromeos]
+  LookupProxyAuthCredentials(proxy_resolver.mojom.ProxyServer proxy_server,
+      string auth_scheme, string realm)
+      => (AuthCredentials? credentials);
+
   [Sync]
   // Enables the checking of static PKP records.
   EnableStaticKeyPinningForTesting() => ();
@@ -1400,4 +1434,8 @@ interface NetworkContext {
   // Gets the OriginPolicyManager associated with this network context.
   GetOriginPolicyManager(
       pending_receiver<OriginPolicyManager> origin_policy_manager);
+
+  // Set whether SCT auditing is enabled for this NetworkContext.
+  [EnableIf=is_ct_supported]
+  SetSCTAuditingEnabled(bool enabled);
 };

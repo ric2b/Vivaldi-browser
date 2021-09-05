@@ -4,6 +4,7 @@
 
 #include "cc/trees/ukm_manager.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/time/time.h"
@@ -65,7 +66,7 @@ const char kVizBreakdownSwapStartToSwapEnd[] =
 const char kVizBreakdownSwapEndToPresentationCompositorFrame[] =
     "SubmitCompositorFrameToPresentationCompositorFrame."
     "SwapEndToPresentationCompositorFrame";
-const char kTotalLatencyToSwapEnd[] = "TotalLatencyToSwapEnd";
+const char kTotalLatencyToSwapBegin[] = "TotalLatencyToSwapBegin";
 const char kTotalLatency[] = "TotalLatency";
 
 // Names of frame sequence types use in compositor latency UKM metrics (see
@@ -74,6 +75,7 @@ const char kCompositorAnimation[] = "CompositorAnimation";
 const char kMainThreadAnimation[] = "MainThreadAnimation";
 const char kPinchZoom[] = "PinchZoom";
 const char kRAF[] = "RAF";
+const char kScrollbarScroll[] = "ScrollbarScroll";
 const char kTouchScroll[] = "TouchScroll";
 const char kUniversal[] = "Universal";
 const char kVideo[] = "Video";
@@ -261,6 +263,8 @@ TEST_P(UkmManagerCompositorLatencyTest, CompositorLatency) {
 
   CompositorFrameReporter::ActiveTrackers active_trackers;
   active_trackers.set(
+      static_cast<size_t>(FrameSequenceTrackerType::kScrollbarScroll));
+  active_trackers.set(
       static_cast<size_t>(FrameSequenceTrackerType::kTouchScroll));
   active_trackers.set(
       static_cast<size_t>(FrameSequenceTrackerType::kCompositorAnimation));
@@ -336,6 +340,7 @@ TEST_P(UkmManagerCompositorLatencyTest, CompositorLatency) {
 
   test_ukm_recorder_->ExpectEntryMetric(entry, kCompositorAnimation, true);
   test_ukm_recorder_->ExpectEntryMetric(entry, kTouchScroll, true);
+  test_ukm_recorder_->ExpectEntryMetric(entry, kScrollbarScroll, true);
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kMainThreadAnimation));
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kPinchZoom));
   EXPECT_FALSE(test_ukm_recorder_->EntryHasMetric(entry, kRAF));
@@ -379,7 +384,7 @@ TEST_F(UkmManagerTest, EventLatency) {
   viz_breakdown.presentation_feedback.timestamp =
       (now += base::TimeDelta::FromMicroseconds(5));
 
-  const base::TimeTicks swap_end_time = viz_breakdown.swap_timings.swap_end;
+  const base::TimeTicks swap_start_time = viz_breakdown.swap_timings.swap_start;
   const base::TimeTicks present_time =
       viz_breakdown.presentation_feedback.timestamp;
 
@@ -445,8 +450,8 @@ TEST_F(UkmManagerTest, EventLatency) {
         entry, kSubmitCompositorFrameToPresentationCompositorFrame,
         (present_time - submit_time).InMicroseconds());
     test_ukm_recorder_->ExpectEntryMetric(
-        entry, kTotalLatencyToSwapEnd,
-        (swap_end_time - event_time).InMicroseconds());
+        entry, kTotalLatencyToSwapBegin,
+        (swap_start_time - event_time).InMicroseconds());
     test_ukm_recorder_->ExpectEntryMetric(
         entry, kTotalLatency, (present_time - event_time).InMicroseconds());
   }

@@ -5,6 +5,7 @@
 #include "media/gpu/test/video.h"
 
 #include <memory>
+#include <numeric>
 #include <utility>
 
 #include "base/bind.h"
@@ -20,12 +21,15 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/media.h"
 #include "media/base/video_decoder_config.h"
+#include "media/base/video_frame.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_demuxer.h"
 #include "media/filters/in_memory_url_protocol.h"
 #include "media/filters/vpx_video_decoder.h"
 #include "media/gpu/macros.h"
+#include "media/gpu/test/video_frame_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/libyuv/include/libyuv/convert.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
 
 namespace media {
@@ -44,7 +48,54 @@ Video::Video(const base::FilePath& file_path,
 
 Video::~Video() = default;
 
-bool Video::Load() {
+std::unique_ptr<Video> Video::ConvertToNV12() const {
+  LOG_ASSERT(IsLoaded()) << "The source video is not loaded";
+  LOG_ASSERT(pixel_format_ == VideoPixelFormat::PIXEL_FORMAT_I420)
+      << "The pixel format of source video is not I420";
+  auto new_video = std::make_unique<Video>(file_path_, metadata_file_path_);
+  new_video->frame_checksums_ = frame_checksums_;
+  new_video->thumbnail_checksums_ = thumbnail_checksums_;
+  new_video->profile_ = profile_;
+  new_video->codec_ = codec_;
+  new_video->frame_rate_ = frame_rate_;
+  new_video->num_frames_ = num_frames_;
+  new_video->num_fragments_ = num_fragments_;
+  new_video->resolution_ = resolution_;
+  new_video->pixel_format_ = PIXEL_FORMAT_NV12;
+
+  // Convert I420 To NV12.
+  const auto i420_layout = CreateVideoFrameLayout(
+      PIXEL_FORMAT_I420, resolution_, 1u /* alignment */);
+  const auto nv12_layout =
+      CreateVideoFrameLayout(PIXEL_FORMAT_NV12, resolution_, 1u /* alignment*/);
+  LOG_ASSERT(i420_layout && nv12_layout) << "Failed creating VideoFrameLayout";
+  const size_t i420_frame_size =
+      i420_layout->planes().back().offset + i420_layout->planes().back().size;
+  const size_t nv12_frame_size =
+      nv12_layout->planes().back().offset + nv12_layout->planes().back().size;
+  LOG_ASSERT(i420_frame_size * num_frames_ == data_.size())
+      << "Unexpected data size";
+  std::vector<uint8_t> new_data(nv12_frame_size * num_frames_);
+  for (size_t i = 0; i < num_frames_; i++) {
+    const uint8_t* src_plane = data_.data() + (i * i420_frame_size);
+    uint8_t* dst_plane = new_data.data() + (i * nv12_frame_size);
+    libyuv::I420ToNV12(src_plane + i420_layout->planes()[0].offset,
+                       i420_layout->planes()[0].stride,
+                       src_plane + i420_layout->planes()[1].offset,
+                       i420_layout->planes()[1].stride,
+                       src_plane + i420_layout->planes()[2].offset,
+                       i420_layout->planes()[2].stride,
+                       dst_plane + nv12_layout->planes()[0].offset,
+                       nv12_layout->planes()[0].stride,
+                       dst_plane + nv12_layout->planes()[1].offset,
+                       nv12_layout->planes()[1].stride, resolution_.width(),
+                       resolution_.height());
+  }
+  new_video->data_ = std::move(new_data);
+  return new_video;
+}
+
+bool Video::Load(const size_t max_frames) {
   // TODO(dstaessens@) Investigate reusing existing infrastructure such as
   //                   DecoderBuffer.
   DCHECK(!file_path_.empty());
@@ -78,6 +129,33 @@ bool Video::Load() {
     return false;
   }
 
+  if (num_frames_ <= max_frames) {
+    return true;
+  }
+
+  DLOG(WARNING) << "Limiting video length to " << max_frames << " frames";
+  // Limits the video length to the specified number of frames.
+  if (pixel_format_ == VideoPixelFormat::PIXEL_FORMAT_UNKNOWN) {
+    // Compressed data. The unused frames are dropped in Decode().
+    num_frames_ = max_frames;
+    return true;
+  }
+
+  // Limits the video length here if the file is YUV.
+  size_t video_frame_size = 0;
+  for (size_t i = 0; i < VideoFrame::NumPlanes(pixel_format_); ++i) {
+    video_frame_size +=
+        VideoFrame::RowBytes(i, pixel_format_, resolution_.width()) *
+        VideoFrame::Rows(i, pixel_format_, resolution_.height());
+  }
+  if (video_frame_size * num_frames_ != static_cast<size_t>(file_size)) {
+    LOG(ERROR) << "Invalid file. file_size=" << file_size
+               << ", expected file size=" << video_frame_size * num_frames_
+               << ", video_frame_size=" << video_frame_size
+               << ", num_frames_=" << num_frames_;
+  }
+  num_frames_ = max_frames;
+  data_.resize(video_frame_size * max_frames);
   return true;
 }
 
@@ -101,7 +179,7 @@ bool Video::Decode() {
   decode_thread.task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&Video::DecodeTask, std::move(data_), resolution_,
-                     &decompressed_data, &success, &done));
+                     num_frames_, &decompressed_data, &success, &done));
   done.Wait();
   decode_thread.Stop();
 
@@ -353,6 +431,7 @@ base::Optional<base::FilePath> Video::ResolveFilePath(
 // static
 void Video::DecodeTask(const std::vector<uint8_t> data,
                        const gfx::Size& resolution,
+                       const size_t num_frames,
                        std::vector<uint8_t>* decompressed_data,
                        bool* success,
                        base::WaitableEvent* done) {
@@ -403,7 +482,9 @@ void Video::DecodeTask(const std::vector<uint8_t> data,
 
   // Start decoding and wait until all frames are ready.
   AVPacket packet = {};
-  while (av_read_frame(glue.format_context(), &packet) >= 0) {
+  size_t num_decoded_frames = 0;
+  while (av_read_frame(glue.format_context(), &packet) >= 0 &&
+         num_decoded_frames < num_frames) {
     if (packet.stream_index == stream_index) {
       media::VideoDecoder::DecodeCB decode_cb = base::BindOnce(
           [](bool* success, media::DecodeStatus status) {
@@ -414,6 +495,7 @@ void Video::DecodeTask(const std::vector<uint8_t> data,
                      std::move(decode_cb));
       if (!*success)
         break;
+      num_decoded_frames++;
     }
     av_packet_unref(&packet);
   }

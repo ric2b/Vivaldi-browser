@@ -123,6 +123,22 @@ constexpr const char* GetStageName(int stage_type_index,
         kVizBreakdownInitialIndex:
       return "SubmitCompositorFrameToPresentationCompositorFrame."
              "SwapEndToPresentationCompositorFrame";
+    case static_cast<int>(VizBreakdown::kSwapStartToBufferAvailable) +
+        kVizBreakdownInitialIndex:
+      return "SubmitCompositorFrameToPresentationCompositorFrame."
+             "SwapStartToBufferAvailable";
+    case static_cast<int>(VizBreakdown::kBufferAvailableToBufferReady) +
+        kVizBreakdownInitialIndex:
+      return "SubmitCompositorFrameToPresentationCompositorFrame."
+             "BufferAvailableToBufferReady";
+    case static_cast<int>(VizBreakdown::kBufferReadyToLatch) +
+        kVizBreakdownInitialIndex:
+      return "SubmitCompositorFrameToPresentationCompositorFrame."
+             "BufferReadyToLatch";
+    case static_cast<int>(VizBreakdown::kLatchToSwapEnd) +
+        kVizBreakdownInitialIndex:
+      return "SubmitCompositorFrameToPresentationCompositorFrame."
+             "LatchToSwapEnd";
     case static_cast<int>(BlinkBreakdown::kHandleInputEvents) +
         kBlinkBreakdownInitialIndex:
       return "SendBeginMainFrameToCommit.HandleInputEvents";
@@ -138,9 +154,12 @@ constexpr const char* GetStageName(int stage_type_index,
     case static_cast<int>(BlinkBreakdown::kPrepaint) +
         kBlinkBreakdownInitialIndex:
       return "SendBeginMainFrameToCommit.Prepaint";
-    case static_cast<int>(BlinkBreakdown::kComposite) +
+    case static_cast<int>(BlinkBreakdown::kCompositingInputs) +
         kBlinkBreakdownInitialIndex:
-      return "SendBeginMainFrameToCommit.Composite";
+      return "SendBeginMainFrameToCommit.CompositingInputs";
+    case static_cast<int>(BlinkBreakdown::kCompositingAssignments) +
+        kBlinkBreakdownInitialIndex:
+      return "SendBeginMainFrameToCommit.CompositingAssignments";
     case static_cast<int>(BlinkBreakdown::kPaint) + kBlinkBreakdownInitialIndex:
       return "SendBeginMainFrameToCommit.Paint";
     case static_cast<int>(BlinkBreakdown::kScrollingCoordinator) +
@@ -156,6 +175,7 @@ constexpr const char* GetStageName(int stage_type_index,
         kBlinkBreakdownInitialIndex:
       return "SendBeginMainFrameToCommit.BeginMainSentToStarted";
     default:
+      NOTREACHED();
       return "";
   }
 }
@@ -174,8 +194,10 @@ static_assert(base::size(kReportTypeNames) == kFrameReportTypeCount,
 constexpr int kMaxCompositorLatencyHistogramIndex =
     kFrameReportTypeCount * kFrameSequenceTrackerTypeCount *
     (kStageTypeCount + kAllBreakdownCount);
-constexpr int kCompositorLatencyHistogramMin = 1;
-constexpr int kCompositorLatencyHistogramMax = 350000;
+constexpr base::TimeDelta kCompositorLatencyHistogramMin =
+    base::TimeDelta::FromMicroseconds(1);
+constexpr base::TimeDelta kCompositorLatencyHistogramMax =
+    base::TimeDelta::FromMilliseconds(350);
 constexpr int kCompositorLatencyHistogramBucketCount = 50;
 
 constexpr int kEventLatencyEventTypeCount =
@@ -186,8 +208,10 @@ constexpr int kMaxEventLatencyHistogramBaseIndex =
     kEventLatencyEventTypeCount * kEventLatencyScrollTypeCount;
 constexpr int kMaxEventLatencyHistogramIndex =
     kMaxEventLatencyHistogramBaseIndex * (kStageTypeCount + kAllBreakdownCount);
-constexpr int kEventLatencyHistogramMin = 1;
-constexpr int kEventLatencyHistogramMax = 5000000;
+constexpr base::TimeDelta kEventLatencyHistogramMin =
+    base::TimeDelta::FromMicroseconds(1);
+constexpr base::TimeDelta kEventLatencyHistogramMax =
+    base::TimeDelta::FromSeconds(5);
 constexpr int kEventLatencyHistogramBucketCount = 100;
 
 bool ShouldReportLatencyMetricsForSequenceType(
@@ -609,12 +633,15 @@ void CompositorFrameReporter::ReportCompositorLatencyHistogram(
     CHECK_LT(histogram_index, kMaxCompositorLatencyHistogramIndex);
     CHECK_GE(histogram_index, 0);
 
+    // Note: There's a 1:1 mapping between `histogram_index` and the name
+    // returned by `GetCompositorLatencyHistogramName()` which allows the use of
+    // `STATIC_HISTOGRAM_POINTER_GROUP()` to cache histogram objects.
     STATIC_HISTOGRAM_POINTER_GROUP(
         GetCompositorLatencyHistogramName(
             report_type_index, frame_sequence_tracker_type, stage_type_index),
         histogram_index, kMaxCompositorLatencyHistogramIndex,
         AddTimeMicrosecondsGranularity(time_delta),
-        base::Histogram::FactoryGet(
+        base::Histogram::FactoryMicrosecondsTimeGet(
             GetCompositorLatencyHistogramName(report_type_index,
                                               frame_sequence_tracker_type,
                                               stage_type_index),
@@ -636,20 +663,23 @@ void CompositorFrameReporter::ReportEventLatencyHistograms() const {
     const int histogram_base_index =
         event_type_index * kEventLatencyScrollTypeCount + scroll_type_index;
 
-    // For scroll events, report total latency up to gpu-swap-end. This is
+    // For scroll events, report total latency up to gpu-swap-begin. This is
     // useful in comparing new EventLatency metrics with LatencyInfo-based
     // scroll event latency metrics.
     if (event_metrics.scroll_type() && !viz_breakdown_.swap_timings.is_null()) {
-      const base::TimeDelta swap_end_latency =
-          viz_breakdown_.swap_timings.swap_end - event_metrics.time_stamp();
-      const std::string swap_end_histogram_name =
-          histogram_base_name + ".TotalLatencyToSwapEnd";
+      const base::TimeDelta swap_begin_latency =
+          viz_breakdown_.swap_timings.swap_start - event_metrics.time_stamp();
+      const std::string swap_begin_histogram_name =
+          histogram_base_name + ".TotalLatencyToSwapBegin";
+      // Note: There's a 1:1 mapping between `histogram_base_index` and
+      // `swap_begin_histogram_name` which allows the use of
+      // `STATIC_HISTOGRAM_POINTER_GROUP()` to cache histogram objects.
       STATIC_HISTOGRAM_POINTER_GROUP(
-          swap_end_histogram_name, histogram_base_index,
+          swap_begin_histogram_name, histogram_base_index,
           kMaxEventLatencyHistogramBaseIndex,
-          AddTimeMicrosecondsGranularity(swap_end_latency),
-          base::Histogram::FactoryGet(
-              swap_end_histogram_name, kEventLatencyHistogramMin,
+          AddTimeMicrosecondsGranularity(swap_begin_latency),
+          base::Histogram::FactoryMicrosecondsTimeGet(
+              swap_begin_histogram_name, kEventLatencyHistogramMin,
               kEventLatencyHistogramMax, kEventLatencyHistogramBucketCount,
               base::HistogramBase::kUmaTargetedHistogramFlag));
     }
@@ -678,11 +708,14 @@ void CompositorFrameReporter::ReportEventLatencyHistograms() const {
         stage_it->start_time - event_metrics.time_stamp();
     const std::string b2r_histogram_name =
         histogram_base_name + ".BrowserToRendererCompositor";
+    // Note: There's a 1:1 mapping between `histogram_base_index` and
+    // `b2r_histogram_name` which allows the use of
+    // `STATIC_HISTOGRAM_POINTER_GROUP()` to cache histogram objects.
     STATIC_HISTOGRAM_POINTER_GROUP(
         b2r_histogram_name, histogram_base_index,
         kMaxEventLatencyHistogramBaseIndex,
         AddTimeMicrosecondsGranularity(b2r_latency),
-        base::Histogram::FactoryGet(
+        base::Histogram::FactoryMicrosecondsTimeGet(
             b2r_histogram_name, kEventLatencyHistogramMin,
             kEventLatencyHistogramMax, kEventLatencyHistogramBucketCount,
             base::HistogramBase::kUmaTargetedHistogramFlag));
@@ -706,6 +739,11 @@ void CompositorFrameReporter::ReportEventLatencyHistograms() const {
         case StageType::kSubmitCompositorFrameToPresentationCompositorFrame:
           ReportEventLatencyVizBreakdowns(histogram_base_index,
                                           histogram_base_name);
+          break;
+        case StageType::kTotalLatency:
+          UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+              "EventLatency.TotalLatency", latency, kEventLatencyHistogramMin,
+              kEventLatencyHistogramMax, kEventLatencyHistogramBucketCount);
           break;
         default:
           break;
@@ -759,10 +797,13 @@ void CompositorFrameReporter::ReportEventLatencyHistogram(
   const int histogram_index =
       histogram_base_index * (kStageTypeCount + kAllBreakdownCount) +
       stage_type_index;
+  // Note: There's a 1:1 mapping between `histogram_index` and `histogram_name`
+  // which allows the use of `STATIC_HISTOGRAM_POINTER_GROUP()` to cache
+  // histogram objects.
   STATIC_HISTOGRAM_POINTER_GROUP(
       histogram_name, histogram_index, kMaxEventLatencyHistogramIndex,
       AddTimeMicrosecondsGranularity(latency),
-      base::Histogram::FactoryGet(
+      base::Histogram::FactoryMicrosecondsTimeGet(
           histogram_name, kEventLatencyHistogramMin, kEventLatencyHistogramMax,
           kEventLatencyHistogramBucketCount,
           base::HistogramBase::kUmaTargetedHistogramFlag));
@@ -906,8 +947,11 @@ void CompositorFrameReporter::PopulateBlinkBreakdownList() {
       blink_breakdown_.layout_update;
   blink_breakdown_list_[static_cast<int>(BlinkBreakdown::kPrepaint)] =
       blink_breakdown_.prepaint;
-  blink_breakdown_list_[static_cast<int>(BlinkBreakdown::kComposite)] =
-      blink_breakdown_.composite;
+  blink_breakdown_list_[static_cast<int>(BlinkBreakdown::kCompositingInputs)] =
+      blink_breakdown_.compositing_inputs;
+  blink_breakdown_list_[static_cast<int>(
+      BlinkBreakdown::kCompositingAssignments)] =
+      blink_breakdown_.compositing_assignments;
   blink_breakdown_list_[static_cast<int>(BlinkBreakdown::kPaint)] =
       blink_breakdown_.paint;
   blink_breakdown_list_[static_cast<int>(

@@ -17,6 +17,7 @@ import android.provider.Settings;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
+import android.webkit.PacProcessor;
 import android.webkit.ServiceWorkerController;
 import android.webkit.TokenBindingService;
 import android.webkit.TracingController;
@@ -105,7 +106,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     private static boolean sWebLayerRunningInSameProcess;
     // Used to detect if we enter initialization for a second time, e.g. because an app caught and
     // discarded an exception thrown by a previous failed initialization attempt.
-    private static volatile boolean sInitAlreadyStarted = false;
+    private static volatile boolean sInitAlreadyStarted;
 
     private final WebViewChromiumRunQueue mRunQueue = new WebViewChromiumRunQueue(
             () -> { return WebViewChromiumFactoryProvider.this.mAwInit.hasStarted(); });
@@ -508,7 +509,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                     @Override
                     public void setSafeBrowsingWhitelist(
                             List<String> urls, ValueCallback<Boolean> callback) {
-                        sharedStatics.setSafeBrowsingWhitelist(
+                        sharedStatics.setSafeBrowsingAllowlist(
                                 urls, CallbackConverter.fromValueCallback(callback));
                     }
 
@@ -714,5 +715,10 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         getSingleton().addTask(() -> {
             getSingleton().getBrowserContextOnUiThread().setWebLayerRunningInSameProcess();
         });
+    }
+
+    @Override
+    public PacProcessor getPacProcessor() {
+        return GlueApiHelperForR.getPacProcessor();
     }
 }

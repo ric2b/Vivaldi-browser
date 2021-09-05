@@ -88,6 +88,7 @@ CommandHandler.onCommand = function(command) {
         });
         if (timeString) {
           ChromeVox.tts.speak(timeString, QueueMode.FLUSH);
+          ChromeVox.braille.write(NavBraille.fromText(timeString));
         } else {
           // Fallback to the old way of speaking time.
           const output = new Output();
@@ -360,25 +361,29 @@ CommandHandler.onCommand = function(command) {
   let skipSync = false;
   let didNavigate = false;
   let tryScrolling = true;
-  let skipSettingSelection = false;
+  let shouldSetSelection = false;
   let skipInitialAncestry = true;
   switch (command) {
     case 'nextCharacter':
+      shouldSetSelection = true;
       didNavigate = true;
       speechProps['phoneticCharacters'] = true;
       current = current.move(cursors.Unit.CHARACTER, Dir.FORWARD);
       break;
     case 'previousCharacter':
+      shouldSetSelection = true;
       dir = Dir.BACKWARD;
       didNavigate = true;
       speechProps['phoneticCharacters'] = true;
       current = current.move(cursors.Unit.CHARACTER, dir);
       break;
     case 'nextWord':
+      shouldSetSelection = true;
       didNavigate = true;
       current = current.move(cursors.Unit.WORD, Dir.FORWARD);
       break;
     case 'previousWord':
+      shouldSetSelection = true;
       dir = Dir.BACKWARD;
       didNavigate = true;
       current = current.move(cursors.Unit.WORD, dir);
@@ -436,22 +441,22 @@ CommandHandler.onCommand = function(command) {
     case 'nextFormField':
       pred = AutomationPredicate.formField;
       predErrorMsg = 'no_next_form_field';
+      CommandHandler.smartStickyMode_.startIgnoringRangeChanges();
       break;
     case 'previousFormField':
       dir = Dir.BACKWARD;
       pred = AutomationPredicate.formField;
       predErrorMsg = 'no_previous_form_field';
+      CommandHandler.smartStickyMode_.startIgnoringRangeChanges();
       break;
     case 'previousGraphic':
       dir = Dir.BACKWARD;
       pred = AutomationPredicate.image;
       predErrorMsg = 'no_previous_graphic';
-      skipSettingSelection = true;
       break;
     case 'nextGraphic':
       pred = AutomationPredicate.image;
       predErrorMsg = 'no_next_graphic';
-      skipSettingSelection = true;
       break;
     case 'nextHeading':
       pred = AutomationPredicate.heading;
@@ -572,6 +577,16 @@ CommandHandler.onCommand = function(command) {
       skipSync = true;
       pred = AutomationPredicate.group;
       break;
+    case 'previousPage':
+    case 'nextPage':
+      const root = AutomationUtil.getTopLevelRoot(current.start.node);
+      if (root && root.scrollY !== undefined) {
+        let page = Math.ceil(root.scrollY / root.location.height) || 1;
+        page = command == 'nextPage' ? page + 1 : page - 1;
+        ChromeVox.tts.stop();
+        root.setScrollOffset(0, page * root.location.height);
+      }
+      return false;
     case 'previousSimilarItem':
       dir = Dir.BACKWARD;
       // Falls through.
@@ -669,6 +684,7 @@ CommandHandler.onCommand = function(command) {
       }
     } break;
     case 'readFromHere':
+      const accumulatedText = [];
       ChromeVoxState.isReadingContinuously = true;
       const continueReading = function() {
         if (!ChromeVoxState.isReadingContinuously ||
@@ -677,17 +693,43 @@ CommandHandler.onCommand = function(command) {
         }
 
         const prevRange = ChromeVoxState.instance.currentRange;
+        const prevNode = prevRange.start.node;
+        const prevLocale = prevNode.detectedLanguage || prevNode.language;
         const newRange = ChromeVoxState.instance.currentRange.move(
             cursors.Unit.NODE, Dir.FORWARD);
+        const newNode = newRange.start.node;
+        const newLocale = newNode.detectedLanguage || newNode.language;
+
+        // Speak the accumulated text immediately if the new range is not text
+        // or we've crossed out of the same parent, or if the language changed.
+        const differentParent = newNode.parent != prevNode.parent;
+        if (accumulatedText.length &&
+            (!AutomationPredicate.text(newNode) || differentParent ||
+             newLocale != prevLocale)) {
+          const text = accumulatedText.join(' ');
+          accumulatedText.length = 0;
+          new Output()
+              .withString(text, prevRange.start.node)
+              .onSpeechEnd(continueReading)
+              .go();
+          return;
+        }
 
         // Stop if we've wrapped back to the document.
-        const maybeDoc = newRange.start.node;
-        if (AutomationPredicate.root(maybeDoc)) {
+        if (AutomationPredicate.root(newNode)) {
           ChromeVoxState.isReadingContinuously = false;
           return;
         }
 
         ChromeVoxState.instance.setCurrentRange(newRange);
+
+        // Accumulate the name of text nodes. It will be read above.
+        if (AutomationPredicate.text(newNode)) {
+          accumulatedText.push(newNode.name);
+          continueReading();
+          return;
+        }
+
         newRange.select();
 
         new Output()
@@ -773,6 +815,7 @@ CommandHandler.onCommand = function(command) {
       output.withString(target.docUrl || '').go();
       return false;
     case 'toggleSelection':
+      shouldSetSelection = true;
       if (!ChromeVoxState.instance.pageSel_) {
         ChromeVoxState.instance.pageSel_ = ChromeVoxState.instance.currentRange;
         DesktopAutomationHandler.instance.ignoreDocumentSelectionFromAction(
@@ -918,30 +961,6 @@ CommandHandler.onCommand = function(command) {
         current = cursors.Range.fromNode(end);
       }
     } break;
-    case 'scrollBackward': {
-      let node = current.start.node;
-      while (node &&
-             !node.standardActions.includes(
-                 chrome.automation.ActionType.SCROLL_BACKWARD)) {
-        node = node.parent;
-      }
-
-      if (node) {
-        node.scrollBackward();
-      }
-    } break;
-    case 'scrollForward': {
-      let node = current.start.node;
-      while (node &&
-             !node.standardActions.includes(
-                 chrome.automation.ActionType.SCROLL_FORWARD)) {
-        node = node.parent;
-      }
-
-      if (node) {
-        node.scrollForward();
-      }
-    } break;
 
     // These commands are only available when invoked from touch.
     case 'nextAtGranularity':
@@ -1023,7 +1042,7 @@ CommandHandler.onCommand = function(command) {
       }
       let word = '';
       for (let z = 0; z < wordStarts.length; ++z) {
-        if (wordStarts[z] <= index && wordEnds[z] >= index) {
+        if (wordStarts[z] <= index && wordEnds[z] > index) {
           word = text.substring(wordStarts[z], wordEnds[z]);
           break;
         }
@@ -1247,7 +1266,7 @@ CommandHandler.onCommand = function(command) {
 
   if (current) {
     ChromeVoxState.instance.navigateToRange(
-        current, undefined, speechProps, skipSettingSelection);
+        current, undefined, speechProps, shouldSetSelection);
   }
 
   CommandHandler.onFinishCommand();

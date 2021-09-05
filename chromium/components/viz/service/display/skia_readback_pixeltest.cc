@@ -11,8 +11,8 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/test/test_switches.h"
 #include "build/build_config.h"
-#include "cc/base/switches.h"
 #include "cc/test/pixel_test.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/resource_provider_test_utils.h"
@@ -106,9 +106,9 @@ class SkiaReadbackPixelTest : public cc::PixelTest,
     gpu::SharedImageInterface* sii =
         child_context_provider_->SharedImageInterface();
     DCHECK(sii);
-    gpu::Mailbox mailbox =
-        sii->CreateSharedImage(format, size, gfx::ColorSpace(),
-                               gpu::SHARED_IMAGE_USAGE_DISPLAY, pixels);
+    gpu::Mailbox mailbox = sii->CreateSharedImage(
+        format, size, gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, gpu::SHARED_IMAGE_USAGE_DISPLAY, pixels);
     gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
 
     TransferableResource gl_resource = TransferableResource::MakeGL(
@@ -139,8 +139,7 @@ class SkiaReadbackPixelTest : public cc::PixelTest,
 
     const gfx::Rect output_rect(kSourceSize);
     std::unique_ptr<RenderPass> pass = RenderPass::Create();
-    pass->SetNew(/*render_pass_id=*/1, output_rect, output_rect,
-                 gfx::Transform());
+    pass->SetNew(RenderPassId{1}, output_rect, output_rect, gfx::Transform());
 
     SharedQuadState* sqs = CreateSharedQuadState(pass.get(), output_rect);
 
@@ -215,7 +214,7 @@ TEST_P(SkiaReadbackPixelTest, ExecutesCopyRequest) {
 
   base::FilePath expected_path = GetExpectedPath();
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          cc::switches::kCCRebaselinePixeltests)) {
+          switches::kRebaselinePixelTests)) {
     EXPECT_TRUE(cc::WritePNGFile(actual, expected_path, false));
   }
 

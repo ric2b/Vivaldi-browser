@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">แว่นกันแดด</translation>
 <translation id="115443833402798225">ฮังกูล Ahnmatae</translation>
 <translation id="1155759005174418845">คาตาลัน</translation>
+<translation id="1172970565351728681">เหลือเวลาอีกประมาณ <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">เปลี่ยนชื่อ</translation>
 <translation id="117624967391683467">กำลังคัดลอก <ph name="FILE_NAME" />...</translation>
 <translation id="1178581264944972037">หยุดชั่วคราว</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">มีไฟล์ที่ชื่อว่า "<ph name="FILENAME" />" อยู่แล้ว คุณต้องการทำอย่างไร</translation>
 <translation id="2121825465123208577">ปรับขนาด</translation>
 <translation id="2136953289241069843">การทับศัพท์ (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">เปิด "<ph name="PATH" />" ไม่ได้: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">อักขระไม่ถูกต้อง: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">แป้นพิมพ์ภาษาเวียดนาม (TCVN)</translation>
 <translation id="2168214441502403371">แป้นพิมพ์ภาษาเปอร์เซีย</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187">ระบบจะโอนการเป็นเจ้าของไปยัง <ph name="DESTINATION_DOMAIN" /></translation>
 <translation id="3241720467332021590">ไอริช</translation>
 <translation id="3245321423178950146">ไม่ทราบศิลปิน</translation>
+<translation id="3248185426436836442">รอดำเนินการ</translation>
 <translation id="3252266817569339921">ฝรั่งเศส</translation>
 <translation id="3254434849914415189">เลือกแอปพลิเคชันค่าเริ่มต้นสำหรับไฟล์ <ph name="FILE_TYPE" />:</translation>
 <translation id="3264582393905923483">บริบท</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">ปีที่บันทึก</translation>
 <translation id="3338239663705455570">แป้นพิมพ์ภาษาสโลวีเนีย</translation>
 <translation id="3353984535370177728">เลือกโฟลเดอร์ที่จะอัปโหลด</translation>
+<translation id="3356580349448036450">เสร็จสมบูรณ์</translation>
 <translation id="3399597614303179694">แป้นพิมพ์ภาษามาซิโดเนีย</translation>
 <translation id="3414856743105198592">การฟอร์แมตอุปกรณ์แบบถอดได้จะทำให้ข้อมูลทั้งหมดถูกลบออก คุณต้องการดำเนินการต่อหรือไม่</translation>
 <translation id="3437801641691368414">เวลาที่สร้าง</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">คุณไม่มีสิทธิ์ย้ายไฟล์ลงใน "<ph name="FOLDER_NAME" />"</translation>
 <translation id="3786301125658655746">คุณออฟไลน์อยู่</translation>
 <translation id="3789841737615482174">ติดตั้ง</translation>
+<translation id="3793469551756281394">เหลือเวลาอีกประมาณ <ph name="REMAINING_TIME_HOUR" /> <ph name="REMAINING_TIME_MINUTE" /></translation>
 <translation id="3798449238516105146">รุ่น</translation>
 <translation id="3801082500826908679">แฟโร</translation>
 <translation id="3809272675881623365">กระต่าย</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">โฟลเดอร์นี้แชร์กับ Windows อยู่</translation>
 <translation id="4487088045714738411">แป้นพิมพ์ภาษาเบลเยียม</translation>
 <translation id="4522570452068850558">รายละเอียด</translation>
+<translation id="4542387084127299777">เปิด "<ph name="PATH" />" ไม่ได้</translation>
 <translation id="4552678318981539154">ซื้อพื้นที่เก็บข้อมูลเพิ่ม</translation>
 <translation id="4559767610552730302">ชัดตื้น</translation>
 <translation id="4572815280350369984">ไฟล์ <ph name="FILE_TYPE" /></translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">สำรองข้อมูลทั้งหมดไปยัง <ph name="BEGIN_LINK" />Google ไดรฟ์<ph name="END_LINK" />แล้ว!</translation>
 <translation id="6643016212128521049">ล้าง</translation>
 <translation id="6650726141019353908">ผีเสื้อสีชมพู</translation>
+<translation id="6657585470893396449">รหัสผ่าน</translation>
 <translation id="6710213216561001401">ก่อนหน้า</translation>
 <translation id="6718273304615422081">กำลังซิป...</translation>
 <translation id="6751256176799620176">เลือกไว้ 1 โฟลเดอร์</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">การติดตั้งล้มเหลว</translation>
 <translation id="7040138676081995583">เปิดด้วย...</translation>
-<translation id="7059566040011178088">ไม่ถึง <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923">รายการที่เลือก <ph name="COUNT" /> รายการ</translation>
 <translation id="7106346894903675391">ซื้อพื้นที่เก็บข้อมูลเพิ่มเติม...</translation>
 <translation id="7126604456862387217">"&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;" - &lt;em&gt;ค้นหาไดรฟ์&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">รุ่นอุปกรณ์</translation>
 <translation id="8208580316430297579">งานศิลปะ</translation>
 <translation id="8223479393428528563">หากต้องการบันทึกไฟล์เหล่านี้เพื่อใช้งานแบบออฟไลน์ ให้คลิกขวาที่ไฟล์ และเลือกตัวเลือก <ph name="OFFLINE_CHECKBOX_NAME" /></translation>
-<translation id="8231972167769262174">ประมาณ <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">ล้มเลิก</translation>
 <translation id="8261506727792406068">ลบ</translation>
 <translation id="8269755669432358899">ยุบแผงความคิดเห็นเกี่ยวกับไฟล์</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">แก้ไข</translation>
 <translation id="9099674669267916096">จำนวนหน้า</translation>
 <translation id="9110990317705400362">เรายังคงค้นหาวิธีที่จะทำให้การท่องเว็บของคุณปลอดภัยยิ่งขึ้นอย่างสม่ำเสมอ ก่อนหน้านี้ทุกเว็บไซต์สามารถแสดงข้อความแจ้งให้คุณเพิ่มส่วนขยายในเบราว์เซอร์ แต่ใน Google Chrome เวอร์ชันล่าสุด คุณจะต้องแจ้งให้ Chrome ทราบอย่างชัดเจนว่าคุณต้องการติดตั้งส่วนขยายเหล่านี้โดยการเพิ่มส่วนขยายผ่านหน้า "ส่วนขยาย" <ph name="BEGIN_LINK" />ดูข้อมูลเพิ่มเติม<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">ปลดล็อก</translation>
 <translation id="912419004897138677">ตัวแปลงรหัส</translation>
 <translation id="9129931661813833980">ตรึงโฟลเดอร์</translation>
 <translation id="9130775360844693113">สมาชิกของ "<ph name="DESTINATION_NAME" />" จะได้รับสิทธิ์เข้าถึงรายการเหล่านี้</translation>

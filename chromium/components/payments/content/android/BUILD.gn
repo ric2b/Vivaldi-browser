@@ -4,12 +4,14 @@
 
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
+import("//components/payments/content/android/payments_java_resources.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 static_library("android") {
   sources = [
     "byte_buffer_helper.cc",
     "byte_buffer_helper.h",
+    "can_make_payment_query_android.cc",
     "currency_formatter_android.cc",
     "currency_formatter_android.h",
     "error_message_util.cc",
@@ -48,6 +50,7 @@ static_library("android") {
 
 generate_jni("jni_headers") {
   sources = [
+    "java/src/org/chromium/components/payments/CanMakePaymentQuery.java",
     "java/src/org/chromium/components/payments/CurrencyFormatter.java",
     "java/src/org/chromium/components/payments/ErrorMessageUtil.java",
     "java/src/org/chromium/components/payments/JniPaymentApp.java",
@@ -57,27 +60,39 @@ generate_jni("jni_headers") {
     "java/src/org/chromium/components/payments/PaymentHandlerHost.java",
     "java/src/org/chromium/components/payments/PaymentManifestDownloader.java",
     "java/src/org/chromium/components/payments/PaymentManifestParser.java",
+    "java/src/org/chromium/components/payments/PaymentManifestWebDataService.java",
     "java/src/org/chromium/components/payments/PaymentRequestSpec.java",
     "java/src/org/chromium/components/payments/PaymentRequestUpdateEventListener.java",
     "java/src/org/chromium/components/payments/PaymentValidator.java",
+    "java/src/org/chromium/components/payments/SslValidityChecker.java",
     "java/src/org/chromium/components/payments/UrlUtil.java",
   ]
+}
+
+android_resources("java_resources") {
+  create_srcjar = false
+  sources = payments_java_resources
 }
 
 android_library("java") {
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   sources = [
     "java/src/org/chromium/components/payments/Address.java",
+    "java/src/org/chromium/components/payments/BrowserPaymentRequest.java",
+    "java/src/org/chromium/components/payments/CanMakePaymentQuery.java",
+    "java/src/org/chromium/components/payments/ComponentPaymentRequestImpl.java",
     "java/src/org/chromium/components/payments/CurrencyFormatter.java",
     "java/src/org/chromium/components/payments/ErrorMessageUtil.java",
     "java/src/org/chromium/components/payments/JniPaymentApp.java",
     "java/src/org/chromium/components/payments/JourneyLogger.java",
+    "java/src/org/chromium/components/payments/MojoPaymentRequestGateKeeper.java",
     "java/src/org/chromium/components/payments/MojoStructCollection.java",
     "java/src/org/chromium/components/payments/OriginSecurityChecker.java",
     "java/src/org/chromium/components/payments/PackageManagerDelegate.java",
     "java/src/org/chromium/components/payments/PayerData.java",
     "java/src/org/chromium/components/payments/PaymentAddressTypeConverter.java",
     "java/src/org/chromium/components/payments/PaymentApp.java",
+    "java/src/org/chromium/components/payments/PaymentAppFactoryParams.java",
     "java/src/org/chromium/components/payments/PaymentDetailsConverter.java",
     "java/src/org/chromium/components/payments/PaymentDetailsUpdateService.java",
     "java/src/org/chromium/components/payments/PaymentDetailsUpdateServiceHelper.java",
@@ -85,22 +100,32 @@ android_library("java") {
     "java/src/org/chromium/components/payments/PaymentHandlerHost.java",
     "java/src/org/chromium/components/payments/PaymentManifestDownloader.java",
     "java/src/org/chromium/components/payments/PaymentManifestParser.java",
+    "java/src/org/chromium/components/payments/PaymentManifestWebDataService.java",
+    "java/src/org/chromium/components/payments/PaymentOptionsUtils.java",
+    "java/src/org/chromium/components/payments/PaymentRequestLifecycleObserver.java",
+    "java/src/org/chromium/components/payments/PaymentRequestParams.java",
     "java/src/org/chromium/components/payments/PaymentRequestSpec.java",
     "java/src/org/chromium/components/payments/PaymentRequestUpdateEventListener.java",
     "java/src/org/chromium/components/payments/PaymentValidator.java",
+    "java/src/org/chromium/components/payments/SslValidityChecker.java",
+    "java/src/org/chromium/components/payments/SupportedDelegations.java",
     "java/src/org/chromium/components/payments/UrlUtil.java",
     "java/src/org/chromium/components/payments/WebAppManifestSection.java",
     "java/src/org/chromium/components/payments/intent/IsReadyToPayServiceHelper.java",
     "java/src/org/chromium/components/payments/intent/WebPaymentIntentHelper.java",
     "java/src/org/chromium/components/payments/intent/WebPaymentIntentHelperType.java",
+    "java/src/org/chromium/components/payments/intent/WebPaymentIntentHelperTypeConverter.java",
   ]
   deps = [
+    ":java_resources",
     "//base:base_java",
     "//base:jni_java",
     "//components/autofill/android:autofill_java",
     "//components/payments/mojom:mojom_java",
     "//content/public/android:content_java",
     "//mojo/public/java:bindings_java",
+    "//mojo/public/java:system_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/blink/public/mojom:android_mojo_bindings_java",
     "//url:gurl_java",
     "//url:origin_java",
@@ -111,6 +136,7 @@ android_library("java") {
     ":payment_details_update_service_aidl",
     ":payments_journey_logger_enum_javagen",
   ]
+  resources_package = "org.chromium.components.payments"
 }
 
 android_aidl("payment_details_update_service_aidl") {

@@ -28,7 +28,7 @@ namespace content {
 namespace {
 
 void DidDeleteIDBData(scoped_refptr<base::SequencedTaskRunner> task_runner,
-                      IndexedDBQuotaClient::DeletionCallback callback,
+                      IndexedDBQuotaClient::DeleteOriginDataCallback callback,
                       bool) {
   task_runner->PostTask(
       FROM_HERE,
@@ -41,15 +41,15 @@ int64_t GetOriginUsageOnIndexedDBThread(IndexedDBContextImpl* context,
   return context->GetOriginDiskUsage(origin);
 }
 
-void GetAllOriginsOnIndexedDBThread(IndexedDBContextImpl* context,
-                                    std::set<url::Origin>* origins_to_return) {
+void GetAllOriginsOnIndexedDBThread(
+    IndexedDBContextImpl* context,
+    std::vector<url::Origin>* origins_to_return) {
   DCHECK(context->IDBTaskRunner()->RunsTasksInCurrentSequence());
-  for (const auto& origin : context->GetAllOrigins())
-    origins_to_return->insert(origin);
+  *origins_to_return = context->GetAllOrigins();
 }
 
-void DidGetOrigins(IndexedDBQuotaClient::GetOriginsCallback callback,
-                   const std::set<url::Origin>* origins) {
+void DidGetOrigins(IndexedDBQuotaClient::GetOriginsForTypeCallback callback,
+                   const std::vector<url::Origin>* origins) {
   // Run on the same sequence that GetOriginsForType was called on,
   // which is likely the IO thread.
   std::move(callback).Run(*origins);
@@ -58,11 +58,12 @@ void DidGetOrigins(IndexedDBQuotaClient::GetOriginsCallback callback,
 void GetOriginsForHostOnIndexedDBThread(
     IndexedDBContextImpl* context,
     const std::string& host,
-    std::set<url::Origin>* origins_to_return) {
+    std::vector<url::Origin>* origins_to_return) {
   DCHECK(context->IDBTaskRunner()->RunsTasksInCurrentSequence());
-  for (const auto& origin : context->GetAllOrigins()) {
+  std::vector<url::Origin> all_origins = context->GetAllOrigins();
+  for (auto& origin : all_origins) {
     if (host == origin.host())
-      origins_to_return->insert(origin);
+      origins_to_return->push_back(std::move(origin));
   }
 }
 
@@ -82,7 +83,7 @@ void IndexedDBQuotaClient::OnQuotaManagerDestroyed() {}
 
 void IndexedDBQuotaClient::GetOriginUsage(const url::Origin& origin,
                                           StorageType type,
-                                          GetUsageCallback callback) {
+                                          GetOriginUsageCallback callback) {
   DCHECK(!callback.is_null());
   DCHECK_EQ(type, StorageType::kTemporary);
 
@@ -93,12 +94,13 @@ void IndexedDBQuotaClient::GetOriginUsage(const url::Origin& origin,
       std::move(callback));
 }
 
-void IndexedDBQuotaClient::GetOriginsForType(StorageType type,
-                                             GetOriginsCallback callback) {
+void IndexedDBQuotaClient::GetOriginsForType(
+    StorageType type,
+    GetOriginsForTypeCallback callback) {
   DCHECK(!callback.is_null());
   DCHECK_EQ(type, StorageType::kTemporary);
 
-  std::set<url::Origin>* origins_to_return = new std::set<url::Origin>();
+  auto* origins_to_return = new std::vector<url::Origin>();
   indexed_db_context_->IDBTaskRunner()->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(&GetAllOriginsOnIndexedDBThread,
@@ -108,13 +110,14 @@ void IndexedDBQuotaClient::GetOriginsForType(StorageType type,
                      base::Owned(origins_to_return)));
 }
 
-void IndexedDBQuotaClient::GetOriginsForHost(StorageType type,
-                                             const std::string& host,
-                                             GetOriginsCallback callback) {
+void IndexedDBQuotaClient::GetOriginsForHost(
+    StorageType type,
+    const std::string& host,
+    GetOriginsForHostCallback callback) {
   DCHECK(!callback.is_null());
   DCHECK_EQ(type, StorageType::kTemporary);
 
-  std::set<url::Origin>* origins_to_return = new std::set<url::Origin>();
+  auto* origins_to_return = new std::vector<url::Origin>();
   indexed_db_context_->IDBTaskRunner()->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(&GetOriginsForHostOnIndexedDBThread,
@@ -126,7 +129,7 @@ void IndexedDBQuotaClient::GetOriginsForHost(StorageType type,
 
 void IndexedDBQuotaClient::DeleteOriginData(const url::Origin& origin,
                                             StorageType type,
-                                            DeletionCallback callback) {
+                                            DeleteOriginDataCallback callback) {
   DCHECK(!callback.is_null());
   DCHECK_EQ(type, StorageType::kTemporary);
 
@@ -139,8 +142,9 @@ void IndexedDBQuotaClient::DeleteOriginData(const url::Origin& origin,
                                     std::move(callback))));
 }
 
-void IndexedDBQuotaClient::PerformStorageCleanup(blink::mojom::StorageType type,
-                                                 base::OnceClosure callback) {
+void IndexedDBQuotaClient::PerformStorageCleanup(
+    blink::mojom::StorageType type,
+    PerformStorageCleanupCallback callback) {
   std::move(callback).Run();
 }
 

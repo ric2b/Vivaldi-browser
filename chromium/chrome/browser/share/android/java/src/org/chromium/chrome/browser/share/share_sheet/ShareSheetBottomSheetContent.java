@@ -32,19 +32,21 @@ import java.util.List;
  * Bottom sheet content to display a 2-row custom share sheet.
  */
 class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickListener {
-    private Context mContext;
+    private static final int SHARE_SHEET_ITEM = 0;
+    private final Context mContext;
+    private final ShareSheetCoordinator mShareSheetCoordinator;
     private ViewGroup mToolbarView;
     private ViewGroup mContentView;
-    private static final int SHARE_SHEET_ITEM = 0;
 
     /**
      * Creates a ShareSheetBottomSheetContent (custom share sheet) opened from the given activity.
      *
      * @param context The context the share sheet was launched from.
+     * @param shareSheetCoordinator The Cooredinator that instatiated this BottomSheetContent.
      */
-    ShareSheetBottomSheetContent(Context context) {
+    ShareSheetBottomSheetContent(Context context, ShareSheetCoordinator shareSheetCoordinator) {
         mContext = context;
-
+        mShareSheetCoordinator = shareSheetCoordinator;
         createContentView();
     }
 
@@ -59,9 +61,16 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
      * @param activity The activity the share sheet belongs to.
      * @param topRowModels The PropertyModels used to build the top row.
      * @param bottomRowModels The PropertyModels used to build the bottom row.
+     * @param message The message to show on top of the share sheet.
      */
     void createRecyclerViews(
-            List<PropertyModel> topRowModels, List<PropertyModel> bottomRowModels) {
+            List<PropertyModel> topRowModels, List<PropertyModel> bottomRowModels, String message) {
+        if (!message.isEmpty()) {
+            TextView messageView = this.getContentView().findViewById(R.id.message);
+            messageView.setVisibility(View.VISIBLE);
+            messageView.setText(message);
+        }
+
         RecyclerView topRow = this.getContentView().findViewById(R.id.share_sheet_chrome_apps);
         if (topRowModels != null && topRowModels.size() > 0) {
             View divider = this.getContentView().findViewById(R.id.share_sheet_divider);
@@ -150,7 +159,9 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
     }
 
     @Override
-    public void destroy() {}
+    public void destroy() {
+        mShareSheetCoordinator.destroy();
+    }
 
     @Override
     public int getPriority() {

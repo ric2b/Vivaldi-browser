@@ -131,6 +131,7 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
     const std::string* action = value.FindStringPath("action");
     const std::string* title = value.FindStringPath("title");
     const std::string* guid = value.FindStringPath("guid");
+    const std::string* parameter = value.FindStringPath("parameter");
     const int origin = value.FindIntKey("origin").value_or(Menu_Node::BUNDLE);
     bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
 
@@ -171,6 +172,9 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
       }
       if (*type == "command") {
         node->SetType(Menu_Node::COMMAND);
+        if (parameter) {
+          node->SetParameter(*parameter);
+        }
       } else if (*type == "checkbox") {
         node->SetType(Menu_Node::CHECKBOX);
       } else if (*type == "radio") {
@@ -285,6 +289,9 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
       break;
     case Menu_Node::COMMAND:
       dict.SetKey("type", base::Value("command"));
+      if (node->parameter().length() > 0) {
+        dict.SetKey("parameter", base::Value(node->parameter()));
+      }
       break;
     case Menu_Node::CHECKBOX:
       dict.SetKey("type", base::Value("checkbox"));

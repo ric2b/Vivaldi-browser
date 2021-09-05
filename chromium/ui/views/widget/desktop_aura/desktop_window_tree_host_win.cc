@@ -437,10 +437,11 @@ void DesktopWindowTreeHostWin::SetVisibilityChangedAnimationsEnabled(
   content_window()->SetProperty(aura::client::kAnimationsDisabledKey, !value);
 }
 
-NonClientFrameView* DesktopWindowTreeHostWin::CreateNonClientFrameView() {
-  return ShouldUseNativeFrame()
-             ? new NativeFrameView(native_widget_delegate_->AsWidget())
-             : nullptr;
+std::unique_ptr<NonClientFrameView>
+DesktopWindowTreeHostWin::CreateNonClientFrameView() {
+  return ShouldUseNativeFrame() ? std::make_unique<NativeFrameView>(
+                                      native_widget_delegate_->AsWidget())
+                                : nullptr;
 }
 
 bool DesktopWindowTreeHostWin::ShouldUseNativeFrame() const {
@@ -734,10 +735,6 @@ bool DesktopWindowTreeHostWin::IsModal() const {
 
 int DesktopWindowTreeHostWin::GetInitialShowState() const {
   return CanActivate() ? SW_SHOWNORMAL : SW_SHOWNOACTIVATE;
-}
-
-bool DesktopWindowTreeHostWin::WillProcessWorkAreaChange() const {
-  return GetWidget()->widget_delegate()->WillProcessWorkAreaChange();
 }
 
 int DesktopWindowTreeHostWin::GetNonClientComponent(

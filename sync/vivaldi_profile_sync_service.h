@@ -48,6 +48,8 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
   VivaldiSyncUIHelper* ui_helper() { return &ui_helper_; }
 
  private:
+  friend class VivaldiSyncUIHelper;
+
   void ShutdownImpl(syncer::ShutdownReason reason) override;
   void OnEngineInitialized(
       syncer::ModelTypeSet initial_types,
@@ -59,6 +61,9 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
       bool success) override;
 
   void OnClearDataComplete(scoped_refptr<net::HttpResponseHeaders> headers);
+
+  std::string GetEncryptionBootstrapToken() const;
+  void SetEncryptionBootstrapToken(const std::string& token);
 
   bool force_local_data_reset_ = false;
 

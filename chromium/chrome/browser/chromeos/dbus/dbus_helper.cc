@@ -11,7 +11,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "chromeos/constants/chromeos_paths.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
-#include "chromeos/dbus/arc_camera_client.h"
+#include "chromeos/dbus/arc/arc_camera_client.h"
+#include "chromeos/dbus/arc/arc_sensor_service_client.h"
 #include "chromeos/dbus/attestation/attestation_client.h"
 #include "chromeos/dbus/audio/cras_audio_client.h"
 #include "chromeos/dbus/authpolicy/authpolicy_client.h"
@@ -33,8 +34,13 @@
 #include "chromeos/dbus/system_clock/system_clock_client.h"
 #include "chromeos/dbus/system_proxy/system_proxy_client.h"
 #include "chromeos/dbus/upstart/upstart_client.h"
+#include "chromeos/services/cfm/public/buildflags/buildflags.h"  // PLATFORM_CFM
 #include "chromeos/tpm/install_attributes.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
+
+#if BUILDFLAG(PLATFORM_CFM)
+#include "chromeos/dbus/cfm/cfm_hotline_client.h"
+#endif
 
 namespace {
 
@@ -64,6 +70,7 @@ void InitializeDBus() {
   // NOTE: base::Feature is not initialized yet, so any non MultiProcessMash
   // dbus client initialization for Ash should be done in Shell::Init.
   InitializeDBusClient<ArcCameraClient>(bus);
+  InitializeDBusClient<ArcSensorServiceClient>(bus);
   InitializeDBusClient<AttestationClient>(bus);
   InitializeDBusClient<AuthPolicyClient>(bus);
   InitializeDBusClient<BiodClient>(bus);  // For device::Fingerprint.
@@ -95,6 +102,9 @@ void InitializeDBus() {
 void InitializeFeatureListDependentDBus() {
   dbus::Bus* bus = DBusThreadManager::Get()->GetSystemBus();
   InitializeDBusClient<bluez::BluezDBusManager>(bus);
+#if BUILDFLAG(PLATFORM_CFM)
+  InitializeDBusClient<CfmHotlineClient>(bus);
+#endif
   InitializeDBusClient<WilcoDtcSupportdClient>(bus);
 }
 
@@ -102,6 +112,9 @@ void ShutdownDBus() {
   // Feature list-dependent D-Bus clients are shut down first because we try to
   // shut down in reverse order of initialization (in case of dependencies).
   WilcoDtcSupportdClient::Shutdown();
+#if BUILDFLAG(PLATFORM_CFM)
+  CfmHotlineClient::Shutdown();
+#endif
   bluez::BluezDBusManager::Shutdown();
 
   // Other D-Bus clients are shut down, also in reverse order of initialization.

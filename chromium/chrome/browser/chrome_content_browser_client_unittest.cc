@@ -9,12 +9,14 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
@@ -136,7 +138,7 @@ void CheckUserAgentStringOrdering(bool mobile_device) {
   ASSERT_TRUE(base::StringToDouble(pieces[2], &version));
   ASSERT_LE(4.0, version);
   ASSERT_GT(11.0, version);
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   // Macintosh; Intel Mac OS X 10_15_4
   ASSERT_EQ(2u, pieces.size());
   ASSERT_EQ("Macintosh", pieces[0]);
@@ -149,7 +151,11 @@ void CheckUserAgentStringOrdering(bool mobile_device) {
   ASSERT_EQ("X", pieces[3]);
   pieces = base::SplitStringUsingSubstr(pieces[4], "_", base::KEEP_WHITESPACE,
                                         base::SPLIT_WANT_ALL);
-  ASSERT_EQ("10", pieces[0]);
+  {
+    int major, minor, patch;
+    base::SysInfo::OperatingSystemVersionNumbers(&major, &minor, &patch);
+    ASSERT_EQ(base::StringPrintf("%d", major), pieces[0]);
+  }
   int value;
   ASSERT_TRUE(base::StringToInt(pieces[1], &value));
   ASSERT_LE(0, value);
@@ -595,6 +601,11 @@ TEST(ChromeContentBrowserClientTest, HandleWebUI) {
   GURL should_redirect = chrome_help;
   test_content_browser_client.HandleWebUI(&should_redirect, nullptr);
   EXPECT_NE(chrome_help, should_redirect);
+
+  // Confirm that the deprecated cookies settings URL is rewritten.
+  GURL cookies_url = GURL(chrome::kChromeUICookieSettingsDeprecatedURL);
+  test_content_browser_client.HandleWebUI(&cookies_url, nullptr);
+  EXPECT_EQ(GURL(chrome::kChromeUICookieSettingsURL), cookies_url);
 }
 
 TEST(ChromeContentBrowserClientTest, HandleWebUIReverse) {
@@ -742,10 +753,10 @@ TEST(ChromeContentBrowserClientTest, GenerateBrandVersionList) {
 TEST(ChromeContentBrowserClientTest, LowEntropyCpuArchitecture) {
   std::string arch = content::GetLowEntropyCpuArchitecture();
 
-#if (!defined(OS_POSIX) && !defined(OS_WIN)) || defined(OS_MACOSX) || \
+#if (!defined(OS_POSIX) && !defined(OS_WIN)) || defined(OS_MAC) || \
     defined(OS_ANDROID)
   EXPECT_EQ("", arch);
-#elif (defined(OS_POSIX) && !defined(OS_MACOSX)) || defined(OS_WIN)
+#elif (defined(OS_POSIX) && !defined(OS_MAC)) || defined(OS_WIN)
   EXPECT_TRUE("arm" == arch || "x86" == arch);
 #endif
 }
@@ -882,7 +893,7 @@ TEST_F(ChromeContentBrowserClientCaptivePortalBrowserTest,
                                    true /* expected_disable_secure_dns */);
   captive_portal::CaptivePortalTabHelper::CreateForWebContents(
       web_contents(), CaptivePortalServiceFactory::GetForProfile(profile()),
-      base::Callback<void(void)>());
+      base::NullCallback());
   captive_portal::CaptivePortalTabHelper::FromWebContents(web_contents())
       ->set_is_captive_portal_window();
   NavigateAndCommit(GURL("https://www.google.com"), ui::PAGE_TRANSITION_LINK);

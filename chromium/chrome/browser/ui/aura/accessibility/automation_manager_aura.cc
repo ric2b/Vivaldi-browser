@@ -12,6 +12,7 @@
 #include "components/crash/core/common/crash_key.h"
 #include "ui/accessibility/aura/aura_window_properties.h"
 #include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_action_handler_base.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_event.h"
@@ -54,7 +55,8 @@ void AutomationManagerAura::Enable() {
 
   // Send this event immediately to push the initial desktop tree state.
   pending_events_.push_back({current_tree_->GetRoot()->GetUniqueId(),
-                             ax::mojom::Event::kLoadComplete, -1});
+                             ax::mojom::Event::kLoadComplete, -1,
+                             is_performing_action_});
   SendPendingEvents();
   // Intentionally not reset at shutdown since we cannot rely on the shutdown
   // ordering of two base::Singletons.
@@ -104,6 +106,14 @@ void AutomationManagerAura::HandleAlert(const std::string& text) {
 
 void AutomationManagerAura::PerformAction(const ui::AXActionData& data) {
   CHECK(enabled_);
+
+  base::AutoReset<bool> reset_is_performing_action(&is_performing_action_,
+                                                   true);
+
+  // Exclude the do default action, which can trigger too many important events
+  // that should not be ignored by clients like focus.
+  if (data.action == ax::mojom::Action::kDoDefault)
+    is_performing_action_ = false;
 
   // Unlike all of the other actions, a hit test requires determining the
   // node to perform the action on first.
@@ -167,7 +177,8 @@ void AutomationManagerAura::Reset(bool reset_serializer) {
 void AutomationManagerAura::PostEvent(int id,
                                       ax::mojom::Event event_type,
                                       int action_request_id) {
-  pending_events_.push_back({id, event_type, action_request_id});
+  pending_events_.push_back(
+      {id, event_type, action_request_id, is_performing_action_});
 
   if (processing_posted_)
     return;
@@ -213,6 +224,8 @@ void AutomationManagerAura::SendPendingEvents() {
       ui::AXEvent event;
       event.id = aura_obj->GetUniqueId();
       event.event_type = event_type;
+      if (event_copy.is_performing_action)
+        event.event_from = ax::mojom::EventFrom::kAction;
       event.action_request_id = event_copy.action_request_id;
       events.push_back(event);
     }
@@ -257,10 +270,10 @@ void AutomationManagerAura::PerformHitTest(
     child_ax_tree_id = ui::AXTreeID::FromString(*child_ax_tree_id_ptr);
 
   // If the window has a child AX tree ID, forward the action to the
-  // associated AXActionHandler.
+  // associated AXActionHandlerBase.
   if (child_ax_tree_id != ui::AXTreeIDUnknown()) {
     ui::AXTreeIDRegistry* registry = ui::AXTreeIDRegistry::GetInstance();
-    ui::AXActionHandler* action_handler =
+    ui::AXActionHandlerBase* action_handler =
         registry->GetActionHandler(child_ax_tree_id);
     CHECK(action_handler);
 

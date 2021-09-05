@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Položka zoznamu</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Potiahnite dvoma prstami doprava</translation>
+<translation id="1016393160682012902">Po stlačení klávesa Qwerty, klávesa obnoviteľného Braillovho displeja alebo dotykového gesta sa dozviete viac o funkcii danej položky. Ak chcete odísť, stlačte kombináciu klávesov Control a w alebo Escape.</translation>
 <translation id="1022586497894531524">Používate hovorenú spätnú väzbu čítačky ChromeVox prvýkrát? Tento stručný návod vám vysvetlí základy potrebné na začatie používania čítačky ChromeVox.</translation>
 <translation id="1025074108959230262">Rýchly režim bol zakázaný</translation>
 <translation id="1031961866430398710">a potom</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Interný odkaz</translation>
 <translation id="4909019435900810068">Posunúť o slovo vzad</translation>
 <translation id="4911349081560453449">Žiadne predchádzajúce začiarkavacie políčko</translation>
-<translation id="4915087353619183190">Spúšťa sa režim učenia. Ak sa chcete dozvedieť viac o jeho funkciách, stlačte kláves Qwerty, kláves obnoviteľného braillovho displeja alebo dotykové gesto. Ak ho chcete ukončiť, stlačte klávesy Control a W alebo Escape.</translation>
 <translation id="492295894462528572">Predhovor</translation>
 <translation id="495046168593986294">Posunúť nahor</translation>
 <translation id="495170559598752135">Akcie</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Zelená</translation>
 <translation id="602001110135236999">Posunúť doľava</translation>
 <translation id="6034000775414344507">Svetlosivá</translation>
+<translation id="6036135911048686884">Skúmanie klepnutím</translation>
 <translation id="6037602951055904232">Posunúť zobrazenie dopredu</translation>
 <translation id="6044160928851315051">Stmaviť obrazovku</translation>
 <translation id="6082768461603900813">Základná navigácia</translation>
@@ -716,7 +717,7 @@
 <translation id="6696967141280706829">Predslov</translation>
 <translation id="6697092096875747123">Predchádzajúce rozbaľovacie pole</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{výkričník}few{# výkričníky}many{# výkričníka}other{# výkričníkov}}</translation>
-<translation id="6710213216561001401">Dozadu</translation>
+<translation id="6710213216561001401">Späť</translation>
 <translation id="6714813999819678458">Predchádzajúci nadpis 2. úrovne</translation>
 <translation id="6730312624811567147">Kombinácia klávesov Hľadať + šípka doľava alebo doprava slúži ako Home alebo End, kombinácia Hľadať + Ctrl + šípka doľava alebo doprava funguje ako Ctrl Home alebo Ctrl End, kombinácia klávesov Hľadať + šípka nahor alebo nadol slúži ako Page Up alebo Page Down</translation>
 <translation id="6736510033526053669">karta sa vytvorila</translation>
@@ -922,6 +923,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{mriežka}few{# mriežky}many{# pound signs}other{# mriežok}}</translation>
 <translation id="8378855320830505539">Oblasť</translation>
 <translation id="8382679411218029383">Vložené automatické dopĺňanie a zoznam</translation>
+<translation id="8394908167088220973">Média – prehrať / pozastaviť</translation>
 <translation id="8428213095426709021">Nastavenia</translation>
 <translation id="8428603554127842284">úroveň <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -966,6 +968,7 @@
 <translation id="8770473310765924354">ukončiť štruktúrovaný obsah, ako sú napríklad tabuľky</translation>
 <translation id="8779057862865475116">Žiadny predchádzajúci odkaz</translation>
 <translation id="8796411681063377102">Ďalší nadpis 3. úrovne</translation>
+<translation id="8823311177246872527"><ph name="CURRENTPAGE" />. strana z <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">banner</translation>
 <translation id="8851136666856101339">hlavné</translation>
 <translation id="8882002077197914455">Hlavička riadka</translation>

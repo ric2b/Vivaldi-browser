@@ -13,6 +13,7 @@ import android.support.test.InstrumentationRegistry;
 
 import androidx.test.filters.MediumTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -24,13 +25,14 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.findinpage.FindToolbar;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
@@ -67,16 +69,17 @@ public class ToolbarTest {
     }
 
     private void waitForFindInPageVisibility(final boolean visible) {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                FindToolbar findToolbar =
-                        (FindToolbar) mActivityTestRule.getActivity().findViewById(
-                                R.id.find_toolbar);
-
-                boolean isVisible = findToolbar != null && findToolbar.isShown();
-                return (visible == isVisible) && !findToolbar.isAnimating();
+        CriteriaHelper.pollUiThread(() -> {
+            FindToolbar findToolbar =
+                    (FindToolbar) mActivityTestRule.getActivity().findViewById(R.id.find_toolbar);
+            if (visible) {
+                Criteria.checkThat(findToolbar, Matchers.notNullValue());
+                Criteria.checkThat(findToolbar.isShown(), Matchers.is(true));
+            } else {
+                if (findToolbar == null) return;
+                Criteria.checkThat(findToolbar.isShown(), Matchers.is(false));
             }
+            Criteria.checkThat(findToolbar.isAnimating(), Matchers.is(false));
         });
     }
 
@@ -124,7 +127,7 @@ public class ToolbarTest {
 
         // Load new tab page.
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
-        Assert.assertEquals(UrlConstants.NTP_URL, tab.getUrlString());
+        Assert.assertEquals(UrlConstants.NTP_URL, ChromeTabUtils.getUrlStringOnUiThread(tab));
         assertFalse(isErrorPage(tab));
 
         // Stop the server and also disconnect the network.
@@ -133,7 +136,7 @@ public class ToolbarTest {
                 () -> NetworkChangeNotifier.forceConnectivityState(false));
 
         mActivityTestRule.loadUrl(testUrl);
-        Assert.assertEquals(testUrl, tab.getUrlString());
+        Assert.assertEquals(testUrl, ChromeTabUtils.getUrlStringOnUiThread(tab));
         assertTrue(isErrorPage(tab));
     }
 

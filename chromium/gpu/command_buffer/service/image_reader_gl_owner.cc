@@ -20,6 +20,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "gpu/command_buffer/service/abstract_texture.h"
 #include "gpu/ipc/common/android/android_image_reader_utils.h"
+#include "media/base/android/media_codec_util.h"
 #include "ui/gl/android/android_surface_control_compat.h"
 #include "ui/gl/gl_fence_android_native_fence_sync.h"
 #include "ui/gl/gl_utils.h"
@@ -35,6 +36,7 @@ bool IsSurfaceControl(TextureOwner::Mode mode) {
     case TextureOwner::Mode::kAImageReaderSecureSurfaceControl:
       return true;
     case TextureOwner::Mode::kAImageReaderInsecure:
+    case TextureOwner::Mode::kAImageReaderInsecureMultithreaded:
       return false;
     case TextureOwner::Mode::kSurfaceTextureInsecure:
       NOTREACHED();
@@ -43,6 +45,29 @@ bool IsSurfaceControl(TextureOwner::Mode mode) {
   NOTREACHED();
   return false;
 }
+
+// This should be as small as possible to limit the memory usage.
+// ImageReader needs 1 image to mimic the behavior of SurfaceTexture but
+// 2 images are required to minimize negative impact on
+// smoothness. This is because in case an image is not acquired for some
+// reasons, last acquired image should be displayed which is only possible with
+// 2 images (1 previously acquired, 1 currently acquired/tried to acquire).
+// But some devices supports only 1 image to be acquired. (see
+// crbug.com/1051705). For SurfaceControl we need 3 images instead of 2 since 1
+// frame (and hence image associated with it) will be with system compositor and
+// 2 frames will be in flight. For multi-threaded compositor, when AImageReader
+// is supported, we need 3 images in order to skip texture copy. 1 frame with
+// display compositor, 1 frame in flight and 1 frame being prepared by the
+// renderer.
+uint32_t NumRequiredMaxImages(TextureOwner::Mode mode) {
+  if (IsSurfaceControl(mode) ||
+      mode == TextureOwner::Mode::kAImageReaderInsecureMultithreaded) {
+    DCHECK(!media::MediaCodecUtil::LimitAImageReaderMaxSizeToOne());
+    return 3;
+  }
+  return media::MediaCodecUtil::LimitAImageReaderMaxSizeToOne() ? 1 : 2;
+}
+
 }  // namespace
 
 // This class is safe to be created/destroyed on different threads. This is made
@@ -108,15 +133,7 @@ ImageReaderGLOwner::ImageReaderGLOwner(
   // are/maybe overriden by the producer sending buffers to this imageReader's
   // Surface.
   int32_t width = 1, height = 1;
-
-  // This should be as small as possible to limit the memory usage.
-  // ImageReader needs 1 image to mimic the behavior of SurfaceTexture. Ideally
-  // it should be 2 but that doesn't work on some devices
-  // (see crbug.com/1051705).
-  // For SurfaceControl we need 3 images instead of 2 since 1 frame (and hence
-  // image associated with it) will be with system compositor and 2 frames will
-  // be in flight.
-  max_images_ = IsSurfaceControl(mode) ? 3 : 1;
+  max_images_ = NumRequiredMaxImages(mode);
   AIMAGE_FORMATS format = mode == Mode::kAImageReaderSecureSurfaceControl
                               ? AIMAGE_FORMAT_PRIVATE
                               : AIMAGE_FORMAT_YUV_420_888;

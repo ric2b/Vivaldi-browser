@@ -4,10 +4,13 @@
 
 #import "app/AppDelegate.h"
 
+#import "app/Foo.h"
+
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication*)application
     didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
+  NSLog(@"%@", [[[FooWrapper alloc] init] helloWithName:@"World"]);
   return YES;
 }
 

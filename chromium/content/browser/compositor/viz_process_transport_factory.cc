@@ -168,7 +168,8 @@ void VizProcessTransportFactory::ConnectHostFrameSinkManager() {
     // process.
     auto connect_on_io_thread =
         [](mojo::PendingReceiver<viz::mojom::FrameSinkManager> receiver,
-           mojo::PendingRemote<viz::mojom::FrameSinkManagerClient> client) {
+           mojo::PendingRemote<viz::mojom::FrameSinkManagerClient> client,
+           const viz::DebugRendererSettings& debug_renderer_settings) {
           // There should always be a GpuProcessHost instance, and GPU process,
           // for running the compositor thread. The exception is during shutdown
           // the GPU process won't be restarted and GpuProcessHost::Get() can
@@ -176,13 +177,16 @@ void VizProcessTransportFactory::ConnectHostFrameSinkManager() {
           auto* gpu_process_host = GpuProcessHost::Get();
           if (gpu_process_host) {
             gpu_process_host->gpu_host()->ConnectFrameSinkManager(
-                std::move(receiver), std::move(client));
+                std::move(receiver), std::move(client),
+                debug_renderer_settings);
           }
         };
     GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(connect_on_io_thread,
-                                  std::move(frame_sink_manager_receiver),
-                                  std::move(frame_sink_manager_client)));
+        FROM_HERE,
+        base::BindOnce(connect_on_io_thread,
+                       std::move(frame_sink_manager_receiver),
+                       std::move(frame_sink_manager_client),
+                       GetHostFrameSinkManager()->debug_renderer_settings()));
   } else {
     DCHECK(!viz_compositor_thread_);
 
@@ -429,6 +433,10 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
       features::IsUsingPreferredIntervalForVideo();
   root_params->num_of_frames_to_toggle_interval =
       features::NumOfFramesToToggleInterval();
+#if defined(OS_WIN)
+  root_params->set_present_duration_allowed =
+      features::ShouldUseSetPresentDuration();
+#endif  // OS_WIN
 
   // Connects the viz process end of CompositorFrameSink message pipes. The
   // browser compositor may request a new CompositorFrameSink on context loss,

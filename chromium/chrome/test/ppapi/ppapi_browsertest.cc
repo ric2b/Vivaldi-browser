@@ -34,6 +34,8 @@
 #include "components/nacl/common/buildflags.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
@@ -66,8 +68,10 @@
 #include "services/network/public/mojom/udp_socket.mojom.h"
 #include "services/network/test/test_dns_util.h"
 #include "services/network/test/test_network_context.h"
+#include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "base/mac/mac_util.h"
 #endif
 
@@ -107,8 +111,7 @@ using content::RenderViewHost;
 // Flaky on Mac ASAN:
 //    http://crbug.com/428670
 
-#if !BUILDFLAG(ENABLE_NACL) || \
-    (defined(OS_MACOSX) && defined(ADDRESS_SANITIZER))
+#if !BUILDFLAG(ENABLE_NACL) || (defined(OS_MAC) && defined(ADDRESS_SANITIZER))
 
 #define MAYBE_PPAPI_NACL(test_name) DISABLED_##test_name
 #define MAYBE_PPAPI_PNACL(test_name) DISABLED_##test_name
@@ -122,7 +125,8 @@ using content::RenderViewHost;
 #else
 
 #define MAYBE_PPAPI_NACL(test_name) test_name
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(ADDRESS_SANITIZER)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(ADDRESS_SANITIZER)
 // http://crbug.com/633067, http://crbug.com/727989
 #define MAYBE_PPAPI_PNACL(test_name) DISABLED_##test_name
 #else
@@ -292,7 +296,7 @@ TEST_PPAPI_NACL(Graphics2D_BindNull)
 #define MAYBE_OUT_Graphics3D Graphics3D
 #define MAYBE_NACL_Graphics3D DISABLED_Graphics3D
 #endif  // defined(USE_AURA)
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 // These tests fail when using the legacy software mode. Reenable when the
 // software compositor is enabled crbug.com/286038
 #define MAYBE_OUT_Graphics3D DISABLED_Graphics3D
@@ -1466,7 +1470,7 @@ IN_PROC_BROWSER_TEST_F(PPAPINaClNewlibTest, MAYBE_PPAPI_NACL(URLLoader3)) {
 }
 
 // Flaky on 32-bit linux bot; http://crbug.com/308906
-#if defined(OS_LINUX) && defined(ARCH_CPU_X86)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(ARCH_CPU_X86)
 #define MAYBE_URLLoader_BasicFilePOST DISABLED_URLLoader_BasicFilePOST
 #else
 #define MAYBE_URLLoader_BasicFilePOST URLLoader_BasicFilePOST
@@ -1731,7 +1735,7 @@ TEST_PPAPI_OUT_OF_PROCESS_VIA_HTTP(FileSystem)
 
 // PPAPINaClTest.FileSystem times out consistently on Windows and Mac.
 // http://crbug.com/130372
-#if defined(OS_MACOSX) || defined(OS_WIN)
+#if defined(OS_MAC) || defined(OS_WIN)
 #define MAYBE_FileSystem DISABLED_FileSystem
 #else
 #define MAYBE_FileSystem FileSystem
@@ -1739,10 +1743,10 @@ TEST_PPAPI_OUT_OF_PROCESS_VIA_HTTP(FileSystem)
 
 TEST_PPAPI_NACL(MAYBE_FileSystem)
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // http://crbug.com/103912
 #define MAYBE_Fullscreen DISABLED_Fullscreen
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
 // http://crbug.com/146008
 #define MAYBE_Fullscreen DISABLED_Fullscreen
 #elif defined(OS_WIN)
@@ -1966,7 +1970,7 @@ TEST_PPAPI_NACL(AudioEncoder)
       LIST_TEST(Audio_AudioCallback4) \
   )
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // http://crbug.com/396464
 #define MAYBE_Audio DISABLED_Audio
 #else
@@ -2018,7 +2022,7 @@ IN_PROC_BROWSER_TEST_F(PPAPINaClPNaClNonSfiTest,
 }
 
 TEST_PPAPI_OUT_OF_PROCESS(View_CreatedVisible)
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // http://crbug.com/474399
 #define MAYBE_View_CreatedVisible DISABLED_View_CreatedVisible
 #else
@@ -2074,21 +2078,27 @@ IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, DISABLED_View_PageHideShow) {
 
 // Tests that if a plugin accepts touch events, the browser knows to send touch
 // events to the renderer.
-IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, InputEvent_AcceptTouchEvent) {
-  std::string positive_tests[] = { "InputEvent_AcceptTouchEvent_1",
-                                   "InputEvent_AcceptTouchEvent_2",
-                                   "InputEvent_AcceptTouchEvent_3",
-                                   "InputEvent_AcceptTouchEvent_4"
-                                 };
-
-  for (size_t i = 0; i < base::size(positive_tests); ++i) {
-    RunTest(positive_tests[i]);
-    RenderViewHost* host = browser()->tab_strip_model()->
-        GetActiveWebContents()->GetRenderViewHost();
-    EXPECT_TRUE(content::RenderViewHostTester::HasTouchEventHandler(host));
-  }
+IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, InputEvent_AcceptTouchEvent1) {
+  RunTouchEventTest("InputEvent_AcceptTouchEvent_1");
 }
 
+// The browser sends touch events to the renderer if the plugin registers for
+// touch events and then unregisters.
+IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, InputEvent_AcceptTouchEvent2) {
+  RunTouchEventTest("InputEvent_AcceptTouchEvent_2");
+}
+
+// Tests that if a plugin accepts touch events, the browser knows to send touch
+// events to the renderer. In this case, the plugin requests that input events
+// corresponding to touch events are delivered for filtering.
+IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, InputEvent_AcceptTouchEvent3) {
+  RunTouchEventTest("InputEvent_AcceptTouchEvent_3");
+}
+// The plugin sends multiple RequestInputEvent() with the second
+// requesting touch events to be delivered.
+IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, InputEvent_AcceptTouchEvent4) {
+  RunTouchEventTest("InputEvent_AcceptTouchEvent_4");
+}
 // View tests.
 #define RUN_VIEW_SUBTESTS \
   RunTestViaHTTP( \
@@ -2119,7 +2129,7 @@ IN_PROC_BROWSER_TEST_F(PPAPINaClPNaClNonSfiTest, MAYBE_PNACL_NONSFI(View)) {
   )
 
 // Disabled due to flakiness http://crbug.com/1036287
-#if defined(OS_LINUX) || defined(OS_MACOSX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC)
 #define MAYBE_FlashMessageLoop DISABLED_FlashMessageLoop
 #else
 #define MAYBE_FlashMessageLoop FlashMessageLoop
@@ -2152,7 +2162,7 @@ IN_PROC_BROWSER_TEST_F(OutOfProcessPPAPITest, MAYBE_FlashMessageLoop) {
 // browser tests on Windows. Renable when the software compositor is available.
 #define MAYBE_Compositor0 DISABLED_Compositor0
 #define MAYBE_Compositor1 DISABLED_Compositor1
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 // This test fails when using the legacy software mode. Reenable when the
 // software compositor is enabled crbug.com/286038
 #define MAYBE_Compositor0 DISABLED_Compositor0
@@ -2167,7 +2177,7 @@ TEST_PPAPI_NACL_SUBTESTS(MAYBE_Compositor0, RUN_COMPOSITOR_SUBTESTS_0)
 TEST_PPAPI_NACL_SUBTESTS(MAYBE_Compositor1, RUN_COMPOSITOR_SUBTESTS_1)
 
 #if defined(OS_LINUX) || defined(OS_WIN) || defined(OS_CHROMEOS) || \
-    defined(OS_MACOSX)
+    defined(OS_MAC)
 // Flaky on ChromeOS, Linux, Windows, and Mac (crbug.com/438729)
 #define MAYBE_MediaStreamAudioTrack DISABLED_MediaStreamAudioTrack
 #else
@@ -2215,7 +2225,7 @@ TEST_PPAPI_NACL(MAYBE_VideoEncoder)
 TEST_PPAPI_OUT_OF_PROCESS(Printing)
 
 // https://crbug.com/1038957.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_MessageHandler DISABLED_MessageHandler
 #else
 #define MAYBE_MessageHandler MessageHandler
@@ -2231,7 +2241,7 @@ TEST_PPAPI_OUT_OF_PROCESS(Flash_GetProxyForURL)
 TEST_PPAPI_OUT_OF_PROCESS(Flash_GetSetting)
 TEST_PPAPI_OUT_OF_PROCESS(Flash_SetCrashData)
 // http://crbug.com/176822
-#if !defined(OS_WIN) && !defined(OS_MACOSX)
+#if !defined(OS_WIN) && !defined(OS_MAC)
 TEST_PPAPI_OUT_OF_PROCESS(FlashClipboard)
 #endif
 TEST_PPAPI_OUT_OF_PROCESS(FlashFile)
@@ -2241,7 +2251,7 @@ TEST_PPAPI_OUT_OF_PROCESS(FlashFile)
 // cros: http://crbug.com/396502
 // windows: http://crbug.com/899893
 // linux: http://crbug.com/899893
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS) || defined(OS_WIN) || \
+#if defined(OS_MAC) || defined(OS_CHROMEOS) || defined(OS_WIN) || \
     defined(OS_LINUX)
 #define MAYBE_FlashFullscreen DISABLED_FlashFullscreen
 #else
@@ -2289,7 +2299,7 @@ class PackagedAppTest : public extensions::ExtensionBrowserTest {
     params.command_line = *base::CommandLine::ForCurrentProcess();
     apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
         ->BrowserAppLauncher()
-        .LaunchAppWithParams(params);
+        ->LaunchAppWithParams(params);
   }
 
   void RunTests(const std::string& extension_dirname) {
@@ -2319,7 +2329,7 @@ class NonSfiPackagedAppTest : public PackagedAppTest {
 
 // Load a packaged app, and wait for it to successfully post a "hello" message
 // back.
-#if defined(OS_WIN) || !defined(NDEBUG) || defined(OS_MACOSX)
+#if defined(OS_WIN) || !defined(NDEBUG) || defined(OS_MAC)
 // flaky: crbug.com/707068
 // flaky on debug builds: crbug.com/709447
 IN_PROC_BROWSER_TEST_F(NewlibPackagedAppTest, DISABLED_SuccessfulLoad) {
@@ -2330,7 +2340,7 @@ IN_PROC_BROWSER_TEST_F(NewlibPackagedAppTest,
   RunTests("packaged_app");
 }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // http://crbug.com/579804
 #define MAYBE_SuccessfulLoad DISABLED_SuccessfulLoad
 #else

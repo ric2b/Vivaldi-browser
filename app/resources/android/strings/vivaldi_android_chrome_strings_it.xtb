@@ -8,11 +8,14 @@
 <translation id="1829244130665387512">Trova nella pagina</translation>
 <translation id="2038563949887743358">Attiva Richiedi sito desktop</translation>
 <translation id="2433507940547922241">Aspetto</translation>
+<translation id="2501278716633472235">Vai indietro</translation>
 <translation id="2633278372998075009">Schede private</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tutti i diritti riservati.</translation>
 <translation id="3234355010754616171">Nuova scheda privata</translation>
 <translation id="3518985090088779359">Accetta e continua</translation>
 <translation id="3700829948786686853">Benvenuto in Vivaldi</translation>
+<translation id="3719826155360621982">Pagina iniziale</translation>
+<translation id="385051799172605136">Indietro</translation>
 <translation id="4121750346708795461">Se utilizzi questa applicazione, accetti il <ph name="BEGIN_LINK1" />Contratto di licenza con l'utente finale<ph name="END_LINK1" /> e l'<ph name="BEGIN_LINK2" />Informativa sulla privacy<ph name="END_LINK2" /> di Vivaldi.</translation>
 <translation id="4243710787042215766">Apri in scheda privata</translation>
 <translation id="4526803704855831732">Schede private</translation>
@@ -37,6 +40,7 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per affin
 <translation id="7519434535192513364">Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi. Invia la parola selezionata e la pagina corrente come contesto alla ricerca di Google. Puoi disattivarlo in <ph name="BEGIN_LINK" />Impostazioni<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Aiuto</translation>
 <translation id="804786196054284061">Contratto di licenza con l'utente finale</translation>
+<translation id="85991616550051997">Vai alla pagina iniziale</translation>
 <translation id="8820817407110198400">Segnalibri</translation>
 <translation id="9063523880881406963">Disattiva Richiedi sito desktop</translation>
 <translation id="9080642952018487277">Entra in modalità privata</translation>

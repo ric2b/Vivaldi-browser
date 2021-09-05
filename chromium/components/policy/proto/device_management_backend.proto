@@ -341,6 +341,14 @@ message DeviceServiceApiAccessResponse {
   optional string auth_code = 1;
 }
 
+// Device Identifier for non-Chrome OS platform.
+message BrowserDeviceIdentifier {
+  // Name of the computer.
+  optional string computer_name = 1;
+  // Device serial number (definition depending on the platform).
+  optional string serial_number = 2;
+}
+
 message PolicyFetchRequest {
   reserved 5;
 
@@ -422,6 +430,9 @@ message PolicyFetchRequest {
 
   // If this is an affiliated user, this is the device's DMToken.
   optional string device_dm_token = 12;
+
+  // Device identifier for helping identify non-Chrome OS devices.
+  optional BrowserDeviceIdentifier browser_device_identifier = 13;
 }
 
 // This message customizes how the device behaves when it is disabled by its
@@ -659,6 +670,20 @@ message PolicyData {
   // Obfuscated customerId the device is enrolled into.
   // Only set for device policy.
   optional string obfuscated_customer_id = 34;
+
+  // The different types of user segments for metrics logging.
+  enum MetricsLogSegment {
+    UNSPECIFIED = 0;
+    K12 = 1;
+    UNIVERSITY = 2;
+    NONPROFIT = 3;
+    ENTERPRISE = 4;
+  }
+
+  // Indicates the segment the user's metrics should be logged under,
+  // UNSPECIFIED if not relevant.
+  // This field should only be set for User Policy response.
+  optional MetricsLogSegment metrics_log_segment = 35;
 }
 
 message ClientActionRequired {
@@ -1005,6 +1030,7 @@ message DiskLifetimeEstimation {
 }
 
 // Status of the single storage device
+// Next id: 27
 message DiskInfo {
   optional string serial = 1;
   optional string manufacturer = 2;
@@ -1027,6 +1053,46 @@ message DiskInfo {
   // Time spent discarding since last boot. Discarding is writing to clear
   // blocks which are no longer in use. Supported on kernels 4.18+.
   optional uint64 discard_time_seconds_since_last_boot = 13;
+
+  // The manufacturer of the block device.
+  oneof vendor_id {
+    // NVME vendors:
+    // https://pcisig.com/membership/member-companies
+    uint32 nvme_subsystem_vendor = 14;
+    // EMMC oemids
+    // https://screenshot.googleplex.com/eZWNnV8qGnc
+    uint32 emmc_oemid = 15;
+    uint32 other_vendor = 16;
+  }
+
+  // The manufacturer-specific product identifier.
+  oneof product_id {
+    uint32 nvme_subsystem_device = 17;
+    uint32 emmc_pnm = 18;
+    uint32 other_product = 19;
+  }
+
+  // The revision of the device's hardware.
+  oneof hardware_revision {
+    uint32 nvme_hardware_rev = 20;
+    uint32 emmc_hardware_rev = 21;
+    uint32 other_hardware_rev = 22;
+  }
+
+  // The revision of the device's firmware.
+  oneof firmware_revision {
+    uint64 nvme_firmware_rev = 23;
+    uint64 emmc_firmware_rev = 24;
+    uint32 other_firmware_rev = 25;
+  }
+
+  // The purpose of the device on the system.
+  enum DevicePurpose {
+    PURPOSE_UNKNOWN = 0;
+    PURPOSE_BOOT = 1;
+    PURPOSE_SWAP = 2;
+  }
+  optional DevicePurpose purpose = 26;
 }
 
 // Status of the storage subsystem.
@@ -1053,9 +1119,32 @@ message BoardStatus {
   repeated ThermalInfo thermal_infos = 1;
 }
 
-// Status for various system-wide non-hardware elements.
+// Status about a system's various elements.
 message SystemStatus {
+  // The product SKU (stock keeping unit) number.
   optional string vpd_sku_number = 1;
+  // The date the device was first activated.
+  // Format: YYYY-WW.
+  optional string first_power_date = 2;
+  // The date the device was manufactured (finalized in factory).
+  // Format: YYYY-MM-DD.
+  optional string manufacture_date = 3;
+  // Contents of CrosConfig in /arc/build-properties/marketing-name. E.g. "HP
+  // Chromebook x360 14"
+  optional string marketing_name = 4;
+  // The BIOS version. E.g. "Google_Sarien.12200.58.0"
+  optional string bios_version = 5;
+  // The product name of the motherboard. E.g. "Sarien"
+  optional string board_name = 6;
+  // The version of the motherboard. E.g. "rev16"
+  optional string board_version = 7;
+  // The chassis type of the device. The values reported by chassis type are
+  // mapped in
+  // www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.0.0.pdf.
+  // E.g. "9"
+  optional uint64 chassis_type = 8;
+  // The product name (model) of the system. E.g. "Sarien"
+  optional string product_name = 9;
 }
 
 // Status of a single C-state. C-states are various modes the CPU can transition
@@ -1292,7 +1381,8 @@ message DeviceStatusReportRequest {
   // Status of various main board components.
   optional BoardStatus board_status = 27;
 
-  // Status for various system-wide non-hardware elements.
+  // Information about a system's various non-hardware elements. This includes
+  // information from cached VPD, CrosConfig, and DMI.
   optional SystemStatus system_status = 28;
 
   // Stateful Partition Information for user data.
@@ -1667,6 +1757,9 @@ message Policy {
 
     // A policy is set by multiple sources and value has been merged.
     SOURCE_MERGED = 7;
+
+    // A policy is set by command line switch for testing purpose.
+    SOURCE_COMMAND_LINE = 8;
   }
   optional PolicySource source = 4;
 
@@ -1806,6 +1899,10 @@ message ChromeDesktopReportRequest {
   optional OSReport os_report = 7;
   // A string contains OS user name.
   optional string os_user_name = 8;
+  // Device identifier for helping identify non-Chrome OS devices.
+  // TODO(crbug.com/1105938): This will also replace the computer_name and
+  // serial_number fields.
+  optional BrowserDeviceIdentifier browser_device_identifier = 9;
 }
 
 // Report user level status on Chrome OS platform. Chrome OS equivalent of
@@ -2344,6 +2441,9 @@ message RemoteCommand {
     // Send a command or get an update from an existing diagnostics routine.
     DEVICE_GET_DIAGNOSTIC_ROUTINE_UPDATE = 11;
 
+    // Clear the cache and cookies associated with a given profile.
+    BROWSER_CLEAR_BROWSING_DATA = 12;
+
     // Please update metrics after adding a new item - see the comment above.
   }
 
@@ -2542,6 +2642,9 @@ message RegisterBrowserRequest {
   optional string os_platform = 2;
   // Platform specific version number, e.g., 6.1.7601.0 or 10.12.6
   optional string os_version = 3;
+  // Device identifier for helping identify non-Chrome OS devices.
+  // TODO(crbug.com/1105938): This will also replace the machine_name field.
+  optional BrowserDeviceIdentifier browser_device_identifier = 4;
 }
 
 // Gets an enrollment token to a managed Google Play account for using it with
@@ -2731,6 +2834,138 @@ message ExtensionInstallReportLogEvent {
     RESUME = 4;
   }
 
+  // Possible failure reasons. See InstallStageTracker::FailureReason for more
+  // details. InstallStageTracker::FailureReason is the main enum and this is
+  // a copy used for reporting purposes.
+  enum FailureReason {
+    FAILURE_REASON_UNKNOWN = 0;
+
+    INVALID_ID = 1;
+
+    MALFORMED_EXTENSION_SETTINGS = 2;
+
+    REPLACED_BY_ARC_APP = 3;
+
+    MALFORMED_EXTENSION_DICT = 4;
+
+    NOT_SUPPORTED_EXTENSION_DICT = 5;
+
+    MALFORMED_EXTENSION_DICT_FILE_PATH = 6;
+
+    MALFORMED_EXTENSION_DICT_VERSION = 7;
+
+    MALFORMED_EXTENSION_DICT_UPDATE_URL = 8;
+
+    LOCALE_NOT_SUPPORTED = 9;
+
+    NOT_PERFORMING_NEW_INSTALL = 10;
+
+    TOO_OLD_PROFILE = 11;
+
+    DO_NOT_INSTALL_FOR_ENTERPRISE = 12;
+
+    ALREADY_INSTALLED = 13;
+
+    CRX_FETCH_FAILED = 14;
+
+    MANIFEST_FETCH_FAILED = 15;
+
+    MANIFEST_INVALID = 16;
+
+    NO_UPDATE = 17;
+
+    CRX_INSTALL_ERROR_DECLINED = 18;
+
+    CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE = 19;
+
+    CRX_INSTALL_ERROR_OTHER = 20;
+
+    NO_UPDATE_URL = 21;
+
+    PENDING_ADD_FAILED = 22;
+
+    DOWNLOADER_ADD_FAILED = 23;
+
+    IN_PROGRESS = 24;
+
+    CRX_FETCH_URL_EMPTY = 25;
+
+    CRX_FETCH_URL_INVALID = 26;
+  }
+
+  //  Stage of extension installing process. See InstallStageTracker::Stage for
+  //  more details. InstallStageTracker::Stage is the main enum and this is
+  // a copy used for reporting purposes. The entries are in the order they occur
+  // in the installation process.
+  enum InstallationStage {
+    CREATED = 0;
+
+    NOTIFIED_FROM_MANAGEMENT = 5;
+
+    NOTIFIED_FROM_MANAGEMENT_NOT_FORCED = 6;
+
+    SEEN_BY_POLICY_LOADER = 7;
+
+    SEEN_BY_EXTERNAL_PROVIDER = 8;
+
+    PENDING = 1;
+
+    DOWNLOADING = 2;
+
+    INSTALLING = 3;
+
+    COMPLETE = 4;
+  }
+
+  // Type of current user. See user_manager::UserType for more details.
+  // user_manager::UserType is the main enum and this is a copy used for
+  // reporting purposes.
+  enum UserType {
+    USER_TYPE_REGULAR = 0;
+
+    USER_TYPE_GUEST = 1;
+
+    USER_TYPE_PUBLIC_ACCOUNT = 2;
+
+    USER_TYPE_SUPERVISED = 3;
+
+    USER_TYPE_KIOSK_APP = 4;
+
+    USER_TYPE_CHILD = 5;
+
+    USER_TYPE_ARC_KIOSK_APP = 6;
+
+    USER_TYPE_ACTIVE_DIRECTORY = 7;
+
+    USER_TYPE_WEB_KIOSK_APP = 8;
+  };
+
+  // Current stage of the extension downloading process. See
+  // ExtensionDownloaderDelegate::Stage for more details.
+  // ExtensionDownloaderDelegate::Stage is the main enum and this is a copy used
+  // for reporting purposes.
+  enum DownloadingStage {
+    DOWNLOAD_PENDING = 0;
+
+    QUEUED_FOR_MANIFEST = 1;
+
+    DOWNLOADING_MANIFEST = 2;
+
+    DOWNLOADING_MANIFEST_RETRY = 3;
+
+    PARSING_MANIFEST = 4;
+
+    MANIFEST_LOADED = 5;
+
+    QUEUED_FOR_CRX = 6;
+
+    DOWNLOADING_CRX = 7;
+
+    DOWNLOADING_CRX_RETRY = 8;
+
+    FINISHED = 9;
+  }
+
   // Timestamp, in microseconds since epoch. Set for all log
   // events.
   optional int64 timestamp = 1;
@@ -2749,6 +2984,25 @@ message ExtensionInstallReportLogEvent {
 
   // Type of session state change. Set for event type SESSION_STATE_CHANGE.
   optional SessionStateChangeType session_state_change_type = 6;
+
+  // Type of failure reason. Set for event type INSTALLATION_FAILED.
+  optional FailureReason failure_reason = 7;
+
+  // Stage of installation process.
+  optional InstallationStage installation_stage = 8;
+
+  // Stage of downloading process.
+  optional DownloadingStage downloading_stage = 9;
+
+  // Type of the extension. Set for event type SUCCESS and sometimes (when
+  // possible) for INSTALLATION_FAILED.
+  optional Extension.ExtensionType extension_type = 10;
+
+  // Type of the current user.
+  optional UserType user_type = 11;
+
+  // Whether the current user is new.
+  optional bool is_new_user = 12;
 }
 
 // A single entry in the push-install log for an app.

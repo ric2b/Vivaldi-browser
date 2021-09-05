@@ -10,7 +10,6 @@
 #include "chrome/browser/media/router/discovery/discovery_network_monitor.h"
 #include "chrome/browser/media/router/discovery/mdns/media_sink_util.h"
 #include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/media_router/media_sink.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "components/prefs/pref_service.h"
@@ -144,6 +143,14 @@ void CastMediaSinkService::RunSinksDiscoveredCallback(
     std::vector<MediaSinkInternal> sinks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sinks_discovered_cb.Run(std::move(sinks));
+}
+
+void CastMediaSinkService::BindLogger(
+    mojo::PendingRemote<mojom::Logger> pending_remote) {
+  impl_->task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CastMediaSinkServiceImpl::BindLogger,
+                     base::Unretained(impl_.get()), std::move(pending_remote)));
 }
 
 }  // namespace media_router

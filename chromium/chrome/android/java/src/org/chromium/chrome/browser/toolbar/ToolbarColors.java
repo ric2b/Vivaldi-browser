@@ -28,9 +28,9 @@ import org.chromium.ui.util.ColorUtils;
 
 import android.app.Activity;
 import org.chromium.base.ContextUtils;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
-import org.chromium.chrome.browser.ChromeActivity;
 
 /**
  * Helpers to determine colors in toolbars.

@@ -4,17 +4,15 @@
 
 #include "components/content_settings/browser/ui/cookie_controls_controller.h"
 
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
+#include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/ui/cookie_controls/cookie_controls_service.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/content_settings/browser/tab_specific_content_settings.h"
+#include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/browser/ui/cookie_controls_view.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/cookie_controls_enforcement.h"
-#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -26,9 +24,9 @@ namespace {
 
 class MockCookieControlsView : public content_settings::CookieControlsView {
  public:
-  MOCK_METHOD3(OnStatusChanged,
-               void(CookieControlsStatus, CookieControlsEnforcement, int));
-  MOCK_METHOD1(OnBlockedCookiesCountChanged, void(int));
+  MOCK_METHOD4(OnStatusChanged,
+               void(CookieControlsStatus, CookieControlsEnforcement, int, int));
+  MOCK_METHOD2(OnCookiesCountChanged, void(int, int));
 };
 
 }  // namespace
@@ -64,12 +62,10 @@ std::ostream& operator<<(std::ostream& os,
 class CookieControlsTest : public ChromeRenderViewHostTestHarness {
  protected:
   void SetUp() override {
-    feature_list.InitAndEnableFeature(
-        content_settings::kImprovedCookieControls);
     ChromeRenderViewHostTestHarness::SetUp();
-    content_settings::TabSpecificContentSettings::CreateForWebContents(
+    content_settings::PageSpecificContentSettings::CreateForWebContents(
         web_contents(),
-        std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+        std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
             web_contents()));
     profile()->GetPrefs()->SetInteger(
         prefs::kCookieControlsMode,
@@ -96,14 +92,13 @@ class CookieControlsTest : public ChromeRenderViewHostTestHarness {
 
   MockCookieControlsView* mock() { return &mock_; }
 
-  content_settings::TabSpecificContentSettings*
-  tab_specific_content_settings() {
-    return content_settings::TabSpecificContentSettings::FromWebContents(
-        web_contents());
+  content_settings::PageSpecificContentSettings*
+  page_specific_content_settings() {
+    return content_settings::PageSpecificContentSettings::GetForFrame(
+        web_contents()->GetMainFrame());
   }
 
  private:
-  base::test::ScopedFeatureList feature_list;
   MockCookieControlsView mock_;
   std::unique_ptr<content_settings::CookieControlsController> cookie_controls_;
 };
@@ -111,7 +106,7 @@ class CookieControlsTest : public ChromeRenderViewHostTestHarness {
 TEST_F(CookieControlsTest, NewTabPage) {
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kDisabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
 }
 
@@ -120,27 +115,41 @@ TEST_F(CookieControlsTest, SomeWebSite) {
   NavigateAndCommit(GURL("https://example.com"));
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
   testing::Mock::VerifyAndClearExpectations(mock());
 
-  // Accessing cookies should not change anything.
-  EXPECT_CALL(*mock(), OnBlockedCookiesCountChanged(0));
-  tab_specific_content_settings()->OnWebDatabaseAccessed(
+  // Accessing cookies should be notified.
+  EXPECT_CALL(*mock(), OnCookiesCountChanged(1, 0));
+  page_specific_content_settings()->OnWebDatabaseAccessed(
       GURL("https://example.com"), /*blocked=*/false);
   testing::Mock::VerifyAndClearExpectations(mock());
 
+  // Manually trigger a full update to check that the cookie count changed.
+  EXPECT_CALL(*mock(),
+              OnStatusChanged(CookieControlsStatus::kEnabled,
+                              CookieControlsEnforcement::kNoEnforcement, 1, 0));
+  cookie_controls()->Update(web_contents());
+  testing::Mock::VerifyAndClearExpectations(mock());
+
   // Blocking cookies should update the blocked cookie count.
-  EXPECT_CALL(*mock(), OnBlockedCookiesCountChanged(1));
-  tab_specific_content_settings()->OnWebDatabaseAccessed(
+  EXPECT_CALL(*mock(), OnCookiesCountChanged(1, 1));
+  page_specific_content_settings()->OnWebDatabaseAccessed(
       GURL("https://thirdparty.com"), /*blocked=*/true);
+  testing::Mock::VerifyAndClearExpectations(mock());
+
+  // Manually trigger a full update to check that the cookie count changed.
+  EXPECT_CALL(*mock(),
+              OnStatusChanged(CookieControlsStatus::kEnabled,
+                              CookieControlsEnforcement::kNoEnforcement, 1, 1));
+  cookie_controls()->Update(web_contents());
   testing::Mock::VerifyAndClearExpectations(mock());
 
   // Navigating somewhere else should reset the cookie count.
   NavigateAndCommit(GURL("https://somethingelse.com"));
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
 }
 
@@ -148,14 +157,14 @@ TEST_F(CookieControlsTest, PreferenceDisabled) {
   NavigateAndCommit(GURL("https://example.com"));
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
   testing::Mock::VerifyAndClearExpectations(mock());
 
   // Disabling the feature should disable the UI.
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kDisabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
       static_cast<int>(content_settings::CookieControlsMode::kOff));
@@ -166,14 +175,14 @@ TEST_F(CookieControlsTest, DisableForSite) {
   NavigateAndCommit(GURL("https://example.com"));
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
   testing::Mock::VerifyAndClearExpectations(mock());
 
   // Disabling cookie blocking for example.com should update the ui.
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kDisabledForSite,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->OnCookieBlockingEnabledForSite(false);
   testing::Mock::VerifyAndClearExpectations(mock());
 
@@ -181,7 +190,7 @@ TEST_F(CookieControlsTest, DisableForSite) {
   NavigateAndCommit(GURL("https://somethingelse.com"));
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
   testing::Mock::VerifyAndClearExpectations(mock());
 
@@ -189,14 +198,14 @@ TEST_F(CookieControlsTest, DisableForSite) {
   NavigateAndCommit(GURL("https://example.com"));
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kDisabledForSite,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
   testing::Mock::VerifyAndClearExpectations(mock());
 
   // Enabling example.com again should change status to kEnabled.
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->OnCookieBlockingEnabledForSite(true);
   testing::Mock::VerifyAndClearExpectations(mock());
 }
@@ -205,7 +214,7 @@ TEST_F(CookieControlsTest, Incognito) {
   NavigateAndCommit(GURL("https://example.com"));
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   cookie_controls()->Update(web_contents());
   testing::Mock::VerifyAndClearExpectations(mock());
 
@@ -214,9 +223,9 @@ TEST_F(CookieControlsTest, Incognito) {
   std::unique_ptr<content::WebContents> incognito_web_contents =
       content::WebContentsTester::CreateTestWebContents(
           profile()->GetPrimaryOTRProfile(), nullptr);
-  content_settings::TabSpecificContentSettings::CreateForWebContents(
+  content_settings::PageSpecificContentSettings::CreateForWebContents(
       incognito_web_contents.get(),
-      std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+      std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
           incognito_web_contents.get()));
   auto* tester = content::WebContentsTester::For(incognito_web_contents.get());
   MockCookieControlsView incognito_mock_;
@@ -229,7 +238,7 @@ TEST_F(CookieControlsTest, Incognito) {
   tester->NavigateAndCommit(GURL("https://example.com"));
   EXPECT_CALL(incognito_mock_,
               OnStatusChanged(CookieControlsStatus::kEnabled,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
   incognito_cookie_controls.Update(incognito_web_contents.get());
   testing::Mock::VerifyAndClearExpectations(mock());
   testing::Mock::VerifyAndClearExpectations(&incognito_mock_);
@@ -238,11 +247,11 @@ TEST_F(CookieControlsTest, Incognito) {
   // through regular mode.
   EXPECT_CALL(*mock(),
               OnStatusChanged(CookieControlsStatus::kDisabledForSite,
-                              CookieControlsEnforcement::kNoEnforcement, 0));
-  EXPECT_CALL(
-      incognito_mock_,
-      OnStatusChanged(CookieControlsStatus::kDisabledForSite,
-                      CookieControlsEnforcement::kEnforcedByCookieSetting, 0));
+                              CookieControlsEnforcement::kNoEnforcement, 0, 0));
+  EXPECT_CALL(incognito_mock_,
+              OnStatusChanged(
+                  CookieControlsStatus::kDisabledForSite,
+                  CookieControlsEnforcement::kEnforcedByCookieSetting, 0, 0));
   cookie_controls()->OnCookieBlockingEnabledForSite(false);
   testing::Mock::VerifyAndClearExpectations(mock());
   testing::Mock::VerifyAndClearExpectations(&incognito_mock_);

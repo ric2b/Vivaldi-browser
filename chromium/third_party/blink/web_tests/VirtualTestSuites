@@ -5,24 +5,6 @@
     "args": ["--enable-features=TopLevelAwait"]
   },
   {
-    "prefix": "cors",
-    "bases": ["external/wpt/cors",
-              "external/wpt/fetch",
-              "external/wpt/fonts",
-              "external/wpt/loading",
-              "external/wpt/preload",
-              "external/wpt/referrer-policy",
-              "external/wpt/resource-timing",
-              "external/wpt/service-workers",
-              "external/wpt/xhr",
-              "http/tests/fetch",
-              "http/tests/misc",
-              "http/tests/navigation",
-              "http/tests/security",
-              "http/tests/xmlhttprequest"],
-    "args": ["--disable-features=OutOfBlinkCors"]
-  },
-  {
     "prefix": "disable-accept-language-header",
     "bases": ["http/tests/navigation/language"],
     "args": ["--disable-features=AcceptLanguageHeader"]
@@ -31,6 +13,11 @@
     "prefix": "gpu",
     "bases": ["fast/canvas"],
     "args": ["--enable-accelerated-2d-canvas"]
+  },
+  {
+    "prefix": "unsafe_webgpu",
+    "bases": ["regress/regress-1104580.html"],
+    "args": ["--enable-unsafe-webgpu"]
   },
   {
     "prefix": "isolated_world_csp",
@@ -120,9 +107,12 @@
               "inspector-protocol/dom-snapshot",
               "media/stable",
               "webexposed",
-              "wpt_internal/origin-isolation"],
+              "wpt_internal/origin-isolation",
+              "compositing/filters"
+              ],
     "args": ["--stable-release-mode",
-             "--disable-auto-wpt-origin-isolation"]
+             "--disable-auto-wpt-origin-isolation",
+             "--enable-blink-features=CompositingOptimizations"]
   },
   {
     "prefix": "feature-policy-permissions",
@@ -198,7 +188,8 @@
               "external/wpt/css/filter-effects",
               "external/wpt/largest-contentful-paint",
               "fast/hidpi/static",
-              "http/tests/csspaint/hidpi"],
+              "http/tests/csspaint/hidpi",
+              "http/tests/images/document-policy"],
     "args": ["--force-device-scale-factor=2"]
   },
   {
@@ -221,9 +212,20 @@
              "--enable-use-zoom-for-dsf"]
   },
   {
+    "prefix": "schemeful-same-site",
+    "bases": ["http/tests/inspector-protocol/network/same-site-issue-warn-cookie-strict-subresource-context-downgrade.js",
+              "http/tests/inspector-protocol/network/same-site-issue-warn-cookie-lax-subresource-context-downgrade.js",
+              "http/tests/inspector-protocol/network/same-site-issue-warn-cookie-navigation-context-downgrade.js"],
+    "args": ["--enable-features=SchemefulSameSite"]
+  },
+  {
     "prefix": "layout_ng_block_frag",
     "bases": ["external/wpt/css/css-break",
+              "external/wpt/css/css-contain",
               "external/wpt/css/css-multicol",
+              "external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/contain",
+              "external/wpt/html/rendering/non-replaced-elements/the-fieldset-and-legend-elements",
+              "fast/forms/fieldset",
               "fast/multicol",
               "fragmentation",
               "printing"],
@@ -236,21 +238,6 @@
               "fast/block",
               "fast/table"],
     "args": ["--enable-blink-features=LayoutNGFragmentTraversal"]
-  },
-  {
-    "prefix": "layout_ng_flex_box",
-    "bases": ["css3/flexbox",
-              "external/wpt/css/css-flexbox",
-              "external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/flexbox"],
-    "args": ["--enable-blink-features=LayoutNGFlexBox"]
-  },
-  {
-    "prefix": "layout_ng_fieldset",
-    "bases": ["external/wpt/css/css-contain",
-              "external/wpt/css/vendor-imports/mozilla/mozilla-central-reftests/contain",
-              "external/wpt/html/rendering/non-replaced-elements/the-fieldset-and-legend-elements",
-              "fast/forms/fieldset"],
-    "args": ["--enable-blink-features=LayoutNGFieldset,LayoutNGBlockFragmentation"]
   },
   {
     "prefix": "layout-ng-grid",
@@ -519,24 +506,19 @@
     "args": ["--enable-features=NativeFileSystemAPI,FileHandlingAPI"]
   },
   {
-    "prefix": "controls-refresh",
-    "bases": [],
-    "args": ["--enable-features=FormControlsRefresh"]
-  },
-  {
     "prefix": "controls-refresh-hc",
-    "bases": ["virtual/controls-refresh/color-scheme"],
-    "args": ["--enable-features=FormControlsRefresh,ForcedColors",
+    "bases": ["fast/forms/color-scheme"],
+    "args": ["--enable-features=ForcedColors",
              "--force-high-contrast"]
   },
   {
     "prefix": "eye-dropper",
-    "bases": ["virtual/controls-refresh/color-scheme/color"],
-    "args": ["--enable-features=FormControlsRefresh,EyeDropper"]
+    "bases": ["fast/forms/color-scheme/color"],
+    "args": ["--enable-features=EyeDropper"]
   },
   {
     "prefix": "use-common-select-popup",
-    "bases": ["virtual/controls-refresh/color-scheme/select"],
+    "bases": ["fast/forms/color-scheme/select"],
     "args": ["--enable-features=UseCommonSelectPopup"]
   },
   {
@@ -558,8 +540,14 @@
              "--enable-blink-features=ForcedColors"]
   },
   {
+    "prefix": "system-color-compute",
+    "bases": ["external/wpt/css/css-color"],
+    "args": ["--enable-blink-features=CSSColorScheme,CSSColorSchemeUARendering,CSSSystemColorComputeToSelf"]
+  },
+  {
     "prefix": "dark-color-scheme",
-    "bases": ["external/wpt/css/css-color-adjust/rendering/dark-color-scheme"],
+    "bases": ["external/wpt/css/css-color-adjust/rendering/dark-color-scheme",
+              "fast/forms/color-scheme"],
     "args": ["--force-dark-mode",
              "--enable-blink-features=CSSColorScheme,CSSColorSchemeUARendering"]
   },
@@ -589,63 +577,6 @@
     "args": ["--enable-blink-features=MeasureMemory,ForceEagerMeasureMemory"]
   },
   {
-    "prefix": "cascade",
-    "bases": ["animations/custom-properties",
-              "animations/interpolation",
-              "external/wpt/css/css-cascade",
-              "external/wpt/css/css-paint-api",
-              "external/wpt/css/css-properties-values-api",
-              "external/wpt/css/css-scoping",
-              "external/wpt/css/css-typed-om",
-              "external/wpt/css/css-variables",
-              "fast/css/variables",
-              "fast/forms/select/select-autofilled.html",
-              "fast/forms/001.html",
-              "fast/forms/button-style-color.html",
-              "fast/forms/calendar-picker/calendar-picker-appearance-zoom125.html",
-              "fast/forms/color/color-suggestion-picker-appearance.html",
-              "fast/forms/date/date-appearance-basic.html",
-              "fast/forms/datetimelocal/datetimelocal-appearance-basic.html",
-              "fast/forms/fieldset/fieldset-align.html",
-              "fast/forms/month/month-appearance-basic.html",
-              "fast/forms/select/basic-selects.html",
-              "fast/forms/select-popup/popup-menu-appearance-zoom090.html",
-              "fast/forms/select-popup/popup-menu-appearance-zoom110.html",
-              "fast/forms/submit/submit-appearance-basic.html",
-              "fast/forms/text/text-appearance-basic.html",
-              "fast/forms/textarea/textarea-appearance-basic.html",
-              "external/wpt/css/css-writing-modes/block-flow-direction-vlr-022.xht",
-              "external/wpt/css/css-writing-modes/block-flow-direction-vrl-021.xht",
-              "external/wpt/css/css-logical/cascading-001.html",
-              "external/wpt/css/css-logical/inheritance.html",
-              "external/wpt/css/css-logical/logical-box-border-color.html",
-              "external/wpt/css/css-logical/logical-box-border-shorthands.html",
-              "external/wpt/css/css-logical/logical-box-border-style.html",
-              "external/wpt/css/css-logical/logical-box-border-width.html",
-              "external/wpt/css/css-logical/logical-box-inset.html",
-              "external/wpt/css/css-logical/logical-box-margin.html",
-              "external/wpt/css/css-logical/logical-box-padding.html",
-              "external/wpt/css/css-logical/logical-box-size.html",
-              "external/wpt/css/css-logical/logicalprops-block-size-vlr.html",
-              "external/wpt/css/css-logical/logicalprops-block-size.html",
-              "external/wpt/css/css-logical/logicalprops-inline-size-vlr.html",
-              "external/wpt/css/css-logical/logicalprops-inline-size.html",
-              "fast/borders/border-image-outset-in-shorthand.html",
-              "fast/borders/border-image-repeat-round.html",
-              "fast/borders/border-image-repeat.html",
-              "fast/borders/border-image-slices.html",
-              "fast/borders/border-image-source.html",
-              "fast/backgrounds/mask-composite.html",
-              "fast/css/acid2.html"],
-    "args": ["--enable-blink-features=CSSCascade"]
-  },
-  {
-    "prefix": "forced-high-contrast-cascade",
-    "bases": ["external/wpt/forced-colors-mode"],
-    "args": ["--force-high-contrast",
-             "--enable-blink-features=CSSCascade,ForcedColors"]
-  },
-  {
     "prefix": "payment-request-mandatory-total",
     "bases": ["http/tests/payments/payment-request-app-store-billing-mandatory-total.html"],
     "args": ["--disable-blink-features=PaymentRequestTotalOptional"]
@@ -658,7 +589,7 @@
   {
     "prefix": "cache-storage-eager-reading",
     "bases": ["external/wpt/service-workers"],
-    "args": ["--enable-features=CacheStorageEagerReading"]
+    "args": ["--disable-features=CacheStorageEagerReading"]
   },
   {
     "prefix": "conditional-appcache-delay",
@@ -736,11 +667,6 @@
     "args": ["--disable-blink-features=ShadowDOMV0,CustomElementsV0,HTMLImports"]
   },
   {
-    "prefix": "form-controls-refresh-disabled",
-    "bases": ["fast/forms/"],
-    "args": ["--disable-features=FormControlsRefresh"]
-  },
-  {
     "prefix": "raw-clipboard",
     "bases": ["clipboard/async-clipboard",
               "external/wpt/clipboard-apis/clipboard-item.https.html"],
@@ -774,7 +700,7 @@
   },
   {
     "prefix": "trust-tokens",
-    "bases": [ "external/wpt/trust-tokens/end-to-end", "http/tests/loading/trust-tokens" ],
+    "bases": [ "external/wpt/trust-tokens/end-to-end", "http/tests/loading/trust-tokens", "http/tests/inspector-protocol/trust-tokens" ],
     "args": [ "--enable-features=TrustTokens" ]
   },
   {
@@ -804,7 +730,8 @@
   },
   {
     "prefix": "subresource-web-bundles",
-    "bases": [ "external/wpt/web-bundle/subresource-loading" ],
+    "bases": [ "external/wpt/web-bundle/subresource-loading",
+               "http/tests/loading/wbn/subresource-loading" ],
     "args": [ "--enable-blink-features=SubresourceWebBundles" ]
   },
   {
@@ -821,5 +748,15 @@
                "http/tests/portals",
                "wpt_internal/portals" ],
     "args": [ "--enable-features=Portals,PortalsCrossOrigin" ]
+  },
+  {
+    "prefix": "restrict-gamepad",
+    "bases": [ "external/wpt/gamepad" ],
+    "args": [ "--enable-features=RestrictGamepadAccess" ]
+  },
+  {
+    "prefix": "bfcache-experiment-control",
+    "bases": [ "http/tests/origin_trials/webexposed/bfcache-experiment-http-header-origin-trial.php" ],
+    "args": [ "--enable-features=BackForwardCacheABExperimentControl" ]
   }
 ]

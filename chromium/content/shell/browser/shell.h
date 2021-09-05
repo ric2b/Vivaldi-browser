@@ -102,7 +102,7 @@ class Shell : public WebContentsDelegate,
   gfx::NativeWindow window();
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Public to be called by an ObjC bridge object.
   void ActionPerformed(int control);
   void URLEntered(const std::string& url_string);
@@ -145,7 +145,8 @@ class Shell : public WebContentsDelegate,
   std::unique_ptr<BluetoothScanningPrompt> ShowBluetoothScanningPrompt(
       RenderFrameHost* frame,
       const BluetoothScanningPrompt::EventHandler& event_handler) override;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
+  void DidNavigateMainFramePostCommit(WebContents* contents) override;
   bool HandleKeyboardEvent(WebContents* source,
                            const NativeWebKeyboardEvent& event) override;
 #endif
@@ -160,9 +161,14 @@ class Shell : public WebContentsDelegate,
       RenderWidgetHost* render_widget_host,
       base::RepeatingClosure hang_monitor_restarter) override;
   void ActivateContents(WebContents* contents) override;
+
   std::unique_ptr<content::WebContents> ActivatePortalWebContents(
       content::WebContents* predecessor_contents,
       std::unique_ptr<content::WebContents> portal_contents) override;
+  void UpdateInspectedWebContentsIfNecessary(
+      content::WebContents* old_contents,
+      content::WebContents* new_contents,
+      base::OnceCallback<void()> callback) override;
   bool ShouldAllowRunningInsecureContent(content::WebContents* web_contents,
                                          bool allowed_per_prefs,
                                          const url::Origin& origin,
@@ -179,10 +185,6 @@ class Shell : public WebContentsDelegate,
   void set_delay_popup_contents_delegate_for_testing(bool delay) {
     delay_popup_contents_delegate_for_testing_ = delay;
   }
-
-  // TODO(danakj): Move this to WebTestShellPlatformDelegate (a test-only
-  // subclass of ShellPlatformDelegate that does not exist yet).
-  bool headless() const { return headless_; }
 
  private:
   class DevToolsWebContentsObserver;
@@ -228,7 +230,6 @@ class Shell : public WebContentsDelegate,
 
   gfx::Size content_size_;
 
-  bool headless_ = false;
   bool delay_popup_contents_delegate_for_testing_ = false;
 
   // A container of all the open windows. We use a vector so we can keep track

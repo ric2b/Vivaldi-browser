@@ -24,7 +24,6 @@ import androidx.test.filters.MediumTest;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
@@ -61,9 +60,6 @@ public class TabSuggestionMessageCardTest {
             + "Study.Group:baseline_tab_suggestions/true";
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
-
-    @Rule
-    public TestRule mProcessor = new Features.InstrumentationProcessor();
 
     private final TabSelectionEditorTestingRobot mTabSelectionEditorTestingRobot =
             new TabSelectionEditorTestingRobot();
@@ -154,9 +150,12 @@ public class TabSuggestionMessageCardTest {
 
     @Test
     @MediumTest
-    @CommandLineFlags.
-    Add({BASE_PARAMS + "/baseline_group_tab_suggestions/true/min_time_between_prefetches/0"})
+    // clang-format off
+    @CommandLineFlags.Add({BASE_PARAMS +
+        "/baseline_group_tab_suggestions/true/min_time_between_prefetches/0"})
+    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1102423")
     public void groupTabSuggestionReviewedAndDismissed() {
+        // clang-format on
         CriteriaHelper.pollUiThread(TabSuggestionMessageService::isSuggestionAvailableForTesting);
 
         enteringTabSwitcherAndVerifySuggestionIsShown(mGroupingSuggestionMessage);
@@ -189,6 +188,7 @@ public class TabSuggestionMessageCardTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/1085452")
     // clang-format off
     @CommandLineFlags.Add({BASE_PARAMS + "/baseline_group_tab_suggestions/true" +
             "/baseline_close_tab_suggestions/true/min_time_between_prefetches/0"})

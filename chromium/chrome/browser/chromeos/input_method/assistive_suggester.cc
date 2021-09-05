@@ -43,6 +43,7 @@ const char* kAllowedDomainsForEmojiSuggester[] = {
 const char* kTestUrls[] = {
     "e14s-test",
     "simple_textarea.html",
+    "test.html",
 };
 
 // For some internal websites, we do not want to reveal their urls in plain
@@ -111,6 +112,15 @@ void RecordAssistiveDisabled(AssistiveType type) {
   base::UmaHistogramEnumeration("InputMethod.Assistive.Disabled", type);
 }
 
+void RecordAssistiveDisabledReasonForPersonalInfo(DisabledReason reason) {
+  base::UmaHistogramEnumeration("InputMethod.Assistive.Disabled.PersonalInfo",
+                                reason);
+}
+
+void RecordAssistiveDisabledReasonForEmoji(DisabledReason reason) {
+  base::UmaHistogramEnumeration("InputMethod.Assistive.Disabled.Emoji", reason);
+}
+
 void RecordAssistiveUserPrefForPersonalInfo(bool value) {
   base::UmaHistogramBoolean("InputMethod.Assistive.UserPref.PersonalInfo",
                             value);
@@ -169,6 +179,9 @@ bool IsAllowedUrl(const char* (&allowedDomains)[N]) {
 template <size_t N>
 bool IsAllowedApp(const char* (&allowedApps)[N]) {
   // WMHelper is not available in Chrome on Linux.
+  if (!exo::WMHelper::HasInstance())
+    return false;
+
   auto* wm_helper = exo::WMHelper::GetInstance();
   auto* window = wm_helper ? wm_helper->GetActiveWindow() : nullptr;
   if (!window)
@@ -189,13 +202,23 @@ bool IsAllowedApp(const char* (&allowedApps)[N]) {
   return false;
 }
 
+bool IsAllowedUrlOrAppForPersonalInfoSuggestion() {
+  return IsAllowedUrl(kAllowedDomainsForPersonalInfoSuggester) ||
+         IsAllowedApp(kAllowedAppsForPersonalInfoSuggester);
+}
+
+bool IsAllowedUrlOrAppForEmojiSuggestion() {
+  return IsAllowedUrl(kAllowedDomainsForEmojiSuggester) ||
+         IsAllowedApp(kAllowedAppsForEmojiSuggester);
+}
+
 }  // namespace
 
 AssistiveSuggester::AssistiveSuggester(InputMethodEngine* engine,
                                        Profile* profile)
     : profile_(profile),
       personal_info_suggester_(engine, profile),
-      emoji_suggester_(engine) {
+      emoji_suggester_(engine, profile) {
   RecordAssistiveUserPrefForPersonalInfo(
       profile_->GetPrefs()->GetBoolean(prefs::kAssistPersonalInfoEnabled));
   RecordAssistiveUserPrefForEmoji(
@@ -218,6 +241,37 @@ bool AssistiveSuggester::IsEmojiSuggestAdditionEnabled() {
          profile_->GetPrefs()->GetBoolean(
              prefs::kEmojiSuggestionEnterpriseAllowed) &&
          profile_->GetPrefs()->GetBoolean(prefs::kEmojiSuggestionEnabled);
+}
+
+DisabledReason AssistiveSuggester::GetDisabledReasonForPersonalInfo() {
+  if (!base::FeatureList::IsEnabled(chromeos::features::kAssistPersonalInfo)) {
+    return DisabledReason::kFeatureFlagOff;
+  }
+  if (!profile_->GetPrefs()->GetBoolean(prefs::kAssistPersonalInfoEnabled)) {
+    return DisabledReason::kUserSettingsOff;
+  }
+  if (!IsAllowedUrlOrAppForPersonalInfoSuggestion()) {
+    return DisabledReason::kUrlOrAppNotAllowed;
+  }
+  return DisabledReason::kNone;
+}
+
+DisabledReason AssistiveSuggester::GetDisabledReasonForEmoji() {
+  if (!base::FeatureList::IsEnabled(
+          chromeos::features::kEmojiSuggestAddition)) {
+    return DisabledReason::kFeatureFlagOff;
+  }
+  if (!profile_->GetPrefs()->GetBoolean(
+          prefs::kEmojiSuggestionEnterpriseAllowed)) {
+    return DisabledReason::kEnterpriseSettingsOff;
+  }
+  if (!profile_->GetPrefs()->GetBoolean(prefs::kEmojiSuggestionEnabled)) {
+    return DisabledReason::kUserSettingsOff;
+  }
+  if (!IsAllowedUrlOrAppForEmojiSuggestion()) {
+    return DisabledReason::kUrlOrAppNotAllowed;
+  }
+  return DisabledReason::kNone;
 }
 
 bool AssistiveSuggester::IsActionEnabled(AssistiveType action) {
@@ -301,9 +355,12 @@ void AssistiveSuggester::RecordAssistiveMatchMetrics(const base::string16& text,
         ProposePersonalInfoAssistiveAction(text_before_cursor);
     if (action != AssistiveType::kGenericAction) {
       RecordAssistiveMatchMetricsForAction(action);
+      RecordAssistiveDisabledReasonForPersonalInfo(
+          GetDisabledReasonForPersonalInfo());
       // Emoji suggestion match
     } else if (emoji_suggester_.ShouldShowSuggestion(text_before_cursor)) {
       RecordAssistiveMatchMetricsForAction(AssistiveType::kEmoji);
+      RecordAssistiveDisabledReasonForEmoji(GetDisabledReasonForEmoji());
     }
   }
 }
@@ -337,8 +394,7 @@ bool AssistiveSuggester::Suggest(const base::string16& text,
       return current_suggester_->Suggest(text_before_cursor);
     }
     if (IsAssistPersonalInfoEnabled() &&
-        (IsAllowedUrl(kAllowedDomainsForPersonalInfoSuggester) ||
-         IsAllowedApp(kAllowedAppsForPersonalInfoSuggester)) &&
+        IsAllowedUrlOrAppForPersonalInfoSuggestion() &&
         personal_info_suggester_.Suggest(text_before_cursor)) {
       current_suggester_ = &personal_info_suggester_;
       if (personal_info_suggester_.IsFirstShown()) {
@@ -346,8 +402,7 @@ bool AssistiveSuggester::Suggest(const base::string16& text,
       }
       return true;
     } else if (IsEmojiSuggestAdditionEnabled() &&
-               (IsAllowedUrl(kAllowedDomainsForEmojiSuggester) ||
-                IsAllowedApp(kAllowedAppsForEmojiSuggester)) &&
+               IsAllowedUrlOrAppForEmojiSuggestion() &&
                emoji_suggester_.Suggest(text_before_cursor)) {
       current_suggester_ = &emoji_suggester_;
       RecordAssistiveCoverage(current_suggester_->GetProposeActionType());

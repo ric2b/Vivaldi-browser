@@ -16,6 +16,7 @@ import android.widget.TextView;
 
 import androidx.annotation.IntDef;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -30,13 +31,14 @@ import org.chromium.chrome.browser.autofill.CardUnmaskPrompt;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt.CardUnmaskObserverForTest;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorObserverForTest;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorTextField;
-import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentRequestServiceObserverForTest;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection.OptionRow;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI.PaymentRequestObserverForTest;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.payments.AbortReason;
+import org.chromium.components.payments.ComponentPaymentRequestImpl;
+import org.chromium.components.payments.ComponentPaymentRequestImpl.PaymentRequestServiceObserverForTest;
 import org.chromium.components.payments.PayerData;
 import org.chromium.components.payments.PaymentApp;
 import org.chromium.components.payments.PaymentFeatureList;
@@ -44,6 +46,7 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
@@ -142,7 +145,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     final CallbackHelper mPaymentResponseReady;
     final CallbackHelper mCompleteReplied;
     final CallbackHelper mRendererClosedMojoConnection;
-    PaymentRequestImpl mPaymentRequest;
+    ComponentPaymentRequestImpl mComponentPaymentRequest;
     PaymentRequestUI mUI;
 
     private final boolean mDelayStartActivity;
@@ -206,7 +209,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
             mWebContentsRef.set(getActivity().getCurrentWebContents());
             PaymentRequestUI.setEditorObserverForTest(PaymentRequestTestRule.this);
             PaymentRequestUI.setPaymentRequestObserverForTest(PaymentRequestTestRule.this);
-            PaymentRequestImpl.setObserverForTest(PaymentRequestTestRule.this);
+            ComponentPaymentRequestImpl.setObserverForTest(PaymentRequestTestRule.this);
             CardUnmaskPrompt.setObserverForTest(PaymentRequestTestRule.this);
         });
         assertWaitForPageScaleFactorMatch(1);
@@ -339,13 +342,10 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     /** Clicks on an element in the payments UI. */
     protected void clickAndWait(int resourceId, CallbackHelper helper) throws TimeoutException {
         int callCount = helper.getCallCount();
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                boolean canClick = mUI.isAcceptingUserInput();
-                if (canClick) mUI.getDialogForTest().findViewById(resourceId).performClick();
-                return canClick;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            boolean canClick = mUI.isAcceptingUserInput();
+            if (canClick) mUI.getDialogForTest().findViewById(resourceId).performClick();
+            Criteria.checkThat(canClick, Matchers.is(true));
         });
         helper.waitForCallback(callCount);
     }
@@ -866,76 +866,52 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
 
     /** Verifies the contents of the test webpage. */
     protected void expectResultContains(final String[] contents) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                try {
-                    String result = DOMUtils.getNodeContents(mWebContentsRef.get(), "result");
-                    if (result == null) {
-                        updateFailureReason("Cannot find 'result' node on test page");
-                        return false;
-                    }
-                    for (int i = 0; i < contents.length; i++) {
-                        if (!result.contains(contents[i])) {
-                            updateFailureReason(String.format(
-                                    "Result '" + result + "' should contain '%s'", contents[i]));
-                            return false;
-                        }
-                    }
-                    return true;
-                } catch (TimeoutException e2) {
-                    updateFailureReason(e2.getMessage());
-                    return false;
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                String result = DOMUtils.getNodeContents(mWebContentsRef.get(), "result");
+                Criteria.checkThat(
+                        "Cannot find 'result' node on test page", result, Matchers.notNullValue());
+                for (int i = 0; i < contents.length; i++) {
+                    Criteria.checkThat(
+                            "Result '" + result + "' should contain '" + contents[i] + "'", result,
+                            Matchers.containsString(contents[i]));
                 }
+            } catch (TimeoutException e2) {
+                throw new CriteriaNotSatisfiedException(e2);
             }
         });
     }
 
     /** Will fail if the OptionRow at |index| is not selected in Contact Details.*/
     protected void expectContactDetailsRowIsSelected(final int index) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                boolean isSelected = ((OptionSection) mUI.getContactDetailsSectionForTest())
-                                             .getOptionRowAtIndex(index)
-                                             .isChecked();
-                if (!isSelected) {
-                    updateFailureReason("Contact Details row at " + index + " was not selected.");
-                }
-                return isSelected;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            boolean isSelected = ((OptionSection) mUI.getContactDetailsSectionForTest())
+                                         .getOptionRowAtIndex(index)
+                                         .isChecked();
+            Criteria.checkThat("Contact Details row at " + index + " was not selected.", isSelected,
+                    Matchers.is(true));
         });
     }
 
     /** Will fail if the OptionRow at |index| is not selected in Shipping Address section.*/
     protected void expectShippingAddressRowIsSelected(final int index) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                boolean isSelected = ((OptionSection) mUI.getShippingAddressSectionForTest())
-                                             .getOptionRowAtIndex(index)
-                                             .isChecked();
-                if (!isSelected) {
-                    updateFailureReason("Shipping Address row at " + index + " was not selected.");
-                }
-                return isSelected;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            boolean isSelected = ((OptionSection) mUI.getShippingAddressSectionForTest())
+                                         .getOptionRowAtIndex(index)
+                                         .isChecked();
+            Criteria.checkThat("Shipping Address row at " + index + " was not selected.",
+                    isSelected, Matchers.is(true));
         });
     }
 
     /** Will fail if the OptionRow at |index| is not selected in PaymentMethod section.*/
     protected void expectPaymentMethodRowIsSelected(final int index) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                boolean isSelected = ((OptionSection) mUI.getPaymentMethodSectionForTest())
-                                             .getOptionRowAtIndex(index)
-                                             .isChecked();
-                if (!isSelected) {
-                    updateFailureReason("Payment Method row at " + index + " was not selected.");
-                }
-                return isSelected;
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            boolean isSelected = ((OptionSection) mUI.getPaymentMethodSectionForTest())
+                                         .getOptionRowAtIndex(index)
+                                         .isChecked();
+            Criteria.checkThat("Payment Method row at " + index + " was not selected.", isSelected,
+                    Matchers.is(true));
         });
     }
 
@@ -975,7 +951,7 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     /** Allows to skip UI into paymenthandler for"basic-card". */
     protected void enableSkipUIForBasicCard() {
         ThreadUtils.runOnUiThreadBlocking(
-                () -> mPaymentRequest.setSkipUIForNonURLPaymentMethodIdentifiersForTest());
+                () -> mComponentPaymentRequest.setSkipUiForNonUrlPaymentMethodIdentifiersForTest());
     }
 
     @Override
@@ -1033,9 +1009,9 @@ public class PaymentRequestTestRule extends ChromeTabbedActivityTestRule
     }
 
     @Override
-    public void onPaymentRequestCreated(PaymentRequestImpl paymentRequest) {
+    public void onPaymentRequestCreated(ComponentPaymentRequestImpl paymentRequest) {
         ThreadUtils.assertOnUiThread();
-        mPaymentRequest = paymentRequest;
+        mComponentPaymentRequest = paymentRequest;
     }
 
     @Override

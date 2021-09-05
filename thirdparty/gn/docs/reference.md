@@ -96,6 +96,7 @@
     *   [args: [string list] Arguments passed to an action.](#var_args)
     *   [asmflags: [string list] Flags passed to the assembler.](#var_asmflags)
     *   [assert_no_deps: [label pattern list] Ensure no deps on these targets.](#var_assert_no_deps)
+    *   [bridge_header: [string] Path to C/Objective-C compatibility header.](#var_bridge_header)
     *   [bundle_contents_dir: Expansion of {{bundle_contents_dir}} in create_bundle.](#var_bundle_contents_dir)
     *   [bundle_deps_filter: [label list] A list of labels that are filtered out.](#var_bundle_deps_filter)
     *   [bundle_executable_dir: Expansion of {{bundle_executable_dir}} in create_bundle](#var_bundle_executable_dir)
@@ -133,6 +134,7 @@
     *   [lib_dirs: [directory list] Additional library directories.](#var_lib_dirs)
     *   [libs: [string list] Additional libraries to link.](#var_libs)
     *   [metadata: [scope] Metadata of this target.](#var_metadata)
+    *   [module_name: [string] The name for the compiled module.](#var_module_name)
     *   [output_conversion: Data format for generated_file targets.](#var_output_conversion)
     *   [output_dir: [directory] Directory to put output file in.](#var_output_dir)
     *   [output_extension: [string] Value to use for the output's file extension.](#var_output_extension)
@@ -152,6 +154,7 @@
     *   [response_file_contents: [string list] Contents of .rsp file for actions.](#var_response_file_contents)
     *   [script: [file name] Script file for actions.](#var_script)
     *   [sources: [file list] Source files for a target.](#var_sources)
+    *   [swiftflags: [string list] Flags passed to the swift compiler.](#var_swiftflags)
     *   [testonly: [boolean] Declares a target must only be used for testing.](#var_testonly)
     *   [visibility: [label list] A list of labels that can depend on a target.](#var_visibility)
     *   [walk_keys: [string list] Key(s) for managing the metadata collection walk.](#var_walk_keys)
@@ -387,8 +390,10 @@
 
 ```
   The .gn file may specify a list of targets to be checked in the list
-  check_targets (see "gn help dotfile"). If a label pattern is specified
-  on the command line, check_targets is not used.
+  check_targets (see "gn help dotfile"). Alternatively, the .gn file may
+  specify a list of targets not to be checked in no_check_targets. If a label
+  pattern is specified on the command line, neither check_targets or
+  no_check_targets is used.
 
   Targets can opt-out from checking with "check_includes = false" (see
   "gn help check_includes").
@@ -1675,7 +1680,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1869,7 +1874,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1901,7 +1906,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1936,7 +1941,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1970,7 +1975,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -2015,7 +2020,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -2039,7 +2044,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -2148,7 +2153,7 @@
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
          libs, precompiled_header, precompiled_source, rustflags,
-         rustenv
+         rustenv, swiftflags
   Nested configs: configs
 ```
 
@@ -3454,10 +3459,12 @@
     Compiler tools:
       "cc": C compiler
       "cxx": C++ compiler
+      "cxx_module": C++ compiler used for Clang .modulemap files
       "objc": Objective C compiler
       "objcxx": Objective C++ compiler
       "rc": Resource compiler (Windows .rc files)
       "asm": Assembler
+      "swift": Swift compiler driver
 
     Linker tools:
       "alink": Linker for static libraries (archives)
@@ -3602,6 +3609,19 @@
         would be:
           "-F. -framework UIKit -framework Foo -weak_framework MediaPlayer"
 
+    swiftmodule_switch [string, optional, link tools only]
+        Valid for: Linker tools except "alink"
+
+        The string will be prependend to the path to the .swiftmodule files
+        that are embedded in the linker output.
+
+        If you specified:
+          swiftmodule_swift = "-Wl,-add_ast_path,"
+        then the "{{swiftmodules}}" expansion for
+          [ "obj/foo/Foo.swiftmodule" ]
+        would be
+          "-Wl,-add_ast_path,obj/foo/Foo.swiftmodule"
+
     outputs  [list of strings with substitutions]
         Valid for: Linker and compiler tools (required)
 
@@ -3631,6 +3651,17 @@
                 "{{output_extension}}",
             "{{output_dir}}/{{target_output_name}}.lib",
           ]
+
+    partial_outputs  [list of strings with substitutions]
+        Valid for: "swift" only
+
+        An array of names for the partial outputs the tool produces. These
+        are relative to the build output directory. The expansion will be
+        evaluated for each file listed in the "sources" of the target.
+
+        This is used to deal with whole module optimization, allowing to
+        list one object file per source file when whole module optimization
+        is disabled.
 
     pool [label, optional]
         Valid for: all tools (optional)
@@ -3834,10 +3865,6 @@
         Expands to the list of system libraries to link to. Each will be
         prefixed by the "lib_switch".
 
-        As a special case to support Mac, libraries with names ending in
-        ".framework" will be added to the {{libs}} with "-framework" preceding
-        it, and the lib prefix will be ignored.
-
         Example: "-lfoo -lbar"
 
     {{output_dir}}
@@ -3885,6 +3912,13 @@
         {{frameworks}} and each item will be preceded by "-framework" or
         "-weak_framework".
 
+    {{swiftmodules}}
+        Swift .swiftmodule files that needs to be embedded into the binary.
+        This is necessary to correctly link with object generated by the
+        Swift compiler (the .swiftmodule file cannot be embedded in object
+        files directly). Those will be prefixed with "swiftmodule_switch"
+        value.
+
   The static library ("alink") tool allows {{arflags}} plus the common tool
   substitutions.
 
@@ -3921,6 +3955,21 @@
     {{xcasset_compiler_flags}}
         Expands to the list of flags specified in corresponding
         create_bundle target.
+
+  The Swift tool has multiple input and outputs. It must have exactly one
+  output of .swiftmodule type, but can have one or more object file outputs,
+  in addition to other type of ouputs. The following expansions are available:
+
+    {{module_name}}
+        Expands to the string representing the module name of target under
+        compilation (see "module_name" variable).
+
+    {{module_dirs}}
+        Expands to the list of -I<path> for the target Swift module search
+        path computed from target dependencies.
+
+    {{swiftflags}}
+        Expands to the list of strings representing Swift compiler flags.
 
   Rust tools have the notion of a single input and a single output, along
   with a set of compiler-specific flags. The following expansions are
@@ -4898,6 +4947,14 @@
     ]
   }
 ```
+### <a name="var_bridge_header"></a>**bridge_header**: [string] Path to C/Objective-C compatibility header.
+
+```
+  Valid for binary targets that contain Swift sources.
+
+  Path to an header that includes C/Objective-C functions and types that
+  needs to be made available to the Swift module.
+```
 ### <a name="var_bundle_contents_dir"></a>**bundle_contents_dir**: Expansion of {{bundle_contents_dir}} in
 ```
                              create_bundle.
@@ -5008,7 +5065,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files.
+  See also "asmflags" for flags for assembly-language files and "swiftflags"
+  for swift files.
 ```
 
 #### **Ordering of flags and values**
@@ -5041,7 +5099,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files.
+  See also "asmflags" for flags for assembly-language files and "swiftflags"
+  for swift files.
 ```
 
 #### **Ordering of flags and values**
@@ -5074,7 +5133,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files.
+  See also "asmflags" for flags for assembly-language files and "swiftflags"
+  for swift files.
 ```
 
 #### **Ordering of flags and values**
@@ -5107,7 +5167,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files.
+  See also "asmflags" for flags for assembly-language files and "swiftflags"
+  for swift files.
 ```
 
 #### **Ordering of flags and values**
@@ -5140,7 +5201,8 @@
   versions of cflags* will be appended on the compiler command line after
   "cflags".
 
-  See also "asmflags" for flags for assembly-language files.
+  See also "asmflags" for flags for assembly-language files and "swiftflags"
+  for swift files.
 ```
 
 #### **Ordering of flags and values**
@@ -5925,12 +5987,6 @@
       "lib_dirs" so the given library is found. Your BUILD.gn file should not
       specify the switch (like "-l"): this will be encoded in the "lib_switch"
       of the tool.
-
-  Apple frameworks
-      System libraries ending in ".framework" will be special-cased: the switch
-      "-framework" will be prepended instead of the lib_switch, and the
-      ".framework" suffix will be trimmed. This is to support the way Mac links
-      framework dependencies.
 ```
 
 #### **Ordering of flags and values**
@@ -5988,6 +6044,13 @@
       my_files = [ "a.txt", "b.txt" ]
     }
   }
+```
+### <a name="var_module_name"></a>**module_name**: [string] The name for the compiled module.
+
+```
+  Valid for binary targets that contain Swift sources.
+
+  If module_name is not set, then this rule will use the target name.
 ```
 ### <a name="var_output_conversion"></a>**output_conversion**: Data format for generated_file targets.
 
@@ -6543,6 +6606,32 @@
   copy
     The source are the source files to copy.
 ```
+### <a name="var_swiftflags"></a>**swiftflags**: Flags passed to the swift compiler.
+
+```
+  A list of strings.
+
+  "swiftflags" are passed to any invocation of a tool that takes an .swift
+  file as input.
+```
+
+#### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurence will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+```
 ### <a name="var_testonly"></a>**testonly**: Declares a target must only be used for testing.
 
 ```
@@ -6821,9 +6910,21 @@
 
   check_targets [optional]
       A list of labels and label patterns that should be checked when running
-      "gn check" or "gn gen --check". If unspecified, all targets will be
-      checked. If it is the empty list, no targets will be checked. To
-      bypass this list, request an explicit check of targets, like "//*".
+      "gn check" or "gn gen --check". If neither check_targets or
+      no_check_targets (see below) is specified, all targets will be checked.
+      It is an error to specify both check_targets and no_check_targets. If it
+      is the empty list, no targets will be checked. To bypass this list,
+      request an explicit check of targets, like "//*".
+
+      The format of this list is identical to that of "visibility" so see "gn
+      help visibility" for examples.
+
+  no_check_targets [optional]
+      A list of labels and label patterns that should *not* be checked when
+      running "gn check" or "gn gen --check". All other targets will be checked.
+      If neither check_targets (see above) or no_check_targets is specified, all
+      targets will be checked. It is an error to specify both check_targets and
+      no_check_targets.
 
       The format of this list is identical to that of "visibility" so see "gn
       help visibility" for examples.
@@ -7566,7 +7667,7 @@
     group("a") {
       metadata = {
         my_files = [ "foo.cpp" ]
-        my_files_barrier [ ":b" ]
+        my_files_barrier = [ ":b" ]
       }
 
       deps = [ ":b", ":c" ]
@@ -7586,7 +7687,8 @@
 
     generated_file("metadata") {
       outputs = [ "$root_build_dir/my_files.json" ]
-      data_keys = [ "my_files", "my_extra_files" ]
+      data_keys = [ "my_files" ]
+      walk_keys = [ "my_files_barrier" ]
 
       deps = [ ":a" ]
     }

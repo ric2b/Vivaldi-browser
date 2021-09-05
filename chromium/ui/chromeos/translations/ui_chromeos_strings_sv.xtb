@@ -21,6 +21,7 @@
 <translation id="1150565364351027703">Solglasögon</translation>
 <translation id="115443833402798225">Hangul Ahnmatae</translation>
 <translation id="1155759005174418845">katalanska</translation>
+<translation id="1172970565351728681">Cirka <ph name="REMAINING_TIME" /> kvar</translation>
 <translation id="1173894706177603556">Ändra namn</translation>
 <translation id="117624967391683467"><ph name="FILE_NAME" /> kopieras ...</translation>
 <translation id="1178581264944972037">Paus</translation>
@@ -106,7 +107,6 @@
 <translation id="2085470240340828803">Det finns redan en fil med namnet <ph name="FILENAME" />. Vad vill du göra?</translation>
 <translation id="2121825465123208577">Ändra storlek</translation>
 <translation id="2136953289241069843">Translitterering (namaste → नमस्कार)</translation>
-<translation id="2138867954865495510">Det går inte att öppna <ph name="PATH" />: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="2163152940313951844">Ogiltigt tecken: <ph name="CHARACTER_NAME" /></translation>
 <translation id="2164862903024139959">Tangentbord för vietnamesiska (TCVN)</translation>
 <translation id="2168214441502403371">Tangentbord för persiska</translation>
@@ -198,6 +198,7 @@
 <translation id="3236289833370040187"><ph name="DESTINATION_DOMAIN" /> blir den nya ägaren efter överföringen.</translation>
 <translation id="3241720467332021590">iriska</translation>
 <translation id="3245321423178950146">Okänd artist</translation>
+<translation id="3248185426436836442">Väntar</translation>
 <translation id="3252266817569339921">franska</translation>
 <translation id="3254434849914415189">Välj standardapp för <ph name="FILE_TYPE" />-filer:</translation>
 <translation id="3264582393905923483">Sammanhang</translation>
@@ -208,6 +209,7 @@
 <translation id="3335337277364016868">Inspelningsår</translation>
 <translation id="3338239663705455570">Slovenskt tangentbord</translation>
 <translation id="3353984535370177728">Välj en mapp för uppladdning</translation>
+<translation id="3356580349448036450">Klart</translation>
 <translation id="3399597614303179694">Makedonskt tangentbord</translation>
 <translation id="3414856743105198592">Om du formaterar det flyttbara mediet raderas alla data. Vill du fortsätta?</translation>
 <translation id="3437801641691368414">Skapades</translation>
@@ -243,6 +245,7 @@
 <translation id="3780536599611287598">Du har inte behörighet att flytta filer till <ph name="FOLDER_NAME" />.</translation>
 <translation id="3786301125658655746">Du är offline</translation>
 <translation id="3789841737615482174">Installera</translation>
+<translation id="3793469551756281394">Cirka <ph name="REMAINING_TIME_HOUR" /> och <ph name="REMAINING_TIME_MINUTE" /> kvar</translation>
 <translation id="3798449238516105146">Version</translation>
 <translation id="3801082500826908679">färöiska</translation>
 <translation id="3809272675881623365">Kanin</translation>
@@ -299,6 +302,7 @@
 <translation id="4481711095103932593">Den här mappen delas med Windows</translation>
 <translation id="4487088045714738411">Belgiskt tangentbord</translation>
 <translation id="4522570452068850558">Info</translation>
+<translation id="4542387084127299777">Det går inte att öppna <ph name="PATH" /></translation>
 <translation id="4552678318981539154">Köp mer lagringsutrymme</translation>
 <translation id="4559767610552730302">Bokeh</translation>
 <translation id="4572815280350369984"><ph name="FILE_TYPE" />-fil</translation>
@@ -511,6 +515,7 @@
 <translation id="6629841649550503054">Allt har säkerhetskopierats på <ph name="BEGIN_LINK" />Google Drive!<ph name="END_LINK" /></translation>
 <translation id="6643016212128521049">Rensa</translation>
 <translation id="6650726141019353908">Rosa fjäril</translation>
+<translation id="6657585470893396449">Lösenord</translation>
 <translation id="6710213216561001401">Föregående</translation>
 <translation id="6718273304615422081">Komprimerar ...</translation>
 <translation id="6751256176799620176">1 mapp har valts</translation>
@@ -551,7 +556,6 @@
 <translation id="7012943028104619157"><ph name="ROOT_TITLE" /> (<ph name="ROOT_SUMMARY" />)</translation>
 <translation id="7014174261166285193">Installationen misslyckades.</translation>
 <translation id="7040138676081995583">Öppna med ...</translation>
-<translation id="7059566040011178088">Mindre än <ph name="REMAINING_TIME" /></translation>
 <translation id="7100897339030255923"><ph name="COUNT" /> markerade objekt</translation>
 <translation id="7106346894903675391">Köp mer lagringsutrymme ...</translation>
 <translation id="7126604456862387217">&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt; – &lt;em&gt;sök i Drive&lt;/em&gt;</translation>
@@ -662,7 +666,6 @@
 <translation id="8193175696669055101">Enhetsmodell</translation>
 <translation id="8208580316430297579">Konst</translation>
 <translation id="8223479393428528563">Om du vill spara filerna och använda dem offline ansluter du till internet igen, högerklickar på filerna och väljer alternativet <ph name="OFFLINE_CHECKBOX_NAME" />.</translation>
-<translation id="8231972167769262174">Om <ph name="REMAINING_TIME" /></translation>
 <translation id="8249296373107784235">Avbryt</translation>
 <translation id="8261506727792406068">Radera</translation>
 <translation id="8269755669432358899">Komprimera panel med information om filåtgärder</translation>
@@ -725,6 +728,7 @@
 <translation id="9065203028668620118">Redigera</translation>
 <translation id="9099674669267916096">Sidantal</translation>
 <translation id="9110990317705400362">Vi strävar hela tiden efter att göra det säkrare för dig att surfa. Tidigare kunde du uppmanas att lägga till ett tillägg i webbläsaren på vilken webbplats som helst. I de senaste versionerna av Google Chrome måste du uttryckligen tala om för Chrome att du vill installera dessa tillägg genom att lägga till dem via sidan Tillägg. <ph name="BEGIN_LINK" />Läs mer<ph name="END_LINK" /></translation>
+<translation id="9111102763498581341">Lås upp</translation>
 <translation id="912419004897138677">Kodek</translation>
 <translation id="9129931661813833980">Fäst mapp</translation>
 <translation id="9130775360844693113">De som använder <ph name="DESTINATION_NAME" /> får åtkomst till dessa objekt.</translation>

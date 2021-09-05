@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Ցանկի միավոր</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Երկու մատը սահեցրեք աջ</translation>
+<translation id="1016393160682012902">Սեղմեք սովորական կամ թարմացվող բրայլյան ստեղնաշարի որևէ ստեղն, կամ հպեք ժեստին՝ դրա գործառույթին ծանոթանալու համար։ Դուրս գալու համար սեղմեք Control + W կամ Escape։</translation>
 <translation id="1022586497894531524">Առաջին անգա՞մ եք օգտագործում ChromeVox Next-ի ձայնային հուշումները: Այս ամփոփ ուղեցույցը կօգնի ձեզ հասկանալ ChromeVox Next-ի հիմունքները:</translation>
 <translation id="1025074108959230262">Կպչուն ռեժիմն անջատված է</translation>
 <translation id="1031961866430398710">ապա</translation>
@@ -152,7 +153,7 @@
 <translation id="2127747486437921899">Շեղ</translation>
 <translation id="2163782704988363449">Վրիպակների ցանկ</translation>
 <translation id="2169714232367507776">Սեղմել ընթացիկ տարրի վրա</translation>
-<translation id="2179452035581866348">ChromeVox-ը ձայներն օգտագործում է` կարևոր և հավելյալ տեղեկություններ տրամադրելու համար: Այս ձայների օգնությամբ դուք կարող եք արագ անցում կատարել էջի տարրերի միջև: Սովորելով այս ձայները` դուք կարող եք անջատել ձայնային նկարագրությունները և էջի մասին անհրաժեշտ տեղեկությունները ստանալ միայն ձայների օգնությամբ: Ստորև ներկայացված են բոլոր ձայներն ու դրանց նշանակությունը:</translation>
+<translation id="2179452035581866348">ChromeVox-ը ձայներն օգտագործում է` կարևոր և հավելյալ տեղեկություններ տրամադրելու համար: Այս ձայների օգնությամբ դուք կարող եք արագ անցում կատարել էջի տարրերի միջև: Սովորելով այս ձայները՝ դուք կարող եք անջատել ձայնային նկարագրությունները և էջի մասին անհրաժեշտ տեղեկությունները ստանալ միայն ձայների օգնությամբ: Ստորև ներկայացված են բոլոր ձայներն ու դրանց նշանակությունը:</translation>
 <translation id="2188751878842439466">{COUNT,plural, =1{աջ փակագիծ}one{# աջ փակագիծ}other{# աջ փակագիծ}}</translation>
 <translation id="2197863150503783129">Թավ դարչնագույն</translation>
 <translation id="2199994615414171367">Նախորդ մաթեմատիկական արտահայտությունը</translation>
@@ -307,7 +308,7 @@
 <translation id="3270069636408109001">Հաջորդ աղյուսակ չկա</translation>
 <translation id="3273791280096244679">Պահել պիտակը</translation>
 <translation id="3283583562490372694">նշված չէ</translation>
-<translation id="3286372614333682499">ուղղահայաց</translation>
+<translation id="3286372614333682499">ուղղաձիգ</translation>
 <translation id="3286390186030710347">Սահիչ</translation>
 <translation id="3300348286427369683">Տեքստի խմբագրման ավելի լայն հնարավորություններ։ ChromeVox-ն այժմ աջակցում է տեքստի խմբագրման ավելի շատ տարբերակներ, օրինակ՝ արագ նավարկման հրահանգներ, բրայլյան էկրանի միջոցով նշորդի տեղաշարժում, ընտրություն և ավելին։</translation>
 <translation id="3307886118343381874">Անցնել աղյուսակի վերջ</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Ներքին հղում</translation>
 <translation id="4909019435900810068">Մեկ բառ հետ գնալ</translation>
 <translation id="4911349081560453449">Նախորդ նշավանդակ չկա</translation>
-<translation id="4915087353619183190">Մուտք ուսուցման ռեժիմ: Սեղմեք QWERTY կամ բրայլյան ստեղնաշարի որևէ ստեղն, կամ հպեք ժեստին՝ դրա գործառույթին ծանոթանալու համար: Դուրս գալու համար սեղմեք Control+W կամ Escape:</translation>
 <translation id="492295894462528572">Ներածություն</translation>
 <translation id="495046168593986294">Ոլորել վեր</translation>
 <translation id="495170559598752135">Գործողություններ</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Կանաչ</translation>
 <translation id="602001110135236999">Ոլորել ձախ</translation>
 <translation id="6034000775414344507">Բաց մոխրագույն</translation>
+<translation id="6036135911048686884">Ուսումնասիրեք հպումով</translation>
 <translation id="6037602951055904232">Շարժվել առաջ</translation>
 <translation id="6044160928851315051">Մթնեցնել էկրանը</translation>
 <translation id="6082768461603900813">Հիմնական նավարկում</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{ֆունտ}one{# ֆունտի նշան}other{# ֆունտի նշան}}</translation>
 <translation id="8378855320830505539">Մարզ</translation>
 <translation id="8382679411218029383">Ինքնալրացման ներտող և ցանկ</translation>
+<translation id="8394908167088220973">Մեդիայի նվագարկում/դադար</translation>
 <translation id="8428213095426709021">Կարգավորումներ</translation>
 <translation id="8428603554127842284">մակարդակ <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -958,15 +960,16 @@
 <translation id="8656888282555543604">Միացնել բրայլյան գրերի գրանցումը</translation>
 <translation id="867187640362843212">Վերնագիր 5</translation>
 <translation id="8696284982970258155">Նեկտարագույն</translation>
-<translation id="8697111817566059991">{COUNT,plural, =1{ցից}one{# ուղղահայաց ցից}other{# ուղղահայաց ցից}}</translation>
+<translation id="8697111817566059991">{COUNT,plural, =1{ցից}one{# ուղղաձիգ ցից}other{# ուղղաձիգ ցից}}</translation>
 <translation id="8743786158317878347">մուտքագրել կառուցվածքավորված բովանդակություն, օրինակ՝ աղյուսակ</translation>
 <translation id="8747966237988593539">Համարակալված ցուցակ</translation>
 <translation id="8749988712346667988">Արծաթագույն</translation>
 <translation id="875769700429317857">«<ph name="FILE_NAME" />» ֆայլի ներբեռնումն ավարտվեց</translation>
 <translation id="8767968232364267681">4-րդ մակարդակի հաջորդ վերնագիրը</translation>
-<translation id="8770473310765924354">Ավարտել կառուցվածքային բովանդակության, ինչպես օրինակ` աղյուսակի ստեղծումը</translation>
+<translation id="8770473310765924354">Ավարտել կառուցվածքային բովանդակության, ինչպես օրինակ՝ աղյուսակի ստեղծումը</translation>
 <translation id="8779057862865475116">Նախորդ հղում չկա</translation>
 <translation id="8796411681063377102">3-րդ մակարդակի հաջորդ վերնագիրը</translation>
+<translation id="8823311177246872527">Էջ <ph name="CURRENTPAGE" />/<ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8882002077197914455">Տողի վերնագիր</translation>

@@ -223,7 +223,7 @@ void AppBannerManagerDesktop::OnWebAppInstalled(
   if (app_id.has_value() && *app_id == installed_app_id &&
       registrar().GetAppUserDisplayMode(*app_id) ==
           blink::mojom::DisplayMode::kStandalone) {
-    OnInstall(registrar().GetAppDisplayMode(*app_id));
+    OnInstall(registrar().GetEffectiveDisplayModeFromManifest(*app_id));
     SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kNo);
   }
 }
@@ -238,7 +238,7 @@ void AppBannerManagerDesktop::CreateWebApp(WebappInstallSource install_source) {
 
   // TODO(loyso): Take appropriate action if WebApps disabled for profile.
   web_app::CreateWebAppFromManifest(
-      contents, install_source,
+      contents, /*bypass_service_worker_check=*/false, install_source,
       base::BindOnce(&AppBannerManagerDesktop::DidFinishCreatingWebApp,
                      weak_factory_.GetWeakPtr()));
 }

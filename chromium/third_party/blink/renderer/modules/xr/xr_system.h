@@ -7,6 +7,7 @@
 
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_dom_overlay_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_session_init.h"
@@ -64,7 +65,6 @@ class XRSystem final : public EventTargetWithInlineData,
                        public device::mojom::blink::VRServiceClient,
                        public FocusChangedObserver {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(XRSystem);
 
  public:
   // TODO(crbug.com/976796): Fix lint errors.
@@ -197,6 +197,7 @@ class XRSystem final : public EventTargetWithInlineData,
     const XRSessionFeatureSet& OptionalFeatures() const;
     bool InvalidRequiredFeatures() const;
     bool InvalidOptionalFeatures() const;
+    bool HasFeature(device::mojom::XRSessionFeature) const;
 
     SensorRequirement GetSensorRequirement() const {
       return sensor_requirement_;
@@ -317,7 +318,7 @@ class XRSystem final : public EventTargetWithInlineData,
   };
 
   // Native event listener used when waiting for fullscreen mode to fully exit
-  // when ending an XR session.
+  // when starting or ending an XR session.
   class OverlayFullscreenExitObserver : public NativeEventListener {
    public:
     explicit OverlayFullscreenExitObserver(XRSystem* xr);
@@ -326,13 +327,13 @@ class XRSystem final : public EventTargetWithInlineData,
     // NativeEventListener
     void Invoke(ExecutionContext*, Event*) override;
 
-    void ExitFullscreen(Element* element, base::OnceClosure on_exited);
+    void ExitFullscreen(Document* doc, base::OnceClosure on_exited);
 
     void Trace(Visitor*) const override;
 
    private:
     Member<XRSystem> xr_;
-    Member<Element> element_;
+    Member<Document> document_;
     base::OnceClosure on_exited_;
     DISALLOW_COPY_AND_ASSIGN(OverlayFullscreenExitObserver);
   };
@@ -365,6 +366,9 @@ class XRSystem final : public EventTargetWithInlineData,
                             PendingRequestSessionQuery* query,
                             ExceptionState* exception_state);
 
+  void DoRequestSession(
+      PendingRequestSessionQuery* query,
+      device::mojom::blink::XRSessionOptionsPtr session_options);
   void OnRequestSessionSetupForDomOverlay(
       PendingRequestSessionQuery*,
       device::mojom::blink::RequestSessionResultPtr result);

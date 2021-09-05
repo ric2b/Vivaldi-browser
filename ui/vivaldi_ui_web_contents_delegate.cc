@@ -104,7 +104,7 @@ bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(
   const blink::WebGestureEvent& event) {
   // When called this means the user has attempted a gesture on the UI. We do
   // not allow that.
-#ifdef OS_MACOSX
+#if defined(OS_MAC)
   if (event.GetType() == blink::WebInputEvent::Type::kGestureDoubleTap)
     return true;
 #endif
@@ -119,9 +119,9 @@ content::ColorChooser* VivaldiUIWebContentsDelegate::OpenColorChooser(
 }
 
 void VivaldiUIWebContentsDelegate::RunFileChooser(
-  content::RenderFrameHost* render_frame_host,
-  std::unique_ptr<content::FileSelectListener> listener,
-  const blink::mojom::FileChooserParams& params) {
+    content::RenderFrameHost* render_frame_host,
+    scoped_refptr<content::FileSelectListener> listener,
+    const blink::mojom::FileChooserParams& params) {
   FileSelectHelper::RunFileChooser(render_frame_host, std::move(listener),
                                    params);
 }
@@ -312,4 +312,14 @@ void VivaldiUIWebContentsDelegate::DidFinishLoad(
   const GURL& validated_url) {
   window_->UpdateTitleBar();
   window_->ForceShow();
+}
+
+void VivaldiUIWebContentsDelegate::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  // Only fire for mainframe.
+  if (!navigation_handle->IsInMainFrame() ||
+      navigation_handle->IsSameDocument())
+    return;
+
+  window_->ContentsDidStartNavigation();
 }

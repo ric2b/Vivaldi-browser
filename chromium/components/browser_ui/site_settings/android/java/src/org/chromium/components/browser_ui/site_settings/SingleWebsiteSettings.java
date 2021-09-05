@@ -18,6 +18,7 @@ import android.text.format.Formatter;
 import android.view.View;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.ListPreference;
@@ -34,10 +35,9 @@ import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.components.embedder_support.util.Origin;
 
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Shows the permissions and other settings for a particular website.
@@ -54,9 +54,11 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
 
     // Preference keys, see single_website_preferences.xml
     // Headings:
+    public static final String PREF_PAGE_DESCRIPTION = "page_description";
+    public static final String PREF_SITE_HEADING = "site_heading";
     public static final String PREF_SITE_TITLE = "site_title";
     public static final String PREF_USAGE = "site_usage";
-    public static final String PREF_PERMISSIONS = "site_permissions";
+    public static final String PREF_PERMISSIONS_HEADER = "site_permissions";
     public static final String PREF_OS_PERMISSIONS_WARNING = "os_permissions_warning";
     public static final String PREF_OS_PERMISSIONS_WARNING_EXTRA = "os_permissions_warning_extra";
     public static final String PREF_OS_PERMISSIONS_WARNING_DIVIDER =
@@ -68,21 +70,40 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     // Buttons:
     public static final String PREF_RESET_SITE = "reset_site_button";
 
+    /**
+     * Currently only implemented for ContentSettingsType that have a ContentSettingsException.
+     * TODO(crbug.com/1103597): Replace PermissionInfo.Type enum with ContentSettingsType.
+     * @param type ContentSettingsType
+     * @return The preference key of this type
+     */
+    private static @Nullable String getPreferenceKey(@ContentSettingsType int type) {
+        switch (type) {
+            case ContentSettingsType.ADS:
+                return "ads_permission_list";
+            case ContentSettingsType.AUTOMATIC_DOWNLOADS:
+                return "automatic_downloads_permission_list";
+            case ContentSettingsType.BACKGROUND_SYNC:
+                return "background_sync_permission_list";
+            case ContentSettingsType.BLUETOOTH_SCANNING:
+                return "bluetooth_scanning_permission_list";
+            case ContentSettingsType.COOKIES:
+                return "cookies_permission_list";
+            case ContentSettingsType.JAVASCRIPT:
+                return "javascript_permission_list";
+            case ContentSettingsType.POPUPS:
+                return "popup_permission_list";
+            case ContentSettingsType.SOUND:
+                return "sound_permission_list";
+            default:
+                return null;
+        }
+    }
+
     // Website permissions (if adding new, see hasPermissionsPreferences and resetSite below)
     // All permissions from the permissions preference category must be listed here.
-    private static final String[] PERMISSION_PREFERENCE_KEYS = {
-            // Permission keys mapped for next {@link ContentSettingException.Type} values.
-            "ads_permission_list", // ContentSettingException.Type.ADS
-            "ar_permission_list", // PermissionInfo.Type.AUGMENTED_REALITY
-            "automatic_downloads_permission_list",
-            // ContentSettingException.Type.AUTOMATIC_DOWNLOADS
-            "background_sync_permission_list", // ContentSettingException.Type.BACKGROUND_SYNC
-            "bluetooth_scanning_permission_list", // ContentSettingException.Type.BLUETOOTH_SCANNING
-            "cookies_permission_list", // ContentSettingException.Type.COOKIE
-            "javascript_permission_list", // ContentSettingException.Type.JAVASCRIPT
-            "popup_permission_list", // ContentSettingException.Type.POPUP
-            "sound_permission_list", // ContentSettingException.Type.SOUND
+    public static final String[] PERMISSION_PREFERENCE_KEYS = {
             // Permission keys mapped for next {@link PermissionInfo.Type} values.
+            "ar_permission_list", // PermissionInfo.Type.AUGMENTED_REALITY
             "camera_permission_list", // PermissionInfo.Type.CAMERA
             "clipboard_permission_list", // PermissionInfo.Type.CLIPBOARD
             "location_access_list", // PermissionInfo.Type.GEOLOCATION
@@ -95,6 +116,20 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             "sensors_permission_list", // PermissionInfo.Type.SENSORS
             "vr_permission_list", // PermissionInfo.Type.VIRTUAL_REALITY
     };
+
+    // A list of preferences keys that will be hidden on this page if this boolean below is true
+    private boolean mHideNonPermissionPreferences;
+    private static final String[] NON_PERMISSION_PREFERENCES = {
+            PREF_SITE_HEADING,
+            PREF_SITE_TITLE,
+            PREF_USAGE,
+            PREF_PERMISSIONS_HEADER,
+            PREF_CLEAR_DATA,
+    };
+
+    // Determines if this page will refresh its permissions display after clear and reset is
+    // clicked.
+    private boolean mRefreshAfterReset;
 
     private static final int REQUEST_CODE_NOTIFICATION_CHANNEL_SETTINGS = 1;
 
@@ -113,6 +148,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     // Records previous notification permission on Android O+ to allow detection of permission
     // revocation within the Android system permission activity.
     private @ContentSettingValues @Nullable Integer mPreviousNotificationPermission;
+
+    // Map from preference key to ContentSettingsType.
+    private Map<String, Integer> mPreferenceMap;
 
     private class SingleWebsitePermissionsPopulator
             implements WebsitePermissionsFetcher.WebsitePermissionsCallback {
@@ -172,7 +210,11 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         getActivity().setTitle(R.string.prefs_site_settings);
+        init();
+        super.onActivityCreated(savedInstanceState);
+    }
 
+    private void init() {
         Object extraSite = getArguments().getSerializable(EXTRA_SITE);
         Object extraSiteAddress = getArguments().getSerializable(EXTRA_SITE_ADDRESS);
 
@@ -192,8 +234,6 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
 
         // Disable animations of preference changes.
         getListView().setItemAnimator(null);
-
-        super.onActivityCreated(savedInstanceState);
     }
 
     @Override
@@ -212,6 +252,14 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         } else {
             super.onDisplayPreferenceDialog(preference);
         }
+    }
+
+    public void setHideNonPermissionPreferences(boolean hide) {
+        mHideNonPermissionPreferences = hide;
+    }
+
+    public void setRefreshAfterReset(boolean refresh) {
+        mRefreshAfterReset = refresh;
     }
 
     /**
@@ -233,11 +281,11 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         // This loop looks expensive, but the amount of data is likely to be relatively small
         // because most sites have very few permissions.
         for (Website other : websites) {
-            if (merged.getContentSettingException(ContentSettingException.Type.ADS) == null
-                    && other.getContentSettingException(ContentSettingException.Type.ADS) != null
+            if (merged.getContentSettingException(ContentSettingsType.ADS) == null
+                    && other.getContentSettingException(ContentSettingsType.ADS) != null
                     && other.compareByAddressTo(merged) == 0) {
-                merged.setContentSettingException(ContentSettingException.Type.ADS,
-                        other.getContentSettingException(ContentSettingException.Type.ADS));
+                merged.setContentSettingException(ContentSettingsType.ADS,
+                        other.getContentSettingException(ContentSettingsType.ADS));
             }
             for (@PermissionInfo.Type int type = 0; type < PermissionInfo.Type.NUM_ENTRIES;
                     type++) {
@@ -264,15 +312,13 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 }
             }
             if (host.equals(other.getAddress().getHost())) {
-                for (@ContentSettingException.Type int type = 0;
-                        type < ContentSettingException.Type.NUM_ENTRIES; type++) {
-                    if (type == ContentSettingException.Type.ADS) {
+                for (ContentSettingException exception : other.getContentSettingExceptions()) {
+                    int type = exception.getContentSettingType();
+                    if (type == ContentSettingsType.ADS) {
                         continue;
                     }
-                    if (merged.getContentSettingException(type) == null
-                            && other.getContentSettingException(type) != null) {
-                        merged.setContentSettingException(
-                                type, other.getContentSettingException(type));
+                    if (merged.getContentSettingException(type) == null) {
+                        merged.setContentSettingException(type, exception);
                     }
                 }
             }
@@ -297,10 +343,11 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
      * Must only be called once mSite is set.
      */
     private void displaySitePermissions() {
+        if (getPreferenceScreen() != null) {
+            getPreferenceScreen().removeAll();
+        }
         SettingsUtils.addPreferencesFromResource(this, R.xml.single_website_preferences);
 
-        Set<String> permissionPreferenceKeys =
-                new HashSet<>(Arrays.asList(PERMISSION_PREFERENCE_KEYS));
         int maxPermissionOrder = 0;
         PreferenceScreen preferenceScreen = getPreferenceScreen();
         // Iterate over preferences in reverse order because some preferences will be removed during
@@ -308,9 +355,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         for (int i = preferenceScreen.getPreferenceCount() - 1; i >= 0; i--) {
             Preference preference = preferenceScreen.getPreference(i);
             setUpPreference(preference);
-            // Keep track of the maximum 'order' value of permission preferences, to allow correct
-            // positioning of subsequent permission preferences.
-            if (permissionPreferenceKeys.contains(preference.getKey())) {
+            if (getContentSettingsTypeFromPreferenceKey(preference.getKey())
+                    != ContentSettingsType.DEFAULT) {
                 maxPermissionOrder = Math.max(maxPermissionOrder, preference.getOrder());
             }
         }
@@ -324,7 +370,16 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             removePreferenceSafely(PREF_USAGE);
         }
         if (!hasPermissionsPreferences()) {
-            removePreferenceSafely(PREF_PERMISSIONS);
+            removePreferenceSafely(PREF_PERMISSIONS_HEADER);
+        }
+
+        // Remove certain preferences explicitly
+        if (mHideNonPermissionPreferences) {
+            for (String key : NON_PERMISSION_PREFERENCES) {
+                removePreferenceSafely(key);
+            }
+        } else {
+            removePreferenceSafely(PREF_PAGE_DESCRIPTION);
         }
     }
 
@@ -336,29 +391,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         } else if (PREF_RESET_SITE.equals(preference.getKey())) {
             setupResetSitePreference(preference);
         } else {
-            assert PERMISSION_PREFERENCE_KEYS.length
-                    == ContentSettingException.Type.NUM_ENTRIES + PermissionInfo.Type.NUM_ENTRIES;
-            for (@ContentSettingException.Type int i = 0;
-                    i < ContentSettingException.Type.NUM_ENTRIES; i++) {
-                if (!PERMISSION_PREFERENCE_KEYS[i].equals(preference.getKey())) {
-                    continue;
-                }
-                if (i == ContentSettingException.Type.ADS) {
-                    setUpAdsPreference(preference);
-                } else if (i == ContentSettingException.Type.SOUND) {
-                    setUpSoundPreference(preference);
-                } else if (i == ContentSettingException.Type.JAVASCRIPT) {
-                    setUpJavascriptPreference(preference);
-                } else {
-                    // ContentSettingException can not be embargoed.
-                    setUpListPreference(preference, mSite.getContentSettingPermission(i),
-                            false /* isEmbargoed */);
-                }
-                return;
-            }
+            assert PERMISSION_PREFERENCE_KEYS.length == PermissionInfo.Type.NUM_ENTRIES;
             for (@PermissionInfo.Type int i = 0; i < PermissionInfo.Type.NUM_ENTRIES; i++) {
-                if (!PERMISSION_PREFERENCE_KEYS[i + ContentSettingException.Type.NUM_ENTRIES]
-                                .equals(preference.getKey())) {
+                if (!PERMISSION_PREFERENCE_KEYS[i].equals(preference.getKey())) {
                     continue;
                 }
                 if (i == PermissionInfo.Type.GEOLOCATION) {
@@ -371,6 +406,22 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                             mSite.getPermission(
                                     getSiteSettingsClient().getBrowserContextHandle(), i),
                             isPermissionEmbargoed(i));
+                }
+                return;
+            }
+            @ContentSettingsType
+            int type = getContentSettingsTypeFromPreferenceKey(preference.getKey());
+            if (type != ContentSettingsType.DEFAULT) {
+                if (type == ContentSettingsType.ADS) {
+                    setUpAdsPreference(preference);
+                } else if (type == ContentSettingsType.SOUND) {
+                    setUpSoundPreference(preference);
+                } else if (type == ContentSettingsType.JAVASCRIPT) {
+                    setUpJavascriptPreference(preference);
+                } else {
+                    // ContentSettingException can not be embargoed.
+                    setUpListPreference(preference, mSite.getContentSettingPermission(type),
+                            false /* isEmbargoed */);
                 }
                 return;
             }
@@ -412,9 +463,10 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         }
     }
 
-    private Intent getNotificationSettingsIntent(String packageName) {
+    private Intent getSettingsIntent(String packageName, @ContentSettingsType int type) {
         Intent intent = new Intent();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                && type == ContentSettingsType.NOTIFICATIONS) {
             intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
             intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName);
         } else {
@@ -447,34 +499,39 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         return newPreference;
     }
 
-    private void setupNotificationManagedByPreference(
-            ChromeImageViewPreference preference, Intent settingsIntent) {
-        preference.setImageView(
-                R.drawable.permission_popups, R.string.website_notification_settings, null);
-        // By disabling the ImageView, clicks will go through to the preference.
-        preference.setImageViewEnabled(false);
+    private boolean setUpManagedByPreference(Preference preference,
+            @StringRes int contentDescriptionRes, @ContentSettingsType int type) {
+        Origin origin = Origin.create(mSite.getAddress().getOrigin());
+        if (origin == null) {
+            return false;
+        }
 
-        preference.setOnPreferenceClickListener(unused -> {
+        String managedBy = getSiteSettingsClient().getDelegateAppNameForOrigin(origin, type);
+        if (managedBy == null) {
+            return false;
+        }
+
+        final Intent settingsIntent = getSettingsIntent(
+                getSiteSettingsClient().getDelegatePackageNameForOrigin(origin, type), type);
+        String summaryText = getString(R.string.website_setting_managed_by_app, managedBy);
+        ChromeImageViewPreference newPreference =
+                replaceWithReadOnlyCopyOf(preference, summaryText);
+
+        newPreference.setImageView(R.drawable.permission_popups, contentDescriptionRes, null);
+        // By disabling the ImageView, clicks will go through to the preference.
+        newPreference.setImageViewEnabled(false);
+
+        newPreference.setOnPreferenceClickListener(unused -> {
             startActivity(settingsIntent);
             return true;
         });
+        return true;
     }
 
     private void setUpNotificationsPreference(Preference preference, boolean isEmbargoed) {
-        WebappSettingsClient client = getSiteSettingsClient().getWebappSettingsClient();
-        Origin origin = Origin.create(mSite.getAddress().getOrigin());
-        if (origin != null) {
-            String managedBy = client.getNotificationDelegateAppNameForOrigin(origin);
-            if (managedBy != null) {
-                final Intent notificationSettingsIntent = getNotificationSettingsIntent(
-                        client.getNotificationDelegatePackageNameForOrigin(origin));
-                String summaryText =
-                        getString(R.string.website_notification_managed_by_app, managedBy);
-                ChromeImageViewPreference newPreference =
-                        replaceWithReadOnlyCopyOf(preference, summaryText);
-                setupNotificationManagedByPreference(newPreference, notificationSettingsIntent);
-                return;
-            }
+        if (setUpManagedByPreference(preference, R.string.website_notification_settings,
+                    ContentSettingsType.NOTIFICATIONS)) {
+            return;
         }
 
         final @ContentSettingValues @Nullable Integer value =
@@ -568,8 +625,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             // User has navigated back from system channel settings on O+. Ensure notification
             // preference is up to date, since they might have toggled it from channel settings.
             Preference notificationsPreference =
-                    findPreference(PERMISSION_PREFERENCE_KEYS[PermissionInfo.Type.NOTIFICATION
-                            + ContentSettingException.Type.NUM_ENTRIES]);
+                    findPreference(PERMISSION_PREFERENCE_KEYS[PermissionInfo.Type.NOTIFICATION]);
             if (notificationsPreference != null) {
                 setUpNotificationsPreference(notificationsPreference, false /* isEmbargoed */);
             }
@@ -623,7 +679,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                         mObjectUserPermissionCount--;
 
                         if (!hasPermissionsPreferences()) {
-                            removePreferenceSafely(PREF_PERMISSIONS);
+                            removePreferenceSafely(PREF_PERMISSIONS_HEADER);
                         }
                     });
 
@@ -660,8 +716,8 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         } else {
             Preference osWarning = findPreference(PREF_OS_PERMISSIONS_WARNING);
             Preference osWarningExtra = findPreference(PREF_OS_PERMISSIONS_WARNING_EXTRA);
-            categoryWithWarning.configurePermissionIsOffPreferences(
-                    osWarning, osWarningExtra, getActivity(), false);
+            categoryWithWarning.configurePermissionIsOffPreferences(osWarning, osWarningExtra,
+                    getActivity(), false, getSiteSettingsClient().getAppName());
             if (osWarning.getTitle() == null) {
                 preferenceScreen.removePreference(osWarning);
             } else if (osWarningExtra.getTitle() == null) {
@@ -677,8 +733,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 && WebsitePreferenceBridge.getAdBlockingActivated(
                         getSiteSettingsClient().getBrowserContextHandle(),
                         mSite.getAddress().getOrigin())
-                && findPreference(PERMISSION_PREFERENCE_KEYS[ContentSettingException.Type.ADS])
-                        != null;
+                && findPreference(getPreferenceKey(ContentSettingsType.ADS)) != null;
 
         if (!adBlockingActivated) {
             removePreferenceSafely(PREF_INTRUSIVE_ADS_INFO);
@@ -722,10 +777,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         for (int i = 0; i < PermissionInfo.Type.NUM_ENTRIES; i++) {
             if (PermissionInfo.getContentSettingsType(i)
                     == SiteSettingsCategory.contentSettingsType(type)) {
-                return mSite.getPermission(browserContextHandle, i) == null
-                        ? false
-                        : SiteSettingsCategory.createFromType(browserContextHandle, type)
-                                  .showPermissionBlockedMessage(getActivity());
+                return mSite.getPermission(browserContextHandle, i) != null
+                        && SiteSettingsCategory.createFromType(browserContextHandle, type)
+                                   .showPermissionBlockedMessage(getActivity());
             }
         }
         return false;
@@ -739,8 +793,12 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
 
     private boolean hasPermissionsPreferences() {
         if (mObjectUserPermissionCount > 0 || mObjectPolicyPermissionCount > 0) return true;
-        for (String key : PERMISSION_PREFERENCE_KEYS) {
-            if (findPreference(key) != null) return true;
+        PreferenceScreen preferenceScreen = getPreferenceScreen();
+        for (int i = 0; i < preferenceScreen.getPreferenceCount(); i++) {
+            String key = preferenceScreen.getPreference(i).getKey();
+            if (getContentSettingsTypeFromPreferenceKey(key) != ContentSettingsType.DEFAULT) {
+                return true;
+            }
         }
         return false;
     }
@@ -804,6 +862,11 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     }
 
     private void setUpLocationPreference(Preference preference) {
+        if (setUpManagedByPreference(preference, R.string.website_location_settings,
+                    ContentSettingsType.GEOLOCATION)) {
+            return;
+        }
+
         @ContentSettingValues
         @Nullable
         Integer permission = mSite.getPermission(
@@ -818,8 +881,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     private void setUpSoundPreference(Preference preference) {
         @ContentSettingValues
         @Nullable
-        Integer currentValue =
-                mSite.getContentSettingPermission(ContentSettingException.Type.SOUND);
+        Integer currentValue = mSite.getContentSettingPermission(ContentSettingsType.SOUND);
         // In order to always show the sound permission, set it up with the default value if it
         // doesn't have a current value.
         if (currentValue == null) {
@@ -836,8 +898,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     private void setUpJavascriptPreference(Preference preference) {
         @ContentSettingValues
         @Nullable
-        Integer currentValue =
-                mSite.getContentSettingPermission(ContentSettingException.Type.JAVASCRIPT);
+        Integer currentValue = mSite.getContentSettingPermission(ContentSettingsType.JAVASCRIPT);
         // If Javascript is blocked by default, then always show a Javascript permission.
         // To do this, set it to the default value (blocked).
         if ((currentValue == null)
@@ -869,7 +930,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 getSiteSettingsClient().getBrowserContextHandle(), mSite.getAddress().getOrigin());
         @ContentSettingValues
         @Nullable
-        Integer permission = mSite.getContentSettingPermission(ContentSettingException.Type.ADS);
+        Integer permission = mSite.getContentSettingPermission(ContentSettingsType.ADS);
 
         // If |permission| is null, there is no explicit (non-default) permission set for this site.
         // If the site is not considered a candidate for blocking, do the standard thing and remove
@@ -922,20 +983,28 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         });
     }
 
-    private int getContentSettingsTypeFromPreferenceKey(String preferenceKey) {
-        for (int i = 0; i < PERMISSION_PREFERENCE_KEYS.length; i++) {
-            if (PERMISSION_PREFERENCE_KEYS[i].equals(preferenceKey)) {
-                return i < ContentSettingException.Type.NUM_ENTRIES
-                        ? ContentSettingException.getContentSettingsType(i)
-                        : PermissionInfo.getContentSettingsType(
-                                i - ContentSettingException.Type.NUM_ENTRIES);
+    public @ContentSettingsType int getContentSettingsTypeFromPreferenceKey(String preferenceKey) {
+        if (mPreferenceMap == null) {
+            mPreferenceMap = new HashMap<>();
+            for (int i = 0; i < PERMISSION_PREFERENCE_KEYS.length; i++) {
+                mPreferenceMap.put(
+                        PERMISSION_PREFERENCE_KEYS[i], PermissionInfo.getContentSettingsType(i));
+            }
+            for (@ContentSettingsType int type = 0; type < ContentSettingsType.NUM_TYPES; type++) {
+                String key = getPreferenceKey(type);
+                if (key != null) {
+                    mPreferenceMap.put(key, type);
+                }
             }
         }
-        return 0;
+        Integer type = mPreferenceMap.get(preferenceKey);
+        if (type != null) return type;
+        return ContentSettingsType.DEFAULT;
     }
 
     private void popBackIfNoSettings() {
-        if (!hasPermissionsPreferences() && !hasUsagePreferences() && getActivity() != null) {
+        if (!hasPermissionsPreferences() && !hasUsagePreferences() && getActivity() != null
+                && !mRefreshAfterReset) {
             getActivity().finish();
         }
     }
@@ -950,16 +1019,16 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                 getSiteSettingsClient().getBrowserContextHandle();
         for (int i = 0; i < PERMISSION_PREFERENCE_KEYS.length; i++) {
             if (PERMISSION_PREFERENCE_KEYS[i].equals(preference.getKey())) {
-                if (i < ContentSettingException.Type.NUM_ENTRIES) {
-                    mSite.setContentSettingPermission(
-                            getSiteSettingsClient().getBrowserContextHandle(), i, permission);
-                } else {
-                    mSite.setPermission(browserContextHandle,
-                            i - ContentSettingException.Type.NUM_ENTRIES, permission);
-                }
+                mSite.setPermission(browserContextHandle, i, permission);
                 return true;
             }
         }
+        int type = getContentSettingsTypeFromPreferenceKey(preference.getKey());
+        if (type != ContentSettingsType.DEFAULT) {
+            mSite.setContentSettingPermission(
+                    getSiteSettingsClient().getBrowserContextHandle(), type, permission);
+        }
+
         return true;
     }
 
@@ -994,6 +1063,12 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         for (String key : PERMISSION_PREFERENCE_KEYS) {
             removePreferenceSafely(key);
         }
+        for (@ContentSettingsType int type = 0; type < ContentSettingsType.NUM_TYPES; type++) {
+            String key = getPreferenceKey(type);
+            if (key != null) {
+                removePreferenceSafely(key);
+            }
+        }
 
         // Clearing stored data implies popping back to parent menu if there is nothing left to
         // show. Therefore, we only need to explicitly close the activity if there's no stored data
@@ -1010,7 +1085,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         RecordHistogram.recordEnumeratedHistogram("SingleWebsitePreferences.NavigatedFromToReset",
                 navigationSource, SettingsNavigationSource.NUM_ENTRIES);
 
-        if (finishActivityImmediately) {
+        if (mRefreshAfterReset) {
+            init();
+        } else if (finishActivityImmediately) {
             getActivity().finish();
         }
     }

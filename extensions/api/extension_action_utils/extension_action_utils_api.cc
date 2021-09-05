@@ -16,8 +16,6 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/context_menus/context_menus_api_helpers.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
-#include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
@@ -38,6 +36,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_factory.h"
@@ -56,10 +55,8 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
-#include "ui/vivaldi_ui_utils.h"
+#include "ui/vivaldi_skia_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
-
-using vivaldi::ui_tools::EncodeBitmap;
 
 namespace extensions {
 

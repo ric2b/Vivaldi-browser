@@ -5,6 +5,9 @@
 #include "chrome/browser/ui/views/frame/glass_browser_frame_view.h"
 
 #include <dwmapi.h>
+
+#include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/trace_event/common/trace_event_common.h"
@@ -15,6 +18,7 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/glass_browser_caption_button_container.h"
+#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/frame/webui_tab_strip_container_view.h"
 #include "chrome/browser/ui/views/tabs/new_tab_button.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -81,18 +85,14 @@ SkColor GlassBrowserFrameView::GetReadableFeatureColor(
 
 GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
                                              BrowserView* browser_view)
-    : BrowserNonClientFrameView(frame, browser_view),
-      window_icon_(nullptr),
-      window_title_(nullptr),
-      throbber_running_(false),
-      throbber_frame_(0) {
+    : BrowserNonClientFrameView(frame, browser_view) {
   // We initialize all fields despite some of them being unused in some modes,
   // since it's possible for modes to flip dynamically (e.g. if the user enables
   // a high-contrast theme). Throbber icons are only used when ShowSystemIcon()
   // is true. Everything else here is only used when
   // ShouldCustomDrawSystemTitlebar() is true.
 
-  if (browser_view->ShouldShowWindowIcon()) {
+  if (browser_view->CanShowWindowIcon()) {
     InitThrobberIcons();
 
     window_icon_ = new TabIconView(this, nullptr);
@@ -115,7 +115,7 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
   // The window title appears above the web app frame toolbar (if present),
   // which surrounds the title with minimal-ui buttons on the left,
   // and other controls (such as the app menu button) on the right.
-  if (browser_view->ShouldShowWindowTitle()) {
+  if (browser_view->CanShowWindowTitle()) {
     window_title_ = new views::Label(browser_view->GetWindowTitle());
     window_title_->SetSubpixelRenderingEnabled(false);
     window_title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -134,8 +134,7 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
       browser_view->browser()->is_focus_mode() ? 0 : kTopResizeFrameArea;
 }
 
-GlassBrowserFrameView::~GlassBrowserFrameView() {
-}
+GlassBrowserFrameView::~GlassBrowserFrameView() = default;
 
 ///////////////////////////////////////////////////////////////////////////////
 // GlassBrowserFrameView, BrowserNonClientFrameView implementation:
@@ -148,7 +147,7 @@ bool GlassBrowserFrameView::CaptionButtonsOnLeadingEdge() const {
 }
 
 gfx::Rect GlassBrowserFrameView::GetBoundsForTabStripRegion(
-    const views::View* tabstrip) const {
+    const gfx::Size& tabstrip_minimum_size) const {
   const int x = CaptionButtonsOnLeadingEdge()
                     ? (width() - frame()->GetMinimizeButtonOffset())
                     : 0;
@@ -156,7 +155,7 @@ gfx::Rect GlassBrowserFrameView::GetBoundsForTabStripRegion(
   if (!CaptionButtonsOnLeadingEdge())
     end_x = std::min(MinimizeButtonX(), end_x);
   return gfx::Rect(x, TopAreaHeight(false), std::max(0, end_x - x),
-                   tabstrip->GetPreferredSize().height());
+                   tabstrip_minimum_size.height());
 }
 
 int GlassBrowserFrameView::GetTopInset(bool restored) const {
@@ -208,20 +207,18 @@ SkColor GlassBrowserFrameView::GetCaptionColor(
 }
 
 void GlassBrowserFrameView::UpdateThrobber(bool running) {
-  if (ShowCustomIcon())
+  if (ShouldShowWindowIcon(TitlebarType::kCustom)) {
     window_icon_->Update();
-
-  if (!ShowSystemIcon())
-    return;
-
-  if (throbber_running_) {
-    if (running) {
-      DisplayNextThrobberFrame();
-    } else {
-      StopThrobber();
+  } else if (ShouldShowWindowIcon(TitlebarType::kSystem)) {
+    if (throbber_running_) {
+      if (running) {
+        DisplayNextThrobberFrame();
+      } else {
+        StopThrobber();
+      }
+    } else if (running) {
+      StartThrobber();
     }
-  } else if (running) {
-    StartThrobber();
   }
 }
 
@@ -230,11 +227,6 @@ gfx::Size GlassBrowserFrameView::GetMinimumSize() const {
   min_size.Enlarge(0, GetTopInset(false));
 
   return min_size;
-}
-
-CaptionButtonContainer* GlassBrowserFrameView::GetCaptionButtonContainer()
-    const {
-  return caption_button_container_;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -284,7 +276,7 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
 
   // See if we're in the sysmenu region.  We still have to check the tabstrip
   // first so that clicks in a tab don't get treated as sysmenu clicks.
-  if (browser_view()->ShouldShowWindowIcon() && frame_component != HTCLIENT) {
+  if (frame_component != HTCLIENT && ShouldShowWindowIcon(TitlebarType::kAny)) {
     gfx::Rect sys_menu_region(
         0, display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSIZEFRAME),
         display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXSMICON),
@@ -297,7 +289,7 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
     return frame_component;
 
   // Then see if the point is within any of the window controls.
-  if (OwnsCaptionButtons()) {
+  if (caption_button_container_) {
     gfx::Point local_point = point;
     ConvertPointToTarget(parent(), caption_button_container_, &local_point);
     if (caption_button_container_->HitTestPoint(local_point)) {
@@ -350,15 +342,14 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
 }
 
 void GlassBrowserFrameView::UpdateWindowIcon() {
-  if (ShowCustomIcon() && !frame()->IsFullscreen())
+  if (window_icon_ && window_icon_->GetVisible())
     window_icon_->SchedulePaint();
 }
 
 void GlassBrowserFrameView::UpdateWindowTitle() {
-  if (ShowCustomTitle() && !frame()->IsFullscreen()) {
-    LayoutTitleBar();
+  LayoutTitleBar();
+  if (window_title_ && window_title_->GetVisible())
     window_title_->SchedulePaint();
-  }
 }
 
 void GlassBrowserFrameView::ResetWindowControls() {
@@ -374,18 +365,23 @@ void GlassBrowserFrameView::ButtonPressed(views::Button* sender,
 }
 
 bool GlassBrowserFrameView::ShouldTabIconViewAnimate() const {
-  DCHECK(ShowCustomIcon());
+  DCHECK(ShouldShowWindowIcon(TitlebarType::kCustom));
   content::WebContents* current_tab = browser_view()->GetActiveWebContents();
   return current_tab && current_tab->IsLoading();
 }
 
 gfx::ImageSkia GlassBrowserFrameView::GetFaviconForTabIconView() {
-  DCHECK(ShowCustomIcon());
+  DCHECK(ShouldShowWindowIcon(TitlebarType::kCustom));
   return frame()->widget_delegate()->GetWindowIcon();
 }
 
 bool GlassBrowserFrameView::IsMaximized() const {
   return frame()->IsMaximized();
+}
+
+bool GlassBrowserFrameView::IsWebUITabStrip() const {
+  return WebUITabStripContainerView::UseTouchableTabStrip(
+      browser_view()->browser());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -403,12 +399,8 @@ void GlassBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
 
 void GlassBrowserFrameView::Layout() {
   TRACE_EVENT0("views.frame", "GlassBrowserFrameView::Layout");
-  if (ShouldCustomDrawSystemTitlebar())
-    LayoutCaptionButtons();
-
-  if (ShouldCustomDrawSystemTitlebar())
-    LayoutTitleBar();
-
+  LayoutCaptionButtons();
+  LayoutTitleBar();
   LayoutClientView();
 }
 
@@ -422,8 +414,6 @@ int GlassBrowserFrameView::FrameBorderThickness() const {
 }
 
 int GlassBrowserFrameView::FrameTopBorderThickness(bool restored) const {
-  constexpr int kRestoredWebUITopBorder = 1;
-
   const bool is_fullscreen =
       (frame()->IsFullscreen() || IsMaximized()) && !restored;
   if (!is_fullscreen) {
@@ -433,8 +423,15 @@ int GlassBrowserFrameView::FrameTopBorderThickness(bool restored) const {
     // value.
     if (browser_view()->IsTabStripVisible())
       return drag_handle_padding_;
+
+    // There is no top border in tablet mode when the window is "restored"
+    // because it is still tiled into either the left or right pane of the
+    // display takes up the entire vertical extent of the screen. Note that a
+    // rendering bug in Windows may still cause the very top of the window to be
+    // cut off intermittently, but that's an OS issue that affects all
+    // applications, not specifically Chrome.
     if (IsWebUITabStrip())
-      return kRestoredWebUITopBorder;
+      return 0;
   }
 
   // Mouse and touch locations are floored but GetSystemMetricsInDIP is rounded,
@@ -468,10 +465,20 @@ int GlassBrowserFrameView::TopAreaHeight(bool restored) const {
   if (frame()->IsFullscreen() && !restored)
     return 0;
 
-  // Return only the top border thickness (no extra drag handle) if maximized or
-  // in WebUI tab strip (tablet) mode.
+  const bool maximized = IsMaximized() && !restored;
   int top = FrameTopBorderThickness(restored);
-  if ((IsMaximized() && !restored) || IsWebUITabStrip())
+  if (IsWebUITabStrip()) {
+    // Caption bar is default Windows size in maximized mode but full size when
+    // windows are tiled in tablet mode (baesd on behavior of first-party
+    // Windows applications).
+    top += maximized ? TitlebarMaximizedVisualHeight()
+                     : caption_button_container_->GetPreferredSize().height();
+    return top;
+  }
+
+  // In maximized mode, we do not add any additional thickness to the grab
+  // handle above the tabs; just return the frame thickness.
+  if (maximized)
     return top;
 
   // Besides the frame border, there's empty space atop the window in restored
@@ -502,10 +509,14 @@ int GlassBrowserFrameView::TitlebarMaximizedVisualHeight() const {
 int GlassBrowserFrameView::TitlebarHeight(bool restored) const {
   if (frame()->IsFullscreen() && !restored)
     return 0;
+
   // The titlebar's actual height is the same in restored and maximized, but
   // some of it is above the screen in maximized mode. See the comment in
-  // FrameTopBorderThicknessPx().
-  return TitlebarMaximizedVisualHeight() + FrameTopBorderThickness(false);
+  // FrameTopBorderThicknessPx(). For WebUI,
+  return (IsWebUITabStrip()
+              ? caption_button_container_->GetPreferredSize().height()
+              : TitlebarMaximizedVisualHeight()) +
+         FrameTopBorderThickness(false);
 }
 
 int GlassBrowserFrameView::WindowTopY() const {
@@ -513,7 +524,9 @@ int GlassBrowserFrameView::WindowTopY() const {
   // FrameTopBorderThickness()) and floor(system dsf) pixels when restored.
   // Unfortunately we can't represent either of those at hidpi without using
   // non-integral dips, so we return the closest reasonable values instead.
-  return IsMaximized() ? FrameTopBorderThickness(false) : 1;
+  if (IsMaximized())
+    return FrameTopBorderThickness(false);
+  return IsWebUITabStrip() ? FrameTopBorderThickness(true) : 1;
 }
 
 int GlassBrowserFrameView::MinimizeButtonX() const {
@@ -530,35 +543,24 @@ int GlassBrowserFrameView::MinimizeButtonX() const {
              : frame()->GetMinimizeButtonOffset();
 }
 
-bool GlassBrowserFrameView::IsToolbarVisible() const {
-  return browser_view()->IsToolbarVisible() &&
-      !browser_view()->toolbar()->GetPreferredSize().IsEmpty();
+bool GlassBrowserFrameView::ShouldShowWindowIcon(TitlebarType type) const {
+  if (type == TitlebarType::kCustom && !ShouldCustomDrawSystemTitlebar())
+    return false;
+  if (type == TitlebarType::kSystem && ShouldCustomDrawSystemTitlebar())
+    return false;
+  if (frame()->IsFullscreen() || browser_view()->IsBrowserTypeWebApp())
+    return false;
+  return browser_view()->ShouldShowWindowIcon();
 }
 
-bool GlassBrowserFrameView::ShowCustomIcon() const {
-  // Web-app windows don't include the window icon as per UI mocks.
-  return !web_app_frame_toolbar() && ShouldCustomDrawSystemTitlebar() &&
-         browser_view()->ShouldShowWindowIcon();
-}
-
-bool GlassBrowserFrameView::ShowCustomTitle() const {
-  return ShouldCustomDrawSystemTitlebar() &&
-         browser_view()->ShouldShowWindowTitle();
-}
-
-bool GlassBrowserFrameView::ShowSystemIcon() const {
-  return !ShouldCustomDrawSystemTitlebar() &&
-         browser_view()->ShouldShowWindowIcon();
-}
-
-bool GlassBrowserFrameView::IsWebUITabStrip() const {
-  return WebUITabStripContainerView::UseTouchableTabStrip(
-      browser_view()->browser());
-}
-
-bool GlassBrowserFrameView::OwnsCaptionButtons() const {
-  return caption_button_container_ &&
-         caption_button_container_->parent() == this;
+bool GlassBrowserFrameView::ShouldShowWindowTitle(TitlebarType type) const {
+  if (type == TitlebarType::kCustom && !ShouldCustomDrawSystemTitlebar())
+    return false;
+  if (type == TitlebarType::kSystem && ShouldCustomDrawSystemTitlebar())
+    return false;
+  if (frame()->IsFullscreen())
+    return false;
+  return browser_view()->ShouldShowWindowTitle();
 }
 
 SkColor GlassBrowserFrameView::GetTitlebarColor() const {
@@ -568,9 +570,6 @@ SkColor GlassBrowserFrameView::GetTitlebarColor() const {
 void GlassBrowserFrameView::PaintTitlebar(gfx::Canvas* canvas) const {
   TRACE_EVENT0("views.frame", "GlassBrowserFrameView::PaintTitlebar");
 
-  cc::PaintFlags flags;
-  gfx::ScopedCanvas scoped_canvas(canvas);
-  float scale = canvas->UndoDeviceScaleFactor();
   // This is the pixel-accurate version of WindowTopY(). Scaling the DIP values
   // here compounds precision error, which exposes unpainted client area. When
   // restored it uses the system dsf instead of the per-monitor dsf to match
@@ -599,13 +598,18 @@ void GlassBrowserFrameView::PaintTitlebar(gfx::Canvas* canvas) const {
   const int color_id = ShouldPaintAsActive()
                            ? ThemeProperties::COLOR_ACCENT_BORDER_ACTIVE
                            : ThemeProperties::COLOR_ACCENT_BORDER_INACTIVE;
+  gfx::ScopedCanvas scoped_canvas(canvas);
+  float scale = canvas->UndoDeviceScaleFactor();
+  cc::PaintFlags flags;
   flags.setColor(color_utils::GetResultingPaintColor(
       GetThemeProvider()->GetColor(color_id), titlebar_color));
   canvas->DrawRect(gfx::RectF(0, 0, width() * scale, y), flags);
 
   const int titlebar_height =
       browser_view()->IsTabStripVisible()
-          ? GetBoundsForTabStripRegion(browser_view()->tabstrip()).bottom()
+          ? GetBoundsForTabStripRegion(
+                browser_view()->tab_strip_region_view()->GetMinimumSize())
+                .bottom()
           : TitlebarHeight(false);
   const gfx::Rect titlebar_rect = gfx::ToEnclosingRect(
       gfx::RectF(0, y, width() * scale, titlebar_height * scale - y));
@@ -630,17 +634,23 @@ void GlassBrowserFrameView::PaintTitlebar(gfx::Canvas* canvas) const {
                          frame_overlay_image.height() * scale, true);
   }
 
-  if (ShowCustomTitle())
+  if (ShouldShowWindowTitle(TitlebarType::kCustom)) {
     window_title_->SetEnabledColor(
         GetCaptionColor(BrowserFrameActiveState::kUseCurrent));
+  }
 }
 
 void GlassBrowserFrameView::LayoutTitleBar() {
   TRACE_EVENT0("views.frame", "GlassBrowserFrameView::LayoutTitleBar");
-  if (!ShowCustomIcon() && !ShowCustomTitle())
+  const bool show_icon = ShouldShowWindowIcon(TitlebarType::kCustom);
+  const bool show_title = ShouldShowWindowTitle(TitlebarType::kCustom);
+  if (window_icon_)
+    window_icon_->SetVisible(show_icon);
+  if (window_title_)
+    window_title_->SetVisible(show_title);
+  if (!show_icon && !show_title && !web_app_frame_toolbar())
     return;
 
-  gfx::Rect window_icon_bounds;
   const int icon_size =
       display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSMICON);
   const int titlebar_visual_height =
@@ -656,10 +666,11 @@ void GlassBrowserFrameView::LayoutTitleBar() {
   int next_trailing_x = MinimizeButtonX();
 
   const int y = window_top + (titlebar_visual_height - icon_size) / 2;
-  window_icon_bounds = gfx::Rect(next_leading_x, y, icon_size, icon_size);
+  const gfx::Rect window_icon_bounds =
+      gfx::Rect(next_leading_x, y, icon_size, icon_size);
 
   constexpr int kIconTitleSpacing = 5;
-  if (ShowCustomIcon()) {
+  if (show_icon) {
     window_icon_->SetBoundsRect(window_icon_bounds);
     next_leading_x = window_icon_bounds.right() + kIconTitleSpacing;
   }
@@ -673,7 +684,7 @@ void GlassBrowserFrameView::LayoutTitleBar() {
     next_trailing_x = remaining_bounds.second;
   }
 
-  if (ShowCustomTitle()) {
+  if (show_title) {
     // If nothing has been added to the left, match native Windows 10 UWP apps
     // that don't have window icons.
     constexpr int kMinimumTitleLeftBorderMargin = 11;
@@ -689,14 +700,27 @@ void GlassBrowserFrameView::LayoutTitleBar() {
 
 void GlassBrowserFrameView::LayoutCaptionButtons() {
   TRACE_EVENT0("views.frame", "GlassBrowserFrameView::LayoutCaptionButtons");
-  if (!OwnsCaptionButtons())
+  if (!caption_button_container_)
     return;
+
+  // Non-custom system titlebar already contains caption buttons.
+  if (!ShouldCustomDrawSystemTitlebar()) {
+    caption_button_container_->SetVisible(false);
+    return;
+  }
+
+  caption_button_container_->SetVisible(true);
 
   const gfx::Size preferred_size =
       caption_button_container_->GetPreferredSize();
+  int height = preferred_size.height();
+  // We use the standard caption bar height when maximized in tablet mode, which
+  // is smaller than our preferred button size.
+  if (IsWebUITabStrip() && IsMaximized())
+    height = std::min(height, TitlebarMaximizedVisualHeight());
   caption_button_container_->SetBounds(width() - preferred_size.width(),
                                        WindowTopY(), preferred_size.width(),
-                                       preferred_size.height());
+                                       height);
 }
 
 void GlassBrowserFrameView::LayoutClientView() {
@@ -705,7 +729,7 @@ void GlassBrowserFrameView::LayoutClientView() {
 }
 
 void GlassBrowserFrameView::StartThrobber() {
-  DCHECK(ShowSystemIcon());
+  DCHECK(ShouldShowWindowIcon(TitlebarType::kSystem));
   if (!throbber_running_) {
     throbber_running_ = true;
     throbber_frame_ = 0;
@@ -717,7 +741,7 @@ void GlassBrowserFrameView::StartThrobber() {
 }
 
 void GlassBrowserFrameView::StopThrobber() {
-  DCHECK(ShowSystemIcon());
+  DCHECK(ShouldShowWindowIcon(TitlebarType::kSystem));
   if (throbber_running_) {
     throbber_running_ = false;
 

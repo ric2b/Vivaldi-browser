@@ -92,7 +92,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
         mSession = mIntentDataProvider.getSession();
 
-        CustomTabNavigationBarController.updateNavigationBarColor(this, mIntentDataProvider);
+        CustomTabNavigationBarController.update(getWindow(), mIntentDataProvider, getResources());
     }
 
     @Override
@@ -198,6 +198,9 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     @Override
     protected BrowserServicesIntentDataProvider buildIntentDataProvider(
             Intent intent, @CustomTabsIntent.ColorScheme int colorScheme) {
+        if (IncognitoCustomTabIntentDataProvider.isValidIncognitoIntent(intent)) {
+            return new IncognitoCustomTabIntentDataProvider(intent, this, colorScheme);
+        }
         return new CustomTabIntentDataProvider(intent, this, colorScheme);
     }
 

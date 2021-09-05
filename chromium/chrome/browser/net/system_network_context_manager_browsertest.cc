@@ -243,7 +243,7 @@ IN_PROC_BROWSER_TEST_F(SystemNetworkContextManagerBrowsertest, AuthParams) {
   EXPECT_FALSE(dynamic_params->delegate_by_kdc_policy);
 
   const char kServerAllowList[] = "foo";
-  local_state->SetString(prefs::kAuthServerWhitelist, kServerAllowList);
+  local_state->SetString(prefs::kAuthServerAllowlist, kServerAllowList);
   dynamic_params =
       SystemNetworkContextManager::GetHttpAuthDynamicParamsForTesting();
   EXPECT_EQ(true, dynamic_params->negotiate_disable_cname_lookup);
@@ -252,7 +252,7 @@ IN_PROC_BROWSER_TEST_F(SystemNetworkContextManagerBrowsertest, AuthParams) {
   EXPECT_EQ("", dynamic_params->delegate_allowlist);
 
   const char kDelegateAllowList[] = "bar, baz";
-  local_state->SetString(prefs::kAuthNegotiateDelegateWhitelist,
+  local_state->SetString(prefs::kAuthNegotiateDelegateAllowlist,
                          kDelegateAllowList);
   dynamic_params =
       SystemNetworkContextManager::GetHttpAuthDynamicParamsForTesting();
@@ -262,7 +262,7 @@ IN_PROC_BROWSER_TEST_F(SystemNetworkContextManagerBrowsertest, AuthParams) {
   EXPECT_EQ(kDelegateAllowList, dynamic_params->delegate_allowlist);
   EXPECT_FALSE(dynamic_params->delegate_by_kdc_policy);
 
-#if defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
   local_state->SetBoolean(prefs::kAuthNegotiateDelegateByKdcPolicy, true);
   dynamic_params =
       SystemNetworkContextManager::GetHttpAuthDynamicParamsForTesting();
@@ -271,7 +271,7 @@ IN_PROC_BROWSER_TEST_F(SystemNetworkContextManagerBrowsertest, AuthParams) {
   EXPECT_EQ(kServerAllowList, dynamic_params->server_allowlist);
   EXPECT_EQ(kDelegateAllowList, dynamic_params->delegate_allowlist);
   EXPECT_TRUE(dynamic_params->delegate_by_kdc_policy);
-#endif  // defined(OS_LINUX) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#endif  // defined(OS_LINUX) || defined(OS_MAC) || defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
   // The kerberos.enabled pref is false and the device is not Active Directory
@@ -566,7 +566,7 @@ IN_PROC_BROWSER_TEST_P(
   // override the feature flag.
   policy::PolicyMap policies;
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            std::make_unique<base::Value>(true));
+            base::Value(true));
   UpdateProviderPolicy(policies);
 
   network_context_params_ptr =
@@ -577,7 +577,7 @@ IN_PROC_BROWSER_TEST_P(
       network::mojom::CertVerifierCreationParams::CertVerifierImpl::kBuiltin);
 
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
-            std::make_unique<base::Value>(false));
+            base::Value(false));
   UpdateProviderPolicy(policies);
 
   network_context_params_ptr =

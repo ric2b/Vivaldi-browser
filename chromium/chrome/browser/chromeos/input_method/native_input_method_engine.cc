@@ -207,12 +207,8 @@ void NativeInputMethodEngine::ImeObserver::OnSurroundingTextChanged(
   assistive_suggester_->RecordAssistiveMatchMetrics(text, cursor_pos,
                                                     anchor_pos);
   if (assistive_suggester_->IsAssistiveFeatureEnabled()) {
-    // If |assistive_suggester_| changes the surrounding text, no longer need
-    // to call the following function, as the information is out-dated.
-    if (assistive_suggester_->OnSurroundingTextChanged(text, cursor_pos,
-                                                       anchor_pos)) {
-      return;
-    }
+    assistive_suggester_->OnSurroundingTextChanged(text, cursor_pos,
+                                                   anchor_pos);
   }
   base_observer_->OnSurroundingTextChanged(engine_id, text, cursor_pos,
                                            anchor_pos, offset_pos);
@@ -280,6 +276,11 @@ void NativeInputMethodEngine::ImeObserver::OnScreenProjectionChanged(
 void NativeInputMethodEngine::ImeObserver::OnSuggestionsChanged(
     const std::vector<std::string>& suggestions) {
   base_observer_->OnSuggestionsChanged(suggestions);
+}
+
+void NativeInputMethodEngine::ImeObserver::OnInputMethodOptionsChanged(
+    const std::string& engine_id) {
+  base_observer_->OnInputMethodOptionsChanged(engine_id);
 }
 
 void NativeInputMethodEngine::ImeObserver::FlushForTesting() {

@@ -47,6 +47,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
 
   // TODO(penghuang): Remove skia_output_surface when DDL is used everywhere.
   SkiaRenderer(const RendererSettings* settings,
+               const DebugRendererSettings* debug_settings,
                OutputSurface* output_surface,
                DisplayResourceProvider* resource_provider,
                OverlayProcessorInterface* overlay_processor,
@@ -88,12 +89,10 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   void EnsureScissorTestDisabled() override;
   void CopyDrawnRenderPass(const copy_output::RenderPassGeometry& geometry,
                            std::unique_ptr<CopyOutputRequest> request) override;
-#if defined(OS_WIN)
-  void SetEnableDCLayers(bool enable) override;
-#endif
   void DidChangeVisibility() override;
   void FinishDrawingQuadList() override;
   void GenerateMipmap() override;
+  bool CreateDelegatedInkPointRenderer() override;
 
  private:
   enum class BypassMode;
@@ -230,13 +229,21 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   // Get corresponding GrContext. Returns nullptr when there is no GrContext.
   // TODO(weiliangc): This currently only returns nullptr. If SKPRecord isn't
   // going to use this later, it should be removed.
-  GrContext* GetGrContext();
+  GrDirectContext* GetGrContext();
   bool is_using_ddl() const { return draw_mode_ == DrawMode::DDL; }
 
-  sk_sp<SkColorFilter> GetColorFilter(const gfx::ColorSpace& src,
-                                      const gfx::ColorSpace& dst,
-                                      float resource_offset,
-                                      float resource_multiplier);
+  // Get a color filter that converts from |src| color space to |dst| color
+  // space using a shader constructed from gfx::ColorTransform.  The color
+  // filters are cached in |color_filter_cache_|.  Resource offset and
+  // multiplier are used to adjust the RGB output of the shader for YUV video
+  // quads. The default values perform no adjustment.
+  sk_sp<SkColorFilter> GetColorSpaceConversionFilter(
+      const gfx::ColorSpace& src,
+      const gfx::ColorSpace& dst,
+      float resource_offset = 0.0f,
+      float resource_multiplier = 1.0f);
+  // Returns the color filter that should be applied to the current canvas.
+  sk_sp<SkColorFilter> GetContentColorFilter();
   // A map from RenderPass id to the texture used to draw the RenderPass from.
   struct RenderPassBacking {
     sk_sp<SkSurface> render_pass_surface;
@@ -249,7 +256,7 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
     std::unique_ptr<SkPictureRecorder> recorder;
     sk_sp<SkPicture> picture;
 
-    RenderPassBacking(GrContext* gr_context,
+    RenderPassBacking(GrDirectContext* gr_context,
                       const gpu::Capabilities& caps,
                       const gfx::Size& size,
                       bool generate_mipmap,

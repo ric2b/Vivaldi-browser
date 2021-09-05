@@ -105,6 +105,13 @@ ClientAndroid::~ClientAndroid() {
     // contents object gets destroyed).
     Metrics::RecordDropOut(Metrics::DropOutReason::CONTENT_DESTROYED);
   }
+
+  auto* password_manager_client = GetPasswordManagerClient();
+  if (password_manager_client) {
+    password_manager_client->GetPasswordManager()->SetAutofillAssistantMode(
+        password_manager::AutofillAssistantMode::kUINotShown);
+  }
+
   Java_AutofillAssistantClient_clearNativePtr(AttachCurrentThread(),
                                               java_object_);
 }
@@ -185,8 +192,11 @@ void ClientAndroid::TransferUITo(
   // From this point on, the UIController, in ui_ptr, is either transferred or
   // deleted.
 
-  GetPasswordManagerClient()->GetPasswordManager()->SetAutofillAssistantMode(
-      password_manager::AutofillAssistantMode::kNotRunning);
+  auto* password_manager_client = GetPasswordManagerClient();
+  if (password_manager_client) {
+    password_manager_client->GetPasswordManager()->SetAutofillAssistantMode(
+        password_manager::AutofillAssistantMode::kUINotShown);
+  }
 
   if (!jother_web_contents)
     return;
@@ -413,6 +423,7 @@ void ClientAndroid::AttachUI(
       return;
     }
   }
+  has_had_ui_ = true;
 
   if (!ui_controller_android_->IsAttached() ||
       (controller_ != nullptr &&
@@ -421,13 +432,11 @@ void ClientAndroid::AttachUI(
       CreateController(nullptr);
     ui_controller_android_->Attach(web_contents_, this, controller_.get());
 
-    // Suppress password manager's prompts while running a password change
-    // script.
+    // Suppress password manager's prompts.
     auto* password_manager_client = GetPasswordManagerClient();
-    if (password_manager_client &&
-        password_manager_client->WasCredentialLeakDialogShown()) {
+    if (password_manager_client) {
       password_manager_client->GetPasswordManager()->SetAutofillAssistantMode(
-          password_manager::AutofillAssistantMode::kRunning);
+          password_manager::AutofillAssistantMode::kUIShown);
     }
   }
 }
@@ -527,12 +536,26 @@ content::WebContents* ClientAndroid::GetWebContents() const {
   return web_contents_;
 }
 
+void ClientAndroid::RecordDropOut(Metrics::DropOutReason reason) {
+  if (started_)
+    Metrics::RecordDropOut(reason);
+
+  started_ = false;
+}
+
+bool ClientAndroid::HasHadUI() const {
+  return has_had_ui_;
+}
+
 void ClientAndroid::Shutdown(Metrics::DropOutReason reason) {
   if (!controller_)
     return;
 
-  GetPasswordManagerClient()->GetPasswordManager()->SetAutofillAssistantMode(
-      password_manager::AutofillAssistantMode::kNotRunning);
+  auto* password_manager_client = GetPasswordManagerClient();
+  if (password_manager_client) {
+    password_manager_client->GetPasswordManager()->SetAutofillAssistantMode(
+        password_manager::AutofillAssistantMode::kUINotShown);
+  }
 
   if (ui_controller_android_ && ui_controller_android_->IsAttached())
     DestroyUI();
@@ -564,15 +587,23 @@ void ClientAndroid::InvalidateAccessToken(const std::string& access_token) {
 }
 
 void ClientAndroid::CreateController(std::unique_ptr<Service> service) {
+  // Persist status message when hot-swapping controllers.
+  std::string status_message;
   if (controller_) {
-    return;
+    status_message = controller_->GetStatusMessage();
+    DestroyController();
   }
   controller_ = std::make_unique<Controller>(
       web_contents_, /* client= */ this, base::DefaultTickClock::GetInstance(),
       std::move(service));
+  controller_->SetStatusMessage(status_message);
 }
 
 void ClientAndroid::DestroyController() {
+  if (controller_ && ui_controller_android_ &&
+      ui_controller_android_->IsAttachedTo(controller_.get())) {
+    ui_controller_android_->Detach();
+  }
   controller_.reset();
   started_ = false;
 }

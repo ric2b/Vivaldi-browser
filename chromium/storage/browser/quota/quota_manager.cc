@@ -17,11 +17,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/rand_util.h"
 #include "base/sequence_checker.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -34,7 +34,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "net/base/url_util.h"
 #include "storage/browser/quota/client_usage_tracker.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_features.h"
@@ -50,46 +49,29 @@ namespace storage {
 
 namespace {
 
-const int64_t kMBytes = 1024 * 1024;
-const int kMinutesInMilliSeconds = 60 * 1000;
-const int64_t kReportHistogramInterval = 60 * 60 * 1000;  // 1 hour
+constexpr int64_t kReportHistogramInterval = 60 * 60 * 1000;  // 1 hour
 
 // Take action on write errors if there is <= 2% disk space
 // available.
-const double kStoragePressureThresholdRatio = 2;
+constexpr double kStoragePressureThresholdPercent = 2;
 
 // Limit how frequently QuotaManager polls for free disk space when
 // only using that information to identify storage pressure.
-const base::TimeDelta kStoragePressureCheckDiskStatsInterval =
+constexpr base::TimeDelta kStoragePressureCheckDiskStatsInterval =
     base::TimeDelta::FromMinutes(5);
 
+// Modifies a given value by a uniformly random amount from
+// -percent to +percent.
+int64_t RandomizeByPercent(int64_t value, int percent) {
+  double random_percent = (base::RandDouble() - 0.5) * percent * 2;
+  return value * (1 + (random_percent / 100.0));
+}
 }  // namespace
-
-const int64_t QuotaManager::kNoLimit = INT64_MAX;
-
-// Cap size for per-host persistent quota determined by the histogram.
-// This is a bit lax value because the histogram says nothing about per-host
-// persistent storage usage and we determined by global persistent storage
-// usage that is less than 10GB for almost all users.
-const int64_t QuotaManager::kPerHostPersistentQuotaLimit = 10 * 1024 * kMBytes;
 
 // Heuristics: assuming average cloud server allows a few Gigs storage
 // on the server side and the storage needs to be shared for user data
 // and by multiple apps.
 int64_t QuotaManager::kSyncableStorageDefaultHostQuota = 500 * kMBytes;
-
-const char QuotaManager::kDatabaseName[] = "QuotaManager";
-
-const int QuotaManager::kThresholdOfErrorsToBeBlacklisted = 3;
-const int QuotaManager::kEvictionIntervalInMilliSeconds =
-    30 * kMinutesInMilliSeconds;
-
-const char QuotaManager::kDaysBetweenRepeatedOriginEvictionsHistogram[] =
-    "Quota.DaysBetweenRepeatedOriginEvictions";
-const char QuotaManager::kEvictedOriginAccessedCountHistogram[] =
-    "Quota.EvictedOriginAccessCount";
-const char QuotaManager::kEvictedOriginDaysSinceAccessHistogram[] =
-    "Quota.EvictedOriginDaysSinceAccess";
 
 namespace {
 
@@ -209,6 +191,17 @@ void DidGetUsageAndQuotaStripBreakdown(
 
 }  // namespace
 
+constexpr int64_t QuotaManager::kGBytes;
+constexpr int64_t QuotaManager::kNoLimit;
+constexpr int64_t QuotaManager::kPerHostPersistentQuotaLimit;
+constexpr int QuotaManager::kEvictionIntervalInMilliSeconds;
+constexpr int QuotaManager::kThresholdOfErrorsToBeDenylisted;
+constexpr int QuotaManager::kThresholdRandomizationPercent;
+constexpr char QuotaManager::kDatabaseName[];
+constexpr char QuotaManager::kDaysBetweenRepeatedOriginEvictionsHistogram[];
+constexpr char QuotaManager::kEvictedOriginAccessedCountHistogram[];
+constexpr char QuotaManager::kEvictedOriginDaysSinceAccessHistogram[];
+
 class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
  public:
   UsageAndQuotaInfoGatherer(QuotaManager* manager,
@@ -236,7 +229,7 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
         4, base::BindOnce(&UsageAndQuotaInfoGatherer::OnBarrierComplete,
                           weak_factory_.GetWeakPtr()));
 
-    std::string host = net::GetHostOrSpecFromURL(origin_.GetURL());
+    const std::string& host = origin_.host();
 
     manager()->GetQuotaSettings(
         base::BindOnce(&UsageAndQuotaInfoGatherer::OnGotSettings,
@@ -666,7 +659,7 @@ class QuotaManager::HostDataDeleter : public QuotaTask {
   }
 
  private:
-  void DidGetOriginsForHost(const std::set<url::Origin>& origins) {
+  void DidGetOriginsForHost(const std::vector<url::Origin>& origins) {
     DCHECK_GT(remaining_clients_, 0U);
 
     for (const auto& origin : origins)
@@ -1159,15 +1152,6 @@ void QuotaManager::GetGlobalUsage(StorageType type,
   GetUsageTracker(type)->GetGlobalUsage(std::move(callback));
 }
 
-void QuotaManager::GetHostUsage(const std::string& host,
-                                StorageType type,
-                                UsageCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  LazyInitialize();
-  DCHECK(GetUsageTracker(type));
-  GetUsageTracker(type)->GetHostUsage(host, std::move(callback));
-}
-
 void QuotaManager::GetHostUsageWithBreakdown(
     const std::string& host,
     StorageType type,
@@ -1464,7 +1448,7 @@ void QuotaManager::DidOriginDataEvicted(blink::mojom::QuotaStatusCode status) {
   // We only try evict origins that are not in use, so basically
   // deletion attempt for eviction should not fail.  Let's record
   // the origin if we get error and exclude it from future eviction
-  // if the error happens consistently (> kThresholdOfErrorsToBeBlacklisted).
+  // if the error happens consistently (> kThresholdOfErrorsToBeDenylisted).
   if (status != blink::mojom::QuotaStatusCode::kOk)
     origins_in_error_[eviction_context_.evicted_origin]++;
 
@@ -1500,13 +1484,33 @@ void QuotaManager::MaybeRunStoragePressureCallback(const url::Origin& origin,
     origin_for_pending_storage_pressure_callback_ = std::move(origin);
     return;
   }
-  if (100 * (available_space / total_space) < kStoragePressureThresholdRatio) {
+
+  if (100 * available_space < kStoragePressureThresholdPercent * total_space) {
     storage_pressure_callback_.Run(std::move(origin));
   }
 }
 
 void QuotaManager::SimulateStoragePressure(const url::Origin origin) {
   storage_pressure_callback_.Run(origin);
+}
+
+void QuotaManager::DetermineStoragePressure(int64_t free_space,
+                                            int64_t total_space) {
+  if (!base::FeatureList::IsEnabled(features::kStoragePressureEvent)) {
+    return;
+  }
+  int64_t threshold_bytes =
+      RandomizeByPercent(kGBytes, kThresholdRandomizationPercent);
+  int64_t threshold = RandomizeByPercent(
+      static_cast<int64_t>(total_space *
+                           (kThresholdRandomizationPercent / 100.0)),
+      kThresholdRandomizationPercent);
+  threshold = std::min(threshold_bytes, threshold);
+
+  if (free_space < threshold) {
+    // TODO(https://crbug.com/1096549): Implement StoragePressureEvent
+    // dispatching.
+  }
 }
 
 void QuotaManager::SetStoragePressureCallback(
@@ -1580,15 +1584,15 @@ void QuotaManager::DidDumpOriginInfoTableForHistogram(
 
     // Ignore stale database entries. If there is no map entry, the origin's
     // data has been deleted.
-    auto found = usage_map.find(info.origin);
-    if (found == usage_map.end() || found->second == 0)
+    auto it = usage_map.find(info.origin);
+    if (it == usage_map.end() || it->second == 0)
       continue;
 
     base::TimeDelta age = now - std::max(info.last_access_time,
                                          info.last_modified_time);
     UMA_HISTOGRAM_COUNTS_1000("Quota.AgeOfOriginInDays", age.InDays());
 
-    int64_t kilobytes = std::max(found->second / INT64_C(1024), INT64_C(1));
+    int64_t kilobytes = std::max(it->second / INT64_C(1024), INT64_C(1));
     base::Histogram::FactoryGet(
         "Quota.AgeOfDataInDays", 1, 1000, 50,
         base::HistogramBase::kUmaTargetedHistogramFlag)->
@@ -1606,7 +1610,7 @@ std::set<url::Origin> QuotaManager::GetEvictionOriginExceptions() {
   }
 
   for (const auto& p : origins_in_error_) {
-    if (p.second > QuotaManager::kThresholdOfErrorsToBeBlacklisted)
+    if (p.second > QuotaManager::kThresholdOfErrorsToBeDenylisted)
       exceptions.insert(p.first);
   }
 

@@ -55,6 +55,11 @@ id<GREYMatcher> HeaderWithAccessibilityLabel(NSString* label) {
   return [ChromeMatchersAppInterface headerWithAccessibilityLabel:label];
 }
 
+id<GREYMatcher> NavigationBarTitleWithAccessibilityLabelId(int label_id) {
+  return [ChromeMatchersAppInterface
+      navigationBarTitleWithAccessibilityLabelID:label_id];
+}
+
 id<GREYMatcher> TextFieldForCellWithLabelId(int message_id) {
   return [ChromeMatchersAppInterface textFieldForCellWithLabelID:message_id];
 }
@@ -163,6 +168,10 @@ id<GREYMatcher> OpenLinkInNewTabButton() {
   return [ChromeMatchersAppInterface openLinkInNewTabButton];
 }
 
+id<GREYMatcher> OpenLinkInNewWindowButton() {
+  return [ChromeMatchersAppInterface openLinkInNewWindowButton];
+}
+
 id<GREYMatcher> NavigationBarDoneButton() {
   return [ChromeMatchersAppInterface navigationBarDoneButton];
 }
@@ -175,24 +184,12 @@ id<GREYMatcher> BookmarksNavigationBarBackButton() {
   return [ChromeMatchersAppInterface bookmarksNavigationBarBackButton];
 }
 
-id<GREYMatcher> AccountConsistencyConfirmationOkButton() {
-  return [ChromeMatchersAppInterface accountConsistencyConfirmationOKButton];
-}
-
-id<GREYMatcher> UnifiedConsentAddAccountButton() {
-  return [ChromeMatchersAppInterface unifiedConsentAddAccountButton];
-}
-
 id<GREYMatcher> AddAccountButton() {
   return [ChromeMatchersAppInterface addAccountButton];
 }
 
 id<GREYMatcher> SignOutAccountsButton() {
   return [ChromeMatchersAppInterface signOutAccountsButton];
-}
-
-id<GREYMatcher> SignOutAndClearDataAccountsButton() {
-  return [ChromeMatchersAppInterface signOutAndClearDataAccountsButton];
 }
 
 id<GREYMatcher> ClearBrowsingDataCell() {

@@ -49,6 +49,7 @@ class CC_PAINT_EXPORT ThreadsafeMatrix : public SkMatrix {
   explicit ThreadsafeMatrix(const SkMatrix& matrix) : SkMatrix(matrix) {
     (void)getType();
   }
+  ThreadsafeMatrix() { (void)getType(); }
 };
 
 class CC_PAINT_EXPORT ThreadsafePath : public SkPath {
@@ -57,6 +58,13 @@ class CC_PAINT_EXPORT ThreadsafePath : public SkPath {
     updateBoundsCache();
   }
   ThreadsafePath() { updateBoundsCache(); }
+};
+
+class CC_PAINT_EXPORT SharedImageProvider {
+ public:
+  virtual ~SharedImageProvider() = default;
+  virtual sk_sp<SkImage> OpenSharedImageForRead(
+      const gpu::Mailbox& mailbox) = 0;
 };
 
 // See PaintOp::Serialize/Deserialize for comments.  Derived Serialize types
@@ -179,6 +187,13 @@ class CC_PAINT_EXPORT PaintOp {
     // The flags to use when serializing this op. This can be used to override
     // the flags serialized with the op. Valid only for PaintOpWithFlags.
     const PaintFlags* flags_to_serialize = nullptr;
+
+    // TODO(crbug.com/1096123): Cleanup after study completion.
+    //
+    // If true, perform serializaion in a way that avoids serializing transient
+    // members, such as IDs, so that a stable digest can be calculated. This
+    // means that serialized output can't be deserialized correctly.
+    bool for_identifiability_study = false;
   };
 
   struct CC_PAINT_EXPORT DeserializeOptions {
@@ -186,7 +201,8 @@ class CC_PAINT_EXPORT PaintOp {
                        ServicePaintCache* paint_cache,
                        SkStrikeClient* strike_client,
                        std::vector<uint8_t>* scratch_buffer,
-                       bool is_privileged);
+                       bool is_privileged,
+                       SharedImageProvider* shared_image_provider);
     TransferCacheDeserializeHelper* transfer_cache = nullptr;
     ServicePaintCache* paint_cache = nullptr;
     SkStrikeClient* strike_client = nullptr;
@@ -197,6 +213,7 @@ class CC_PAINT_EXPORT PaintOp {
     // True if the deserialization is happening on a privileged gpu channel.
     // e.g. in the case of UI.
     bool is_privileged = false;
+    SharedImageProvider* shared_image_provider = nullptr;
   };
 
   // Indicates how PaintImages are serialized.
@@ -204,7 +221,8 @@ class CC_PAINT_EXPORT PaintOp {
     kNoImage,
     kImageData,
     kTransferCacheEntry,
-    kLastType = kTransferCacheEntry
+    kMailbox,
+    kLastType = kMailbox
   };
 
   // Subclasses should provide a static Serialize() method called from here.
@@ -408,6 +426,9 @@ class CC_PAINT_EXPORT ClipRectOp final : public PaintOp {
   SkRect rect;
   SkClipOp op;
   bool antialias;
+
+ private:
+  ClipRectOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT ClipRRectOp final : public PaintOp {
@@ -426,6 +447,9 @@ class CC_PAINT_EXPORT ClipRRectOp final : public PaintOp {
   SkRRect rrect;
   SkClipOp op;
   bool antialias;
+
+ private:
+  ClipRRectOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT ConcatOp final : public PaintOp {
@@ -440,6 +464,9 @@ class CC_PAINT_EXPORT ConcatOp final : public PaintOp {
   HAS_SERIALIZATION_FUNCTIONS();
 
   ThreadsafeMatrix matrix;
+
+ private:
+  ConcatOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT CustomDataOp final : public PaintOp {
@@ -455,6 +482,9 @@ class CC_PAINT_EXPORT CustomDataOp final : public PaintOp {
 
   // Stores user defined id as a placeholder op.
   uint32_t id;
+
+ private:
+  CustomDataOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT DrawColorOp final : public PaintOp {
@@ -472,6 +502,9 @@ class CC_PAINT_EXPORT DrawColorOp final : public PaintOp {
 
   SkColor color;
   SkBlendMode mode;
+
+ private:
+  DrawColorOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT DrawDRRectOp final : public PaintOpWithFlags {
@@ -819,6 +852,9 @@ class CC_PAINT_EXPORT RotateOp final : public PaintOp {
   HAS_SERIALIZATION_FUNCTIONS();
 
   SkScalar degrees;
+
+ private:
+  RotateOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT SaveOp final : public PaintOp {
@@ -873,6 +909,9 @@ class CC_PAINT_EXPORT SaveLayerAlphaOp final : public PaintOp {
 
   SkRect bounds;
   uint8_t alpha;
+
+ private:
+  SaveLayerAlphaOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT ScaleOp final : public PaintOp {
@@ -912,6 +951,9 @@ class CC_PAINT_EXPORT SetMatrixOp final : public PaintOp {
   HAS_SERIALIZATION_FUNCTIONS();
 
   ThreadsafeMatrix matrix;
+
+ private:
+  SetMatrixOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT SetNodeIdOp final : public PaintOp {
@@ -926,6 +968,9 @@ class CC_PAINT_EXPORT SetNodeIdOp final : public PaintOp {
   HAS_SERIALIZATION_FUNCTIONS();
 
   int node_id;
+
+ private:
+  SetNodeIdOp() : PaintOp(kType) {}
 };
 
 class CC_PAINT_EXPORT TranslateOp final : public PaintOp {
@@ -941,6 +986,9 @@ class CC_PAINT_EXPORT TranslateOp final : public PaintOp {
 
   SkScalar dx;
   SkScalar dy;
+
+ private:
+  TranslateOp() : PaintOp(kType) {}
 };
 
 #undef HAS_SERIALIZATION_FUNCTIONS

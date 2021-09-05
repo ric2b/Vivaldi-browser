@@ -48,6 +48,7 @@
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -308,7 +309,7 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
 
 // Flaky on Windows: http://crbug.com/305722
 // The test frequently times out on Linux, too. See crbug.com/440043.
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_OverscrollNavigation DISABLED_OverscrollNavigation
 #else
 #define MAYBE_OverscrollNavigation OverscrollNavigation
@@ -321,7 +322,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, MAYBE_OverscrollNavigation) {
 // Flaky on Windows (might be related to the above test):
 // http://crbug.com/305722
 // On Linux, the test frequently times out. (See crbug.com/440043).
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_OverscrollNavigationWithTouchHandler \
   DISABLED_OverscrollNavigationWithTouchHandler
 #else
@@ -757,8 +758,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ContentWindowClose) {
   delete web_contents->GetContentNativeView();
 }
 
-
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 // This appears to be flaky in the same was as the other overscroll
 // tests. Enabling for non-Windows platforms.
 // See http://crbug.com/369871.
@@ -787,7 +787,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
   EXPECT_FALSE(controller.CanGoForward());
 
   web_contents->GetController().GoBack();
-  WaitForLoadStop(web_contents);
+  EXPECT_TRUE(WaitForLoadStop(web_contents));
   EXPECT_EQ(1, GetCurrentIndex());
   EXPECT_EQ(base::ASCIIToUTF16("Title: #1"), web_contents->GetTitle());
   EXPECT_TRUE(controller.CanGoBack());

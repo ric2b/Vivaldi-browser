@@ -15,14 +15,11 @@
 #include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 
-namespace cc {
-class PaintCanvas;
-}
-
 namespace blink {
 class AssociatedInterfaceProvider;
 class IntRect;
 class ResourceRequest;
+struct ScreenInfo;
 class WebLocalFrame;
 
 class RemoteFrameClient : public FrameClient {
@@ -46,10 +43,17 @@ class RemoteFrameClient : public FrameClient {
   virtual void FrameRectsChanged(const IntRect& local_frame_rect,
                                  const IntRect& screen_space_rect) = 0;
 
+  virtual void ZoomLevelChanged(double zoom_level) = 0;
+
+  virtual void UpdateCaptureSequenceNumber(uint32_t sequence_number) = 0;
+
+  virtual void PageScaleFactorChanged(float page_scale_factor,
+                                      bool is_pinch_gesture_active) = 0;
+
+  virtual void DidChangeScreenInfo(const ScreenInfo& original_screen_info) = 0;
+
   virtual void UpdateRemoteViewportIntersection(
       const ViewportIntersectionState& intersection_state) = 0;
-
-  virtual uint32_t Print(const IntRect&, cc::PaintCanvas*) const = 0;
 
   virtual AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() = 0;
 };

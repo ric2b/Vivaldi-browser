@@ -5,6 +5,8 @@
 source_set("activity_services") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "activity_params.h",
+    "activity_params.mm",
     "activity_scenario.h",
     "activity_service_coordinator.h",
     "activity_service_coordinator.mm",
@@ -33,7 +35,6 @@ source_set("activity_services") {
     "//ios/chrome/browser/ui/activity_services/activities",
     "//ios/chrome/browser/ui/activity_services/data",
     "//ios/chrome/browser/ui/activity_services/requirements",
-    "//ios/chrome/browser/ui/bookmarks",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/ui/util",
@@ -62,6 +63,7 @@ source_set("unit_tests") {
     "//components/sync/driver:driver",
     "//components/ui_metrics",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser:pref_names",
     "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/download",
@@ -88,27 +90,6 @@ source_set("unit_tests") {
   ]
 }
 
-source_set("eg_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  defines = [ "CHROME_EARL_GREY_1" ]
-  testonly = true
-  sources = [ "activity_service_controller_egtest.mm" ]
-  deps = [
-    "//base",
-    "//components/strings",
-    "//ios/chrome/app/strings",
-    "//ios/chrome/browser/ui/util",
-    "//ios/chrome/test/app:test_support",
-    "//ios/chrome/test/earl_grey:test_support",
-    "//ios/testing/earl_grey:earl_grey_support",
-    "//ios/web:earl_grey_test_support",
-    "//ios/web/public/test",
-    "//ios/web/public/test/http_server",
-    "//ui/base",
-  ]
-  libs = [ "XCTest.framework" ]
-}
-
 source_set("eg2_tests") {
   defines = [ "CHROME_EARL_GREY_2" ]
   configs += [
@@ -129,5 +110,5 @@ source_set("eg2_tests") {
     "//ui/base",
   ]
 
-  libs = [ "UIKit.framework" ]
+  frameworks = [ "UIKit.framework" ]
 }

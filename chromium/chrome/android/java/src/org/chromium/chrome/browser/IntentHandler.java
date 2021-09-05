@@ -26,20 +26,23 @@ import android.util.Pair;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.browser.customtabs.CustomTabsSessionToken;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FileUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
+import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.RequestMetadata;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorFactory;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -69,6 +72,7 @@ import java.util.Map;
 /**
  * Handles all browser-related Intents.
  */
+@JNINamespace("chrome::android")
 public class IntentHandler {
     private static final String TAG = "IntentHandler";
 
@@ -466,7 +470,7 @@ public class IntentHandler {
         }
 
         String referrerUrl = getReferrerUrlIncludingExtraHeaders(intent);
-        String extraHeaders = getExtraHeadersFromIntent(intent, true);
+        String extraHeaders = getExtraHeadersFromIntent(intent);
 
         if (isIntentForMhtmlFileOrContent(intent) && tabOpenType == TabOpenType.OPEN_NEW_TAB
                 && referrerUrl == null && extraHeaders == null) {
@@ -504,7 +508,9 @@ public class IntentHandler {
     private static Uri getReferrer(Intent intent) {
         Uri referrer = IntentUtils.safeGetParcelableExtra(intent, Intent.EXTRA_REFERRER);
         if (referrer != null) {
-            return referrer;
+            String pendingReferrer = IntentHandler.getPendingReferrerUrl(
+                    IntentUtils.safeGetIntExtra(intent, EXTRA_REFERRER_ID, 0));
+            return TextUtils.isEmpty(pendingReferrer) ? referrer : Uri.parse(pendingReferrer);
         }
         String referrerName = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_REFERRER_NAME);
         if (referrerName != null) {
@@ -521,16 +527,23 @@ public class IntentHandler {
      */
     private static String getReferrerUrl(Intent intent) {
         Uri referrerExtra = getReferrer(intent);
+        CustomTabsSessionToken customTabsSession =
+                CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        if (referrerExtra == null && customTabsSession != null) {
+            Referrer referrer = CustomTabsConnection.getInstance().getDefaultReferrerForSession(
+                    customTabsSession);
+            if (referrer != null) {
+                referrerExtra = Uri.parse(referrer.getUrl());
+            }
+        }
+
         if (referrerExtra == null) return null;
-        String referrerUrl = IntentHandler.getPendingReferrerUrl(
-                IntentUtils.safeGetIntExtra(intent, EXTRA_REFERRER_ID, 0));
-        if (!TextUtils.isEmpty(referrerUrl)) {
-            return referrerUrl;
-        } else if (isValidReferrerHeader(referrerExtra)) {
+        if (isValidReferrerHeader(referrerExtra)) {
             return referrerExtra.toString();
         } else if (IntentHandler.notSecureIsIntentChromeOrFirstParty(intent)
-                || ChromeApplication.getComponent().resolveSessionDataHolder()
-                        .canActiveHandlerUseReferrer(intent, referrerExtra)) {
+                || ChromeApplication.getComponent()
+                           .resolveSessionDataHolder()
+                           .canActiveHandlerUseReferrer(customTabsSession, referrerExtra)) {
             return referrerExtra.toString();
         }
         return null;
@@ -571,14 +584,14 @@ public class IntentHandler {
         if (referrer != null) {
             params.setReferrer(new Referrer(referrer, getReferrerPolicyFromIntent(intent)));
         }
-        String headers = getExtraHeadersFromIntent(intent, true);
+        String headers = getExtraHeadersFromIntent(intent);
         if (headers != null) params.setVerbatimHeaders(headers);
     }
 
     public static int getReferrerPolicyFromIntent(Intent intent) {
         int policy =
                 IntentUtils.safeGetIntExtra(intent, EXTRA_REFERRER_POLICY, ReferrerPolicy.DEFAULT);
-        if (policy < 0 || policy >= ReferrerPolicy.LAST) {
+        if (policy < ReferrerPolicy.MIN_VALUE || policy >= ReferrerPolicy.MAX_VALUE) {
             policy = ReferrerPolicy.DEFAULT;
         }
         return policy;
@@ -775,52 +788,40 @@ public class IntentHandler {
     }
 
     /**
-     * Calls {@link #getExtraHeadersFromIntent(Intent, boolean)} with shouldLogHeaders as false.
-     */
-    public static String getExtraHeadersFromIntent(Intent intent) {
-        return getExtraHeadersFromIntent(intent, false);
-    }
-
-    /**
      * Returns a String (or null) containing the extra headers sent by the intent, if any.
      *
      * This methods skips the referrer header.
      *
      * @param intent The intent containing the bundle extra with the HTTP headers.
-     * @param shouldLogHeaders Whether we should perform logging on the types of headers that the
-     *                         Intent contains. This should only be done for Intents as they come
-     *                         in to Chrome.
      */
-    public static String getExtraHeadersFromIntent(Intent intent, boolean shouldLogHeaders) {
+    public static String getExtraHeadersFromIntent(Intent intent) {
         Bundle bundleExtraHeaders = IntentUtils.safeGetBundleExtra(intent, Browser.EXTRA_HEADERS);
         if (bundleExtraHeaders == null) return null;
         StringBuilder extraHeaders = new StringBuilder();
 
-        // We do some logging to determine what kinds of headers developers are inserting.
-        IntentHeadersRecorder recorder = shouldLogHeaders ? new IntentHeadersRecorder() : null;
-        boolean shouldBlockNonSafelistedHeaders = ChromeFeatureList.isEnabled(
-                ChromeFeatureList.ANDROID_BLOCK_INTENT_NON_SAFELISTED_HEADERS);
-        IntentHeadersRecorder.HeaderClassifier headerClassifier = shouldBlockNonSafelistedHeaders
-                ? new IntentHeadersRecorder.HeaderClassifier()
-                : null;
         boolean fromChrome = IntentHandler.wasIntentSenderChrome(intent);
-        boolean firstParty = shouldLogHeaders
-                ? (IntentHandler.notSecureIsIntentChromeOrFirstParty(intent) && !fromChrome)
-                : false;
+        boolean shouldAllowNonSafelistedHeaders =
+                CustomTabsConnection.getInstance().isFirstPartyOriginForIntent(intent);
 
         for (String key : bundleExtraHeaders.keySet()) {
             String value = bundleExtraHeaders.getString(key);
 
-            if (!HttpUtil.isAllowedHeader(key, value)) continue;
+            if (!HttpUtil.isAllowedHeader(key, value)) {
+                Log.w(TAG, "Ignoring forbidden header " + key + " in EXTRA_HEADERS.");
+            }
 
             // Strip the custom header that can only be added by ourselves.
             if ("x-chrome-intent-type".equals(key.toLowerCase(Locale.US))) continue;
 
             if (!fromChrome) {
-                if (shouldLogHeaders) recorder.recordHeader(key, value, firstParty);
+                if (key.toLowerCase(Locale.US).startsWith("x-chrome-")) {
+                    Log.w(TAG, "Ignoring x-chrome header " + key + " in EXTRA_HEADERS.");
+                    continue;
+                }
 
-                if (shouldBlockNonSafelistedHeaders
-                        && !headerClassifier.isCorsSafelistedHeader(key, value, firstParty)) {
+                if (!shouldAllowNonSafelistedHeaders
+                        && !IntentHandlerJni.get().isCorsSafelistedHeader(key, value)) {
+                    Log.w(TAG, "Ignoring non-CORS-safelisted header " + key + " in EXTRA_HEADERS.");
                     continue;
                 }
             }
@@ -831,7 +832,6 @@ public class IntentHandler {
             extraHeaders.append(value);
         }
 
-        if (shouldLogHeaders) recorder.report(firstParty);
         return extraHeaders.length() == 0 ? null : extraHeaders.toString();
     }
 
@@ -910,26 +910,14 @@ public class IntentHandler {
             // Ignore all intents that specify a Chrome internal scheme if they did not come from
             // a trustworthy source.
             String scheme = getSanitizedUrlScheme(url);
-            if (!isInternal && scheme != null
-                    && (intent.hasCategory(Intent.CATEGORY_BROWSABLE)
-                               || intent.hasCategory(Intent.CATEGORY_DEFAULT)
-                               || intent.getCategories() == null)) {
-                String lowerCaseScheme = scheme.toLowerCase(Locale.US);
-                if (UrlConstants.CHROME_SCHEME.equals(lowerCaseScheme)
-                        || UrlConstants.CHROME_NATIVE_SCHEME.equals(lowerCaseScheme)
-                        || ContentUrlConstants.ABOUT_SCHEME.equals(lowerCaseScheme)) {
-                    // Allow certain "safe" internal URLs to be launched by external
-                    // applications.
-                    String lowerCaseUrl = url.toLowerCase(Locale.US);
-                    if (ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL.equals(lowerCaseUrl)
-                            || ContentUrlConstants.ABOUT_BLANK_URL.equals(lowerCaseUrl)
-                            || UrlConstants.CHROME_DINO_URL.equals(lowerCaseUrl)) {
-                        return false;
-                    }
-
+            recordFirstPartyToInternalScheme(scheme, url, intent, isInternal, isFromChrome);
+            if (!isInternal) {
+                if (intentHasUnsafeInternalScheme(scheme, url, intent)) {
                     Log.w(TAG, "Ignoring internal Chrome URL from untrustworthy source.");
                     return true;
                 }
+
+                return false;
             }
 
             // We must check for screen state at this point.
@@ -943,6 +931,30 @@ public class IntentHandler {
         } catch (Throwable t) {
             return true;
         }
+    }
+
+    private static boolean intentHasUnsafeInternalScheme(String scheme, String url, Intent intent) {
+        if (scheme != null
+                && (intent.hasCategory(Intent.CATEGORY_BROWSABLE)
+                        || intent.hasCategory(Intent.CATEGORY_DEFAULT)
+                        || intent.getCategories() == null)) {
+            String lowerCaseScheme = scheme.toLowerCase(Locale.US);
+            if (UrlConstants.CHROME_SCHEME.equals(lowerCaseScheme)
+                    || UrlConstants.CHROME_NATIVE_SCHEME.equals(lowerCaseScheme)
+                    || ContentUrlConstants.ABOUT_SCHEME.equals(lowerCaseScheme)) {
+                // Allow certain "safe" internal URLs to be launched by external
+                // applications.
+                String lowerCaseUrl = url.toLowerCase(Locale.US);
+                if (ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL.equals(lowerCaseUrl)
+                        || ContentUrlConstants.ABOUT_BLANK_URL.equals(lowerCaseUrl)
+                        || UrlConstants.CHROME_DINO_URL.equals(lowerCaseUrl)) {
+                    return false;
+                }
+
+                return true;
+            }
+        }
+        return false;
     }
 
     @VisibleForTesting
@@ -1379,5 +1391,22 @@ public class IntentHandler {
         IntentHandler.addTrustedIntentExtras(newIntent);
 
         return newIntent;
+    }
+
+    /**
+     * Records whether the intent comes from a non-Chrome first party and contains a Chrome internal
+     * scheme. This is so we can determine whether we can cut the feature.
+     */
+    private static void recordFirstPartyToInternalScheme(
+            String scheme, String url, Intent intent, boolean isInternal, boolean isChrome) {
+        if (!isInternal || isChrome) return;
+
+        RecordHistogram.recordBooleanHistogram("MobileIntent.FirstPartyToInternalScheme",
+                intentHasUnsafeInternalScheme(scheme, url, intent));
+    }
+
+    @NativeMethods
+    interface Natives {
+        boolean isCorsSafelistedHeader(String name, String value);
     }
 }

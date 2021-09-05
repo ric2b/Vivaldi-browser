@@ -15,7 +15,9 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-forward.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-forward.h"
@@ -37,7 +39,6 @@ class WebSharedWorker;
 }  // namespace blink
 
 namespace blink {
-class MessagePortChannel;
 class MessagePortDescriptor;
 class PendingURLLoaderFactoryBundle;
 }  // namespace blink
@@ -45,7 +46,6 @@ class PendingURLLoaderFactoryBundle;
 namespace content {
 
 class ChildURLLoaderFactoryBundle;
-struct NavigationResponseOverrideParameters;
 
 // A stub class to receive IPC from browser process and talk to
 // blink::WebSharedWorker. Implements blink::WebSharedWorkerClient.
@@ -58,6 +58,7 @@ class EmbeddedSharedWorkerStub : public blink::WebSharedWorkerClient,
  public:
   EmbeddedSharedWorkerStub(
       blink::mojom::SharedWorkerInfoPtr info,
+      const blink::SharedWorkerToken& token,
       const url::Origin& constructor_origin,
       const std::string& user_agent,
       const blink::UserAgentMetadata& ua_metadata,
@@ -79,59 +80,34 @@ class EmbeddedSharedWorkerStub : public blink::WebSharedWorkerClient,
       mojo::PendingReceiver<blink::mojom::SharedWorker> receiver,
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker,
+      ukm::SourceId ukm_source_id,
       const std::vector<std::string>& cors_exempt_header_list);
   ~EmbeddedSharedWorkerStub() override;
 
   // blink::WebSharedWorkerClient implementation.
-  void CountFeature(blink::mojom::WebFeature feature) override;
-  void WorkerContextClosed() override;
   void WorkerContextDestroyed() override;
-  void WorkerReadyForInspection(
-      blink::CrossVariantMojoRemote<blink::mojom::DevToolsAgentInterfaceBase>
-          devtools_agent_remote,
-      blink::CrossVariantMojoReceiver<
-          blink::mojom::DevToolsAgentHostInterfaceBase>
-          devtools_agent_host_receiver) override;
-  void WorkerScriptLoadFailed(const std::string& error_message) override;
-  void WorkerScriptEvaluated(bool success) override;
-  scoped_refptr<blink::WebWorkerFetchContext> CreateWorkerFetchContext()
-      override;
 
  private:
-  // WebSharedWorker will own |channel|.
-  void ConnectToChannel(int connection_request_id,
-                        blink::MessagePortChannel channel);
-
   // mojom::SharedWorker methods:
+  // TODO(nhiroki): Move these implementation into blink::WebSharedWorkerImpl.
   void Connect(int connection_request_id,
                blink::MessagePortDescriptor port) override;
   void Terminate() override;
 
+  scoped_refptr<blink::WebWorkerFetchContext> CreateWorkerFetchContext(
+      const GURL& url,
+      const blink::mojom::RendererPreferences& renderer_preferences,
+      mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
+          preference_watcher_receiver,
+      const std::vector<std::string>& cors_exempt_header_list);
+
   mojo::Receiver<blink::mojom::SharedWorker> receiver_;
-  mojo::Remote<blink::mojom::SharedWorkerHost> host_;
-  bool running_ = false;
-  GURL url_;
-  blink::mojom::RendererPreferences renderer_preferences_;
-  // Set on ctor and passed to the fetch context created when
-  // CreateWorkerFetchContext() is called.
-  mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
-      preference_watcher_receiver_;
   std::unique_ptr<blink::WebSharedWorker> impl_;
-
-  std::vector<std::string> cors_exempt_header_list_;
-
-  using PendingChannel =
-      std::pair<int /* connection_request_id */, blink::MessagePortChannel>;
-  std::vector<PendingChannel> pending_channels_;
 
   scoped_refptr<ServiceWorkerProviderContext> service_worker_provider_context_;
 
   // The factory bundle used for loading subresources for this shared worker.
   scoped_refptr<ChildURLLoaderFactoryBundle> subresource_loader_factory_bundle_;
-
-  // The response override parameters used for taking a resource pre-requested
-  // by the browser process.
-  std::unique_ptr<NavigationResponseOverrideParameters> response_override_;
 
   // Out-of-process NetworkService:
   // Detects disconnection from the default factory of the loader factory bundle

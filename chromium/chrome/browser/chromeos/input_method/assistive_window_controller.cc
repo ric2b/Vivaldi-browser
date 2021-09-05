@@ -15,8 +15,10 @@
 #include "chrome/browser/chromeos/input_method/assistive_window_properties.h"
 #include "chrome/browser/chromeos/input_method/ui/suggestion_details.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/ime/chromeos/ime_bridge.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 
 namespace chromeos {
@@ -95,8 +97,8 @@ void AssistiveWindowController::InitSuggestionWindow() {
     return;
   // suggestion_window_view_ is deleted by DialogDelegateView::DeleteDelegate.
   suggestion_window_view_ =
-      new ui::ime::SuggestionWindowView(GetParentView(), this);
-  views::Widget* widget = suggestion_window_view_->InitWidget();
+      ui::ime::SuggestionWindowView::Create(GetParentView(), this);
+  views::Widget* widget = suggestion_window_view_->GetWidget();
   widget->AddObserver(this);
   widget->Show();
 }
@@ -123,10 +125,16 @@ void AssistiveWindowController::OnWidgetClosing(views::Widget* widget) {
   }
 }
 
+// TODO(crbug/1119570): Update AcceptSuggestion signature (either use
+// announce_string, or no string)
 void AssistiveWindowController::AcceptSuggestion(
     const base::string16& suggestion) {
-  tts_handler_->Announce(base::StringPrintf(
-      "%s inserted.", base::UTF16ToUTF8(suggestion).c_str()));
+  if (window_.type == ui::ime::AssistiveWindowType::kEmojiSuggestion) {
+    tts_handler_->Announce(
+        l10n_util::GetStringUTF8(IDS_SUGGESTION_EMOJI_SUGGESTED));
+  } else {
+    tts_handler_->Announce(l10n_util::GetStringUTF8(IDS_SUGGESTION_INSERTED));
+  }
   HideSuggestion();
 }
 
@@ -137,11 +145,15 @@ void AssistiveWindowController::HideSuggestion() {
     suggestion_window_view_->GetWidget()->Close();
 }
 
-void AssistiveWindowController::SetBounds(const gfx::Rect& cursor_bounds) {
+void AssistiveWindowController::SetBounds(const Bounds& bounds) {
+  bounds_ = bounds;
+  // Sets suggestion_window_view_'s bounds here for most up-to-date cursor
+  // position. This is different from UndoWindow because UndoWindow gets cursors
+  // position before showing.
+  // TODO(crbug/1112982): Investigate getting bounds to suggester before sending
+  // show suggestion request.
   if (suggestion_window_view_ && confirmed_length_ == 0)
-    suggestion_window_view_->SetBounds(cursor_bounds);
-  if (undo_window_)
-    undo_window_->SetBounds(cursor_bounds);
+    suggestion_window_view_->SetAnchorRect(bounds.caret);
 }
 
 void AssistiveWindowController::FocusStateChanged() {
@@ -175,9 +187,16 @@ void AssistiveWindowController::SetButtonHighlighted(
         return;
 
       suggestion_window_view_->SetButtonHighlighted(button, highlighted);
-      tts_handler_->Announce(button.announce_string);
+      if (highlighted)
+        tts_handler_->Announce(button.announce_string);
       break;
     case ui::ime::AssistiveWindowType::kUndoWindow:
+      if (!undo_window_)
+        return;
+
+      undo_window_->SetButtonHighlighted(button, highlighted);
+      tts_handler_->Announce(button.announce_string);
+      break;
     case ui::ime::AssistiveWindowType::kNone:
       break;
   }
@@ -198,7 +217,14 @@ void AssistiveWindowController::SetAssistiveWindowProperties(
     case ui::ime::AssistiveWindowType::kUndoWindow:
       if (!undo_window_)
         InitUndoWindow();
-      window.visible ? undo_window_->Show() : undo_window_->Hide();
+      if (window.visible) {
+        undo_window_->SetAnchorRect(bounds_.autocorrect.IsEmpty()
+                                        ? bounds_.caret
+                                        : bounds_.autocorrect);
+        undo_window_->Show();
+      } else {
+        undo_window_->Hide();
+      }
       break;
     case ui::ime::AssistiveWindowType::kEmojiSuggestion:
     case ui::ime::AssistiveWindowType::kPersonalInfoSuggestion:

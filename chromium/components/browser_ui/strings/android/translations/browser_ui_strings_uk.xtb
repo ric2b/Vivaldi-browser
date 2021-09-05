@@ -21,20 +21,19 @@
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1647391597548383849">Доступ до камери</translation>
 <translation id="1660204651932907780">Дозволити сайтам відтворювати звук (рекомендується)</translation>
+<translation id="1677097821151855053">Файли cookie та інші дані із сайтів використовуються, щоб запам'ятати ваші дані, наприклад, щоб входити у ваш обліковий запис або персоналізувати рекламу. Щоб керувати файлами cookie для всіх сайтів, перегляньте <ph name="BEGIN_LINK" />Налаштування<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Очистити дані сайту?</translation>
 <translation id="169515064810179024">Заборонити сайтам доступ до датчиків руху</translation>
 <translation id="1717218214683051432">Датчики руху</translation>
 <translation id="1743802530341753419">Запитувати, перш ніж дозволяти сайтам підключатися до пристрою (рекомендовано)</translation>
+<translation id="1818308510395330587">Щоб дозволити додатку <ph name="APP_NAME" /> використовувати доповнену реальність, увімкніть камеру в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="1887786770086287077">На цьому пристрої вимкнено доступ до геоданих. Увімкніть його в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="1919345977826869612">Оголошення</translation>
-<translation id="1922076542920281912">Щоб надати Chrome доступ до геоданих, також увімкніть їх у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="1923695749281512248"><ph name="BYTES_DOWNLOADED_WITH_UNITS" />/<ph name="FILE_SIZE_WITH_UNITS" /></translation>
-<translation id="194341124344773587">Увімкніть дозвіл для Chrome у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="1984937141057606926">Заборонено лише сторонні файли cookie</translation>
 <translation id="1994173015038366702">URL-адреса сайту</translation>
 <translation id="2025115093177348061">Доповнена реальність</translation>
 <translation id="2030769033451695672">Натисніть, щоб повернутися на сторінку <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
-<translation id="2041019821020695769">Щоб надати Chrome доступ до сповіщень, також увімкніть їх у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="2079545284768500474">Відмінити</translation>
 <translation id="2091887806945687916">Сигнал</translation>
 <translation id="2107397443965016585">Запитувати, перш ніж дозволяти сайтам відтворювати захищений вміст (рекомендовано)</translation>
@@ -42,6 +41,7 @@
 <translation id="2148716181193084225">Сьогодні</translation>
 <translation id="2182457891543959921">Запитувати, перш ніж дозволяти сайтам створювати 3D-карту вашого оточення або відстежувати положення камери (рекомендовано)</translation>
 <translation id="2212565012507486665">Дозволити файли cookie</translation>
+<translation id="2228071138934252756">Щоб надати додатку <ph name="APP_NAME" /> доступ до камери, також увімкніть її в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="2289270750774289114">Запитувати, коли сайт хоче шукати пристрої Bluetooth поблизу (рекомендовано)</translation>
 <translation id="2315043854645842844">Операційна система не підтримує сертифікат, вибраний на стороні клієнта.</translation>
 <translation id="2359808026110333948">Продовжити</translation>
@@ -52,13 +52,13 @@
 <translation id="2490684707762498678">Адміністратор сімейної групи: <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Довідка й відгуки</translation>
 <translation id="2501278716633472235">Назад</translation>
-<translation id="2537296579376733324">Усі файли cookie, лише на цьому сайті</translation>
 <translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 файл cookie заблоковано}one{# файл cookie заблоковано}few{# файли cookie заблоковано}many{# файлів cookie заблоковано}other{# файлу cookie заблоковано}}</translation>
 <translation id="2570922361219980984">На цьому пристрої також вимкнено доступ до геоданих. Увімкніть його в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Розгорнуто – натисніть, щоб згорнути.</translation>
 <translation id="2586657967955657006">Буфер обміну</translation>
 <translation id="2621115761605608342">Увімкнути JavaScript на певному сайті.</translation>
 <translation id="2653659639078652383">Надіслати</translation>
+<translation id="2677748264148917807">Вийти</translation>
 <translation id="2687403674020088961">Блокувати всі файли cookie (не рекомендовано)</translation>
 <translation id="2704606927547763573">Скопійов.</translation>
 <translation id="2822354292072154809">Скинути всі дозволи сайту <ph name="CHOSEN_OBJECT_NAME" />?</translation>
@@ -71,8 +71,8 @@
 <translation id="301521992641321250">Блокується автоматично</translation>
 <translation id="3115898365077584848">Показати інформацію</translation>
 <translation id="3123473560110926937">Заблоковано на деяких сайтах</translation>
-<translation id="3190152372525844641">Увімкніть дозволи для Chrome у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="3198916472715691905">У пам'яті зайнято <ph name="STORAGE_AMOUNT" /></translation>
+<translation id="321187648315454507">Щоб дозволити додатку <ph name="APP_NAME" /> надсилати вам сповіщення, також увімкніть їх у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Мікрофон</translation>
 <translation id="3277252321222022663">Надати сайтам доступ до датчиків (рекомендовано)</translation>
 <translation id="3295602654194328831">Сховати інформацію</translation>
@@ -83,9 +83,7 @@
 <translation id="358794129225322306">Дозволити сайту автоматично завантажувати декілька файлів.</translation>
 <translation id="3596414637720633074">Блокувати файли cookie третіх сторін в анонімному режимі</translation>
 <translation id="3600792891314830896">Вимкнути звук на сайтах, які відтворюють його</translation>
-<translation id="3730075448226062617">Щоб надати Chrome доступ до мікрофона, також увімкніть його в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="3744111561329211289">Фонова синхронізація</translation>
-<translation id="3822502789641063741">Видалити дані сайтів?</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="3859306556332390985">Далі</translation>
 <translation id="3955193568934677022">Дозволити сайтам відтворювати захищений вміст (рекомендується)</translation>
@@ -95,16 +93,20 @@
 <translation id="4008040567710660924">Дозволити файли cookie для конкретного сайту.</translation>
 <translation id="4046123991198612571">Наступна композиція</translation>
 <translation id="4165986682804962316">Налаштування сайту</translation>
+<translation id="4200726100658658164">Відкрити налаштування доступу до моїх геоданих</translation>
 <translation id="4226663524361240545">Коли надходитимуть сповіщення, пристрій може вібрувати</translation>
 <translation id="4242533952199664413">Відкрити налаштування</translation>
 <translation id="4259722352634471385">Веб-сторінку <ph name="URL" /> заблоковано</translation>
 <translation id="4278390842282768270">Дозволено</translation>
 <translation id="429312253194641664">Сайт відтворює медіа-вміст</translation>
+<translation id="42981349822642051">Розгорнути</translation>
+<translation id="4336434711095810371">Видалити всі дані</translation>
 <translation id="4433925000917964731">Спрощену сторінку надає Google</translation>
 <translation id="4434045419905280838">Спливаючі вікна й переадресація</translation>
 <translation id="445467742685312942">Дозволити сайтам відтворювати захищений вміст</translation>
 <translation id="4468959413250150279">Вимкнути звук для певного сайту.</translation>
 <translation id="4479647676395637221">Запитувати, перш ніж дозволити сайтам використовувати камеру (рекомендується)</translation>
+<translation id="4534723447064627427">Щоб надати додатку <ph name="APP_NAME" /> доступ до мікрофона, також увімкніть його в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Деталі</translation>
 <translation id="4645575059429386691">Керується одним із батьків</translation>
 <translation id="4670064810192446073">Віртуальна реальність</translation>
@@ -112,7 +114,6 @@
 <translation id="4883854917563148705">Налаштування, якими керує адміністратор, не можна скинути</translation>
 <translation id="4887024562049524730">Запитувати, перш ніж давати сайтам доступ до даних і пристрою віртуальної реальності (рекомендовано)</translation>
 <translation id="4962975101802056554">Скасувати всі дозволи для пристрою</translation>
-<translation id="4964199952259983386">Щоб дозволити Chrome використовувати доповнену реальність, увімкніть камеру в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="497421865427891073">Перейти вперед</translation>
 <translation id="4996978546172906250">Надіслати</translation>
 <translation id="5039804452771397117">Дозволити</translation>
@@ -120,14 +121,15 @@
 <translation id="5063480226653192405">Використання</translation>
 <translation id="5100237604440890931">Згорнуто – натисніть, щоб розгорнути.</translation>
 <translation id="5123685120097942451">Анонімна вкладка</translation>
+<translation id="528192093759286357">Щоб вийти з повноекранного режиму, проведіть пальцем по екрану згори вниз і торкніться кнопки "Назад".</translation>
 <translation id="5300589172476337783">Показати</translation>
 <translation id="5301954838959518834">OK</translation>
-<translation id="5307446750509046227">Видалити дані сайтів</translation>
 <translation id="5313967007315987356">Додати сайт</translation>
 <translation id="5317780077021120954">Зберегти</translation>
 <translation id="5335288049665977812">Дозволити сайтам запускати JavaScript (рекомендується)</translation>
 <translation id="534295439873310000">Пристрої NFC</translation>
 <translation id="5354152178998424783">Буде видалено <ph name="DATASIZE" /> даних і файлів cookie сайтів.</translation>
+<translation id="5384883051496921101">Цей сайт збирається надіслати інформацію в додаток, у якому вимкнено режим анонімного перегляду.</translation>
 <translation id="5391532827096253100">Ваше з’єднання з цим сайтом незахищене. Інформація про сайт</translation>
 <translation id="5494752089476963479">Блокувати рекламу на сайтах, які показують нав’язливі чи оманливі оголошення</translation>
 <translation id="5505264765875738116">Сайти не можуть просити дозвіл надсилати сповіщення</translation>
@@ -146,6 +148,7 @@
 <translation id="5916664084637901428">Увімкнено</translation>
 <translation id="5922853908706496913">Доступ до вашого екрана</translation>
 <translation id="5939518447894949180">Скинути</translation>
+<translation id="6015775454662021376">Керуйте доступом цього сайту до вашого пристрою</translation>
 <translation id="6040143037577758943">Закрити</translation>
 <translation id="6042308850641462728">Більше</translation>
 <translation id="6064125863973209585">Завершені завантаження</translation>
@@ -153,7 +156,6 @@
 <translation id="6177111841848151710">Заблоковано для поточної пошукової системи</translation>
 <translation id="6181444274883918285">Додати сайт у список винятків</translation>
 <translation id="6192792657125177640">Винятки</translation>
-<translation id="6194112207524046168">Щоб надати Chrome доступ до камери, також увімкніть її в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="6196640612572343990">Блокувати сторонні файли cookie</translation>
 <translation id="6206551242102657620">З’єднання безпечне. Інформація про сайт</translation>
 <translation id="6216432067784365534"><ph name="NAME_OF_LIST_ITEM" />: опції</translation>
@@ -161,6 +163,7 @@
 <translation id="6295158916970320988">Усі сайти</translation>
 <translation id="6320088164292336938">Вібросигнал</translation>
 <translation id="6388207532828177975">Очистити та скинути</translation>
+<translation id="6423924377271166037">Видалити файли cookie</translation>
 <translation id="6439114592976064011">Заборонити сайтам доступ до даних і пристрою віртуальної реальності</translation>
 <translation id="6447842834002726250">Cookie-файли</translation>
 <translation id="6527303717912515753">Надіслати</translation>
@@ -168,6 +171,7 @@
 <translation id="6561560012278703671">Показувати лише значок повідомлення (блокувати сповіщення)</translation>
 <translation id="6608650720463149374"><ph name="GIGABYTES" /> ГБ</translation>
 <translation id="6612358246767739896">Захищений вміст</translation>
+<translation id="662080504995468778">Залишитися</translation>
 <translation id="6643016212128521049">Очистити</translation>
 <translation id="6697925417670533197">Активні завантаження</translation>
 <translation id="6746124502594467657">Вниз</translation>
@@ -190,6 +194,7 @@
 <translation id="7128222689758636196">Дозволити поточній пошуковій системі</translation>
 <translation id="7141896414559753902">Блокувати спливаючі вікна та переадресацію на сайтах (рекомендовано)</translation>
 <translation id="7176368934862295254"><ph name="KILOBYTES" /> КБ</translation>
+<translation id="7243308994586599757">Опції можна знайти внизу екрана</translation>
 <translation id="7250468141469952378">Вибрано <ph name="ITEM_COUNT" /></translation>
 <translation id="7302486331832100261">Зазвичай ви блокуєте сповіщення. Щоб дозволити, натисніть "Деталі".</translation>
 <translation id="7423098979219808738">Спершу запитувати</translation>
@@ -225,32 +230,38 @@
 <translation id="8261506727792406068">Видалити</translation>
 <translation id="8300705686683892304">Керуються додатком</translation>
 <translation id="8372893542064058268">сайті.</translation>
+<translation id="8376384591331888629">Зокрема файли cookie третіх сторін на цьому сайті</translation>
 <translation id="83792324527827022">Сайт використовує камеру та мікрофон</translation>
 <translation id="8380167699614421159">Цей сайт показує нав’язливі чи оманливі оголошення</translation>
 <translation id="8394832520002899662">Натисніть, щоб повернутися на сайт</translation>
 <translation id="8425213833346101688">Змінити</translation>
 <translation id="8441146129660941386">Назад</translation>
+<translation id="8444433999583714703">Щоб надати додатку <ph name="APP_NAME" /> доступ до геоданих, також увімкніть їх у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="8447861592752582886">Скасувати доступ до пристрою</translation>
+<translation id="8451050538944905715">{NUM_SELECTED,plural, =1{Використовується 1 файл cookie}one{Використовується # файл cookie}few{Використовуються # файли cookie}many{Використовуються # файлів cookie}other{Використовуються # файлу cookie}}</translation>
 <translation id="8463851957836045671">Сайт працює швидко</translation>
 <translation id="851751545965956758">Заборонити сайтам підключатися до пристроїв</translation>
 <translation id="857943718398505171">Дозволено (рекомендується)</translation>
 <translation id="8609465669617005112">Угору</translation>
 <translation id="8676374126336081632">Видалити введений текст</translation>
 <translation id="8702612070107455751">Усі дані, збережені офлайн, буде видалено.</translation>
+<translation id="8719283222052720129">Увімкніть дозвіл для додатка <ph name="APP_NAME" /> у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="8725066075913043281">Повторити спробу</translation>
 <translation id="8730621377337864115">Готово</translation>
 <translation id="8737217482364735741">Усі дані та файли cookie сайту <ph name="ORIGIN" /> буде видалено.</translation>
 <translation id="8801436777607969138">Блокувати JavaScript на певному сайті.</translation>
 <translation id="8816026460808729765">Заборонити сайтам доступ до датчиків</translation>
 <translation id="8847988622838149491">USB</translation>
-<translation id="885701979325669005">Обсяг пам’яті</translation>
 <translation id="8926666909099850184">NFC вимкнено на цьому пристрої. Увімкніть цю функцію в <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="8929372349074745002">Зазвичай цей сайт швидко відкривається й відповідає</translation>
 <translation id="8941729603749328384">www.example.com</translation>
+<translation id="894871326938397531">Завершити анонімний перегляд?</translation>
 <translation id="8958424370300090006">Блокувати файли cookie з конкретного сайту.</translation>
 <translation id="8959122750345127698">Веб-сторінка <ph name="URL" /> недоступна</translation>
 <translation id="9019902583201351841">Керується батьками</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
+<translation id="913657688200966289">Увімкніть дозволи для додатка <ph name="APP_NAME" /> у <ph name="BEGIN_LINK" />налаштуваннях Android<ph name="END_LINK" />.</translation>
 <translation id="945632385593298557">Доступ до мікрофона</translation>
 <translation id="965817943346481315">Блокувати, якщо сайт показує нав’язливі чи оманливі оголошення (рекомендовано)</translation>
+<translation id="967624055006145463">Збережені дані</translation>
 </translationbundle>

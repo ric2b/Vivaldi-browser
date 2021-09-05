@@ -40,9 +40,9 @@ bool AppWebContentsHelper::ShouldSuppressGestureEvent(
 
   if (vivaldi::IsVivaldiRunning()) {
     // Extend for other platforms after support has been added.
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     return false;
-#endif  // OS_MACOSX
+#endif  // OS_MAC
   }
 
   // Disable pinch zooming in app windows.

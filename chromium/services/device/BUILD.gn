@@ -8,7 +8,8 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-is_serial_enabled_platform = is_win || (is_linux && use_udev) || is_mac
+is_serial_enabled_platform =
+    is_win || ((is_linux || is_chromeos) && use_udev) || is_mac
 
 source_set("lib") {
   # This should be visible only to embedders of the Device Service, and the
@@ -92,7 +93,7 @@ component("binder_overrides") {
   defines = [ "IS_DEVICE_SERVICE_BINDER_OVERRIDES_IMPL" ]
 }
 
-is_linux_without_udev = is_linux && !use_udev
+is_linux_without_udev = (is_linux || is_chromeos) && !use_udev
 
 source_set("perftests") {
   testonly = true
@@ -247,6 +248,8 @@ source_set("tests") {
 
   if (is_serial_enabled_platform) {
     sources += [
+      "serial/bluetooth_serial_port_impl_unittest.cc",
+      "serial/serial_device_enumerator_linux_unittest.cc",
       "serial/serial_device_enumerator_unittest.cc",
       "serial/serial_port_impl_unittest.cc",
       "serial/serial_port_manager_impl_unittest.cc",
@@ -256,7 +259,14 @@ source_set("tests") {
       sources += [ "serial/serial_io_handler_posix_unittest.cc" ]
     }
 
+    if (is_linux || is_chromeos) {
+      deps += [ "//device/udev_linux:test_support" ]
+    }
+
     deps += [
+      "//device/bluetooth:mocks",
+      "//services/device/public/cpp/bluetooth:bluetooth",
+      "//services/device/public/cpp/serial:switches",
       "//services/device/serial",
       "//services/device/serial:test_support",
     ]

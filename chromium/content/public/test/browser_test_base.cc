@@ -19,13 +19,13 @@
 #include "base/i18n/icu_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
+#include "base/task/current_thread.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -56,7 +56,7 @@
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_utils.h"
-#include "content/test/content_browser_sanity_checker.h"
+#include "content/test/content_browser_consistency_checker.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_switches.h"
 #include "media/base/media_switches.h"
@@ -68,12 +68,13 @@
 #include "services/network/public/mojom/network_service_test.mojom.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/tracing/public/cpp/trace_startup.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display_switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "ui/platform_window/common/platform_window_defaults.h"  // nogncheck
 #endif
 
@@ -92,7 +93,7 @@
 #endif
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include "content/browser/sandbox_parameters_mac.h"
 #include "net/test/test_data_directory.h"
 #include "ui/events/test/event_generator.h"
@@ -175,17 +176,25 @@ class InitialNavigationObserver : public WebContentsObserver {
 
 }  // namespace
 
-BrowserTestBase::BrowserTestBase()
-    : expected_exit_code_(0),
-      enable_pixel_output_(false),
-      use_software_compositing_(false),
-      set_up_called_(false) {
+BrowserTestBase::BrowserTestBase() {
+#if defined(USE_OZONE) && defined(USE_X11)
+  // In case of the USE_OZONE + USE_X11 build, the OzonePlatform can either be
+  // enabled or disabled. However, tests may override the FeatureList that will
+  // result in unknown state for the UseOzonePlatform feature. Thus, the
+  // features::IsUsingOzonePlatform has static const initializer that won't be
+  // changed despite FeatureList being overridden. However, it requires to call
+  // this method at least once so that the value is set correctly. This place
+  // looks the most appropriate as tests haven't started to add own FeatureList
+  // yet and we still have the original value set by base::TestSuite.
+  ignore_result(features::IsUsingOzonePlatform());
+#endif
+
   CHECK(!g_instance_already_created)
       << "Each browser test should be run in a new process. If you are adding "
          "a new browser test suite that runs on Android, please add it to "
          "//build/android/pylib/gtest/gtest_test_instance.py.";
   g_instance_already_created = true;
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   ui::test::EnableTestConfigForPlatformWindows();
 #endif
 
@@ -203,7 +212,7 @@ BrowserTestBase::BrowserTestBase()
 #if defined(USE_AURA)
   ui::test::EventGeneratorDelegate::SetFactoryFunction(
       base::BindRepeating(&aura::test::EventGeneratorDelegateAura::Create));
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   ui::test::EventGeneratorDelegate::SetFactoryFunction(
       base::BindRepeating(&views::test::CreateEventGeneratorDelegateMac));
 #endif
@@ -265,6 +274,20 @@ void BrowserTestBase::SetUp() {
   command_line->AppendSwitch(
       switches::kDisableBackgroundingOccludedWindowsForTesting);
 
+  if (enable_pixel_output_) {
+    DCHECK(!command_line->HasSwitch(switches::kForceDeviceScaleFactor))
+        << "--force-device-scale-factor flag already present. Tests using "
+        << "EnablePixelOutput should specify a forced device scale factor by "
+        << "passing it as an argument to EnblePixelOutput.";
+    DCHECK(force_device_scale_factor_);
+
+    // We do this before setting enable_pixel_output_ from the switch below so
+    // that the device scale factor is forced only when enabled from test code.
+    command_line->AppendSwitchASCII(
+        switches::kForceDeviceScaleFactor,
+        base::StringPrintf("%f", force_device_scale_factor_));
+  }
+
 #if defined(USE_AURA)
   // Most tests do not need pixel output, so we don't produce any. The command
   // line can override this behaviour to allow for visual debugging.
@@ -294,7 +317,7 @@ void BrowserTestBase::SetUp() {
   if (command_line->HasSwitch("enable-gpu"))
     use_software_gl = false;
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // On Mac we always use hardware GL.
   use_software_gl = false;
 
@@ -325,7 +348,7 @@ void BrowserTestBase::SetUp() {
   if (!allow_network_access_to_host_resolutions_)
     test_host_resolver_ = std::make_unique<TestHostResolver>();
 
-  ContentBrowserSanityChecker scoped_enable_sanity_checks;
+  ContentBrowserConsistencyChecker scoped_enable_consistency_checks;
 
   SetUpInProcessBrowserTestFixture();
 
@@ -343,6 +366,19 @@ void BrowserTestBase::SetUp() {
                                                           &disabled_features);
   }
 
+#if defined(USE_X11) && defined(USE_OZONE)
+  // Append OzonePlatform to the enabled features so that the CommandLine
+  // instance has correct values, and other processes if any (GPU, for example),
+  // also use correct path.  features::IsUsingOzonePlatform() has static const
+  // initializer, which means the value of the features::IsUsingOzonePlatform()
+  // doesn't change even if tests override the FeatureList. Thus, it's correct
+  // to call it now as it is set way earlier than tests override the features.
+  //
+  // TODO(https://crbug.com/1096425): remove this as soon as use_x11 goes away.
+  if (features::IsUsingOzonePlatform())
+    enabled_features += ",UseOzonePlatform";
+#endif
+
   if (!enabled_features.empty()) {
     command_line->AppendSwitchASCII(switches::kEnableFeatures,
                                     enabled_features);
@@ -352,11 +388,9 @@ void BrowserTestBase::SetUp() {
                                     disabled_features);
   }
 
-  // Always disable the unsandbox GPU process for DX12 and Vulkan Info
-  // collection to avoid interference. This GPU process is launched 120
-  // seconds after chrome starts.
-  command_line->AppendSwitch(
-      switches::kDisableGpuProcessForDX12VulkanInfoCollection);
+  // Always disable the unsandbox GPU process for DX12 Info collection to avoid
+  // interference. This GPU process is launched 120 seconds after chrome starts.
+  command_line->AppendSwitch(switches::kDisableGpuProcessForDX12InfoCollection);
 
   // The current global field trial list contains any trials that were activated
   // prior to main browser startup. That global field trial list is about to be
@@ -513,7 +547,7 @@ void BrowserTestBase::SetUp() {
 }
 
 void BrowserTestBase::TearDown() {
-#if defined(USE_AURA) || defined(OS_MACOSX)
+#if defined(USE_AURA) || defined(OS_MAC)
   ui::test::EventGeneratorDelegate::SetFactoryFunction(
       ui::test::EventGeneratorDelegate::FactoryFunction());
 #endif
@@ -636,7 +670,7 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     // This can be called from a posted task. Allow nested tasks here, because
     // otherwise the test body will have to do it in order to use RunLoop for
     // waiting.
-    base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
+    base::CurrentThread::ScopedNestableTaskAllower allow;
 
 #if !defined(OS_ANDROID)
     // Fail the test if a renderer crashes while the test is running.
@@ -732,7 +766,10 @@ void BrowserTestBase::PostTaskToInProcessRendererAndWait(
   run_loop.Run();
 }
 
-void BrowserTestBase::EnablePixelOutput() { enable_pixel_output_ = true; }
+void BrowserTestBase::EnablePixelOutput(float force_device_scale_factor) {
+  enable_pixel_output_ = true;
+  force_device_scale_factor_ = force_device_scale_factor;
+}
 
 void BrowserTestBase::UseSoftwareCompositing() {
   use_software_compositing_ = true;

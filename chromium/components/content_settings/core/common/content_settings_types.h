@@ -149,18 +149,20 @@ enum class ContentSettingsType : int32_t {
   WAKE_LOCK_SCREEN,
   WAKE_LOCK_SYSTEM,
 
-  // Legacy SameSite cookie behavior. This disables SameSiteByDefaultCookies
-  // and CookiesWithoutSameSiteMustBeSecure, and forces the legacy behavior
-  // where cookies that don't specify SameSite are treated as SameSite=None and
-  // SameSite=None cookies are not required to be Secure.
+  // Legacy SameSite cookie behavior. This disables SameSiteByDefaultCookies,
+  // CookiesWithoutSameSiteMustBeSecure, and SchemefulSameSite, forcing the
+  // legacy behavior wherein cookies that don't specify SameSite are treated as
+  // SameSite=None, SameSite=None cookies are not required to be Secure, and
+  // schemeful same-site is not active.
+  //
   // This will also be used to revert to legacy behavior when future changes
   // in cookie handling are introduced.
   LEGACY_COOKIE_ACCESS,
 
   // Content settings which stores whether to allow sites to ask for permission
-  // to save changes to an original file selected by the user through the Native
+  // to save changes to an original file selected by the user through the
   // File System API.
-  NATIVE_FILE_SYSTEM_WRITE_GUARD,
+  FILE_SYSTEM_WRITE_GUARD,
 
   // Content settings for installed web apps that browsing history may be
   // inferred from e.g. last update check timestamp.
@@ -195,8 +197,8 @@ enum class ContentSettingsType : int32_t {
   AR,
 
   // Content setting which stores whether to allow site to open and read files
-  // and directories selected through the Native File System API.
-  NATIVE_FILE_SYSTEM_READ_GUARD,
+  // and directories selected through the File System API.
+  FILE_SYSTEM_READ_GUARD,
 
   // Access to first party storage in a third-party context. Exceptions are
   // scoped to the combination of requesting/top-level origin, and are managed
@@ -213,6 +215,15 @@ enum class ContentSettingsType : int32_t {
   // Permits access to information about the screens, like size and position.
   // Permits creating and placing windows across the set of connected screens.
   WINDOW_PLACEMENT,
+
+  // Stores whether to allow insecure websites to make private network requests.
+  // See also: https://wicg.github.io/cors-rfc1918
+  // Set through enterprise policies only.
+  INSECURE_PRIVATE_NETWORK,
+
+  // Content setting which stores whether or not a site can access low-level
+  // locally installed font data using the Font Access API.
+  FONT_ACCESS,
 
   NUM_TYPES,
 };

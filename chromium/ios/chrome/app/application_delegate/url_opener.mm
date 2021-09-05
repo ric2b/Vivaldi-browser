@@ -51,10 +51,7 @@ const char* const kUMAMobileSessionStartFromAppsHistogram =
   if (startupInformation.isPresentingFirstRunUI) {
     UMA_HISTOGRAM_ENUMERATION("FirstRun.LaunchSource", [params launchSource],
                               first_run::LAUNCH_SIZE);
-    return NO;
-  }
-
-  if (applicationActive) {
+  } else if (applicationActive) {
     // The app is already active so the applicationDidBecomeActive: method will
     // never be called. Open the requested URL immediately and return YES if
     // the parsed URL was valid.
@@ -85,9 +82,7 @@ const char* const kUMAMobileSessionStartFromAppsHistogram =
       }
       UrlLoadParams urlLoadParams = UrlLoadParams::InNewTab(URL, virtualURL);
 
-      ApplicationModeForTabOpening targetMode =
-          [params launchInIncognito] ? ApplicationModeForTabOpening::INCOGNITO
-                                     : ApplicationModeForTabOpening::NORMAL;
+      ApplicationModeForTabOpening targetMode = params.applicationMode;
       // If the call is coming from the app, it should be opened in the current
       // mode to avoid changing mode.
       if (callerApp == CALLER_APP_GOOGLE_CHROME)
@@ -107,24 +102,27 @@ const char* const kUMAMobileSessionStartFromAppsHistogram =
       return YES;
     }
     return NO;
+  } else {
+    // Don't record the first user action if application is not active.
+    [startupInformation resetFirstUserActionRecorder];
   }
-
-  // Don't record the first user action.
-  [startupInformation resetFirstUserActionRecorder];
 
   connectionInformation.startupParameters = params;
   return connectionInformation.startupParameters != nil;
 }
 
 + (void)handleLaunchOptions:(URLOpenerParams*)options
-          applicationActive:(BOOL)applicationActive
                   tabOpener:(id<TabOpening>)tabOpener
       connectionInformation:(id<ConnectionInformation>)connectionInformation
          startupInformation:(id<StartupInformation>)startupInformation
                    appState:(AppState*)appState {
   if (options.URL) {
+    // This method is always called when the SceneState transitions to
+    // SceneActivationLevelForegroundActive, and before the handling of
+    // startupInformation is done.
+    // Pass |NO| as active to avoid double processing.
     BOOL openURLResult = [URLOpener openURL:options
-                          applicationActive:applicationActive
+                          applicationActive:NO
                                   tabOpener:tabOpener
                       connectionInformation:connectionInformation
                          startupInformation:startupInformation];

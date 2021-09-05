@@ -99,6 +99,8 @@ bindings_modules_generated_union_type_files = [
   "$bindings_modules_v8_output_dir/string_or_string_sequence_or_constrain_dom_string_parameters.h",
   "$bindings_modules_v8_output_dir/string_or_unsigned_long.cc",
   "$bindings_modules_v8_output_dir/string_or_unsigned_long.h",
+  "$bindings_modules_v8_output_dir/uint32_array_or_unsigned_long_sequence.cc",
+  "$bindings_modules_v8_output_dir/uint32_array_or_unsigned_long_sequence.h",
   "$bindings_modules_v8_output_dir/unsigned_long_or_unsigned_long_sequence.cc",
   "$bindings_modules_v8_output_dir/unsigned_long_or_unsigned_long_sequence.h",
   "$bindings_modules_v8_output_dir/unsigned_long_enforce_range_sequence_or_gpu_extent_3d_dict.cc",
@@ -109,17 +111,32 @@ bindings_modules_generated_union_type_files = [
   "$bindings_modules_v8_output_dir/unsigned_long_enforce_range_sequence_or_gpu_origin_3d_dict.h",
   "$bindings_modules_v8_output_dir/usv_string_or_uint32_array.cc",
   "$bindings_modules_v8_output_dir/usv_string_or_uint32_array.h",
-  "$bindings_modules_v8_output_dir/webgl_rendering_context_or_webgl2_rendering_context.cc",
-  "$bindings_modules_v8_output_dir/webgl_rendering_context_or_webgl2_rendering_context.h",
+  "$bindings_modules_v8_output_dir/usv_string_or_usv_string_sequence.cc",
+  "$bindings_modules_v8_output_dir/usv_string_or_usv_string_sequence.h",
   "$bindings_modules_v8_output_dir/worklet_animation_effect_or_worklet_group_effect.cc",
   "$bindings_modules_v8_output_dir/worklet_animation_effect_or_worklet_group_effect.h",
 ]
+
+# WebGL2 Compute
+if (support_webgl2_compute_context) {
+  bindings_modules_generated_union_type_files += [
+    "$bindings_modules_v8_output_dir/webgl_rendering_context_or_webgl2_rendering_context_or_webgl2_compute_rendering_context.cc",
+    "$bindings_modules_v8_output_dir/webgl_rendering_context_or_webgl2_rendering_context_or_webgl2_compute_rendering_context.h",
+  ]
+} else {
+  bindings_modules_generated_union_type_files += [
+    "$bindings_modules_v8_output_dir/webgl_rendering_context_or_webgl2_rendering_context.cc",
+    "$bindings_modules_v8_output_dir/webgl_rendering_context_or_webgl2_rendering_context.h",
+  ]
+}
 
 generated_modules_callback_function_files = [
   "$bindings_modules_v8_output_dir/v8_animate_callback.cc",
   "$bindings_modules_v8_output_dir/v8_animate_callback.h",
   "$bindings_modules_v8_output_dir/v8_animator_constructor.cc",
   "$bindings_modules_v8_output_dir/v8_animator_constructor.h",
+  "$bindings_modules_v8_output_dir/v8_audio_frame_output_callback.cc",
+  "$bindings_modules_v8_output_dir/v8_audio_frame_output_callback.h",
   "$bindings_modules_v8_output_dir/v8_blink_audio_worklet_process_callback.cc",
   "$bindings_modules_v8_output_dir/v8_blink_audio_worklet_process_callback.h",
   "$bindings_modules_v8_output_dir/v8_blink_audio_worklet_processor_constructor.cc",
@@ -180,15 +197,3 @@ generated_modules_callback_function_files = [
 
 bindings_generated_v8_context_snapshot_external_references_file =
     "$bindings_modules_v8_output_dir/v8_context_snapshot_external_references.cc"
-
-generated_modules_dictionary_files = []
-
-if (use_v8_bind_gen_for_dictionary) {
-  generated_modules_dictionary_files +=
-      process_file_template(
-          modules_dictionary_idl_files,
-          [
-            "$bindings_modules_v8_output_dir/v8_{{source_name_part}}.cc",
-            "$bindings_modules_v8_output_dir/v8_{{source_name_part}}.h",
-          ])
-}

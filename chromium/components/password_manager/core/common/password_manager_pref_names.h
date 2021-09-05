@@ -24,7 +24,7 @@ extern const char kCredentialsEnableAutosignin[];
 // passwords.
 extern const char kCredentialsEnableService[];
 
-#if !defined(OS_MACOSX) && !defined(OS_CHROMEOS) && defined(OS_POSIX)
+#if !defined(OS_APPLE) && !defined(OS_CHROMEOS) && defined(OS_POSIX)
 // The current state of the migration to LoginDB from Keyring/Kwallet on Linux.
 extern const char kMigrationToLoginDBStep[];
 #endif
@@ -38,7 +38,7 @@ extern const char kOsPasswordBlank[];
 extern const char kOsPasswordLastChanged[];
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 // The current status of migrating the passwords from the Keychain to the
 // database. Stores a value from MigrationStatus.
 extern const char kKeychainMigrationStatus[];
@@ -67,6 +67,11 @@ extern const char kSignInPasswordPromoRevive[];
 // (e.g. whether that user has opted in). It maps from hash of Gaia ID to
 // dictionary of key-value pairs.
 extern const char kAccountStoragePerAccountSettings[];
+
+// A boolean that tracks whether the account-scoped password store exists on
+// disk. When the factory needs to delete the store from disk, it uses this pref
+// to only trigger the deletion if the store actually exists.
+extern const char kAccountStorageExists[];
 
 // String that represents the sync password hash.
 extern const char kSyncPasswordHash[];
@@ -103,6 +108,10 @@ extern const char kWasOnboardingFeatureCheckedBefore[];
 // used to fill a form, in microseconds since Windows epoch.
 extern const char kProfileStoreDateLastUsedForFilling[];
 extern const char kAccountStoreDateLastUsedForFilling[];
+
+// Number of times the check for leaked password has been performed from the
+// password settings.
+extern const char kSettingsLaunchedPasswordChecks[];
 
 }  // namespace prefs
 }  // namespace password_manager

@@ -12,8 +12,10 @@
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_mixed_content.h"
 #include "third_party/blink/public/platform/web_mixed_content_context_type.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
+#include "third_party/blink/renderer/core/loader/mock_content_security_notifier.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
@@ -109,54 +111,46 @@ TEST(MixedContentCheckerTest, ContextTypeForInspector) {
                 &dummy_page_holder->GetFrame(), blockable_mixed_content));
 }
 
-namespace {
-
-class MixedContentCheckerMockLocalFrameClient : public EmptyLocalFrameClient {
- public:
-  MixedContentCheckerMockLocalFrameClient() : EmptyLocalFrameClient() {}
-  MOCK_METHOD0(DidContainInsecureFormAction, void());
-  MOCK_METHOD0(DidDisplayContentWithCertificateErrors, void());
-  MOCK_METHOD0(DidRunContentWithCertificateErrors, void());
-};
-
-}  // namespace
-
 TEST(MixedContentCheckerTest, HandleCertificateError) {
-  MixedContentCheckerMockLocalFrameClient* client =
-      MakeGarbageCollected<MixedContentCheckerMockLocalFrameClient>();
-  auto dummy_page_holder =
-      std::make_unique<DummyPageHolder>(IntSize(1, 1), nullptr, client);
+  auto dummy_page_holder = std::make_unique<DummyPageHolder>(
+      IntSize(1, 1), nullptr, MakeGarbageCollected<EmptyLocalFrameClient>());
 
   KURL main_resource_url(NullURL(), "https://example.test");
   KURL displayed_url(NullURL(), "https://example-displayed.test");
   KURL ran_url(NullURL(), "https://example-ran.test");
 
+  // Set up the mock content security notifier.
+  testing::StrictMock<MockContentSecurityNotifier> mock_notifier;
+  mojo::Remote<mojom::blink::ContentSecurityNotifier> notifier_remote;
+  notifier_remote.Bind(mock_notifier.BindNewPipeAndPassRemote());
+
   dummy_page_holder->GetFrame().GetDocument()->SetURL(main_resource_url);
   ResourceResponse response1(ran_url);
-  EXPECT_CALL(*client, DidRunContentWithCertificateErrors());
+  EXPECT_CALL(mock_notifier, NotifyContentWithCertificateErrorsRan()).Times(1);
   MixedContentChecker::HandleCertificateError(
-      &dummy_page_holder->GetFrame(), response1,
-      mojom::RequestContextType::SCRIPT);
+      response1, mojom::RequestContextType::SCRIPT,
+      WebMixedContent::CheckModeForPlugin::kLax, *notifier_remote);
 
   ResourceResponse response2(displayed_url);
   mojom::RequestContextType request_context = mojom::RequestContextType::IMAGE;
   ASSERT_EQ(
       WebMixedContentContextType::kOptionallyBlockable,
       WebMixedContent::ContextTypeFromRequestContext(
-          request_context, dummy_page_holder->GetFrame()
-                               .GetSettings()
-                               ->GetStrictMixedContentCheckingForPlugin()));
-  EXPECT_CALL(*client, DidDisplayContentWithCertificateErrors());
-  MixedContentChecker::HandleCertificateError(&dummy_page_holder->GetFrame(),
-                                              response2, request_context);
+          request_context, MixedContentChecker::DecideCheckModeForPlugin(
+                               dummy_page_holder->GetFrame().GetSettings())));
+  EXPECT_CALL(mock_notifier, NotifyContentWithCertificateErrorsDisplayed())
+      .Times(1);
+  MixedContentChecker::HandleCertificateError(
+      response2, request_context, WebMixedContent::CheckModeForPlugin::kLax,
+      *notifier_remote);
+
+  notifier_remote.FlushForTesting();
 }
 
 TEST(MixedContentCheckerTest, DetectMixedForm) {
   KURL main_resource_url(NullURL(), "https://example.test/");
-  MixedContentCheckerMockLocalFrameClient* client =
-      MakeGarbageCollected<MixedContentCheckerMockLocalFrameClient>();
-  auto dummy_page_holder =
-      std::make_unique<DummyPageHolder>(IntSize(1, 1), nullptr, client);
+  auto dummy_page_holder = std::make_unique<DummyPageHolder>(
+      IntSize(1, 1), nullptr, MakeGarbageCollected<EmptyLocalFrameClient>());
   dummy_page_holder->GetFrame().Loader().CommitNavigation(
       WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(),
                                                 main_resource_url),
@@ -169,8 +163,6 @@ TEST(MixedContentCheckerTest, DetectMixedForm) {
   KURL mailto_form_action_url(NullURL(), "mailto:action@example-action.test");
 
   // mailto and http are non-secure form targets.
-  EXPECT_CALL(*client, DidContainInsecureFormAction()).Times(2);
-
   EXPECT_TRUE(MixedContentChecker::IsMixedFormAction(
       &dummy_page_holder->GetFrame(), http_form_action_url,
       ReportingDisposition::kSuppressReporting));
@@ -187,10 +179,8 @@ TEST(MixedContentCheckerTest, DetectMixedForm) {
 
 TEST(MixedContentCheckerTest, DetectMixedFavicon) {
   KURL main_resource_url("https://example.test/");
-  MixedContentCheckerMockLocalFrameClient* client =
-      MakeGarbageCollected<MixedContentCheckerMockLocalFrameClient>();
-  auto dummy_page_holder =
-      std::make_unique<DummyPageHolder>(IntSize(1, 1), nullptr, client);
+  auto dummy_page_holder = std::make_unique<DummyPageHolder>(
+      IntSize(1, 1), nullptr, MakeGarbageCollected<EmptyLocalFrameClient>());
   dummy_page_holder->GetFrame().Loader().CommitNavigation(
       WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(),
                                                 main_resource_url),
@@ -202,19 +192,24 @@ TEST(MixedContentCheckerTest, DetectMixedFavicon) {
   KURL http_favicon_url("http://example.test/favicon.png");
   KURL https_favicon_url("https://example.test/favicon.png");
 
+  // Set up the mock content security notifier.
+  testing::StrictMock<MockContentSecurityNotifier> mock_notifier;
+  mojo::Remote<mojom::blink::ContentSecurityNotifier> notifier_remote;
+  notifier_remote.Bind(mock_notifier.BindNewPipeAndPassRemote());
+
   // Test that a mixed content favicon is correctly blocked.
   EXPECT_TRUE(MixedContentChecker::ShouldBlockFetch(
       &dummy_page_holder->GetFrame(), mojom::RequestContextType::FAVICON,
       http_favicon_url, ResourceRequest::RedirectStatus::kNoRedirect,
       http_favicon_url, base::Optional<String>(),
-      ReportingDisposition::kSuppressReporting));
+      ReportingDisposition::kSuppressReporting, *notifier_remote));
 
   // Test that a secure favicon is not blocked.
   EXPECT_FALSE(MixedContentChecker::ShouldBlockFetch(
       &dummy_page_holder->GetFrame(), mojom::RequestContextType::FAVICON,
       https_favicon_url, ResourceRequest::RedirectStatus::kNoRedirect,
       https_favicon_url, base::Optional<String>(),
-      ReportingDisposition::kSuppressReporting));
+      ReportingDisposition::kSuppressReporting, *notifier_remote));
 }
 
 class TestFetchClientSettingsObject : public FetchClientSettingsObject {

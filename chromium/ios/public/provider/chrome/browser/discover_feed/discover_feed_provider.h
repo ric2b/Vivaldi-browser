@@ -7,27 +7,56 @@
 
 #import <UIKit/UIKit.h>
 
-#include "base/ios/block_types.h"
-
 @protocol ApplicationCommands;
+class AuthenticationService;
+class Browser;
+@class DiscoverFeedConfiguration;
 
 // DiscoverFeedProvider allows embedders to provide functionality for a Discover
 // Feed.
 class DiscoverFeedProvider {
  public:
+  // Observer class for discover feed events.
+  class Observer {
+   public:
+    Observer() {}
+    virtual ~Observer() {}
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
+
+    // Called whenever the FeedProvider Model has changed. At this point all
+    // existing Feed ViewControllers are stale and need to be refreshed.
+    virtual void OnDiscoverFeedModelRecreated() = 0;
+  };
+
   DiscoverFeedProvider() = default;
   virtual ~DiscoverFeedProvider() = default;
 
   DiscoverFeedProvider(const DiscoverFeedProvider&) = delete;
   DiscoverFeedProvider& operator=(const DiscoverFeedProvider&) = delete;
 
+  // Starts the Feed using |discover_config| which contains various configs for
+  // the Feed.
+  virtual void StartFeed(DiscoverFeedConfiguration* discover_config);
+  // DEPRECATED. Delete once this method has been deleted downstream.
+  virtual void StartFeed(AuthenticationService* auth_service);
   // Returns true if the Discover Feed is enabled.
   virtual bool IsDiscoverFeedEnabled();
   // Returns the Discover Feed ViewController.
-  virtual UIViewController* NewFeedViewController(
-      id<ApplicationCommands> dispatcher) NS_RETURNS_RETAINED;
-  // Refreshes the Discover Feed with completion.
-  virtual void RefreshFeedWithCompletion(ProceduralBlock completion);
+  virtual UIViewController* NewFeedViewController(Browser* browser)
+      NS_RETURNS_RETAINED;
+  // Updates the feed's theme to match the user's theme (light/dark).
+  virtual void UpdateTheme();
+  // Refreshes the Discover Feed. Once the Feed model is refreshed it will
+  // update all ViewControllers returned by NewFeedViewController.
+  virtual void RefreshFeed();
+  // Updates the Feed for an account change e.g. Signing In/Out.
+  virtual void UpdateFeedForAccountChange();
+  // Methods to register or remove observers.
+  virtual void AddObserver(Observer* observer);
+  virtual void RemoveObserver(Observer* observer);
+  // Loads and appends the next set of articles in the feed.
+  virtual void LoadMoreFeedArticles();
 };
 
 #endif  // IOS_PUBLIC_PROVIDER_CHROME_BROWSER_DISCOVER_FEED_DISCOVER_FEED_PROVIDER_H_

@@ -20,6 +20,7 @@
 namespace blink {
 
 class ConsoleMessage;
+class DOMWrapperWorld;
 class DetachableResourceFetcherProperties;
 class KURL;
 class PreviewsResourceLoadingHints;
@@ -81,8 +82,6 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
       ReportingDisposition reporting_disposition) const;
 
-  virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
-
  protected:
   explicit BaseFetchContext(
       const DetachableResourceFetcherProperties& properties)
@@ -99,7 +98,9 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
                                        const FetchInitiatorInfo&,
                                        ResourceRequestBlockedReason,
                                        ResourceType) const = 0;
-  virtual bool ShouldBypassMainWorldCSP() const = 0;
+  virtual const ContentSecurityPolicy* GetContentSecurityPolicyForWorld(
+      const DOMWrapperWorld* world) const = 0;
+
   virtual bool IsSVGImageChromeClient() const = 0;
   virtual bool ShouldBlockFetchByMixedContentCheck(
       mojom::blink::RequestContextType request_context,
@@ -111,9 +112,14 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
                                                          const KURL&) const = 0;
   virtual const KURL& Url() const = 0;
   virtual const SecurityOrigin* GetParentSecurityOrigin() const = 0;
+  virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
 
   // TODO(yhirano): Remove this.
   virtual void AddConsoleMessage(ConsoleMessage*) const = 0;
+
+  void AddBackForwardCacheExperimentHTTPHeaderIfNeeded(
+      ExecutionContext* context,
+      ResourceRequest& request);
 
  private:
   const Member<const DetachableResourceFetcherProperties> fetcher_properties_;

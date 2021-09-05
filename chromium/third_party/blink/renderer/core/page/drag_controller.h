@@ -54,8 +54,6 @@ class WebMouseEvent;
 class CORE_EXPORT DragController final
     : public GarbageCollected<DragController>,
       public ExecutionContextLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(DragController);
-
  public:
   explicit DragController(Page*);
 
@@ -126,8 +124,8 @@ class CORE_EXPORT DragController final
 
   // The document the mouse was last dragged over.
   Member<Document> document_under_mouse_;
-  // The Document (if any) that initiated the drag.
-  Member<Document> drag_initiator_;
+  // The window (if any) that initiated the drag.
+  Member<LocalDOMWindow> drag_initiator_;
 
   Member<DragState> drag_state_;
 

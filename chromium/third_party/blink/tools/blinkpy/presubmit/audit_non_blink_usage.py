@@ -46,6 +46,7 @@ _CONFIG = [
             'base::Location',
             'base::MakeRefCounted',
             'base::Optional',
+            'base::OptionalFromPtr',
             'base::OptionalOrNullptr',
             'base::PlatformThread',
             'base::PlatformThreadId',
@@ -105,6 +106,14 @@ _CONFIG = [
             'base::RepeatingCallback',
             'base::RepeatingClosure',
 
+            # //base/cancelable_callback.h
+            'base::CancelableOnceCallback',
+            'base::CancelableOnceClosure',
+            'base::CancelableRepeatingCallback',
+            'base::CancelableRepeatingClosure',
+            'base::CancelableCallback',
+            'base::CancelableClosure',
+
             # //base/mac/scoped_nsobject.h
             'base::scoped_nsobject',
 
@@ -137,14 +146,17 @@ _CONFIG = [
             'base::as_signed',
             'base::as_unsigned',
             'base::checked_cast',
-            'base::strict_cast',
             'base::saturated_cast',
+            'base::strict_cast',
+            'base::ClampCeil',
+            'base::ClampFloor',
+            'base::IsTypeInRangeForNumericType',
+            'base::IsValueInRangeForNumericType',
+            'base::IsValueNegative',
+            'base::MakeStrictNum',
+            'base::ClampRound',
             'base::SafeUnsignedAbs',
             'base::StrictNumeric',
-            'base::MakeStrictNum',
-            'base::IsValueInRangeForNumericType',
-            'base::IsTypeInRangeForNumericType',
-            'base::IsValueNegative',
 
             # //base/strings/char_traits.h.
             'base::CharTraits',
@@ -241,6 +253,7 @@ _CONFIG = [
             'cc::PaintFlags',
             'cc::PaintImage',
             'cc::PaintImageBuilder',
+            'cc::PaintRecord',
             'cc::PaintShader',
             'cc::PaintWorkletInput',
             'cc::NodeId',
@@ -253,6 +266,7 @@ _CONFIG = [
             'gfx::Rect',
             'gfx::RectF',
             'gfx::RRectF',
+            'gfx::ScaleToCeiledSize',
             'gfx::ScaleVector2d',
             'gfx::Size',
             'gfx::SizeF',
@@ -312,10 +326,10 @@ _CONFIG = [
             'cc::PaintHoldingCommitTrigger',
 
             # Scrolling
-            'cc::kManipulationInfoHasPinchZoomed',
-            'cc::kManipulationInfoHasScrolledByPrecisionTouchPad',
-            'cc::kManipulationInfoHasScrolledByTouch',
-            'cc::kManipulationInfoHasScrolledByWheel',
+            'cc::kManipulationInfoPinchZoom',
+            'cc::kManipulationInfoPrecisionTouchPad',
+            'cc::kManipulationInfoTouch',
+            'cc::kManipulationInfoWheel',
             'cc::kPixelsPerLineStep',
             'cc::kMinFractionToStepWhenPaging',
             'cc::kPercentDeltaForDirectionalScroll',
@@ -336,6 +350,7 @@ _CONFIG = [
             'cc::SnapStrictness',
             'cc::TargetSnapAreaElementIds',
             'gfx::RectToSkRect',
+            'gfx::RectToSkIRect',
             'gfx::ScrollOffset',
             'ui::ScrollGranularity',
 
@@ -458,6 +473,7 @@ _CONFIG = [
             'ui::AXEventIntent',
             'ui::AXNodeData',
             'ui::IsDialog',
+            'ui::IsContainerWithSelectableChildren',
             'ax::mojom::BoolAttribute',
             'ax::mojom::HasPopup',
             'ax::mojom::State',
@@ -571,7 +587,9 @@ _CONFIG = [
             'cc::ApplyViewportChangesArgs',
             'cc::LayerTreeSettings',
             'cc::TaskGraphRunner',
+            'gfx::DisplayColorSpaces',
             'ui::ImeTextSpan',
+            'viz::LocalSurfaceIdAllocation',
         ],
     },
     {
@@ -618,8 +636,24 @@ _CONFIG = [
         'paths':
         ['third_party/blink/renderer/core/frame/web_frame_widget_base.cc'],
         'allowed': [
+            'cc::InputHandlerScrollResult',
             'cc::SwapPromise',
             'viz::CompositorFrameMetadata',
+        ],
+    },
+    {
+        'paths':
+        ['third_party/blink/renderer/core/frame/web_local_frame_impl.cc'],
+        'allowed': [
+            'ui::AXTreeID',
+            'ui::AXTreeIDUnknown',
+        ],
+    },
+    {
+        'paths':
+        ['third_party/blink/renderer/core/frame/web_local_frame_impl.h'],
+        'allowed': [
+            'ui::AXTreeID',
         ],
     },
     {
@@ -780,6 +814,7 @@ _CONFIG = [
             'third_party/blink/renderer/modules/webcodecs/',
         ],
         'allowed': [
+            'gpu::kNullSurfaceHandle',
             'media::.+',
         ]
     },
@@ -913,6 +948,16 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/modules/webcodecs/video_decoder_fuzzer.cc',
+            'third_party/blink/renderer/modules/webcodecs/fuzzer_utils.cc',
+            'third_party/blink/renderer/modules/webcodecs/fuzzer_utils.h',
+        ],
+        'allowed': [
+            'wc_fuzzer::.+',
+        ]
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/modules/webgpu/',
         ],
         # The WebGPU Blink module needs access to the WebGPU control
@@ -1029,7 +1074,7 @@ _CONFIG = [
     {
         'paths': [
             # TODO(crbug.com/787254): Separate the two paths below and their own
-            # whitelist.
+            # allowlist.
             'third_party/blink/renderer/modules/peerconnection/',
             'third_party/blink/renderer/bindings/modules/v8/serialization/',
         ],
@@ -1040,14 +1085,14 @@ _CONFIG = [
             'base::LazyInstance',
             'base::Lock',
             # TODO(crbug.com/787254): Remove base::BindOnce, base::Unretained,
-            # base::Passed, base::Closure, base::MessageLoopCurrent,
+            # base::Passed, base::Closure, base::CurrentThread,
             # base::RetainedRef, base::EndsWith and base::CompareCase.
             'base::Bind.*',
             'base::Closure',
             'base::CompareCase',
             'base::EndsWith',
             'base::MD5.*',
-            'base::MessageLoopCurrent',
+            'base::CurrentThread',
             'base::Passed',
             'base::PowerObserver',
             'base::RetainedRef',

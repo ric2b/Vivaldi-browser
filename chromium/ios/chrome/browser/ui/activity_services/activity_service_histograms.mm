@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/activity_services/activity_service_histograms.h"
 
-#include "base/metrics/histogram_macros.h"
+#import "base/metrics/histogram_functions.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -20,6 +20,16 @@ const char kShareOmniboxActionsHistogram[] =
     "Mobile.Share.TabShareButton.Actions";
 const char kShareQRCodeImageActionsHistogram[] =
     "Mobile.Share.QRCodeImage.Actions";
+const char kShareHistoryEntryActionsHistogram[] =
+    "Mobile.Share.HistoryEntry.Actions";
+const char kShareReadingListEntryActionsHistogram[] =
+    "Mobile.Share.ReadingListEntry.Actions";
+const char kShareBookmarkEntryActionsHistogram[] =
+    "Mobile.Share.BookmarkEntry.Actions";
+const char kShareMostVisitedEntryActionsHistogram[] =
+    "Mobile.Share.MostVisitedEntry.Actions";
+const char kShareRecentTabsEntryActionsHistogram[] =
+    "Mobile.Share.RecentTabsEntry.Actions";
 
 // Enum representing an aggregation of the |ActivityType| enum values in a way
 // that is relevant for metric collection. Current values should not
@@ -120,14 +130,31 @@ ShareActionType MapActionType(ActivityType type) {
 
 void RecordActionForScenario(ShareActionType actionType,
                              ActivityScenario scenario) {
+  const char* histogramName;
   switch (scenario) {
     case ActivityScenario::TabShareButton:
-      UMA_HISTOGRAM_ENUMERATION(kShareOmniboxActionsHistogram, actionType);
+      histogramName = kShareOmniboxActionsHistogram;
       break;
     case ActivityScenario::QRCodeImage:
-      UMA_HISTOGRAM_ENUMERATION(kShareQRCodeImageActionsHistogram, actionType);
+      histogramName = kShareQRCodeImageActionsHistogram;
+      break;
+    case ActivityScenario::HistoryEntry:
+      histogramName = kShareHistoryEntryActionsHistogram;
+      break;
+    case ActivityScenario::ReadingListEntry:
+      histogramName = kShareReadingListEntryActionsHistogram;
+      break;
+    case ActivityScenario::BookmarkEntry:
+      histogramName = kShareBookmarkEntryActionsHistogram;
+      break;
+    case ActivityScenario::MostVisitedEntry:
+      histogramName = kShareMostVisitedEntryActionsHistogram;
+      break;
+    case ActivityScenario::RecentTabsEntry:
+      histogramName = kShareRecentTabsEntryActionsHistogram;
       break;
   }
+  base::UmaHistogramEnumeration(histogramName, actionType);
 }
 
 }  // namespace
@@ -135,7 +162,7 @@ void RecordActionForScenario(ShareActionType actionType,
 #pragma mark - Public Methods
 
 void RecordScenarioInitiated(ActivityScenario scenario) {
-  UMA_HISTOGRAM_ENUMERATION(kShareScenariosHistogram, scenario);
+  base::UmaHistogramEnumeration(kShareScenariosHistogram, scenario);
 }
 
 void RecordActivityForScenario(ActivityType type, ActivityScenario scenario) {

@@ -48,6 +48,11 @@ const base::Feature kIOSLookalikeUrlNavigationSuggestionsUI{
 const base::Feature kAddWebContentDropInteraction{
     "AddWebContentDropInteraction", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kScrollToTextIOS{"ScrollToTextIOS",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIOSLegacyTLSInterstitial{
+    "IOSLegacyTLSInterstitial", base::FEATURE_DISABLED_BY_DEFAULT};
+
 bool UseWebClientDefaultUserAgent() {
   if (@available(iOS 13, *)) {
     return base::FeatureList::IsEnabled(kUseDefaultUserAgentInWebClient);

@@ -31,22 +31,9 @@ FakeSyncManager::FakeSyncManager(ModelTypeSet initial_sync_ended_types,
       initial_sync_ended_types_(initial_sync_ended_types),
       progress_marker_types_(progress_marker_types),
       configure_fail_types_(configure_fail_types),
-      last_configure_reason_(CONFIGURE_REASON_UNKNOWN),
-      num_invalidations_received_(0) {}
+      last_configure_reason_(CONFIGURE_REASON_UNKNOWN) {}
 
 FakeSyncManager::~FakeSyncManager() {}
-
-ModelTypeSet FakeSyncManager::GetAndResetPurgedTypes() {
-  ModelTypeSet purged_types = purged_types_;
-  purged_types_.Clear();
-  return purged_types;
-}
-
-ModelTypeSet FakeSyncManager::GetAndResetUnappliedTypes() {
-  ModelTypeSet unapplied_types = unapplied_types_;
-  unapplied_types_.Clear();
-  return unapplied_types;
-}
 
 ModelTypeSet FakeSyncManager::GetAndResetDownloadedTypes() {
   ModelTypeSet downloaded_types = downloaded_types_;
@@ -60,8 +47,13 @@ ConfigureReason FakeSyncManager::GetAndResetConfigureReason() {
   return reason;
 }
 
-int FakeSyncManager::GetInvalidationCount() const {
-  return num_invalidations_received_;
+int FakeSyncManager::GetInvalidationCount(ModelType type) const {
+  auto it = num_invalidations_received_.find(type);
+  if (it == num_invalidations_received_.end()) {
+    return 0;
+  } else {
+    return it->second;
+  }
 }
 
 void FakeSyncManager::WaitForSyncThread() {
@@ -76,7 +68,6 @@ void FakeSyncManager::WaitForSyncThread() {
 
 void FakeSyncManager::Init(InitArgs* args) {
   sync_task_runner_ = base::SequencedTaskRunnerHandle::Get();
-  PurgePartiallySyncedTypes();
 
   for (auto& observer : observers_) {
     observer.OnInitializationComplete(WeakHandle<JsBackend>(),
@@ -87,35 +78,6 @@ void FakeSyncManager::Init(InitArgs* args) {
 
 ModelTypeSet FakeSyncManager::InitialSyncEndedTypes() {
   return initial_sync_ended_types_;
-}
-
-ModelTypeSet FakeSyncManager::GetTypesWithEmptyProgressMarkerToken(
-    ModelTypeSet types) {
-  ModelTypeSet empty_types = types;
-  empty_types.RemoveAll(progress_marker_types_);
-  return empty_types;
-}
-
-void FakeSyncManager::PurgePartiallySyncedTypes() {
-  ModelTypeSet partial_types;
-  for (ModelType type : progress_marker_types_) {
-    if (!initial_sync_ended_types_.Has(type))
-      partial_types.Put(type);
-  }
-  progress_marker_types_.RemoveAll(partial_types);
-  purged_types_.PutAll(partial_types);
-}
-
-void FakeSyncManager::PurgeDisabledTypes(ModelTypeSet to_purge,
-                                         ModelTypeSet to_journal,
-                                         ModelTypeSet to_unapply) {
-  // Simulate cleaning up disabled types.
-  purged_types_.PutAll(to_purge);
-  unapplied_types_.PutAll(to_unapply);
-  // Types from |to_unapply| should retain their server data and progress
-  // markers.
-  initial_sync_ended_types_.RemoveAll(Difference(to_purge, to_unapply));
-  progress_marker_types_.RemoveAll(Difference(to_purge, to_unapply));
 }
 
 void FakeSyncManager::UpdateCredentials(const SyncCredentials& credentials) {
@@ -160,10 +122,6 @@ void FakeSyncManager::AddObserver(Observer* observer) {
 
 void FakeSyncManager::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
-}
-
-void FakeSyncManager::SaveChanges() {
-  // Do nothing.
 }
 
 void FakeSyncManager::ShutdownOnSyncThread() {
@@ -226,7 +184,7 @@ void FakeSyncManager::RequestEmitDebugInfo() {}
 void FakeSyncManager::OnIncomingInvalidation(
     ModelType type,
     std::unique_ptr<InvalidationInterface> invalidation) {
-  num_invalidations_received_++;
+  num_invalidations_received_[type]++;
 }
 
 ModelTypeSet FakeSyncManager::GetLastRefreshRequestTypes() {
@@ -239,10 +197,6 @@ void FakeSyncManager::SetInvalidatorEnabled(bool invalidator_enabled) {
 
 void FakeSyncManager::OnCookieJarChanged(bool account_mismatch,
                                          bool empty_jar) {}
-
-void FakeSyncManager::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
-  NOTIMPLEMENTED();
-}
 
 void FakeSyncManager::UpdateInvalidationClientId(const std::string&) {
   NOTIMPLEMENTED();

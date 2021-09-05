@@ -9,17 +9,17 @@
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
-#include "components/prefs/json_pref_store.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_data_source.h"
 
 class Profile;
 
+namespace bookmarks {
+class BookmarkModel;
+}
+
 namespace content {
 class BrowserContext;
 }
-
-namespace extensions {
 
 class VivaldiDataSourcesAPIHolder;
 
@@ -44,7 +44,7 @@ class VivaldiDataSourcesAPI
     THUMBNAIL_URL = 1,
   };
 
-  static constexpr int kUrlKindCount = 3;
+  static constexpr int kUrlKindCount = THUMBNAIL_URL + 1;
 
   // Return an index of data mapping preference or -1 if the preference
   // does not hold a data mapping.
@@ -54,15 +54,6 @@ class VivaldiDataSourcesAPI
 
   static VivaldiDataSourcesAPI* FromBrowserContext(
       content::BrowserContext* browser_context);
-
-  // Read the given file into the vector. Return false when file does not exit
-  // or is empty or on errors. The errors are logged. This should only be used
-  // on threads that are allowed to block.
-  static bool ReadFileOnBlockingThread(const base::FilePath& file_path,
-                                       std::vector<unsigned char>* data);
-
-  static scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
-      const base::FilePath& file_path);
 
   static void ScheduleRemovalOfUnusedUrlData(
       content::BrowserContext* browser_context, base::TimeDelta when);
@@ -88,18 +79,20 @@ class VivaldiDataSourcesAPI
       scoped_refptr<base::RefCountedMemory> png_data,
       AddBookmarkImageCallback callback);
 
-  // This can be called from any thread. The callback will be called from the UI
-  // thread.
-  void AddImageDataForBookmark(int64_t bookmark_id,
-                               scoped_refptr<base::RefCountedMemory> png_data,
-                               AddBookmarkImageCallback ui_thread_callback);
+  // Capture the url and store the resulting image as a thumbnail for the given
+  // bookmark.
+  static void CaptureBookmarkThumbnail(
+      content::BrowserContext* browser_context,
+      int64_t bookmark_id,
+      const GURL& url,
+      AddBookmarkImageCallback ui_thread_callback);
 
-  // This method must be called from the IO thread.
-  void GetDataForId(UrlKind url_kind,
-                    std::string id,
-                    content::URLDataSource::GotDataCallback callback);
+  static void GetDataForId(content::BrowserContext* browser_context,
+                           UrlKind url_kind,
+                           std::string id,
+                           content::URLDataSource::GotDataCallback callback);
 
-  void LoadMappings();
+  void Start();
 
  private:
   friend class base::RefCountedThreadSafe<VivaldiDataSourcesAPI>;
@@ -122,15 +115,23 @@ class VivaldiDataSourcesAPI
                                      std::string path_id,
                                      UpdateMappingCallback callback);
 
+  void FindUsedUrlsOnUIThread();
+  void FindUsedUrlsOnUIThreadWithLoadedBookmaks(
+      bookmarks::BookmarkModel* bookmark_model);
+
   // Use std::array, not plain C array to get proper move semantics.
   using UsedIds = std::array<std::vector<std::string>, kUrlKindCount>;
-  void CollectUsedUrlsOnUIThread();
   void RemoveUnusedUrlDataOnFileThread(UsedIds used_ids);
 
   void GetDataForIdOnFileThread(
       UrlKind url_kind,
       std::string id,
       content::URLDataSource::GotDataCallback callback);
+
+  void AddImageDataForBookmarkUIThread(
+      int64_t bookmark_id,
+      AddBookmarkImageCallback ui_thread_callback,
+      scoped_refptr<base::RefCountedMemory> png_data);
 
   void AddImageDataForBookmarkOnFileThread(
       int64_t bookmark_id,
@@ -154,10 +155,16 @@ class VivaldiDataSourcesAPI
   void AddNewbornIdOnFileThread(UrlKind url_kind, const std::string& id);
   void ForgetNewbornIdOnFileThread(UrlKind url_kind, const std::string& id);
 
+  // Helper to get bookmark model. It must be called from UI thread.
+  bookmarks::BookmarkModel* GetBookmarkModel();
+
   // This must be accessed only on UI thread. It is reset to null on shutdown.
   Profile* profile_;
 
   const base::FilePath user_data_dir_;
+
+  // Runner for UI thread that skips tasks on shutdown.
+  scoped_refptr<base::SingleThreadTaskRunner> ui_thread_runner_;
 
   // Runner to ensure that tasks to manipulate the data mapping runs in sequence
   // with the proper order.
@@ -174,7 +181,5 @@ class VivaldiDataSourcesAPI
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSourcesAPI);
 };
-
-}  // namespace extensions
 
 #endif  // COMPONENTS_DATASOURCE_VIVALDI_DATA_SOURCE_API_H_

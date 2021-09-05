@@ -15,13 +15,8 @@ namespace internal {
 // Handles alignment up to XMM instructions on Intel.
 static constexpr size_t kCookieSize = 16;
 
-// Cookies are enabled for debug builds, unless PartitionAlloc is used as the
-// malloc() implementation. This is a temporary workaround the alignment issues
-// caused by cookies. With them, PartitionAlloc cannot support posix_memalign(),
-// which is required.
-//
-// TODO(lizeb): Support cookies when used as the malloc() implementation.
-#if DCHECK_IS_ON() && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+// Cookies are enabled for debug builds.
+#if DCHECK_IS_ON()
 
 static constexpr unsigned char kCookieValue[kCookieSize] = {
     0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xD0, 0x0D,
@@ -42,12 +37,6 @@ ALWAYS_INLINE size_t PartitionCookieSizeAdjustAdd(size_t size) {
   return size;
 }
 
-ALWAYS_INLINE void* PartitionCookieFreePointerAdjust(void* ptr) {
-  // The value given to the application is actually just after the cookie.
-  ptr = static_cast<char*>(ptr) - kCookieSize;
-  return ptr;
-}
-
 ALWAYS_INLINE size_t PartitionCookieSizeAdjustSubtract(size_t size) {
   // Remove space for cookies.
   PA_DCHECK(size >= 2 * kCookieSize);
@@ -55,13 +44,16 @@ ALWAYS_INLINE size_t PartitionCookieSizeAdjustSubtract(size_t size) {
   return size;
 }
 
-ALWAYS_INLINE size_t PartitionCookieOffsetSubtract(size_t offset) {
-#if DCHECK_IS_ON()
-  // Convert offset from the beginning of the allocated slot to offset from
-  // the value given to the application, which is just after the cookie.
-  offset -= kCookieSize;
-#endif
-  return offset;
+ALWAYS_INLINE void* PartitionCookiePointerAdjustSubtract(void* ptr) {
+  // The value given to the application is actually just after the cookie.
+  ptr = static_cast<char*>(ptr) - kCookieSize;
+  return ptr;
+}
+
+ALWAYS_INLINE void* PartitionCookiePointerAdjustAdd(void* ptr) {
+  // The value given to the application is actually just after the cookie.
+  ptr = static_cast<char*>(ptr) + kCookieSize;
+  return ptr;
 }
 
 ALWAYS_INLINE void PartitionCookieWriteValue(void* ptr) {
@@ -78,16 +70,20 @@ ALWAYS_INLINE size_t PartitionCookieSizeAdjustAdd(size_t size) {
   return size;
 }
 
-ALWAYS_INLINE void* PartitionCookieFreePointerAdjust(void* ptr) {
-  return ptr;
-}
-
 ALWAYS_INLINE size_t PartitionCookieSizeAdjustSubtract(size_t size) {
   return size;
 }
 
+ALWAYS_INLINE void* PartitionCookiePointerAdjustSubtract(void* ptr) {
+  return ptr;
+}
+
+ALWAYS_INLINE void* PartitionCookiePointerAdjustAdd(void* ptr) {
+  return ptr;
+}
+
 ALWAYS_INLINE void PartitionCookieWriteValue(void* ptr) {}
-#endif  // DCHECK_IS_ON() && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif  // DCHECK_IS_ON()
 
 }  // namespace internal
 }  // namespace base

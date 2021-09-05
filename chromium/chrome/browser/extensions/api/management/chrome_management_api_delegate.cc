@@ -241,7 +241,7 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
     web_app_info->open_as_window = false;
 
     if (!image_result.image.IsEmpty()) {
-      web_app_info->icon_bitmaps[image_result.image.Width()] =
+      web_app_info->icon_bitmaps_any[image_result.image.Width()] =
           image_result.image.AsBitmap();
     }
 
@@ -332,7 +332,7 @@ void LaunchWebApp(const web_app::AppId& app_id, Profile* profile) {
 
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           app_id, launch_container, WindowOpenDisposition::NEW_FOREGROUND_TAB,
           apps::mojom::AppLaunchSource::kSourceManagementApi));
 }
@@ -369,7 +369,8 @@ void OnWebAppInstallabilityChecked(
           displayer.browser(), nullptr, std::move(web_contents), url,
           WindowOpenDisposition::NEW_FOREGROUND_TAB, gfx::Rect());
       web_app::CreateWebAppFromManifest(
-          containing_contents, WebappInstallSource::MANAGEMENT_API,
+          containing_contents, /*bypass_service_worker_check=*/true,
+          WebappInstallSource::MANAGEMENT_API,
           base::BindOnce(&OnWebAppInstallCompleted, std::move(callback)));
       return;
   }
@@ -397,7 +398,7 @@ void ChromeManagementAPIDelegate::LaunchAppFunctionDelegate(
   Profile* profile = Profile::FromBrowserContext(context);
   apps::AppServiceProxyFactory::GetForProfile(profile)
       ->BrowserAppLauncher()
-      .LaunchAppWithParams(apps::AppLaunchParams(
+      ->LaunchAppWithParams(apps::AppLaunchParams(
           extension->id(), launch_container,
           WindowOpenDisposition::NEW_FOREGROUND_TAB,
           apps::mojom::AppLaunchSource::kSourceManagementApi));
@@ -521,7 +522,7 @@ void ChromeManagementAPIDelegate::InstallOrLaunchReplacementWebApp(
     return;
   }
 
-  provider->install_manager().LoadWebAppAndCheckInstallability(
+  provider->install_manager().LoadWebAppAndCheckManifest(
       web_app_url, WebappInstallSource::MANAGEMENT_API,
       base::BindOnce(&OnWebAppInstallabilityChecked, profile,
                      std::move(callback)));

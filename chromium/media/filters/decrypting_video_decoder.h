@@ -10,6 +10,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "media/base/callback_registry.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decryptor.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"
@@ -34,6 +36,8 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       MediaLog* media_log);
   ~DecryptingVideoDecoder() override;
+
+  bool SupportsDecryption() const override;
 
   // VideoDecoder implementation.
   std::string GetDisplayName() const override;
@@ -70,9 +74,8 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
   // Callback for Decryptor::DecryptAndDecodeVideo().
   void DeliverFrame(Decryptor::Status status, scoped_refptr<VideoFrame> frame);
 
-  // Callback for the |decryptor_| to notify this object that a new key has been
-  // added.
-  void OnKeyAdded();
+  // Callback for the CDM to notify |this|.
+  void OnCdmContextEvent(CdmContext::Event event);
 
   // Reset decoder and call |reset_cb_|.
   void DoReset();
@@ -111,7 +114,9 @@ class MEDIA_EXPORT DecryptingVideoDecoder : public VideoDecoder {
   // clear content, we want to ensure this decoder remains used.
   bool support_clear_content_ = false;
 
-  base::WeakPtr<DecryptingVideoDecoder> weak_this_;
+  // To keep the CdmContext event callback registered.
+  std::unique_ptr<CallbackRegistration> event_cb_registration_;
+
   base::WeakPtrFactory<DecryptingVideoDecoder> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(DecryptingVideoDecoder);

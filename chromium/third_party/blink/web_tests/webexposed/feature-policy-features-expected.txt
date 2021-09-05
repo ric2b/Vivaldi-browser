@@ -22,7 +22,7 @@ ch-viewport-width
 ch-width
 clipboard-read
 clipboard-write
-conversion-measurement
+cross-origin-isolated
 document-domain
 document-write
 downloads
@@ -32,6 +32,7 @@ execution-while-out-of-viewport
 focus-without-user-activation
 forms
 fullscreen
+gamepad
 geolocation
 gyroscope
 hid

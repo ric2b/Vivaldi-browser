@@ -18,6 +18,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
@@ -59,7 +60,7 @@
 #include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
-#include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
@@ -90,7 +91,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
-#include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
@@ -245,7 +245,6 @@ void RemoveNonArcApps(Profile* profile,
                       bool flush) {
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile);
-  DCHECK(proxy);
   if (flush)
     proxy->FlushMojoCallsForTesting();
   proxy->AppRegistryCache().ForEachApp(
@@ -523,9 +522,9 @@ class ArcAppModelBuilderTest
       EXPECT_TRUE(image.HasRepresentation(scale));
       const gfx::ImageSkiaRep& representation = image.GetRepresentation(scale);
       EXPECT_FALSE(representation.is_null());
-      EXPECT_EQ(gfx::ToCeiledInt(icon_dimension * scale),
+      EXPECT_EQ(base::ClampCeil(icon_dimension * scale),
                 representation.pixel_width());
-      EXPECT_EQ(gfx::ToCeiledInt(icon_dimension * scale),
+      EXPECT_EQ(base::ClampCeil(icon_dimension * scale),
                 representation.pixel_height());
     }
   }
@@ -564,7 +563,6 @@ class ArcAppModelBuilderTest
   void FlushMojoCallsForAppService() {
     apps::AppServiceProxy* app_service_proxy_ =
         apps::AppServiceProxyFactory::GetForProfile(profile_.get());
-    DCHECK(app_service_proxy_);
     app_service_proxy_->FlushMojoCallsForTesting();
   }
 
@@ -2129,7 +2127,6 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderWithBadIcon) {
   // the test result when calling AppServiceAppIconLoader to load the icon.
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(profile_.get());
-  DCHECK(proxy);
   apps::StubIconLoader stub_icon_loader;
   apps::IconLoader* old_icon_loader =
       proxy->OverrideInnerIconLoaderForTesting(&stub_icon_loader);
@@ -2239,9 +2236,31 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderCompressed) {
   base::RunLoop run_loop;
   base::Closure quit = run_loop.QuitClosure();
 
+  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
+    apps::AppServiceProxy* proxy =
+        apps::AppServiceProxyFactory::GetForProfile(profile_.get());
+    ASSERT_NE(nullptr, proxy);
+
+    proxy->LoadIcon(
+        apps::mojom::AppType::kArc, app_id, apps::mojom::IconType::kCompressed,
+        icon_size, false /*allow_placeholder_icon*/,
+        base::BindLambdaForTesting([&](apps::mojom::IconValuePtr icon_value) {
+          EXPECT_EQ(apps::mojom::IconType::kCompressed, icon_value->icon_type);
+          EXPECT_TRUE(icon_value->compressed);
+          std::vector<uint8_t> png_data = icon_value->compressed.value();
+          std::string compressed(png_data.begin(), png_data.end());
+          // Check that |compressed| starts with the 8-byte PNG magic string.
+          EXPECT_EQ(compressed.substr(0, 8),
+                    "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a");
+          quit.Run();
+        }));
+    run_loop.Run();
+    return;
+  }
+
   apps::ArcIconOnceLoader once_loader(profile());
   once_loader.LoadIcon(
-      app_id, icon_size, apps::mojom::IconCompression::kCompressed,
+      app_id, icon_size, apps::mojom::IconType::kCompressed,
       base::BindLambdaForTesting([&](ArcAppIcon* icon) {
         const std::map<ui::ScaleFactor, std::string>& compressed_images =
             icon->compressed_images();
@@ -2251,7 +2270,8 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderCompressed) {
           if (iter != compressed_images.end()) {
             num_compressed_images_seen++;
             const std::string& compressed = iter->second;
-            // Check that |compressed| starts with the 8-byte PNG magic string.
+            // Check that |compressed| starts with the 8-byte PNG magic
+            // string.
             EXPECT_EQ(compressed.substr(0, 8),
                       "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a");
           }
@@ -2776,7 +2796,8 @@ TEST_P(ArcDefaultAppTest, DisableDefaultApps) {
   EXPECT_FALSE(prefs->GetApp(app_id));
 }
 
-TEST_P(ArcAppLauncherForDefaultAppTest, AppIconUpdated) {
+// TODO(crbug.com/1112319): Flaky.
+TEST_P(ArcAppLauncherForDefaultAppTest, DISABLED_AppIconUpdated) {
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
   ASSERT_NE(nullptr, prefs);
 
@@ -2846,6 +2867,27 @@ TEST_P(ArcAppLauncherForDefaultAppTest, AppIconNonDefaultDip) {
   // 17 should never be a default dip size.
   std::unique_ptr<AppServiceAppIconLoader> icon_loader =
       std::make_unique<AppServiceAppIconLoader>(profile(), 17, &icon_delegate);
+  icon_loader->FetchImage(app_id);
+  icon_delegate.WaitForIconUpdates(1);
+  icon_loader.reset();
+}
+
+// Validates that default app icon can be loaded for the single icon file
+// generated when the adaptive icon feature is disabled.
+TEST_P(ArcAppLauncherForDefaultAppTest, AppIconMigration) {
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
+  ASSERT_NE(nullptr, prefs);
+
+  ASSERT_EQ(3u, fake_default_apps().size());
+  const arc::mojom::AppInfo& app = fake_default_apps()[2];
+  const std::string app_id = ArcAppTest::GetAppId(app);
+
+  // Icon can be only fetched after app is registered in the system.
+  arc_test()->WaitForDefaultApps();
+
+  FakeAppIconLoaderDelegate icon_delegate;
+  std::unique_ptr<AppServiceAppIconLoader> icon_loader =
+      std::make_unique<AppServiceAppIconLoader>(profile(), 64, &icon_delegate);
   icon_loader->FetchImage(app_id);
   icon_delegate.WaitForIconUpdates(1);
   icon_loader.reset();

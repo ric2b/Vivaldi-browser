@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chrome/browser/buildflags.gni")
 import("//chrome/common/features.gni")
 import("//chrome/test/base/js2gtest.gni")
 import("//chrome/test/include_js_tests.gni")
@@ -22,7 +23,7 @@ if (enable_js_type_check) {
       "memory_internals:closure_compile",
       "reset_password:closure_compile",
     ]
-    if (is_linux || is_win || is_mac) {
+    if (is_linux || is_chromeos || is_win || is_mac) {
       deps += [
         "bluetooth_internals:closure_compile",
         "bookmarks:closure_compile",
@@ -31,12 +32,15 @@ if (enable_js_type_check) {
         "downloads:closure_compile",
         "gaia_auth_host:closure_compile",
         "history:closure_compile",
+        "inline_login:closure_compile",
         "local_ntp:closure_compile",
         "local_state:closure_compile",
         "management:closure_compile",
         "media_router:closure_compile",
         "nearby_internals:closure_compile",
         "nearby_share:closure_compile",
+        "nearby_share/shared:closure_compile",
+        "nearby_share/shared:closure_compile_module",
         "new_tab_page:closure_compile",
         "ntp4:closure_compile",
         "omnibox:closure_compile",
@@ -52,7 +56,7 @@ if (enable_js_type_check) {
         "welcome:closure_compile",
       ]
     }
-    if (is_win || is_android || is_linux) {
+    if (is_win || is_android || is_linux || is_chromeos) {
       deps += [ "sandbox_internals:closure_compile" ]
     }
     if (is_chromeos) {
@@ -64,13 +68,20 @@ if (enable_js_type_check) {
     if (enable_nacl) {
       deps += [ "about_nacl:closure_compile" ]
     }
+    if (enable_tab_search) {
+      deps += [ "tab_search:closure_compile" ]
+    }
     if (enable_webui_tab_strip) {
       deps += [ "tab_strip:closure_compile" ]
+    }
+    if (enable_kaleidoscope) {
+      deps += [ "kaleidoscope:closure_compile" ]
     }
     if (is_android) {
       deps += [
         "explore_sites_internals:closure_compile",
         "feed_internals:closure_compile",
+        "internals/notifications:closure_compile",
         "internals/query_tiles:closure_compile",
         "offline_pages:closure_compile",
         "snippets_internals:closure_compile",
@@ -85,7 +96,7 @@ if (enable_js_type_check) {
     # but because Window bots don't depend on Java, |closure_compile| is off on
     # Windows. Adding |is_linux| so that these targets are type-checked on at
     # least one platform.
-    if (is_win || is_linux) {
+    if (is_win || is_linux || is_chromeos) {
       deps += [ "conflicts:closure_compile" ]
     }
   }
@@ -225,7 +236,11 @@ if (!is_android) {
       "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
     ]
 
-    deps = [ "//chrome/browser/resources/nearby_share:web_components" ]
+    deps = [
+      "//chrome/browser/resources/nearby_share:web_components",
+      "//chrome/browser/resources/nearby_share/shared:polymer3_elements",
+      "//chrome/browser/ui/webui/nearby_share:mojom_js",
+    ]
 
     defines = chrome_grit_defines
     outputs = [
@@ -245,6 +260,7 @@ if (!is_android) {
     }
 
     deps = [
+      "//chrome/browser/promo_browser_command:mojo_bindings_js",
       "//chrome/browser/ui/webui/new_tab_page:mojo_bindings_js",
       "//skia/public/mojom:mojom_js",
     ]
@@ -323,6 +339,27 @@ if (!is_android) {
 }
 
 if (is_chromeos) {
+  grit("multidevice_internals_resources") {
+    source =
+        "chromeos/multidevice_internals/multidevice_internals_resources.grd"
+
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    ]
+
+    deps = [ "//chrome/browser/resources/chromeos/multidevice_internals:web_components" ]
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/multidevice_internals_resources.h",
+      "grit/multidevice_internals_resources_map.cc",
+      "grit/multidevice_internals_resources_map.h",
+      "multidevice_internals_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
   grit("os_settings_resources") {
     grit_flags = [
       "-E",
@@ -503,6 +540,28 @@ if (enable_print_preview) {
       "grit/print_preview_pdf_resources_map.cc",
       "grit/print_preview_pdf_resources_map.h",
       "print_preview_pdf_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (enable_tab_search) {
+  grit("tab_search_resources") {
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    ]
+    source = "tab_search/tab_search_resources.grd"
+    deps = [
+      "//chrome/browser/resources/tab_search:web_components",
+      "//chrome/browser/ui/webui/tab_search:mojo_bindings_js",
+    ]
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/tab_search_resources.h",
+      "grit/tab_search_resources_map.cc",
+      "grit/tab_search_resources_map.h",
+      "tab_search_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }

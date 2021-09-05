@@ -14,6 +14,10 @@
 // This command line flag enables NoStatePrefetch on Isolated Prerenders.
 extern const char kIsolatedPrerenderEnableNSPCmdLineFlag[];
 
+// Overrides the value returned by
+// |IsolatedPrerenderMaxSubresourcesPerPrerender| when a valid long is given.
+extern const char kIsolatedPrerenderLimitNSPSubresourcesCmdLineFlag[];
+
 // Returns true if the Isolated Prerender feature is enabled.
 bool IsolatedPrerenderIsEnabled();
 
@@ -25,11 +29,18 @@ bool IsolatedPrerenderNoStatePrefetchSubresources();
 // field trial return nullopt.
 base::Optional<size_t> IsolatedPrerenderMaximumNumberOfPrefetches();
 
+// The maximum number of mainframes allowed to be prefetched at the same time.
+size_t IsolatedPrerenderMaximumNumberOfConcurrentPrefetches();
+
 // The maximum number of no state prefetches to attempt, in order to prefetch
 // the pages' subresources, while the user is on the SRP. nullopt is returned
 // for unlimited. Negative values given by the field trial return nullopt.
 base::Optional<size_t>
 IsolatedPrerenderMaximumNumberOfNoStatePrefetchAttempts();
+
+// The maximum body length allowed to be prefetched for mainframe responses in
+// bytes.
+size_t IsolatedPrerenderMainframeBodyLengthLimit();
 
 // Whether idle sockets should be closed after every prefetch.
 bool IsolatedPrerenderCloseIdleSockets();
@@ -47,18 +58,19 @@ bool IsolatedPrerenderProbingEnabled();
 // Whether an ISP filtering canary check should be made on browser startup.
 bool IsolatedPrerenderCanaryCheckEnabled();
 
-// The URL to use for the canary check.
-GURL IsolatedPrerenderCanaryCheckURL();
+// The URL to use for the TLS canary check.
+GURL IsolatedPrerenderTLSCanaryCheckURL();
+
+// The URL to use for the DNS canary check.
+GURL IsolatedPrerenderDNSCanaryCheckURL();
 
 // How long a canary check can be cached for the same network.
 base::TimeDelta IsolatedPrerenderCanaryCheckCacheLifetime();
 
-// The type of probe that needs to be done before prefetched resources can be
-// used.
-enum class IsolatedPrerenderOriginProbeType {
-  kDns,
-  kHttpHead,
-};
-IsolatedPrerenderOriginProbeType IsolatedPrerenderOriginProbeMechanism();
+// Experimental control to replace TLS probing with HTTP.
+bool IsolatedPrerenderMustHTTPProbeInsteadOfTLS();
+
+// The maximum number of subresources that will be fetched per prefetched page.
+size_t IsolatedPrerenderMaxSubresourcesPerPrerender();
 
 #endif  // CHROME_BROWSER_PRERENDER_ISOLATED_ISOLATED_PRERENDER_PARAMS_H_

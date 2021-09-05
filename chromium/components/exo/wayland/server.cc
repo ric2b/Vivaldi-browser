@@ -60,6 +60,7 @@
 #include "ui/display/screen.h"
 
 #if defined(OS_CHROMEOS)
+#include "base/system/sys_info.h"
 #include "components/exo/wayland/wl_shell.h"
 #include "components/exo/wayland/xdg_shell.h"
 #include "components/exo/wayland/zcr_color_space.h"
@@ -129,7 +130,7 @@ Server::Server(Display* display)
       wl_display_(wl_display_create()),
       serial_tracker_(std::make_unique<SerialTracker>(wl_display_.get())) {
   wl_global_create(wl_display_.get(), &wl_compositor_interface,
-                   kWlCompositorVersion, display_, bind_compositor);
+                   kWlCompositorVersion, this, bind_compositor);
   wl_global_create(wl_display_.get(), &wl_shm_interface, 1, display_, bind_shm);
 #if defined(USE_OZONE)
   wl_global_create(wl_display_.get(), &zwp_linux_dmabuf_v1_interface,
@@ -180,7 +181,7 @@ Server::Server(Display* display)
                    bind_shell);
   wl_global_create(wl_display_.get(), &zcr_cursor_shapes_v1_interface, 1,
                    display_, bind_cursor_shapes);
-  wl_global_create(wl_display_.get(), &zcr_gaming_input_v2_interface, 1,
+  wl_global_create(wl_display_.get(), &zcr_gaming_input_v2_interface, 2,
                    display_, bind_gaming_input);
   wl_global_create(wl_display_.get(), &zcr_keyboard_configuration_v1_interface,
                    zcr_keyboard_configuration_v1_interface.version, display_,
@@ -237,11 +238,22 @@ Server::~Server() {
 std::unique_ptr<Server> Server::Create(Display* display) {
   std::unique_ptr<Server> server(new Server(display));
 
-  char* runtime_dir = getenv("XDG_RUNTIME_DIR");
-  if (!runtime_dir) {
+  char* runtime_dir_str = getenv("XDG_RUNTIME_DIR");
+  if (!runtime_dir_str) {
     LOG(ERROR) << "XDG_RUNTIME_DIR not set in the environment";
     return nullptr;
   }
+
+  const base::FilePath runtime_dir(runtime_dir_str);
+#if defined(OS_CHROMEOS)
+  // On debugging chromeos-chrome on linux platform,
+  // try to ensure the directory if missing.
+  if (!base::SysInfo::IsRunningOnChromeOS()) {
+    CHECK(base::DirectoryExists(runtime_dir) ||
+          base::CreateDirectory(runtime_dir))
+        << "Failed to create XDG_RUNTIME_DIR";
+  }
+#endif  // defined(OS_CHROMEOS)
 
   std::string socket_name(kSocketName);
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -317,6 +329,14 @@ void Server::OnDisplayAdded(const display::Display& new_display) {
 void Server::OnDisplayRemoved(const display::Display& old_display) {
   DCHECK_EQ(outputs_.count(old_display.id()), 1u);
   outputs_.erase(old_display.id());
+}
+
+wl_resource* Server::GetOutputResource(wl_client* client, int64_t display_id) {
+  DCHECK_NE(display_id, display::kInvalidDisplayId);
+  auto iter = outputs_.find(display_id);
+  if (iter == outputs_.end())
+    return nullptr;
+  return iter->second.get()->GetOutputResourceForClient(client);
 }
 
 }  // namespace wayland

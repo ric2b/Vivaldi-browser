@@ -672,33 +672,6 @@ class GcpGaiaCredentialBaseInvalidDomainTest
     : public GcpGaiaCredentialBaseTest,
       public ::testing::WithParamInterface<
           std::tuple<const wchar_t*, const wchar_t*>> {
- public:
-  // Get a pretty-printed string of the list of email domains that we can
-  // display to the end-user.
-  base::string16 GetEmailDomainsPrintableString() {
-    base::string16 email_domains_reg_old = GetGlobalFlagOrDefault(L"ed", L"");
-    base::string16 email_domains_reg_new =
-        GetGlobalFlagOrDefault(L"domains_allowed_to_login", L"");
-
-    base::string16 email_domains_reg = email_domains_reg_old.empty()
-                                           ? email_domains_reg_new
-                                           : email_domains_reg_old;
-    if (email_domains_reg.empty())
-      return email_domains_reg;
-
-    std::vector<base::string16> domains =
-        base::SplitString(base::ToLowerASCII(email_domains_reg),
-                          base::ASCIIToUTF16(kEmailDomainsSeparator),
-                          base::WhitespaceHandling::TRIM_WHITESPACE,
-                          base::SplitResult::SPLIT_WANT_NONEMPTY);
-    base::string16 email_domains_str;
-    for (size_t i = 0; i < domains.size(); ++i) {
-      email_domains_str += domains[i];
-      if (i < domains.size() - 1)
-        email_domains_str += L", ";
-    }
-    return email_domains_str;
-  }
 };
 
 TEST_P(GcpGaiaCredentialBaseInvalidDomainTest, Fail) {
@@ -728,9 +701,8 @@ TEST_P(GcpGaiaCredentialBaseInvalidDomainTest, Fail) {
 
     ASSERT_EQ(S_OK, StartLogonProcessAndWait());
 
-    base::string16 expected_error_msg = base::ReplaceStringPlaceholders(
-        GetStringResource(IDS_INVALID_EMAIL_DOMAIN_BASE),
-        {GetEmailDomainsPrintableString()}, nullptr);
+    base::string16 expected_error_msg =
+        GetStringResource(IDS_INVALID_EMAIL_DOMAIN_BASE);
 
     // Logon process should fail with the specified error message.
     ASSERT_EQ(S_OK, FinishLogonProcess(false, false, expected_error_msg));
@@ -748,33 +720,6 @@ class GcpGaiaCredentialBasePermittedAccountTest
     : public GcpGaiaCredentialBaseTest,
       public ::testing::WithParamInterface<
           std::tuple<const wchar_t*, const wchar_t*>> {
- public:
-  // Get a pretty-printed string of the list of email domains that we can
-  // display to the end-user.
-  base::string16 GetEmailDomainsPrintableString() {
-    base::string16 email_domains_reg_old = GetGlobalFlagOrDefault(L"ed", L"");
-    base::string16 email_domains_reg_new =
-        GetGlobalFlagOrDefault(L"domains_allowed_to_login", L"");
-
-    base::string16 email_domains_reg = email_domains_reg_old.empty()
-                                           ? email_domains_reg_new
-                                           : email_domains_reg_old;
-    if (email_domains_reg.empty())
-      return email_domains_reg;
-
-    std::vector<base::string16> domains =
-        base::SplitString(base::ToLowerASCII(email_domains_reg),
-                          base::ASCIIToUTF16(kEmailDomainsSeparator),
-                          base::WhitespaceHandling::TRIM_WHITESPACE,
-                          base::SplitResult::SPLIT_WANT_NONEMPTY);
-    base::string16 email_domains_str;
-    for (size_t i = 0; i < domains.size(); ++i) {
-      email_domains_str += domains[i];
-      if (i < domains.size() - 1)
-        email_domains_str += L", ";
-    }
-    return email_domains_str;
-  }
 };
 
 TEST_P(GcpGaiaCredentialBasePermittedAccountTest, PermittedAccounts) {
@@ -813,9 +758,7 @@ TEST_P(GcpGaiaCredentialBasePermittedAccountTest, PermittedAccounts) {
   } else {
     base::string16 expected_error_msg;
     if (!found_domain) {
-      expected_error_msg = base::ReplaceStringPlaceholders(
-          GetStringResource(IDS_INVALID_EMAIL_DOMAIN_BASE),
-          {GetEmailDomainsPrintableString()}, nullptr);
+      expected_error_msg = GetStringResource(IDS_INVALID_EMAIL_DOMAIN_BASE);
     } else {
       expected_error_msg = GetStringResource(IDS_EMAIL_MISMATCH_BASE);
     }
@@ -876,6 +819,60 @@ TEST_F(GcpGaiaCredentialBaseTest, TrimPeriodAtTheEnd) {
   ASSERT_EQ(S_OK, StartLogonProcessAndWait());
 
   ASSERT_STREQ(W2COLE(L"abcdefghijklmn_abcd"), test->GetFinalUsername());
+  EXPECT_EQ(test->GetFinalEmail(), email);
+}
+
+TEST_F(GcpGaiaCredentialBaseTest, UseShorterFormForAccountName) {
+  USES_CONVERSION;
+  ASSERT_EQ(S_OK, SetGlobalFlagForTesting(kRegUseShorterAccountName, 1));
+
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+
+  Microsoft::WRL::ComPtr<ITestCredential> test;
+  ASSERT_EQ(S_OK, cred.As(&test));
+
+  constexpr char email[] = "abc@def.com";
+
+  ASSERT_EQ(S_OK, test->SetGlsEmailAddress(email));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  ASSERT_STREQ(W2COLE(L"abc"), test->GetFinalUsername());
+  EXPECT_EQ(test->GetFinalEmail(), email);
+}
+
+TEST_F(GcpGaiaCredentialBaseTest, UseShorterFormForAccountNameWithConflict) {
+  USES_CONVERSION;
+  ASSERT_EQ(S_OK, SetGlobalFlagForTesting(kRegUseShorterAccountName, 1));
+
+  const wchar_t user_name[] = L"abc";
+  const wchar_t password[] = L"password";
+
+  CComBSTR local_sid;
+  DWORD error;
+  HRESULT hr = fake_os_user_manager()->AddUser(
+      user_name, password, L"fullname", L"comment", true, &local_sid, &error);
+  ASSERT_EQ(S_OK, hr);
+  ASSERT_EQ(0u, error);
+
+  // Create provider and start logon.
+  Microsoft::WRL::ComPtr<ICredentialProviderCredential> cred;
+
+  ASSERT_EQ(S_OK, InitializeProviderAndGetCredential(0, &cred));
+
+  Microsoft::WRL::ComPtr<ITestCredential> test;
+  ASSERT_EQ(S_OK, cred.As(&test));
+
+  constexpr char email[] = "abc@def.com";
+
+  ASSERT_EQ(S_OK, test->SetGlsEmailAddress(email));
+
+  ASSERT_EQ(S_OK, StartLogonProcessAndWait());
+
+  ASSERT_STREQ(W2COLE(L"abc2"), test->GetFinalUsername());
   EXPECT_EQ(test->GetFinalEmail(), email);
 }
 

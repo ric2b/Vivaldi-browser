@@ -54,7 +54,6 @@
 #include "extensions/common/manifest_handlers/permissions_parser.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "net/base/load_flags.h"
-#include "net/url_request/url_request.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -252,7 +251,7 @@ ConvertExtensionInstallStatusForAPI(ExtensionInstallStatus status) {
     case kTerminated:
       return api::webstore_private::ExtensionInstallStatus::
           EXTENSION_INSTALL_STATUS_TERMINATED;
-    case kBlacklisted:
+    case kBlocklisted:
       return api::webstore_private::ExtensionInstallStatus::
           EXTENSION_INSTALL_STATUS_BLACKLISTED;
     case kCustodianApprovalRequired:

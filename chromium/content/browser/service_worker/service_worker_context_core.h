@@ -18,16 +18,15 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_threadsafe.h"
+#include "components/services/storage/public/mojom/service_worker_storage_control.mojom.h"
 #include "content/browser/service_worker/service_worker_info.h"
 #include "content/browser/service_worker/service_worker_process_manager.h"
 #include "content/browser/service_worker/service_worker_registration_status.h"
 #include "content/browser/service_worker/service_worker_registry.h"
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/dedicated_worker_id.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/service_worker_context.h"
-#include "content/public/browser/shared_worker_id.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
@@ -173,9 +172,8 @@ class CONTENT_EXPORT ServiceWorkerContextCore
 
   ServiceWorkerContextWrapper* wrapper() const { return wrapper_; }
   ServiceWorkerRegistry* registry() const { return registry_.get(); }
-  // TODO(crbug.com/1016064): Remove this accessor once some parts of
-  // ServiceWorkerStorage are moved to the Storage Service.
-  ServiceWorkerStorage* storage() const;
+  mojo::Remote<storage::mojom::ServiceWorkerStorageControl>&
+  GetStorageControl();
   ServiceWorkerProcessManager* process_manager();
   ServiceWorkerJobCoordinator* job_coordinator() {
     return job_coordinator_.get();
@@ -254,7 +252,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
   // Callback is called after all deletions occurred. The status code is
   // blink::ServiceWorkerStatusCode::kOk if all succeed, or
   // SERVICE_WORKER_FAILED if any did not succeed.
-  void DeleteForOrigin(const GURL& origin, StatusCallback callback);
+  void DeleteForOrigin(const url::Origin& origin, StatusCallback callback);
 
   // Performs internal storage cleanup. Operations to the storage in the past
   // (e.g. deletion) are usually recorded in disk for a certain period until
@@ -393,7 +391,7 @@ class CONTENT_EXPORT ServiceWorkerContextCore
                               std::string* out_error) const;
 
   void DidGetRegistrationsForDeleteForOrigin(
-      const GURL& origin,
+      const url::Origin& origin,
       base::OnceCallback<void(blink::ServiceWorkerStatusCode)> callback,
       blink::ServiceWorkerStatusCode status,
       const std::vector<scoped_refptr<ServiceWorkerRegistration>>&

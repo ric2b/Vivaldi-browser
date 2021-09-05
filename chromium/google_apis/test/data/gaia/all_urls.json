@@ -30,6 +30,12 @@
     "embedded_setup_chromeos_url_v2": {
       "url": "https://accounts.example.com/embedded/setup/v2/chromeos"
     },
+    "embedded_setup_chromeos_kid_signup_url": {
+      "url": "https://accounts.example.com/embedded/setup/kidsignup/chromeos"
+    },
+    "embedded_setup_chromeos_kid_signin_url": {
+      "url": "https://accounts.example.com/embedded/setup/kidsignin/chromeos"
+    },
     "embedded_setup_windows_url": {
       "url": "https://accounts.example.com/embedded/setup/windows"
     },
@@ -112,7 +118,7 @@
       "url": "https://www.exampleapis.com/reauth/v1beta/users/"
     },
     "gaia_login_form_realm": {
-      "url": "https://accounts.example.com/"
+      "url": "https://accounts.example.com/LoginFormRealm"
     }
   }
 }

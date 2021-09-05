@@ -112,9 +112,9 @@ FrameSelection::FrameSelection(LocalFrame& frame)
 
 FrameSelection::~FrameSelection() = default;
 
-const DisplayItemClient& FrameSelection::CaretDisplayItemClientForTesting()
+const CaretDisplayItemClient& FrameSelection::CaretDisplayItemClientForTesting()
     const {
-  return frame_caret_->GetDisplayItemClient();
+  return frame_caret_->CaretDisplayItemClientForTesting();
 }
 
 bool FrameSelection::IsAvailable() const {
@@ -160,10 +160,6 @@ VisibleSelection FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated()
   // to caller. See http://crbug.com/590369 for more details.
   GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kSelection);
   return ComputeVisibleSelectionInDOMTree();
-}
-
-VisibleSelectionInFlatTree FrameSelection::GetSelectionInFlatTree() const {
-  return ComputeVisibleSelectionInFlatTree();
 }
 
 void FrameSelection::MoveCaretSelection(const IntPoint& point) {
@@ -547,10 +543,6 @@ void FrameSelection::ContextDestroyed() {
   layout_selection_->ContextDestroyed();
 
   frame_->GetEditor().ClearTypingStyle();
-}
-
-void FrameSelection::ClearPreviousCaretVisualRect(const LayoutBlock& block) {
-  frame_caret_->ClearPreviousVisualRect(block);
 }
 
 void FrameSelection::LayoutBlockWillBeDestroyed(const LayoutBlock& block) {
@@ -1022,7 +1014,6 @@ PhysicalRect FrameSelection::AbsoluteUnclippedBounds() const {
   if (!view || !layout_view)
     return PhysicalRect();
 
-  view->UpdateLifecycleToLayoutClean(DocumentUpdateReason::kSelection);
   return PhysicalRect(layout_selection_->AbsoluteSelectionBounds());
 }
 

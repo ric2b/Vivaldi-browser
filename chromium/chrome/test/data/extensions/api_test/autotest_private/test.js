@@ -759,21 +759,29 @@ var defaultTests = [
                 newAccelerator('w', false /* shift */, true /* control */);
             chrome.autotestPrivate.activateAccelerator(
                 closeWindow,
-                function(success) {
+                async function(success) {
                   chrome.test.assertTrue(success);
+
                   // Actual window close might happen sometime later after the
                   // accelerator. So keep trying until window count drops to 1.
-                  var timer = window.setInterval(() => {
-                    chrome.autotestPrivate.getAppWindowList(function(list) {
-                      chrome.test.assertNoLastError();
+                  await new Promise(resolve => {
+                    function check() {
+                      chrome.autotestPrivate.getAppWindowList(function(list) {
+                        chrome.test.assertNoLastError();
 
-                      if (list.length != 1)
-                        return;
+                        if (list.length == 1) {
+                          resolve();
+                          return;
+                        }
 
-                      window.clearInterval(timer);
-                      chrome.test.succeed();
-                    });
-                  }, 100);
+                        window.setTimeout(check, 100);
+                      });
+                    };
+
+                    check();
+                  });
+
+                  chrome.test.succeed();
                 });
           });
         });
@@ -885,6 +893,58 @@ var defaultTests = [
           });
         });
       });
+    });
+  },
+
+  function collectThoughputTrackerData() {
+    chrome.autotestPrivate.startThroughputTrackerDataCollection(function() {
+      chrome.test.assertNoLastError();
+
+      var stopAndCollectData = function() {
+        chrome.autotestPrivate.stopThroughputTrackerDataCollection(
+            function(data){
+          chrome.test.assertNoLastError();
+          chrome.test.assertTrue(data.length > 0);
+          chrome.test.succeed();
+        });
+      };
+
+      // Triggers a tracked animation, e.g. toggling the launcher.
+      var togglePeeking = newAccelerator('search', false /* shift */);
+      function closeLauncher() {
+        togglePeeking.pressed = true;
+        chrome.autotestPrivate.activateAccelerator(
+            togglePeeking,
+            function(success) {
+              chrome.test.assertFalse(success);
+              togglePeeking.pressed = false;
+              chrome.autotestPrivate.activateAccelerator(
+                  togglePeeking,
+                  function(success) {
+                    chrome.test.assertTrue(success);
+                    chrome.autotestPrivate.waitForLauncherState(
+                        'Closed',
+                        function() {
+                          chrome.test.assertNoLastError();
+                          stopAndCollectData();
+                        });
+                  });
+            });
+      }
+      chrome.autotestPrivate.activateAccelerator(
+          togglePeeking,
+          function(success) {
+            chrome.test.assertFalse(success);
+            togglePeeking.pressed = false;
+            chrome.autotestPrivate.activateAccelerator(
+                togglePeeking,
+                function(success) {
+                  chrome.test.assertTrue(success);
+                  chrome.autotestPrivate.waitForLauncherState(
+                      'Peeking',
+                      closeLauncher);
+                });
+          });
     });
   },
 

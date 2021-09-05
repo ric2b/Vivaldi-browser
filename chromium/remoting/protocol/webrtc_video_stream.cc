@@ -138,8 +138,8 @@ void WebrtcVideoStream::Start(
   webrtc_transport_ = webrtc_transport;
 
   webrtc_transport_->video_encoder_factory()->RegisterEncoderSelectedCallback(
-      base::Bind(&WebrtcVideoStream::OnEncoderCreated,
-                 weak_factory_.GetWeakPtr()));
+      base::BindRepeating(&WebrtcVideoStream::OnEncoderCreated,
+                          weak_factory_.GetWeakPtr()));
 
   capturer_->Start(this);
 
@@ -159,9 +159,9 @@ void WebrtcVideoStream::Start(
   webrtc_transport_->OnVideoTransceiverCreated(transceiver);
 
   scheduler_.reset(new WebrtcFrameSchedulerSimple(session_options_));
-  scheduler_->Start(
-      webrtc_transport_->video_encoder_factory(),
-      base::Bind(&WebrtcVideoStream::CaptureNextFrame, base::Unretained(this)));
+  scheduler_->Start(webrtc_transport_->video_encoder_factory(),
+                    base::BindRepeating(&WebrtcVideoStream::CaptureNextFrame,
+                                        base::Unretained(this)));
 
   video_stats_dispatcher_.Init(webrtc_transport_->CreateOutgoingChannel(
                                    video_stats_dispatcher_.channel_name()),
@@ -190,10 +190,8 @@ void WebrtcVideoStream::SetLosslessEncode(bool want_lossless) {
 }
 
 void WebrtcVideoStream::SetLosslessColor(bool want_lossless) {
-  lossless_color_ = want_lossless;
-  if (encoder_) {
-    encoder_->SetLosslessColor(want_lossless);
-  }
+  NOTIMPLEMENTED() << "Changing lossless-color for VP9 requires SDP "
+                      "offer/answer exchange.";
 }
 
 void WebrtcVideoStream::SetObserver(Observer* observer) {
@@ -233,7 +231,6 @@ void WebrtcVideoStream::OnCaptureResult(
     encoder_selector_.SetDesktopFrame(*frame);
     encoder_ = encoder_selector_.CreateEncoder();
     encoder_->SetLosslessEncode(lossless_encode_);
-    encoder_->SetLosslessColor(lossless_color_);
 
     // TODO(zijiehe): Permanently stop the video stream if we cannot create an
     // encoder for the |frame|.
@@ -354,6 +351,16 @@ void WebrtcVideoStream::OnEncoderCreated(
     webrtc::VideoCodecType codec_type,
     const webrtc::SdpVideoFormat::Parameters& parameters) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  // Reset the encoder in case a previous one was being used and SDP
+  // re-negotiation selected a different one. The proper codec will be
+  // created after the next frame is captured.
+  // An optimization would be to reset only if the new encoder is different
+  // from the current one. However, SDP renegotiation is expected to occur
+  // infrequently (only when the user changes a setting), and should typically
+  // not cause the same codec to be repeatedly selected.
+  encoder_.reset();
+
   // The preferred codec id depends on the order of
   // |encoder_selector_|.RegisterEncoder().
   if (codec_type == webrtc::kVideoCodecVP8) {

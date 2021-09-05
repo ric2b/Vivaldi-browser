@@ -20,7 +20,7 @@ TEST(PreviewsUserDataTest, TestConstructor) {
 TEST(PreviewsUserDataTest, TestSetEligibilityReason) {
   PreviewsUserData data(1u);
   EXPECT_EQ(base::nullopt,
-            data.EligibilityReasonForPreview(PreviewsType::OFFLINE));
+            data.EligibilityReasonForPreview(PreviewsType::DEFER_ALL_SCRIPT));
 
   data.SetEligibilityReasonForPreview(
       PreviewsType::NOSCRIPT, PreviewsEligibilityReason::BLOCKLIST_UNAVAILABLE);
@@ -29,7 +29,7 @@ TEST(PreviewsUserDataTest, TestSetEligibilityReason) {
       PreviewsEligibilityReason::BLOCKLIST_DATA_NOT_LOADED);
 
   EXPECT_EQ(base::nullopt,
-            data.EligibilityReasonForPreview(PreviewsType::OFFLINE));
+            data.EligibilityReasonForPreview(PreviewsType::DEFER_ALL_SCRIPT));
   EXPECT_EQ(PreviewsEligibilityReason::BLOCKLIST_DATA_NOT_LOADED,
             data.EligibilityReasonForPreview(PreviewsType::NOSCRIPT));
 }
@@ -44,12 +44,10 @@ TEST(PreviewsUserDataTest, DeepCopy) {
   EXPECT_FALSE(data->cache_control_no_transform_directive());
   EXPECT_EQ(previews::PreviewsType::NONE, data->CommittedPreviewsType());
   EXPECT_FALSE(data->block_listed_for_lite_page());
-  EXPECT_FALSE(data->offline_preview_used());
 
   data->set_data_savings_inflation_percent(123);
   data->set_cache_control_no_transform_directive();
   data->SetCommittedPreviewsType(previews::PreviewsType::NOSCRIPT);
-  data->set_offline_preview_used(true);
   data->set_block_listed_for_lite_page(true);
 
   PreviewsUserData data_copy(*data);
@@ -60,7 +58,6 @@ TEST(PreviewsUserDataTest, DeepCopy) {
   EXPECT_EQ(previews::PreviewsType::NOSCRIPT,
             data_copy.CommittedPreviewsType());
   EXPECT_TRUE(data_copy.block_listed_for_lite_page());
-  EXPECT_TRUE(data_copy.offline_preview_used());
 }
 
 TEST(PreviewsUserDataTest, TestCoinFlip_HasCommittedPreviewsType) {
@@ -96,14 +93,16 @@ TEST(PreviewsUserDataTest, TestCoinFlip_AllowedPreviewsState) {
   std::unique_ptr<PreviewsUserData> data =
       std::make_unique<PreviewsUserData>(id);
 
-  data->set_allowed_previews_state(content::NOSCRIPT_ON);
+  data->set_allowed_previews_state(blink::PreviewsTypes::NOSCRIPT_ON);
   data->set_coin_flip_holdback_result(CoinFlipHoldbackResult::kHoldback);
-  EXPECT_EQ(data->AllowedPreviewsState(), content::PREVIEWS_OFF);
-  EXPECT_EQ(data->PreHoldbackAllowedPreviewsState(), content::NOSCRIPT_ON);
+  EXPECT_EQ(data->AllowedPreviewsState(), blink::PreviewsTypes::PREVIEWS_OFF);
+  EXPECT_EQ(data->PreHoldbackAllowedPreviewsState(),
+            blink::PreviewsTypes::NOSCRIPT_ON);
 
   data->set_coin_flip_holdback_result(CoinFlipHoldbackResult::kAllowed);
-  EXPECT_EQ(data->AllowedPreviewsState(), content::NOSCRIPT_ON);
-  EXPECT_EQ(data->PreHoldbackAllowedPreviewsState(), content::NOSCRIPT_ON);
+  EXPECT_EQ(data->AllowedPreviewsState(), blink::PreviewsTypes::NOSCRIPT_ON);
+  EXPECT_EQ(data->PreHoldbackAllowedPreviewsState(),
+            blink::PreviewsTypes::NOSCRIPT_ON);
 }
 
 TEST(PreviewsUserDataTest, TestCoinFlip_CommittedPreviewsState) {
@@ -111,14 +110,16 @@ TEST(PreviewsUserDataTest, TestCoinFlip_CommittedPreviewsState) {
   std::unique_ptr<PreviewsUserData> data =
       std::make_unique<PreviewsUserData>(id);
 
-  data->set_committed_previews_state(content::NOSCRIPT_ON);
+  data->set_committed_previews_state(blink::PreviewsTypes::NOSCRIPT_ON);
   data->set_coin_flip_holdback_result(CoinFlipHoldbackResult::kHoldback);
-  EXPECT_EQ(data->CommittedPreviewsState(), content::PREVIEWS_OFF);
-  EXPECT_EQ(data->PreHoldbackCommittedPreviewsState(), content::NOSCRIPT_ON);
+  EXPECT_EQ(data->CommittedPreviewsState(), blink::PreviewsTypes::PREVIEWS_OFF);
+  EXPECT_EQ(data->PreHoldbackCommittedPreviewsState(),
+            blink::PreviewsTypes::NOSCRIPT_ON);
 
   data->set_coin_flip_holdback_result(CoinFlipHoldbackResult::kAllowed);
-  EXPECT_EQ(data->CommittedPreviewsState(), content::NOSCRIPT_ON);
-  EXPECT_EQ(data->PreHoldbackCommittedPreviewsState(), content::NOSCRIPT_ON);
+  EXPECT_EQ(data->CommittedPreviewsState(), blink::PreviewsTypes::NOSCRIPT_ON);
+  EXPECT_EQ(data->PreHoldbackCommittedPreviewsState(),
+            blink::PreviewsTypes::NOSCRIPT_ON);
 }
 
 }  // namespace previews

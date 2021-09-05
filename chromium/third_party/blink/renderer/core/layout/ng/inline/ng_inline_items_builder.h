@@ -8,8 +8,8 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/empty_offset_mapping_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_line_height_metrics.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping_builder.h"
+#include "third_party/blink/renderer/platform/fonts/font_height.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -165,7 +165,7 @@ class NGInlineItemsBuilderTemplate {
     unsigned item_index;
     bool should_create_box_fragment;
     bool may_have_margin_;
-    NGLineHeightMetrics text_metrics;
+    FontHeight text_metrics;
 
     BoxInfo(unsigned item_index, const NGInlineItem& item);
     bool ShouldCreateBoxFragmentForChild(const BoxInfo& child) const;

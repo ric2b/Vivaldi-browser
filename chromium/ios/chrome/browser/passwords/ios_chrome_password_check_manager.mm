@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
+
+#include "base/strings/utf_string_conversions.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -22,6 +24,29 @@ using SavedPasswordsView =
     password_manager::SavedPasswordsPresenter::SavedPasswordsView;
 using State = password_manager::BulkLeakCheckServiceInterface::State;
 
+// Key used to attach UserData to a LeakCheckCredential.
+constexpr char kPasswordCheckDataKey[] = "password-check-manager-data-key";
+// Minimum time the check should be running.
+constexpr base::TimeDelta kDelay = base::TimeDelta::FromSeconds(3);
+
+// Class which ensures that IOSChromePasswordCheckManager will stay alive
+// until password check is completed even if class what initially created
+// IOSChromePasswordCheckManager was destroyed.
+class IOSChromePasswordCheckManagerHolder : public LeakCheckCredential::Data {
+ public:
+  explicit IOSChromePasswordCheckManagerHolder(
+      scoped_refptr<IOSChromePasswordCheckManager> manager)
+      : manager_(std::move(manager)) {}
+  ~IOSChromePasswordCheckManagerHolder() override = default;
+
+  std::unique_ptr<Data> Clone() override {
+    return std::make_unique<IOSChromePasswordCheckManagerHolder>(manager_);
+  }
+
+ private:
+  scoped_refptr<IOSChromePasswordCheckManager> manager_;
+};
+
 PasswordCheckState ConvertBulkCheckState(State state) {
   switch (state) {
     case State::kIdle:
@@ -35,6 +60,7 @@ PasswordCheckState ConvertBulkCheckState(State state) {
     case State::kQuotaLimit:
       return PasswordCheckState::kQuotaLimit;
     case State::kCanceled:
+      return PasswordCheckState::kCanceled;
     case State::kTokenRequestFailure:
     case State::kHashingFailure:
     case State::kServiceError:
@@ -42,6 +68,23 @@ PasswordCheckState ConvertBulkCheckState(State state) {
   }
   NOTREACHED();
   return PasswordCheckState::kIdle;
+}
+
+// Function which returns duplicates of passed form.
+std::vector<autofill::PasswordForm> GetDuplicatesOfForm(
+    const autofill::PasswordForm& form,
+    SavedPasswordsView passwords) {
+  std::vector<autofill::PasswordForm> duplicates;
+  auto tie = [](const auto& form) {
+    return std::tie(form.signon_realm, form.username_value,
+                    form.password_value);
+  };
+
+  for (const auto& item : passwords) {
+    if (tie(item) == tie(form))
+      duplicates.emplace_back(item);
+  }
+  return duplicates;
 }
 }  // namespace
 
@@ -73,8 +116,21 @@ IOSChromePasswordCheckManager::IOSChromePasswordCheckManager(
 IOSChromePasswordCheckManager::~IOSChromePasswordCheckManager() = default;
 
 void IOSChromePasswordCheckManager::StartPasswordCheck() {
-  bulk_leak_check_service_adapter_.StartBulkLeakCheck();
-  is_check_running_ = true;
+  if (is_initialized_) {
+    IOSChromePasswordCheckManagerHolder data(
+        scoped_refptr<IOSChromePasswordCheckManager>(this));
+    bulk_leak_check_service_adapter_.StartBulkLeakCheck(kPasswordCheckDataKey,
+                                                        &data);
+    is_check_running_ = true;
+    start_time_ = base::Time::Now();
+  } else {
+    start_check_on_init_ = true;
+  }
+}
+
+void IOSChromePasswordCheckManager::StopPasswordCheck() {
+  bulk_leak_check_service_adapter_.StopBulkLeakCheck();
+  is_check_running_ = false;
 }
 
 PasswordCheckState IOSChromePasswordCheckManager::GetPasswordCheckState()
@@ -96,10 +152,47 @@ IOSChromePasswordCheckManager::GetCompromisedCredentials() const {
   return compromised_credentials_manager_.GetCompromisedCredentials();
 }
 
+password_manager::SavedPasswordsPresenter::SavedPasswordsView
+IOSChromePasswordCheckManager::GetSavedPasswordsFor(
+    const CredentialWithPassword& credential) const {
+  return compromised_credentials_manager_.GetSavedPasswordsFor(credential);
+}
+
+void IOSChromePasswordCheckManager::EditPasswordForm(
+    const autofill::PasswordForm& form,
+    base::StringPiece password) {
+  saved_passwords_presenter_.EditPassword(form, base::UTF8ToUTF16(password));
+}
+
+void IOSChromePasswordCheckManager::EditCompromisedPasswordForm(
+    const autofill::PasswordForm& form,
+    base::StringPiece password) {
+  compromised_credentials_manager_.UpdateCompromisedCredentials(
+      password_manager::CredentialView(form), password);
+}
+
+void IOSChromePasswordCheckManager::DeletePasswordForm(
+    const autofill::PasswordForm& form) {
+  auto duplicates =
+      GetDuplicatesOfForm(form, saved_passwords_presenter_.GetSavedPasswords());
+  for (auto& duplicate : duplicates) {
+    password_store_->RemoveLogin(duplicate);
+  }
+}
+
+void IOSChromePasswordCheckManager::DeleteCompromisedPasswordForm(
+    const autofill::PasswordForm& form) {
+  compromised_credentials_manager_.RemoveCompromisedCredential(
+      password_manager::CredentialView(form));
+}
+
 void IOSChromePasswordCheckManager::OnSavedPasswordsChanged(
     SavedPasswordsView) {
   // Observing saved passwords to update possible kNoPasswords state.
   NotifyPasswordCheckStatusChanged();
+  if (!std::exchange(is_initialized_, true) && start_check_on_init_) {
+    StartPasswordCheck();
+  }
 }
 
 void IOSChromePasswordCheckManager::OnCompromisedCredentialsChanged(
@@ -117,6 +210,20 @@ void IOSChromePasswordCheckManager::OnStateChanged(State state) {
         base::Time::Now().ToDoubleT());
   }
   if (state != State::kRunning) {
+    // If check was running
+    if (is_check_running_) {
+      const base::TimeDelta elapsed = base::Time::Now() - start_time_;
+      if (elapsed < kDelay) {
+        base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+            FROM_HERE,
+            base::BindOnce(&IOSChromePasswordCheckManager::
+                               NotifyPasswordCheckStatusChanged,
+                           weak_ptr_factory_.GetWeakPtr()),
+            kDelay - elapsed);
+        is_check_running_ = false;
+        return;
+      }
+    }
     is_check_running_ = false;
   }
   NotifyPasswordCheckStatusChanged();

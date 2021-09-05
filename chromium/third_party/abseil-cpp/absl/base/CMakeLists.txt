@@ -105,7 +105,6 @@ absl_cc_library(
   HDRS
     "dynamic_annotations.h"
   SRCS
-    "dynamic_annotations.cc"
     "internal/dynamic_annotations.h"
   COPTS
     ${ABSL_DEFAULT_COPTS}
@@ -385,6 +384,7 @@ absl_cc_library(
     ${ABSL_TEST_COPTS}
   DEPS
     absl::base
+    absl::config
     absl::base_internal
     absl::core_headers
     absl::synchronization
@@ -403,6 +403,7 @@ absl_cc_test(
   DEPS
     absl::base
     absl::base_internal
+    absl::config
     absl::core_headers
     absl::synchronization
     gtest_main

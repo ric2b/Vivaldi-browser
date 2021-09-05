@@ -25,7 +25,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/base/load_flags.h"
-#include "net/url_request/url_request_status.h"
+#include "net/base/net_errors.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -362,14 +362,14 @@ TEST_F(ModelLoaderTest, ModelNamesTest) {
   EXPECT_EQ(ModelLoader::FillInModelName(false, 5),
             "client_model_v5_variation_5.pb");
 
-  // No Finch setup. Should default to 0.
+  // No Finch setup. Should default to 4.
   std::unique_ptr<ModelLoader> loader;
   loader.reset(new ModelLoader(base::Closure(), nullptr,
                                false /* is_extended_reporting */));
-  EXPECT_EQ(loader->name(), "client_model_v5_variation_0.pb");
+  EXPECT_EQ(loader->name(), "client_model_v5_variation_4.pb");
   EXPECT_EQ(loader->url_.spec(),
             "https://ssl.gstatic.com/safebrowsing/csd/"
-            "client_model_v5_variation_0.pb");
+            "client_model_v5_variation_4.pb");
 
   // Model 1, no extended reporting.
   SetFinchModelNumber(1);

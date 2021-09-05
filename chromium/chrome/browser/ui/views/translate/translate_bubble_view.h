@@ -82,7 +82,6 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   TranslateBubbleModel* model() { return model_.get(); }
 
   // LocationBarBubbleDelegateView:
-  base::string16 GetWindowTitle() const override;
   void Init() override;
   View* GetInitiallyFocusedView() override;
   bool ShouldShowCloseButton() const override;
@@ -117,8 +116,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
     BUTTON_ID_ALWAYS_TRANSLATE,
     BUTTON_ID_OPTIONS_MENU,
     BUTTON_ID_CLOSE,
-    BUTTON_ID_RESET,
-    BUTTON_ID_RETURN
+    BUTTON_ID_RESET
   };
 
   enum ComboboxID {
@@ -146,7 +144,7 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            OptionsMenuNeverTranslateLanguage);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
-                           OptionsMenuRespectsBlacklistSite);
+                           OptionsMenuRespectsBlocklistSite);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            OptionsMenuNeverTranslateSite);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
@@ -155,6 +153,8 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
                            TabSelectedAfterTranslation);
   FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
                            AlwaysTranslateTriggerTranslation);
+  FRIEND_TEST_ALL_PREFIXES(TranslateBubbleViewTest,
+                           ShowOriginalUpdatesViewState);
 
   TranslateBubbleView(views::View* anchor_view,
                       std::unique_ptr<TranslateBubbleModel> model,
@@ -200,9 +200,6 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
   // takes ownership of the returned view.
   std::unique_ptr<views::View> CreateViewAdvancedTarget();
 
-  // Tab UI presents the same view for before/during/after translate state.
-  bool IsEquivalentState(TranslateBubbleModel::ViewState view_state);
-
   // Creates the 'advanced' view to show source/target language combobox. Caller
   // takes ownership of the returned view.
   std::unique_ptr<views::View> CreateViewAdvanced(
@@ -223,6 +220,14 @@ class TranslateBubbleView : public LocationBarBubbleDelegateView,
 
   // Get the current always translate checkbox
   views::Checkbox* GetAlwaysTranslateCheckbox();
+
+  // Sets the window title. The window title still needs to be set, even when it
+  // is not shown, for accessiblity purposes.
+  void SetWindowTitle(TranslateBubbleModel::ViewState view_state);
+
+  // Updates the view state. Whenever the view state is updated, the title needs
+  // to be updated for accessibility.
+  void UpdateViewState(TranslateBubbleModel::ViewState view_state);
 
   // Switches the view type.
   void SwitchView(TranslateBubbleModel::ViewState view_state);

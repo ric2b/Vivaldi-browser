@@ -6,10 +6,17 @@ import("//build/config/android/rules.gni")
 
 android_library("java") {
   sources = [
+    "android/java/src/org/chromium/chrome/browser/tabmodel/AsyncTabCreationParams.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/AsyncTabCreator.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/AsyncTabParams.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/EmptyTabModel.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/EmptyTabModelFilter.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/EmptyTabModelSelectorObserver.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/IncognitoTabHost.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/IncognitoTabHostRegistry.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/NextTabPolicy.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabCreator.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabCreatorManager.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabList.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModel.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelFilter.java",
@@ -21,11 +28,14 @@ android_library("java") {
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabModelObserver.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabObserver.java",
     "android/java/src/org/chromium/chrome/browser/tabmodel/TabModelUtils.java",
+    "android/java/src/org/chromium/chrome/browser/tabmodel/TabReparentingParams.java",
   ]
   deps = [
     "//base:base_java",
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/tab:java",
+    "//components/embedder_support/android:util_java",
     "//content/public/android:content_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
   ]
 }

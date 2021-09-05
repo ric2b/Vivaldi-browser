@@ -124,6 +124,11 @@ void ConvertRealLoadTimesToBlockingTimes(LoadTimingInfo* load_timing_info) {
 ///////////////////////////////////////////////////////////////////////////////
 // URLRequest::Delegate
 
+int URLRequest::Delegate::OnConnected(URLRequest* request,
+                                      const TransportInfo& info) {
+  return OK;
+}
+
 void URLRequest::Delegate::OnReceivedRedirect(URLRequest* request,
                                               const RedirectInfo& redirect_info,
                                               bool* defer_redirect) {}
@@ -399,7 +404,8 @@ void URLRequest::set_maybe_sent_cookies(CookieAccessResultList cookies) {
   maybe_sent_cookies_ = std::move(cookies);
 }
 
-void URLRequest::set_maybe_stored_cookies(CookieAndLineStatusList cookies) {
+void URLRequest::set_maybe_stored_cookies(
+    CookieAndLineAccessResultList cookies) {
   maybe_stored_cookies_ = std::move(cookies);
 }
 
@@ -433,7 +439,7 @@ void URLRequest::set_site_for_cookies(const SiteForCookies& site_for_cookies) {
 }
 
 void URLRequest::set_first_party_url_policy(
-    FirstPartyURLPolicy first_party_url_policy) {
+    RedirectInfo::FirstPartyURLPolicy first_party_url_policy) {
   DCHECK(!is_pending_);
   first_party_url_policy_ = first_party_url_policy;
 }
@@ -536,8 +542,10 @@ URLRequest::URLRequest(const GURL& url,
       url_chain_(1, url),
       force_ignore_site_for_cookies_(false),
       method_("GET"),
-      referrer_policy_(CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE),
-      first_party_url_policy_(NEVER_CHANGE_FIRST_PARTY_URL),
+      referrer_policy_(
+          ReferrerPolicy::CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE),
+      first_party_url_policy_(
+          RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL),
       load_flags_(LOAD_NORMAL),
       privacy_mode_(PRIVACY_MODE_ENABLED),
       disable_secure_dns_(false),
@@ -764,6 +772,10 @@ void URLRequest::set_status(int status) {
 
 bool URLRequest::failed() const {
   return (status_ != OK && status_ != ERR_IO_PENDING);
+}
+
+int URLRequest::NotifyConnected(const TransportInfo& info) {
+  return delegate_->OnConnected(this, info);
 }
 
 void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
@@ -1120,14 +1132,14 @@ void URLRequest::RecordReferrerGranularityMetrics(
   if (request_is_same_origin) {
     UMA_HISTOGRAM_ENUMERATION(
         "Net.URLRequest.ReferrerPolicyForRequest.SameOrigin", referrer_policy_,
-        MAX_REFERRER_POLICY + 1);
+        static_cast<int>(ReferrerPolicy::MAX) + 1);
     UMA_HISTOGRAM_BOOLEAN(
         "Net.URLRequest.ReferrerHasInformativePath.SameOrigin",
         referrer_more_descriptive_than_its_origin);
   } else {
     UMA_HISTOGRAM_ENUMERATION(
         "Net.URLRequest.ReferrerPolicyForRequest.CrossOrigin", referrer_policy_,
-        MAX_REFERRER_POLICY + 1);
+        static_cast<int>(ReferrerPolicy::MAX) + 1);
     UMA_HISTOGRAM_BOOLEAN(
         "Net.URLRequest.ReferrerHasInformativePath.CrossOrigin",
         referrer_more_descriptive_than_its_origin);

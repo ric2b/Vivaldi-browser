@@ -11,11 +11,11 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/current_thread.h"
 #include "base/task/sequence_manager/sequence_manager.h"
 #include "base/task/task_observer.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -130,7 +130,7 @@ void RunMessageLoop() {
 }
 
 void RunThisRunLoop(base::RunLoop* run_loop) {
-  base::MessageLoopCurrent::ScopedNestableTaskAllower allow;
+  base::CurrentThread::ScopedNestableTaskAllower allow;
   run_loop->Run();
 }
 
@@ -152,7 +152,7 @@ void RunAllTasksUntilIdle() {
     // current loop iteration and loop in case the MessageLoop posts tasks to
     // the Task Scheduler after the initial flush.
     TaskObserver task_observer;
-    base::MessageLoopCurrent::Get()->AddTaskObserver(&task_observer);
+    base::CurrentThread::Get()->AddTaskObserver(&task_observer);
 
     // This must use RunLoop::Type::kNestableTasksAllowed in case this
     // RunAllTasksUntilIdle() call is nested inside an existing Run(). Without
@@ -165,7 +165,7 @@ void RunAllTasksUntilIdle() {
 
     run_loop.Run();
 
-    base::MessageLoopCurrent::Get()->RemoveTaskObserver(&task_observer);
+    base::CurrentThread::Get()->RemoveTaskObserver(&task_observer);
 
     if (!task_observer.processed())
       break;
@@ -213,11 +213,23 @@ void IsolateAllSitesForTesting(base::CommandLine* command_line) {
 bool CanSameSiteMainFrameNavigationsChangeRenderFrameHosts() {
   // TODO(crbug.com/936696): Also return true when RenderDocument for main frame
   // is enabled.
-  return IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled();
+  return CanSameSiteMainFrameNavigationsChangeSiteInstances();
 }
 
 bool CanSameSiteMainFrameNavigationsChangeSiteInstances() {
-  return IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled();
+  return IsProactivelySwapBrowsingInstanceOnSameSiteNavigationEnabled() ||
+         IsSameSiteBackForwardCacheEnabled();
+}
+
+void DisableProactiveBrowsingInstanceSwapFor(RenderFrameHost* rfh) {
+  if (!CanSameSiteMainFrameNavigationsChangeSiteInstances())
+    return;
+  // If the RFH is not a main frame, navigations on it will never result in a
+  // proactive BrowsingInstance swap, so we shouldn't really call it on main
+  // frames.
+  DCHECK(!rfh->GetParent());
+  static_cast<RenderFrameHostImpl*>(rfh)
+      ->DisableProactiveBrowsingInstanceSwapForTesting();
 }
 
 GURL GetWebUIURL(const std::string& host) {
@@ -485,31 +497,46 @@ float TestPageScaleObserver::WaitForPageScaleUpdate() {
 }
 
 EffectiveURLContentBrowserClient::EffectiveURLContentBrowserClient(
+    bool requires_dedicated_process)
+    : requires_dedicated_process_(requires_dedicated_process) {}
+
+EffectiveURLContentBrowserClient::EffectiveURLContentBrowserClient(
     const GURL& url_to_modify,
     const GURL& url_to_return,
     bool requires_dedicated_process)
-    : url_to_modify_(url_to_modify),
-      url_to_return_(url_to_return),
-      requires_dedicated_process_(requires_dedicated_process) {}
+    : requires_dedicated_process_(requires_dedicated_process) {
+  AddTranslation(url_to_modify, url_to_return);
+}
 
 EffectiveURLContentBrowserClient::~EffectiveURLContentBrowserClient() {}
+
+void EffectiveURLContentBrowserClient::AddTranslation(
+    const GURL& url_to_modify,
+    const GURL& url_to_return) {
+  urls_to_modify_[url_to_modify] = url_to_return;
+}
 
 GURL EffectiveURLContentBrowserClient::GetEffectiveURL(
     BrowserContext* browser_context,
     const GURL& url) {
-  if (url == url_to_modify_)
-    return url_to_return_;
+  auto it = urls_to_modify_.find(url);
+  if (it != urls_to_modify_.end())
+    return it->second;
   return url;
 }
 
 bool EffectiveURLContentBrowserClient::DoesSiteRequireDedicatedProcess(
     BrowserContext* browser_context,
     const GURL& effective_site_url) {
-  GURL expected_effective_site_url =
-      SiteInstance::GetSiteForURL(browser_context, url_to_modify_);
+  if (!requires_dedicated_process_)
+    return false;
 
-  return requires_dedicated_process_ &&
-         expected_effective_site_url == effective_site_url;
+  for (const auto& pair : urls_to_modify_) {
+    if (SiteInstance::GetSiteForURL(browser_context, pair.first) ==
+        effective_site_url)
+      return true;
+  }
+  return false;
 }
 
 }  // namespace content

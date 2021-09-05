@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include "base/containers/flat_set.h"
+#include "base/containers/mru_cache.h"
 #include "base/optional.h"
 #include "base/time/clock.h"
 #include "chrome/browser/lite_video/lite_video_hint_cache.h"
@@ -20,7 +22,18 @@ namespace blocklist {
 class OptOutStore;
 }  // namespace blocklist
 
+namespace optimization_guide {
+class OptimizationGuideDecider;
+enum class OptimizationGuideDecision;
+class OptimizationMetadata;
+}  // namespace optimization_guide
+
 namespace lite_video {
+
+using LiteVideoHintCallback = base::OnceCallback<void(
+    base::Optional<LiteVideoHint> hint,
+    LiteVideoBlocklistReason blocklist_reason,
+    optimization_guide::OptimizationGuideDecision opt_guide_decision)>;
 
 // The LiteVideoDecider makes the decision on whether LiteVideos should be
 // applied to a navigation and provides the parameters to use when
@@ -30,18 +43,19 @@ class LiteVideoDecider
       public network::NetworkConnectionTracker::NetworkConnectionObserver,
       public network::NetworkQualityTracker::EffectiveConnectionTypeObserver {
  public:
-  LiteVideoDecider(std::unique_ptr<blocklist::OptOutStore> opt_out_store,
-                   base::Clock* clock);
+  LiteVideoDecider(
+      std::unique_ptr<blocklist::OptOutStore> opt_out_store,
+      base::Clock* clock,
+      optimization_guide::OptimizationGuideDecider* opt_guide_decider);
   ~LiteVideoDecider() override;
 
-  // Determine if the navigation can have the LiteVideo optimization
-  // applied and returns the LiteVideoHint to use for throttling if one exists.
-  // This also updates the blocklist based on the navigation provided and should
-  // be limited to one call per navigation. |blocklist_reason| will be
-  // populated, if applicable.
-  base::Optional<LiteVideoHint> CanApplyLiteVideo(
-      content::NavigationHandle* navigation_handle,
-      LiteVideoBlocklistReason* blocklist_reason);
+  // Determine if the navigation can have the LiteVideo optimization applied. It
+  // invokes |callback| with the blocklist result and a LiteVideoHint if
+  // available for the |navigation_handle|. This also updates the blocklist
+  // based on the navigation provided and should be limited to one call per
+  // navigation.
+  void CanApplyLiteVideo(content::NavigationHandle* navigation_handle,
+                         LiteVideoHintCallback callback);
 
   // Override the blocklist used by |this| for testing.
   void SetUserBlocklistForTesting(
@@ -65,10 +79,9 @@ class LiteVideoDecider
   void OnEffectiveConnectionTypeChanged(
       net::EffectiveConnectionType type) override;
 
-  // Purge all the user browsing data within |user_blocklist_| between
-  // the provided time ranges.
-  void ClearBlocklist(const base::Time& delete_begin,
-                      const base::Time& delete_end);
+  // Purge all the user browsing data within |user_blocklist_|  between
+  // the provided time ranges and all data within |cached_opt_guide_hints_|.
+  void ClearData(const base::Time& delete_begin, const base::Time& delete_end);
 
   // Update |user_blocklist_| that a rebuffer event consided an opt-out on the
   // mainframe and subframe URLs occurred.
@@ -76,7 +89,37 @@ class LiteVideoDecider
                         base::Optional<GURL> subframe_url,
                         bool opt_out);
 
+  // Set the optimization guide decider used by |this| for testing only.
+  void SetOptimizationGuideDeciderForTesting(
+      optimization_guide::OptimizationGuideDecider* opt_guide_decider) {
+    opt_guide_decider_ = opt_guide_decider;
+  }
+
+  // Set the permanently blocked hosts used by |this| for testing only.
+  void SetPermanentHostBlocklistForTesting(
+      const base::flat_set<std::string>& permanent_host_blocklist) {
+    permanent_host_blocklist_ = permanent_host_blocklist;
+  }
+
  private:
+  // The result of the query to the optimization guide based on the
+  // |mainframe_url|.
+  void OnOptimizationGuideHintAvailable(
+      const GURL& mainframe_url,
+      LiteVideoBlocklistReason blocklist_reason,
+      LiteVideoHintCallback callback,
+      optimization_guide::OptimizationGuideDecision decision,
+      const optimization_guide::OptimizationMetadata& metadata);
+
+  // Update the blocklists based on the navigation and the provided blocklist
+  // reason.
+  void UpdateBlocklists(content::NavigationHandle* navigation_handle,
+                        LiteVideoBlocklistReason blocklist_reason);
+
+  // Checks the owned permanent blocklist to determine if |host|
+  // has been blocked from having LiteVideos shown indefinitely.
+  bool IsHostPermanentlyBlockedlisted(const std::string& host) const;
+
   // The hint cache that holds LiteVideoHints that specify the parameters
   // for throttling media requests for that navigation.
   std::unique_ptr<LiteVideoHintCache> hint_cache_;
@@ -96,7 +139,22 @@ class LiteVideoDecider
   net::EffectiveConnectionType current_effective_connection_type_ =
       net::EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
 
+  // The optimization guide decider to consult for remote predictions.
+  optimization_guide::OptimizationGuideDecider* opt_guide_decider_ = nullptr;
+
+  // The store of hints provided by the optimization guide keyed by mainframe
+  // host. If the hint is empty, then the optimization guide returned kFalse.
+  base::HashingMRUCache<std::string, base::Optional<LiteVideoHint>>
+      cached_opt_guide_hints_;
+
+  // The set of hosts that are permanently blocked from having LiteVideos
+  // applied on them.
+  base::flat_set<std::string> permanent_host_blocklist_;
+
   SEQUENCE_CHECKER(sequence_checker_);
+
+  // Used to get a weak pointer to |this|.
+  base::WeakPtrFactory<LiteVideoDecider> weak_ptr_factory_{this};
 };
 
 }  // namespace lite_video

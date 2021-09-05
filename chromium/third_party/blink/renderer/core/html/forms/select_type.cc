@@ -33,6 +33,7 @@
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer_init.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
 #include "third_party/blink/renderer/core/dom/mutation_record.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
@@ -101,6 +102,7 @@ class MenuListSelectType final : public SelectType {
   void PopupDidHide() override;
   bool PopupIsVisible() const override;
   PopupMenu* PopupForTesting() const override;
+  AXObject* PopupRootAXObject() const override;
 
   void DidMutateSubtree();
 
@@ -274,8 +276,7 @@ bool MenuListSelectType::ShouldOpenPopupForKeyPressEvent(
   LayoutTheme& layout_theme = LayoutTheme::GetTheme();
   int key_code = event.keyCode();
 
-  return ((layout_theme.PopsMenuBySpaceKey() && key_code == ' ' &&
-           !select_->type_ahead_.HasActiveSession(event)) ||
+  return ((key_code == ' ' && !select_->type_ahead_.HasActiveSession(event)) ||
           (layout_theme.PopsMenuByReturnKey() && key_code == '\r'));
 }
 
@@ -368,6 +369,10 @@ void MenuListSelectType::SetPopupIsVisible(bool popup_is_visible) {
 
 PopupMenu* MenuListSelectType::PopupForTesting() const {
   return popup_.Get();
+}
+
+AXObject* MenuListSelectType::PopupRootAXObject() const {
+  return popup_ ? popup_->PopupRootAXObject() : nullptr;
 }
 
 void MenuListSelectType::DidSelectOption(
@@ -723,7 +728,7 @@ bool ListBoxSelectType::DefaultEventHandler(const Event& event) {
     // Convert to coords relative to the list box if needed.
     if (HTMLOptionElement* option = EventTargetOption(*mouse_event)) {
       if (!option->IsDisabledFormControl()) {
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
         const bool meta_or_ctrl = mouse_event->metaKey();
 #else
         const bool meta_or_ctrl = mouse_event->ctrlKey();
@@ -857,7 +862,7 @@ bool ListBoxSelectType::DefaultEventHandler(const Event& event) {
     }
 
     bool is_control_key = false;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     is_control_key = keyboard_event->metaKey();
 #else
     is_control_key = keyboard_event->ctrlKey();
@@ -1354,6 +1359,11 @@ bool SelectType::PopupIsVisible() const {
 }
 
 PopupMenu* SelectType::PopupForTesting() const {
+  NOTREACHED();
+  return nullptr;
+}
+
+AXObject* SelectType::PopupRootAXObject() const {
   NOTREACHED();
   return nullptr;
 }

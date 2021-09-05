@@ -34,11 +34,11 @@ void IOSChromeUpdatePasswordInfoBarDelegate::Create(
     infobars::InfoBarManager* infobar_manager,
     std::unique_ptr<PasswordFormManagerForUI> form_manager,
     UIViewController* baseViewController,
-    id<ApplicationCommands> dispatcher) {
+    id<ApplicationCommands> handler) {
   DCHECK(infobar_manager);
   auto delegate = base::WrapUnique(new IOSChromeUpdatePasswordInfoBarDelegate(
       is_sync_user, std::move(form_manager)));
-  delegate->set_dispatcher(dispatcher);
+  delegate->set_handler(handler);
 
   UpdatePasswordInfoBarController* controller =
       [[UpdatePasswordInfoBarController alloc]
@@ -126,6 +126,6 @@ bool IOSChromeUpdatePasswordInfoBarDelegate::Accept() {
       selected_account_, form_to_save()->GetPendingCredentials().password_value,
       form_to_save());
   form_to_save()->Save();
-  set_infobar_response(password_manager::metrics_util::CLICKED_SAVE);
+  set_infobar_response(password_manager::metrics_util::CLICKED_ACCEPT);
   return true;
 }

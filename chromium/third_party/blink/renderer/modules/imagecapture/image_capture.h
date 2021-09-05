@@ -37,7 +37,6 @@ class MODULES_EXPORT ImageCapture final
       public ActiveScriptWrappable<ImageCapture>,
       public ExecutionContextLifecycleObserver,
       public mojom::blink::PermissionObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(ImageCapture);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -45,9 +44,12 @@ class MODULES_EXPORT ImageCapture final
                               MediaStreamTrack*,
                               ExceptionState&);
 
+  // |initialized_callback| is called when settings and capabilities are
+  // retrieved.
   ImageCapture(ExecutionContext*,
                MediaStreamTrack*,
-               bool pan_tilt_zoom_allowed);
+               bool pan_tilt_zoom_allowed,
+               base::OnceClosure initialized_callback);
   ~ImageCapture() override;
 
   // EventTarget implementation.
@@ -82,6 +84,7 @@ class MODULES_EXPORT ImageCapture final
   void GetMediaTrackSettings(MediaTrackSettings*) const;
 
   bool HasPanTiltZoomPermissionGranted() const;
+  bool HasZoomPermissionGranted() const;
 
   void Trace(Visitor*) const override;
 
@@ -102,12 +105,31 @@ class MODULES_EXPORT ImageCapture final
                         bool result);
   void OnMojoTakePhoto(ScriptPromiseResolver*, media::mojom::blink::BlobPtr);
 
-  void UpdateMediaTrackCapabilities(media::mojom::blink::PhotoStatePtr);
+  // If getUserMedia contains either pan, tilt, or zoom constraints, the
+  // corresponding settings will be set when image capture is created.
+  void SetPanTiltZoomSettingsFromTrack(
+      base::OnceClosure callback,
+      media::mojom::blink::PhotoStatePtr photo_state);
+  // Update local track settings and capabilities once pan, tilt, and zoom
+  // settings have been set. |done_callback| will be called when settings and
+  // capabilities are retrieved.
+  void OnSetPanTiltZoomSettingsFromTrack(base::OnceClosure done_callback,
+                                         bool result);
+  // Update local track settings and capabilities and call
+  // |initialized_callback| to indicate settings and capabilities have been
+  // retrieved.
+  void UpdateMediaTrackCapabilities(
+      base::OnceClosure initialized_callback,
+      media::mojom::blink::PhotoStatePtr photo_state);
+
   void OnServiceConnectionError();
 
   void ResolveWithNothing(ScriptPromiseResolver*);
   void ResolveWithPhotoSettings(ScriptPromiseResolver*);
   void ResolveWithPhotoCapabilities(ScriptPromiseResolver*);
+
+  // Returns true if page is visible. Otherwise returns false.
+  bool IsPageVisible();
 
   Member<MediaStreamTrack> stream_track_;
   std::unique_ptr<ImageCaptureFrameGrabber> frame_grabber_;

@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/enterprise/reporting/profile_report_generator.h"
+#include "components/enterprise/browser/reporting/profile_report_generator.h"
 
 #include "base/json/json_reader.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/util/values/values_util.h"
+#include "chrome/browser/enterprise/reporting/reporting_delegate_factory_desktop.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -53,7 +54,8 @@ constexpr char kBlockedExtensionSettings[] = R"({
 class ProfileReportGeneratorTest : public ::testing::Test {
  public:
   ProfileReportGeneratorTest()
-      : profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+      : generator_(&reporting_delegate_factory_),
+        profile_manager_(TestingBrowserProcess::GetGlobal()) {}
   ~ProfileReportGeneratorTest() override = default;
 
   void SetUp() override {
@@ -80,11 +82,10 @@ class ProfileReportGeneratorTest : public ::testing::Test {
   void InitPolicyMap() {
     policy_map_.Set("kPolicyName1", policy::POLICY_LEVEL_MANDATORY,
                     policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                    std::make_unique<base::Value>(std::vector<base::Value>()),
-                    nullptr);
+                    base::Value(std::vector<base::Value>()), nullptr);
     policy_map_.Set("kPolicyName2", policy::POLICY_LEVEL_RECOMMENDED,
                     policy::POLICY_SCOPE_MACHINE, policy::POLICY_SOURCE_MERGED,
-                    std::make_unique<base::Value>(true), nullptr);
+                    base::Value(true), nullptr);
   }
 
   std::unique_ptr<em::ChromeUserProfileInfo> GenerateReport(
@@ -132,6 +133,7 @@ class ProfileReportGeneratorTest : public ::testing::Test {
   TestingProfile* profile() { return profile_; }
   TestingProfileManager* profile_manager() { return &profile_manager_; }
 
+  ReportingDelegateFactoryDesktop reporting_delegate_factory_;
   ProfileReportGenerator generator_;
 
  private:

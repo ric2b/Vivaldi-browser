@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
@@ -36,13 +37,6 @@ const int64_t kFullHashExpiryTimeInMinutes = 60;
 const ThreatSeverity kLeastSeverity =
     std::numeric_limits<ThreatSeverity>::max();
 
-// The list of the name of any store files that are no longer used and can be
-// safely deleted from the disk. There's no overlap allowed between the files
-// on this list and the list returned by GetListInfos().
-const char* const kStoreFileNamesToDelete[] = {
-    "AnyIpMalware.store", "ChromeFilenameClientIncident.store",
-    "UrlSuspiciousSiteId.store"};
-
 ListInfos GetListInfos() {
 // NOTE(vakh): When adding a store here, add the corresponding store-specific
 // histograms also.
@@ -54,48 +48,51 @@ ListInfos GetListInfos() {
 //   hash checks. For instance: GetChromeUrlApiId()
 
 #if defined(OS_IOS)
-  const bool kSyncOnlyOnChromeBuilds = false;
-  const bool kSyncOnlyOnDesktopBuilds = false;
-#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  const bool kSyncOnlyOnChromeBuilds = true;
-  const bool kSyncOnlyOnDesktopBuilds = true;
+  const bool kSyncOnIos = true;
 #else
-  const bool kSyncOnlyOnChromeBuilds = false;
-  const bool kSyncOnlyOnDesktopBuilds = true;
+  const bool kSyncOnIos = false;
 #endif
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  const bool kIsChromeBranded = true;
+#else
+  const bool kIsChromeBranded = false;
+#endif
+
+  const bool kSyncOnDesktopBuilds = !kSyncOnIos;
+  const bool kSyncOnChromeDesktopBuilds = kIsChromeBranded && kSyncOnDesktopBuilds;
   const bool kSyncAlways = true;
   const bool kSyncNever = false;
   return ListInfos({
-      ListInfo(kSyncOnlyOnDesktopBuilds, "IpMalware.store", GetIpMalwareId(),
+      ListInfo(kSyncOnDesktopBuilds, "IpMalware.store", GetIpMalwareId(),
                SB_THREAT_TYPE_UNUSED),
       ListInfo(kSyncAlways, "UrlSoceng.store", GetUrlSocEngId(),
                SB_THREAT_TYPE_URL_PHISHING),
       ListInfo(kSyncAlways, "UrlMalware.store", GetUrlMalwareId(),
                SB_THREAT_TYPE_URL_MALWARE),
-      ListInfo(kSyncOnlyOnDesktopBuilds, "UrlUws.store", GetUrlUwsId(),
+      ListInfo(kSyncOnDesktopBuilds, "UrlUws.store", GetUrlUwsId(),
                SB_THREAT_TYPE_URL_UNWANTED),
-      ListInfo(kSyncOnlyOnDesktopBuilds, "UrlMalBin.store", GetUrlMalBinId(),
+      ListInfo(kSyncOnDesktopBuilds, "UrlMalBin.store", GetUrlMalBinId(),
                SB_THREAT_TYPE_URL_BINARY_MALWARE),
-      ListInfo(kSyncOnlyOnDesktopBuilds, "ChromeExtMalware.store",
+      ListInfo(kSyncOnDesktopBuilds, "ChromeExtMalware.store",
                GetChromeExtMalwareId(), SB_THREAT_TYPE_EXTENSION),
-      ListInfo(kSyncOnlyOnChromeBuilds, "CertCsdDownloadWhitelist.store",
+      ListInfo(kSyncOnChromeDesktopBuilds, "CertCsdDownloadWhitelist.store",
                GetCertCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
-      ListInfo(kSyncOnlyOnChromeBuilds, "ChromeUrlClientIncident.store",
+      ListInfo(kSyncOnChromeDesktopBuilds, "ChromeUrlClientIncident.store",
                GetChromeUrlClientIncidentId(),
                SB_THREAT_TYPE_BLACKLISTED_RESOURCE),
       ListInfo(kSyncAlways, "UrlBilling.store", GetUrlBillingId(),
                SB_THREAT_TYPE_BILLING),
-      ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdDownloadWhitelist.store",
+      ListInfo(kSyncOnChromeDesktopBuilds, "UrlCsdDownloadWhitelist.store",
                GetUrlCsdDownloadWhitelistId(), SB_THREAT_TYPE_UNUSED),
-      ListInfo(kSyncOnlyOnChromeBuilds, "UrlCsdWhitelist.store",
+      ListInfo(kSyncOnChromeDesktopBuilds, "UrlCsdWhitelist.store",
                GetUrlCsdWhitelistId(), SB_THREAT_TYPE_CSD_WHITELIST),
-      ListInfo(kSyncOnlyOnChromeBuilds, "UrlSubresourceFilter.store",
+      ListInfo(kSyncOnChromeDesktopBuilds, "UrlSubresourceFilter.store",
                GetUrlSubresourceFilterId(), SB_THREAT_TYPE_SUBRESOURCE_FILTER),
-      ListInfo(kSyncOnlyOnChromeBuilds, "UrlSuspiciousSite.store",
+      ListInfo(kSyncOnChromeDesktopBuilds, "UrlSuspiciousSite.store",
                GetUrlSuspiciousSiteId(), SB_THREAT_TYPE_SUSPICIOUS_SITE),
       ListInfo(kSyncNever, "", GetChromeUrlApiId(), SB_THREAT_TYPE_API_ABUSE),
-      ListInfo(kSyncOnlyOnChromeBuilds, "UrlHighConfidenceAllowlist.store",
+      ListInfo(kSyncOnChromeDesktopBuilds || kSyncOnIos, "UrlHighConfidenceAllowlist.store",
                GetUrlHighConfidenceAllowlistId(),
                SB_THREAT_TYPE_HIGH_CONFIDENCE_ALLOWLIST),
   });
@@ -287,11 +284,6 @@ V4LocalDatabaseManager::V4LocalDatabaseManager(
                               base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
   DCHECK(!base_path_.empty());
   DCHECK(!list_infos_.empty());
-
-  DeleteUnusedStoreFiles();
-
-  DVLOG(1) << "V4LocalDatabaseManager::V4LocalDatabaseManager: "
-           << "base_path_: " << base_path_.AsUTF8Unsafe();
 }
 
 V4LocalDatabaseManager::~V4LocalDatabaseManager() {
@@ -631,32 +623,6 @@ void V4LocalDatabaseManager::DatabaseUpdated() {
         FROM_HERE, CreateTaskTraits(ThreadID::UI),
         base::BindOnce(
             &SafeBrowsingDatabaseManager::NotifyDatabaseUpdateFinished, this));
-  }
-}
-
-void V4LocalDatabaseManager::DeleteUnusedStoreFiles() {
-  for (auto* const store_filename_to_delete : kStoreFileNamesToDelete) {
-    // Is the file marked for deletion also being used for a valid V4Store?
-    auto it = std::find_if(std::begin(list_infos_), std::end(list_infos_),
-                           [&store_filename_to_delete](ListInfo const& li) {
-                             return li.filename() == store_filename_to_delete;
-                           });
-    if (list_infos_.end() == it) {
-      const base::FilePath store_path =
-          base_path_.AppendASCII(store_filename_to_delete);
-      bool path_exists = base::PathExists(store_path);
-      base::UmaHistogramBoolean("SafeBrowsing.V4UnusedStoreFileExists" +
-                                    GetUmaSuffixForStore(store_path),
-                                path_exists);
-      if (!path_exists) {
-        continue;
-      }
-      task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(base::GetDeleteFileCallback(), store_path));
-    } else {
-      NOTREACHED() << "Trying to delete a store file that's in use: "
-                   << store_filename_to_delete;
-    }
   }
 }
 

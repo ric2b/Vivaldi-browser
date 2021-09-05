@@ -14,6 +14,7 @@
 #include "base/format_macros.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
@@ -110,6 +111,10 @@ ModelTypeWorker::ModelTypeWorker(
 }
 
 ModelTypeWorker::~ModelTypeWorker() {
+  base::UmaHistogramCounts1000(
+      std::string("Sync.UndecryptedEntitiesOnDataTypeDisabled.") +
+          ModelTypeToHistogramSuffix(type_),
+      entries_pending_decryption_.size());
   model_type_processor_->DisconnectSync();
 }
 
@@ -300,7 +305,8 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
     AdaptUniquePositionForNote(update_entity, &data);
     AdaptTitleForNote(update_entity, &data.specifics,
                           specifics_were_encrypted);
-    AdaptGuidForNote(update_entity, &data.specifics);
+    data.is_note_guid_in_specifics_preprocessed =
+        AdaptGuidForNote(update_entity, &data.specifics);
   } else if (model_type == AUTOFILL_WALLET_DATA) {
     AdaptClientTagForWalletData(&data);
   }
@@ -446,14 +452,6 @@ void ModelTypeWorker::OnFullCommitFailure(SyncCommitError commit_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   model_type_processor_->OnCommitFailed(commit_error);
-}
-
-void ModelTypeWorker::AbortMigration() {
-  DCHECK(!model_type_state_.initial_sync_done());
-  model_type_state_ = sync_pb::ModelTypeState();
-  entries_pending_decryption_.clear();
-  pending_updates_.clear();
-  nudge_handler_->NudgeForInitialDownload(type_);
 }
 
 size_t ModelTypeWorker::EstimateMemoryUsage() const {

@@ -7,7 +7,7 @@
 // language policy. If a language is both blocked and forced, forced wins. It is
 // only practical to test this interaction in a single unit test covering both
 // header files.
-#include "chrome/browser/spellchecker/spellcheck_language_blacklist_policy_handler.h"
+#include "chrome/browser/spellchecker/spellcheck_language_blocklist_policy_handler.h"
 #include "chrome/browser/spellchecker/spellcheck_language_policy_handler.h"
 
 #include <ostream>
@@ -130,28 +130,28 @@ TEST_P(SpellcheckLanguagePolicyHandlersTest, ApplyPolicySettings) {
     forced_languages_list.Append(std::move(forced_language));
   }
 
-  policy.Set(policy::key::kSpellcheckLanguageBlacklist,
+  policy.Set(policy::key::kSpellcheckLanguageBlocklist,
              policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
              policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
-             base::Value::ToUniquePtrValue(std::move(blocked_languages_list)),
-             nullptr);
+             std::move(blocked_languages_list), nullptr);
 
-  policy.Set(
-      policy::key::kSpellcheckLanguage, policy::POLICY_LEVEL_MANDATORY,
-      policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
-      base::Value::ToUniquePtrValue(std::move(forced_languages_list)), nullptr);
+  policy.Set(policy::key::kSpellcheckLanguage, policy::POLICY_LEVEL_MANDATORY,
+             policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
+             std::move(forced_languages_list), nullptr);
 
-  policy.Set(
-      policy::key::kSpellcheckEnabled, policy::POLICY_LEVEL_MANDATORY,
-      policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
-      std::make_unique<base::Value>(GetParam().spellcheck_enabled), nullptr);
+  policy.Set(policy::key::kSpellcheckEnabled, policy::POLICY_LEVEL_MANDATORY,
+             policy::POLICY_SCOPE_USER,
+             policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
+             base::Value(GetParam().spellcheck_enabled), nullptr);
 
   // Apply policy to the forced languages handler.
   SpellcheckLanguagePolicyHandler forced_languages_handler;
   forced_languages_handler.ApplyPolicySettings(policy, &prefs);
 
   // Apply policy to the blocked languages handler.
-  SpellcheckLanguageBlacklistPolicyHandler blocked_languages_handler;
+  SpellcheckLanguageBlocklistPolicyHandler blocked_languages_handler(
+      policy::key::kSpellcheckLanguageBlocklist);
   blocked_languages_handler.ApplyPolicySettings(policy, &prefs);
 
   // Check if forced languages preferences are as expected.
@@ -159,7 +159,7 @@ TEST_P(SpellcheckLanguagePolicyHandlersTest, ApplyPolicySettings) {
              GetParam().expected_forced_languages);
 
   // Check if blocked languages preferences are as expected.
-  CheckPrefs(prefs, spellcheck::prefs::kSpellCheckBlacklistedDictionaries,
+  CheckPrefs(prefs, spellcheck::prefs::kSpellCheckBlocklistedDictionaries,
              GetParam().expected_blocked_languages);
 }
 

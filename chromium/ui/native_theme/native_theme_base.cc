@@ -720,15 +720,17 @@ SkRect NativeThemeBase::PaintCheckboxRadioCommon(
     flags.setStyle(cc::PaintFlags::kFill_Style);
     canvas->drawRoundRect(background_rect, border_radius, border_radius, flags);
 
-    // Draw the border.
-    if (!(is_checkbox && button.checked)) {
+    // For checkbox the border is drawn only when it is unchecked or
+    // indeterminate. For radio the border is always drawn.
+    if (!(is_checkbox && button.checked && !button.indeterminate)) {
       // Shrink half border width so the final pixels of the border will be
       // within the rectangle.
       const auto border_rect =
           skrect.makeInset(kBorderWidth / 2, kBorderWidth / 2);
       SkColor border_color =
-          button.checked ? ControlsAccentColorForState(state, color_scheme)
-                         : ControlsBorderColorForState(state, color_scheme);
+          (button.checked && !button.indeterminate)
+              ? ControlsAccentColorForState(state, color_scheme)
+              : ControlsBorderColorForState(state, color_scheme);
       flags.setColor(border_color);
       flags.setStyle(cc::PaintFlags::kStroke_Style);
       flags.setStrokeWidth(kBorderWidth);
@@ -1645,45 +1647,47 @@ SkColor NativeThemeBase::GetControlColor(ControlColorId color_id,
 
 SkColor NativeThemeBase::GetDarkModeControlColor(
     ControlColorId color_id) const {
-    switch (color_id) {
+  switch (color_id) {
     case kAccent:
-      return SkColorSetRGB(0xC3, 0xC3, 0xC3);
+      return SkColorSetRGB(0x99, 0xC8, 0xFF);
     case kHoveredAccent:
-      return SkColorSetRGB(0xD8, 0xD8, 0xD8);
+      return SkColorSetRGB(0xD1, 0xE6, 0xFF);
     case kPressedAccent:
-      return SkColorSetRGB(0xB9, 0xB9, 0xB9);
+      return SkColorSetRGB(0x61, 0xA9, 0xFF);
     case kDisabledAccent:
-      return SkColorSetARGB(0x4D, 0xC3, 0xC3, 0xC3);
+      return SkColorSetRGB(0x75, 0x75, 0x75);
     case kProgressValue:
       return SkColorSetRGB(0x63, 0xAD, 0xE5);
     case kFill:
+      return SkColorSetRGB(0x3B, 0x3B, 0x3B);
     case kLightenLayer:
     case kAutoCompleteBackground:
     case kBackground:
       return SkColorSetRGB(0x3B, 0x3B, 0x3B);
     case kBorder:
+      return SkColorSetRGB(0x85, 0x85, 0x85);
     case kSlider:
-      return SkColorSetRGB(0xC3, 0xC3, 0xC3);
+      return SkColorSetRGB(0x99, 0xC8, 0xFF);
     case kHoveredSlider:
-      return SkColorSetRGB(0xD8, 0xD8, 0xD8);
+      return SkColorSetRGB(0xD1, 0xE6, 0xFF);
     case kPressedSlider:
-      return SkColorSetRGB(0xB9, 0xB9, 0xB9);
+      return SkColorSetRGB(0x61, 0xA9, 0xFF);
     case kDisabledSlider:
-      return SkColorSetRGB(0x70, 0x70, 0x70);
+      return SkColorSetRGB(0x75, 0x75, 0x75);
     case kDisabledBackground:
-      return SkColorSetARGB(0x4D, 0x3B, 0x3B, 0x3B);
+      return SkColorSetRGB(0x3B, 0x3B, 0x3B);
     case kHoveredBorder:
-      return SkColorSetRGB(0xEA, 0xEA, 0xEA);
-    case kPressedBorder:
       return SkColorSetRGB(0xAC, 0xAC, 0xAC);
+    case kPressedBorder:
+      return SkColorSetRGB(0x6E, 0x6E, 0x6E);
     case kDisabledBorder:
-      return SkColorSetARGB(0x4D ,0xC3, 0xC3, 0xC3);
+      return SkColorSetRGB(0x62, 0x62, 0x62);
     case kHoveredFill:
-      return SkColorSetRGB(0x54, 0x54, 0x54);
+      return SkColorSetRGB(0x3B, 0x3B, 0x3B);
     case kPressedFill:
-      return SkColorSetRGB(0x45, 0x45, 0x45);
+      return SkColorSetRGB(0x3B, 0x3B, 0x3B);
     case kDisabledFill:
-      return SkColorSetARGB(0x4D, 0x3B, 0x3B, 0x3B);
+      return SkColorSetRGB(0x36, 0x36, 0x36);
     case kScrollbarArrowBackground:
       return SkColorSetRGB(0x42, 0x42, 0x42);
     case kScrollbarArrowBackgroundHovered:
@@ -1702,7 +1706,7 @@ SkColor NativeThemeBase::GetDarkModeControlColor(
     case kScrollbarThumbPressed:
     case kScrollbarThumb:
       return SK_ColorWHITE;
-    }
+  }
   NOTREACHED();
   return gfx::kPlaceholderColor;
 }

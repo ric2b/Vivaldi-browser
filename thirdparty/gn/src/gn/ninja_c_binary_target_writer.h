@@ -73,6 +73,9 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
                     const std::vector<OutputFile>& order_only_deps,
                     std::vector<OutputFile>* object_files,
                     std::vector<SourceFile>* other_files);
+  void WriteSwiftSources(const std::vector<OutputFile>& input_deps,
+                         const std::vector<OutputFile>& order_only_deps,
+                         std::vector<OutputFile>* object_files);
 
   void WriteLinkerStuff(const std::vector<OutputFile>& object_files,
                         const std::vector<SourceFile>& other_files,

@@ -257,7 +257,7 @@ TEST_F(MenuRunnerTest, PrefixSelect) {
 
 // This test is Mac-specific: Mac is the only platform where VKEY_SPACE
 // activates menu items.
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
 TEST_F(MenuRunnerTest, SpaceActivatesItem) {
   if (!MenuConfig::instance().all_menus_use_prefix_selection)
     return;
@@ -282,7 +282,7 @@ TEST_F(MenuRunnerTest, SpaceActivatesItem) {
   EXPECT_EQ(1, delegate->on_menu_closed_called());
   EXPECT_NE(nullptr, delegate->on_menu_closed_menu());
 }
-#endif  // OS_MACOSX
+#endif  // OS_APPLE
 
 // Tests that attempting to nest a menu within a drag-and-drop menu does not
 // cause a crash. Instead the drag and drop action should be canceled, and the
@@ -595,11 +595,12 @@ TEST_F(MenuRunnerImplTest, FocusOnMenuClose) {
       new internal::MenuRunnerImpl(menu_item_view());
 
   // Create test button that has focus.
+  auto button_managed = std::make_unique<LabelButton>();
+  button_managed->SetID(1);
+  button_managed->SetSize(gfx::Size(20, 20));
   LabelButton* button =
-      new LabelButton(nullptr, base::string16(), style::CONTEXT_BUTTON);
-  button->SetID(1);
-  button->SetSize(gfx::Size(20, 20));
-  owner()->GetRootView()->AddChildView(button);
+      owner()->GetRootView()->AddChildView(std::move(button_managed));
+
   button->SetFocusBehavior(View::FocusBehavior::ALWAYS);
   button->GetWidget()->widget_delegate()->SetCanActivate(true);
   button->GetWidget()->Activate();

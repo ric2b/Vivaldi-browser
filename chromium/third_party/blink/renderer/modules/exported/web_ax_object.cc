@@ -124,9 +124,9 @@ class WebAXSparseAttributeClientAdapter : public AXSparseAttributeClient {
   }
 
   void AddObjectVectorAttribute(AXObjectVectorAttribute attribute,
-                                HeapVector<Member<AXObject>>& value) override {
-    WebVector<WebAXObject> result(value.size());
-    std::copy(value.begin(), value.end(), result.begin());
+                                HeapVector<Member<AXObject>>* value) override {
+    WebVector<WebAXObject> result(value->size());
+    std::copy(value->begin(), value->end(), result.begin());
     attribute_map_.AddObjectVectorAttribute(
         static_cast<WebAXObjectVectorAttribute>(attribute), result);
   }
@@ -965,9 +965,9 @@ ax::mojom::ListStyle WebAXObject::GetListStyle() const {
   return private_->GetListStyle();
 }
 
-ax::mojom::TextDirection WebAXObject::GetTextDirection() const {
+ax::mojom::blink::WritingDirection WebAXObject::GetTextDirection() const {
   if (IsDetached())
-    return ax::mojom::TextDirection::kLtr;
+    return ax::mojom::blink::WritingDirection::kLtr;
 
   return private_->GetTextDirection();
 }
@@ -1500,6 +1500,20 @@ void WebAXObject::GetRelativeBounds(WebAXObject& offset_container,
                               clips_children);
   offset_container = WebAXObject(container);
   bounds_in_container = WebFloatRect(bounds);
+}
+
+void WebAXObject::GetAllObjectsWithChangedBounds(
+    WebVector<WebAXObject>& out_changed_bounds_objects) const {
+  if (IsDetached())
+    return;
+
+  HeapVector<Member<AXObject>> changed_bounds_objects =
+      private_->AXObjectCache().GetAllObjectsWithChangedBounds();
+
+  out_changed_bounds_objects.reserve(changed_bounds_objects.size());
+  out_changed_bounds_objects.resize(changed_bounds_objects.size());
+  std::copy(changed_bounds_objects.begin(), changed_bounds_objects.end(),
+            out_changed_bounds_objects.begin());
 }
 
 bool WebAXObject::ScrollToMakeVisible() const {

@@ -55,8 +55,6 @@ enum { ANDROID_VIEW_ACCESSIBILITY_RANGE_TYPE_FLOAT = 1 };
 
 namespace content {
 
-const float kContentInvalidTimeoutMillisecs = 6000.0;
-
 // static
 BrowserAccessibility* BrowserAccessibility::Create() {
   return new BrowserAccessibilityAndroid();
@@ -176,20 +174,6 @@ bool BrowserAccessibilityAndroid::IsCollectionItem() const {
 }
 
 bool BrowserAccessibilityAndroid::IsContentInvalid() const {
-  if (IsFocused()) {
-    // When a node has focus, only report that it's invalid for a short period
-    // of time. Otherwise it's annoying to hear the invalid message every time
-    // a character is entered.
-    if (content_invalid_timer_.Elapsed().InMillisecondsF() <
-        kContentInvalidTimeoutMillisecs) {
-      bool invalid_state =
-          HasIntAttribute(ax::mojom::IntAttribute::kInvalidState) &&
-          GetData().GetInvalidState() != ax::mojom::InvalidState::kFalse;
-      if (invalid_state)
-        return true;
-    }
-    return false;
-  }
   return HasIntAttribute(ax::mojom::IntAttribute::kInvalidState) &&
          GetData().GetInvalidState() != ax::mojom::InvalidState::kFalse;
 }
@@ -267,6 +251,10 @@ bool BrowserAccessibilityAndroid::IsLink() const {
 
 bool BrowserAccessibilityAndroid::IsMultiLine() const {
   return HasState(ax::mojom::State::kMultiline);
+}
+
+bool BrowserAccessibilityAndroid::IsMultiselectable() const {
+  return HasState(ax::mojom::State::kMultiselectable);
 }
 
 bool BrowserAccessibilityAndroid::IsRangeType() const {
@@ -378,7 +366,7 @@ BrowserAccessibilityAndroid::GetSoleInterestingNodeFromSubtree() const {
 }
 
 bool BrowserAccessibilityAndroid::AreInlineTextBoxesLoaded() const {
-  if (GetRole() == ax::mojom::Role::kStaticText)
+  if (IsText())
     return InternalChildCount() > 0;
 
   // Return false if any descendant needs to load inline text boxes.
@@ -548,6 +536,47 @@ base::string16 BrowserAccessibilityAndroid::GetHint() const {
     strings.push_back(description);
 
   return base::JoinString(strings, base::ASCIIToUTF16(" "));
+}
+
+base::string16 BrowserAccessibilityAndroid::GetStateDescription() const {
+  // For multiselectable state, generate a state description
+  if (IsMultiselectable())
+    return GetMultiselectableStateDescription();
+
+  // Otherwise we will not use state description
+  return base::string16();
+}
+
+base::string16 BrowserAccessibilityAndroid::GetMultiselectableStateDescription()
+    const {
+  content::ContentClient* content_client = content::GetContentClient();
+
+  // Count the number of children and selected children.
+  int child_count = 0;
+  int selected_count = 0;
+  for (PlatformChildIterator it = PlatformChildrenBegin();
+       it != PlatformChildrenEnd(); ++it) {
+    child_count++;
+    BrowserAccessibilityAndroid* child =
+        static_cast<BrowserAccessibilityAndroid*>(it.get());
+    if (child->IsSelected())
+      selected_count++;
+  }
+
+  // If none are selected, return special case.
+  if (!selected_count)
+    return content_client->GetLocalizedString(
+        IDS_AX_MULTISELECTABLE_STATE_DESCRIPTION_NONE);
+
+  // Generate a state description of the form: "multiselectable, x of y
+  // selected.".
+  std::vector<base::string16> values;
+  values.push_back(base::NumberToString16(selected_count));
+  values.push_back(base::NumberToString16(child_count));
+  return base::ReplaceStringPlaceholders(
+      content_client->GetLocalizedString(
+          IDS_AX_MULTISELECTABLE_STATE_DESCRIPTION),
+      values, nullptr);
 }
 
 std::string BrowserAccessibilityAndroid::GetRoleString() const {
@@ -964,8 +993,6 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
       message_id = IDS_AX_ROLE_MENU_BAR;
       break;
     case ax::mojom::Role::kMenuButton:
-      message_id = IDS_AX_ROLE_MENU_BUTTON;
-      break;
     case ax::mojom::Role::kMenuItem:
       message_id = IDS_AX_ROLE_MENU_ITEM;
       break;
@@ -1724,7 +1751,7 @@ void BrowserAccessibilityAndroid::GetSuggestions(
   BrowserAccessibility* node = InternalGetFirstChild();
   int start_offset = 0;
   while (node && node != this) {
-    if (node->IsTextOnlyObject()) {
+    if (node->IsText()) {
       const std::vector<int32_t>& marker_types =
           node->GetData().GetIntListAttribute(
               ax::mojom::IntListAttribute::kMarkerTypes);
@@ -1801,7 +1828,7 @@ bool BrowserAccessibilityAndroid::HasOnlyTextChildren() const {
   // This is called from IsLeaf, so don't call PlatformChildCount
   // from within this!
   for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
-    if (!it->IsTextOnlyObject())
+    if (!it->IsText())
       return false;
   }
   return true;
@@ -1812,8 +1839,7 @@ bool BrowserAccessibilityAndroid::HasOnlyTextAndImageChildren() const {
   // from within this!
   for (auto it = InternalChildrenBegin(); it != InternalChildrenEnd(); ++it) {
     BrowserAccessibility* child = it.get();
-    if (child->GetRole() != ax::mojom::Role::kStaticText &&
-        !ui::IsImageOrVideo(child->GetRole())) {
+    if (!child->IsText() && !ui::IsImageOrVideo(child->GetRole())) {
       return false;
     }
   }
@@ -1906,10 +1932,6 @@ base::string16 BrowserAccessibilityAndroid::GetContentInvalidErrorMessage()
     return content_client->GetLocalizedString(message_id);
 
   return base::string16();
-}
-
-void BrowserAccessibilityAndroid::ResetContentInvalidTimer() {
-  content_invalid_timer_ = base::ElapsedTimer();
 }
 
 }  // namespace content

@@ -36,7 +36,7 @@ if (is_mac) {
         ldflags = []
       }
       ldflags += [
-        "-Wl,-rpath,@executable_path/../../third_party/sparkle_lib/",
+        "-Wl,-rpath,@executable_path/sparkle_lib/Build/Products/Release/",
       ]
     }
   }
@@ -62,7 +62,7 @@ if (is_linux) {
     ]
   }
   if (target_cpu == "arm64") {
-    update_template_instance("//third_party/swiftshader/third_party/llvm-7.0:swiftshader_llvm") {
+    update_template_instance("//third_party/swiftshader/third_party/llvm-10.0:swiftshader_llvm") {
       if (!defined(cflags)) {
         cflags = []
       }

@@ -4,7 +4,12 @@
 
 #include "chrome/browser/browsing_data/access_context_audit_database.h"
 
+#include "base/bind_helpers.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "components/content_settings/core/common/content_settings_utils.h"
 #include "sql/database.h"
 #include "sql/test/scoped_error_expecter.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -35,6 +40,7 @@ void ExpectAccessRecordsEqual(
     EXPECT_EQ(a.name, b.name);
     EXPECT_EQ(a.domain, b.domain);
     EXPECT_EQ(a.path, b.path);
+    EXPECT_EQ(a.is_persistent, b.is_persistent);
   } else {
     EXPECT_EQ(a.origin, b.origin);
   }
@@ -61,6 +67,8 @@ constexpr char kManyContextsCookieName[] = "multiple contexts cookie";
 constexpr char kManyContextsCookieDomain[] = "multi-contexts.com";
 constexpr char kManyContextsCookiePath[] = "/";
 constexpr char kManyContextsStorageAPIOrigin[] = "https://many-contexts.com";
+constexpr char kManyVisitsTopFrameOrigin1[] = "https://mulitple-visits.com";
+constexpr char kManyVisitsTopFrameOrigin2[] = "https://mulitple-other.com";
 constexpr AccessContextAuditDatabase::StorageAPIType
     kManyContextsStorageAPIType =
         AccessContextAuditDatabase::StorageAPIType::kWebDatabase;
@@ -76,11 +84,11 @@ class AccessContextAuditDatabaseTest : public testing::Test {
 
   void SetUp() override { ASSERT_TRUE(temp_directory_.CreateUniqueTempDir()); }
 
-  void OpenDatabase() {
+  void OpenDatabase(bool restore_non_persistent_cookies = false) {
     database_.reset();
     database_ = base::MakeRefCounted<AccessContextAuditDatabase>(
         temp_directory_.GetPath());
-    database_->Init();
+    database_->Init(restore_non_persistent_cookies);
   }
 
   void CloseDatabase() { database_.reset(); }
@@ -95,46 +103,67 @@ class AccessContextAuditDatabaseTest : public testing::Test {
   std::vector<AccessContextAuditDatabase::AccessRecord> GetTestRecords() {
     return {
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test.com"),
+            url::Origin::Create(GURL(kManyVisitsTopFrameOrigin1)),
             AccessContextAuditDatabase::StorageAPIType::kLocalStorage,
-            GURL("https://test.com"),
+            url::Origin::Create(GURL("https://test.com")),
             base::Time::FromDeltaSinceWindowsEpoch(
                 base::TimeDelta::FromHours(1))),
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test2.com:8000"),
+            url::Origin::Create(GURL(kManyVisitsTopFrameOrigin2)),
             AccessContextAuditDatabase::StorageAPIType::kLocalStorage,
-            GURL("https://test.com"),
+            url::Origin::Create(GURL("https://test.com")),
             base::Time::FromDeltaSinceWindowsEpoch(
                 base::TimeDelta::FromHours(2))),
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test2.com"), "cookie1", "test.com", "/",
+            url::Origin::Create(GURL("https://test2.com:8000")), "cookie1",
+            "test.com", "/",
             base::Time::FromDeltaSinceWindowsEpoch(
-                base::TimeDelta::FromHours(3))),
+                base::TimeDelta::FromHours(3)),
+            /* is_persistent */ true),
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test2.com"), kManyContextsCookieName,
-            kManyContextsCookieDomain, kManyContextsCookiePath,
+            url::Origin::Create(GURL(kManyVisitsTopFrameOrigin1)),
+            kManyContextsCookieName, kManyContextsCookieDomain,
+            kManyContextsCookiePath,
             base::Time::FromDeltaSinceWindowsEpoch(
-                base::TimeDelta::FromHours(4))),
+                base::TimeDelta::FromHours(4)),
+            /* is_persistent */ true),
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test3.com"), kManyContextsCookieName,
-            kManyContextsCookieDomain, kManyContextsCookiePath,
+            url::Origin::Create(GURL(kManyVisitsTopFrameOrigin2)),
+            kManyContextsCookieName, kManyContextsCookieDomain,
+            kManyContextsCookiePath,
             base::Time::FromDeltaSinceWindowsEpoch(
-                base::TimeDelta::FromHours(4))),
+                base::TimeDelta::FromHours(4)),
+            /* is_persistent */ true),
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test4.com:8000"), kManyContextsStorageAPIType,
-            GURL(kManyContextsStorageAPIOrigin),
+            url::Origin::Create(GURL("https://test4.com:8000")),
+            kManyContextsStorageAPIType,
+            url::Origin::Create(GURL(kManyContextsStorageAPIOrigin)),
             base::Time::FromDeltaSinceWindowsEpoch(
                 base::TimeDelta::FromHours(5))),
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test5.com:8000"), kManyContextsStorageAPIType,
-            GURL(kManyContextsStorageAPIOrigin),
+            url::Origin::Create(GURL(kManyVisitsTopFrameOrigin1)),
+            kManyContextsStorageAPIType,
+            url::Origin::Create(GURL(kManyContextsStorageAPIOrigin)),
             base::Time::FromDeltaSinceWindowsEpoch(
                 base::TimeDelta::FromHours(6))),
         AccessContextAuditDatabase::AccessRecord(
-            GURL("https://test5.com:8000"), kSingleContextStorageAPIType,
-            GURL(kManyContextsStorageAPIOrigin),
+            url::Origin::Create(GURL(kManyVisitsTopFrameOrigin2)),
+            kSingleContextStorageAPIType,
+            url::Origin::Create(GURL(kManyContextsStorageAPIOrigin)),
             base::Time::FromDeltaSinceWindowsEpoch(
                 base::TimeDelta::FromHours(7))),
+        AccessContextAuditDatabase::AccessRecord(
+            url::Origin::Create(GURL("https://test6.com")),
+            "non-persistent-cookie", "non-persistent-domain", "/",
+            base::Time::FromDeltaSinceWindowsEpoch(
+                base::TimeDelta::FromHours(8)),
+            /* is_persistent */ false),
+        AccessContextAuditDatabase::AccessRecord(
+            url::Origin::Create(GURL("https://test7.com")),
+            kManyContextsStorageAPIType,
+            url::Origin::Create(GURL("https://test8.com")),
+            base::Time::FromDeltaSinceWindowsEpoch(
+                base::TimeDelta::FromHours(9))),
     };
   }
 
@@ -151,18 +180,107 @@ TEST_F(AccessContextAuditDatabaseTest, DatabaseInitialization) {
   sql::Database raw_db;
   EXPECT_TRUE(raw_db.Open(db_path()));
 
-  // [cookies] and [storageapi].
-  EXPECT_EQ(2u, sql::test::CountSQLTables(&raw_db));
+  // Database is currently at version 1.
+  sql::MetaTable meta_table;
+  EXPECT_TRUE(meta_table.Init(&raw_db, 1, 1));
 
-  // [top_frame_origin, name, domain, path, access_utc]
-  EXPECT_EQ(5u, sql::test::CountTableColumns(&raw_db, "cookies"));
+  // [cookies], [storageapi] and [meta]
+  EXPECT_EQ(3u, sql::test::CountSQLTables(&raw_db));
+
+  // [top_frame_origin, name, domain, path, access_utc, is_persistent]
+  EXPECT_EQ(6u, sql::test::CountTableColumns(&raw_db, "cookies"));
 
   // [top_frame_origin, type, origin, access_utc]
   EXPECT_EQ(4u, sql::test::CountTableColumns(&raw_db, "originStorageAPIs"));
 }
 
-TEST_F(AccessContextAuditDatabaseTest, DataPersisted) {
-  // Check that data is retrievable both before and after a database reopening.
+TEST_F(AccessContextAuditDatabaseTest, ComputeDatabaseMetrics) {
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+
+  base::HistogramTester histogram_tester;
+  database()->ComputeDatabaseMetrics();
+
+  // Check total number of records was recorded.
+  histogram_tester.ExpectUniqueSample("Privacy.AccessContextAudit.RecordCount",
+                                      test_records.size(), 1);
+
+  // Check database file size was recorded in KB.
+  int64_t file_size;
+  base::GetFileSize(db_path(), &file_size);
+  histogram_tester.ExpectUniqueSample("Privacy.AccessContextAudit.DatabaseSize",
+                                      static_cast<int>(file_size / 1024), 1);
+
+  // Check unique top frame origin count was recorded.
+  std::set<url::Origin> top_frame_origins;
+  for (const auto& record : test_records)
+    top_frame_origins.insert(record.top_frame_origin);
+  histogram_tester.ExpectUniqueSample(
+      "Privacy.AccessContextAudit.TopFrameOriginCount",
+      top_frame_origins.size(), 1);
+
+  // Check unique cookie domain count was recorded.
+  std::set<std::string> cookie_domains;
+  for (const auto& record : test_records) {
+    if (record.type == AccessContextAuditDatabase::StorageAPIType::kCookie)
+      cookie_domains.insert(record.domain);
+  }
+  histogram_tester.ExpectUniqueSample(
+      "Privacy.AccessContextAudit.CookieDomainCount", cookie_domains.size(), 1);
+
+  // Check unique cookie domain count was recorded.
+  std::set<url::Origin> storage_origins;
+  for (const auto& record : test_records) {
+    if (record.type != AccessContextAuditDatabase::StorageAPIType::kCookie)
+      storage_origins.insert(record.origin);
+  }
+  histogram_tester.ExpectUniqueSample(
+      "Privacy.AccessContextAudit.StorageOriginCount", storage_origins.size(),
+      1);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, IsPersistentSchemaMigration) {
+  // Check that the database opens and functions correctly when a database
+  // with a cookies table, but without an is_persistent field, is present.
+  auto test_records = GetTestRecords();
+  sql::Database raw_db;
+  EXPECT_TRUE(raw_db.Open(db_path()));
+
+  // Create a cookies table without is_persistent.
+  EXPECT_TRUE(
+      raw_db.Execute("CREATE TABLE cookies "
+                     "(top_frame_origin TEXT NOT NULL,"
+                     "name TEXT NOT NULL,"
+                     "domain TEXT NOT NULL,"
+                     "path TEXT NOT NULL,"
+                     "access_utc INTEGER NOT NULL,"
+                     "PRIMARY KEY (top_frame_origin, name, domain, path))"));
+
+  OpenDatabase();
+  database()->AddRecords(test_records);
+  ValidateDatabaseRecords(database(), test_records);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, RestoreNonPersistentCookies) {
+  // Check that non-persistent records are preserved with all other records
+  // when the database is opened with the restore_non_persistent_cookies flag.
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+  ValidateDatabaseRecords(database(), test_records);
+
+  CloseDatabase();
+  OpenDatabase(/* restore_non_persistent_cookies */ true);
+
+  ValidateDatabaseRecords(database(), test_records);
+  CloseDatabase();
+}
+
+TEST_F(AccessContextAuditDatabaseTest, NonPersistentCookiesRemoved) {
+  // Check that non-persistent records are removed, but all other records are
+  // retained when the database is opened without the
+  // restore_non_persistent_cookies flag.
   auto test_records = GetTestRecords();
   OpenDatabase();
   database()->AddRecords(test_records);
@@ -171,12 +289,23 @@ TEST_F(AccessContextAuditDatabaseTest, DataPersisted) {
   CloseDatabase();
   OpenDatabase();
 
+  test_records.erase(
+      std::remove_if(
+          test_records.begin(), test_records.end(),
+          [=](const AccessContextAuditDatabase::AccessRecord& record) {
+            return record.type ==
+                       AccessContextAuditDatabase::StorageAPIType::kCookie &&
+                   record.is_persistent == false;
+          }),
+      test_records.end());
+
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
   ValidateDatabaseRecords(database(), test_records);
   CloseDatabase();
 }
 
-TEST_F(AccessContextAuditDatabaseTest, RecoveredOnOpen) {
-  // Check that a database recovery is performed when opening a corrupted file.
+TEST_F(AccessContextAuditDatabaseTest, RazedOnError) {
+  // Check that the database is razed when opening a corrupted file.
   auto test_records = GetTestRecords();
   OpenDatabase();
   database()->AddRecords(test_records);
@@ -190,10 +319,11 @@ TEST_F(AccessContextAuditDatabaseTest, RecoveredOnOpen) {
   expecter.ExpectError(SQLITE_CORRUPT);
 
   // Open that database and ensure that it does not fail.
-  EXPECT_NO_FATAL_FAILURE(OpenDatabase());
+  EXPECT_NO_FATAL_FAILURE(
+      OpenDatabase(/* restore_non_persistent_cookies */ true));
 
-  // Data should be recovered.
-  ValidateDatabaseRecords(database(), test_records);
+  // No data should be present as the database should have been razed.
+  ValidateDatabaseRecords(database(), {});
 
   EXPECT_TRUE(expecter.SawExpectedErrors());
 }
@@ -224,6 +354,57 @@ TEST_F(AccessContextAuditDatabaseTest, RemoveRecord) {
   EXPECT_EQ(0u, storage_api_rows);
 }
 
+TEST_F(AccessContextAuditDatabaseTest, RemoveAllRecords) {
+  // Check that removing all records deleted all entries from the database and
+  // from the database file.
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+  ValidateDatabaseRecords(database(), test_records);
+  database()->RemoveAllRecords();
+  ValidateDatabaseRecords(database(), {});
+  CloseDatabase();
+
+  // Verify that everything is deleted from the database file.
+  sql::Database raw_db;
+  EXPECT_TRUE(raw_db.Open(db_path()));
+
+  size_t cookie_rows;
+  size_t storage_api_rows;
+  sql::test::CountTableRows(&raw_db, "cookies", &cookie_rows);
+  sql::test::CountTableRows(&raw_db, "originStorageAPIs", &storage_api_rows);
+
+  EXPECT_EQ(0u, cookie_rows);
+  EXPECT_EQ(0u, storage_api_rows);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, RemoveAllRecordsForTimeRange) {
+  // Check that records within the specified time range are removed.
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+  ValidateDatabaseRecords(database(), test_records);
+
+  auto begin_time =
+      base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromHours(4));
+  auto end_time =
+      base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromHours(6));
+
+  database()->RemoveAllRecordsForTimeRange(begin_time, end_time);
+
+  test_records.erase(
+      std::remove_if(
+          test_records.begin(), test_records.end(),
+          [=](const AccessContextAuditDatabase::AccessRecord& record) {
+            return record.last_access_time >= begin_time &&
+                   record.last_access_time <= end_time;
+          }),
+      test_records.end());
+
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
+  ValidateDatabaseRecords(database(), test_records);
+}
+
 TEST_F(AccessContextAuditDatabaseTest, RemoveAllCookieRecords) {
   // Check that all matching cookie records are removed from the database.
   auto test_records = GetTestRecords();
@@ -247,6 +428,36 @@ TEST_F(AccessContextAuditDatabaseTest, RemoveAllCookieRecords) {
           }),
       test_records.end());
 
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
+  ValidateDatabaseRecords(database(), test_records);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, RemoveAllRecordsForTopFrameOrigins) {
+  // Check that all records which have one of the provided origins as the top
+  // frame origin are removed correctly.
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+  ValidateDatabaseRecords(database(), test_records);
+
+  std::vector<url::Origin> many_visit_origins = {
+      url::Origin::Create(GURL(kManyVisitsTopFrameOrigin1)),
+      url::Origin::Create(GURL(kManyVisitsTopFrameOrigin2))};
+  database()->RemoveAllRecordsForTopFrameOrigins(many_visit_origins);
+
+  test_records.erase(
+      std::remove_if(
+          test_records.begin(), test_records.end(),
+          [=](const AccessContextAuditDatabase::AccessRecord& record) {
+            return std::find_if(many_visit_origins.begin(),
+                                many_visit_origins.end(),
+                                [=](const url::Origin origin) {
+                                  return record.top_frame_origin == origin;
+                                }) != many_visit_origins.end();
+          }),
+      test_records.end());
+
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
   ValidateDatabaseRecords(database(), test_records);
 }
 
@@ -258,18 +469,21 @@ TEST_F(AccessContextAuditDatabaseTest, RemoveAllStorageRecords) {
   database()->AddRecords(test_records);
   ValidateDatabaseRecords(database(), test_records);
 
-  database()->RemoveAllRecordsForOriginStorage(
-      GURL(kManyContextsStorageAPIOrigin), kManyContextsStorageAPIType);
+  database()->RemoveAllRecordsForOriginKeyedStorage(
+      url::Origin::Create(GURL(kManyContextsStorageAPIOrigin)),
+      kManyContextsStorageAPIType);
 
   test_records.erase(
       std::remove_if(
           test_records.begin(), test_records.end(),
           [=](const AccessContextAuditDatabase::AccessRecord& record) {
             return (record.type == kManyContextsStorageAPIType &&
-                    record.origin.GetOrigin() ==
-                        GURL(kManyContextsStorageAPIOrigin).GetOrigin());
+                    record.origin == url::Origin::Create(
+                                         GURL(kManyContextsStorageAPIOrigin)));
           }),
       test_records.end());
+
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
   ValidateDatabaseRecords(database(), test_records);
 }
 
@@ -308,4 +522,126 @@ TEST_F(AccessContextAuditDatabaseTest, RepeatedAccesses) {
 
   EXPECT_EQ(num_test_cookie_entries, cookie_rows);
   EXPECT_EQ(num_test_storage_entries, storage_api_rows);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, RemoveSessionOnlyRecords) {
+  // Check that records are cleared appropriately by RemoveSessionOnlyRecords
+  // when the provided content settings indicate they should.
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+  ValidateDatabaseRecords(database(), test_records);
+
+  // Test that default content setting of SESSION_ONLY results in all records
+  // being removed.
+  ContentSettingsForOneType content_settings;
+  content_settings.emplace_back(
+      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
+      base::Value::FromUniquePtrValue(content_settings::ContentSettingToValue(
+          CONTENT_SETTING_SESSION_ONLY)),
+      std::string(), /* incognito */ false);
+
+  database()->RemoveSessionOnlyRecords(content_settings);
+  ValidateDatabaseRecords(database(), {});
+
+  // Check that a more targeted content setting also removes the appropriate
+  // records.
+  content_settings.clear();
+  database()->AddRecords(test_records);
+  ValidateDatabaseRecords(database(), test_records);
+
+  content_settings.emplace_back(
+      ContentSettingsPattern::FromString(kManyContextsCookieDomain),
+      ContentSettingsPattern::Wildcard(),
+      base::Value::FromUniquePtrValue(content_settings::ContentSettingToValue(
+          CONTENT_SETTING_SESSION_ONLY)),
+      std::string(), /* incognito */ false);
+  content_settings.emplace_back(
+      ContentSettingsPattern::FromString(kManyContextsStorageAPIOrigin),
+      ContentSettingsPattern::Wildcard(),
+      base::Value::FromUniquePtrValue(content_settings::ContentSettingToValue(
+          CONTENT_SETTING_SESSION_ONLY)),
+      std::string(), /* incognito */ false);
+  content_settings.emplace_back(
+      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
+      base::Value::FromUniquePtrValue(
+          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW)),
+      std::string(), /* incognito */ false);
+  database()->RemoveSessionOnlyRecords(content_settings);
+
+  test_records.erase(
+      std::remove_if(
+          test_records.begin(), test_records.end(),
+          [=](const AccessContextAuditDatabase::AccessRecord& record) {
+            if (record.type ==
+                AccessContextAuditDatabase::StorageAPIType::kCookie) {
+              return record.domain == kManyContextsCookieDomain;
+            }
+            return record.origin ==
+                   url::Origin::Create(GURL(kManyContextsStorageAPIOrigin));
+          }),
+      test_records.end());
+
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
+  ValidateDatabaseRecords(database(), test_records);
+}
+
+TEST_F(AccessContextAuditDatabaseTest, RemoveStorageApiRecords) {
+  // Check that removal of storage API records based on a combined time range,
+  // storage type, and origin matching function operates correctly.
+  auto test_records = GetTestRecords();
+  OpenDatabase();
+  database()->AddRecords(test_records);
+
+  std::set<AccessContextAuditDatabase::StorageAPIType> storage_types;
+  storage_types.insert(kManyContextsStorageAPIType);
+  storage_types.insert(kSingleContextStorageAPIType);
+
+  auto kStorageOrigin =
+      url::Origin::Create(GURL(kManyContextsStorageAPIOrigin));
+
+  auto origin_matcher = base::BindLambdaForTesting(
+      [&](const url::Origin& origin) { return origin == kStorageOrigin; });
+
+  auto begin_time =
+      base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromHours(5));
+  auto end_time =
+      base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromHours(9));
+
+  database()->RemoveStorageApiRecords(storage_types, origin_matcher, begin_time,
+                                      end_time);
+  test_records.erase(
+      std::remove_if(
+          test_records.begin(), test_records.end(),
+          [=](const AccessContextAuditDatabase::AccessRecord& record) {
+            return (record.type == kManyContextsStorageAPIType ||
+                    record.type == kSingleContextStorageAPIType) &&
+                   record.origin == kStorageOrigin &&
+                   record.last_access_time >= begin_time &&
+                   record.last_access_time <= end_time;
+          }),
+      test_records.end());
+
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
+  ValidateDatabaseRecords(database(), test_records);
+
+  // Check that providing a null origin matcher function matches all origins.
+  test_records = GetTestRecords();
+  database()->AddRecords(test_records);
+
+  database()->RemoveStorageApiRecords(storage_types, base::NullCallback(),
+                                      begin_time, end_time);
+
+  test_records.erase(
+      std::remove_if(
+          test_records.begin(), test_records.end(),
+          [=](const AccessContextAuditDatabase::AccessRecord& record) {
+            return (record.type == kManyContextsStorageAPIType ||
+                    record.type == kSingleContextStorageAPIType) &&
+                   record.last_access_time >= begin_time &&
+                   record.last_access_time <= end_time;
+          }),
+      test_records.end());
+  EXPECT_GT(GetTestRecords().size(), test_records.size());
+  ValidateDatabaseRecords(database(), test_records);
 }

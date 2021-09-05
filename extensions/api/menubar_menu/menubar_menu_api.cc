@@ -195,7 +195,7 @@ void MenubarMenuAPI::SendError(
                             browser_context);
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 // Not used on Mac but we still need a stub
 MenubarMenuShowFunction::MenubarMenuShowFunction() = default;
 MenubarMenuShowFunction::~MenubarMenuShowFunction() = default;

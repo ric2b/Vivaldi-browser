@@ -27,9 +27,14 @@ class PrefRegistrySimple;
 class Profile;
 
 // Trigger identifiers currently used; duplicates not allowed.
+extern const char kHatsSurveyTriggerTesting[];
 extern const char kHatsSurveyTriggerSatisfaction[];
 extern const char kHatsSurveyTriggerSettings[];
 extern const char kHatsSurveyTriggerSettingsPrivacy[];
+
+// The Trigger ID for a test HaTS Next survey which is available for testing
+// and demo purposes when the migration feature flag is enabled.
+extern const char kHatsNextSurveyTriggerIDTesting[];
 
 // This class provides the client side logic for determining if a
 // survey should be shown for any trigger based on input from a finch
@@ -119,6 +124,16 @@ class HatsService : public KeyedService {
       content::WebContents* web_contents,
       int timeout_ms);
 
+  // Updates the user preferences to record that the survey associated with
+  // |survey_id| was shown to the user. |survey_id| is the unique_id provided
+  // to the HaTS Service to identify a survey. This is the trigger ID for HaTS
+  // Next, and the site ID for HaTS v1.
+  void RecordSurveyAsShown(std::string survey_id);
+
+  // Indicates to the service that the HaTS Next dialog has been closed.
+  // Virtual to allow mocking in tests.
+  virtual void HatsNextDialogClosed();
+
   void SetSurveyMetadataForTesting(const SurveyMetadata& metadata);
   void GetSurveyMetadataForTesting(HatsService::SurveyMetadata* metadata) const;
   void SetSurveyCheckerForTesting(
@@ -127,6 +142,7 @@ class HatsService : public KeyedService {
 
  private:
   friend class DelayedSurveyTask;
+  FRIEND_TEST_ALL_PREFIXES(HatsServiceHatsNext, SingleHatsNextDialog);
 
   void LaunchSurveyForWebContents(const std::string& trigger,
                                   content::WebContents* web_contents);
@@ -155,6 +171,10 @@ class HatsService : public KeyedService {
   std::set<DelayedSurveyTask> pending_tasks_;
 
   base::flat_map<std::string, SurveyConfig> survey_configs_by_triggers_;
+
+  // Whether a HaTS Next dialog currently exists (regardless of whether it
+  // is being shown to the user).
+  bool hats_next_dialog_exists_ = false;
 
   base::WeakPtrFactory<HatsService> weak_ptr_factory_{this};
 

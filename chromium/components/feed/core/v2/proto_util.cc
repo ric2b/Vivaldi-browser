@@ -12,8 +12,10 @@
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "components/feed/core/proto/v2/store.pb.h"
+#include "components/feed/core/proto/v2/wire/capability.pb.h"
 #include "components/feed/core/proto/v2/wire/feed_request.pb.h"
 #include "components/feed/core/proto/v2/wire/request.pb.h"
+#include "components/feed/core/v2/config.h"
 #include "components/feed/core/v2/feed_stream.h"
 
 #if defined(OS_ANDROID)
@@ -115,10 +117,9 @@ feedwire::Request CreateFeedQueryRequest(
 
   feedwire::FeedRequest& feed_request = *request.mutable_feed_request();
   feed_request.add_client_capability(feedwire::Capability::BASE_UI);
-  feed_request.add_client_capability(feedwire::Capability::REQUEST_SCHEDULE);
-  feed_request.add_client_capability(feedwire::Capability::OPEN_IN_TAB);
-  feed_request.add_client_capability(feedwire::Capability::DOWNLOAD_LINK);
-  feed_request.add_client_capability(feedwire::Capability::INFINITE_FEED);
+  feed_request.add_client_capability(feedwire::Capability::CARD_MENU);
+  for (auto capability : GetFeedConfig().experimental_capabilities)
+    feed_request.add_client_capability(capability);
 
   *feed_request.mutable_client_info() = CreateClientInfo(request_metadata);
   feedwire::FeedQuery& query = *feed_request.mutable_feed_query();
@@ -175,7 +176,7 @@ bool CompareContent(const feedstore::Content& a, const feedstore::Content& b) {
 
 feedwire::ClientInfo CreateClientInfo(const RequestMetadata& request_metadata) {
   feedwire::ClientInfo client_info;
-  // TODO(harringtond): Fill out client_instance_id.
+  client_info.set_client_instance_id(request_metadata.client_instance_id);
 
   feedwire::DisplayInfo& display_info = *client_info.add_display_info();
   display_info.set_screen_density(request_metadata.display_metrics.density);

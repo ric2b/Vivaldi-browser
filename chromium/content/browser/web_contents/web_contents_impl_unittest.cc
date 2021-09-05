@@ -528,6 +528,10 @@ TEST_F(WebContentsImplTest, CrossSiteBoundaries) {
 // Test that navigating across a site boundary after a crash creates a new
 // RFH without requiring a cross-site transition (i.e., PENDING state).
 TEST_F(WebContentsImplTest, CrossSiteBoundariesAfterCrash) {
+  // Ensure that the cross-site transition will also be cross-process on
+  // Android.
+  IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+
   TestRenderFrameHost* orig_rfh = main_test_rfh();
 
   int orig_rvh_delete_count = 0;
@@ -867,7 +871,7 @@ TEST_F(WebContentsImplTest, CrossSiteComparesAgainstCurrentPage) {
   // BrowsingInstance swapping (even on renderer-initiated navigations) is
   // disabled.
   if (AreAllSitesIsolatedForTesting() || !AreDefaultSiteInstancesEnabled() ||
-      IsProactivelySwapBrowsingInstanceEnabled()) {
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     return;
   }
 
@@ -975,20 +979,36 @@ TEST_F(WebContentsImplTest, CrossSiteNavigationPreempted) {
   EXPECT_TRUE(contents()->CrossProcessNavigationPending());
 
   // Suppose the original renderer navigates before the new one is ready.
-  NavigationSimulator::NavigateAndCommitFromDocument(
-      GURL("http://www.google.com/foo"), orig_rfh);
+  const GURL url3("http://www.google.com/foo");
+  NavigationSimulator::NavigateAndCommitFromDocument(url3, orig_rfh);
 
   // Verify that the pending navigation is cancelled.
-  EXPECT_FALSE(orig_rfh->is_waiting_for_beforeunload_completion());
   SiteInstance* instance2 = contents()->GetSiteInstance();
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If same-site ProactivelySwapBrowsingInstance or main-frame RenderDocument
+    // is enabled, the RFH should change.
+    EXPECT_NE(orig_rfh, main_test_rfh());
+  } else {
+    EXPECT_EQ(orig_rfh, main_test_rfh());
+  }
+  if (CanSameSiteMainFrameNavigationsChangeSiteInstances()) {
+    // When ProactivelySwapBrowsingInstance is enabled on same-site navigations,
+    // the SiteInstance will change.
+    EXPECT_NE(instance1, instance2);
+  } else {
+    EXPECT_EQ(instance1, instance2);
+  }
+  EXPECT_FALSE(main_test_rfh()->is_waiting_for_beforeunload_completion());
+  EXPECT_EQ(main_test_rfh()->GetLastCommittedURL(), url3);
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
-  EXPECT_EQ(orig_rfh, main_test_rfh());
-  EXPECT_EQ(instance1, instance2);
   EXPECT_EQ(nullptr, contents()->GetPendingMainFrame());
 }
 
 // Tests that if we go back twice (same-site then cross-site), and the same-site
-// RFH commits first, the cross-site RFH's navigation is canceled.
+// RFH commits first, the cross-site RFH's navigation is canceled. If the
+// same-site navigation is a cross-RFH navigation, however, the same-site
+// navigation will get canceled instead and we are left with the newer
+// cross-site navigation.
 // TODO(avi,creis): Consider changing this behavior to better match the user's
 // intent.
 TEST_F(WebContentsImplTest, CrossSiteNavigationBackPreempted) {
@@ -1028,8 +1048,20 @@ TEST_F(WebContentsImplTest, CrossSiteNavigationBackPreempted) {
   SiteInstance* instance3 = contents()->GetSiteInstance();
 
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
-  EXPECT_EQ(google_rfh, main_test_rfh());
-  EXPECT_EQ(instance2, instance3);
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If same-site ProactivelySwapBrowsingInstance or main-frame RenderDocument
+    // is enabled, the RFH should change.
+    EXPECT_NE(google_rfh, main_test_rfh());
+  } else {
+    EXPECT_EQ(google_rfh, main_test_rfh());
+  }
+  if (CanSameSiteMainFrameNavigationsChangeSiteInstances()) {
+    // When ProactivelySwapBrowsingInstance is enabled on same-site navigations,
+    // the SiteInstance will change.
+    EXPECT_NE(instance2, instance3);
+  } else {
+    EXPECT_EQ(instance2, instance3);
+  }
   EXPECT_FALSE(contents()->GetPendingMainFrame());
   EXPECT_EQ(url3, entry3->GetURL());
   EXPECT_EQ(instance3,
@@ -1037,28 +1069,60 @@ TEST_F(WebContentsImplTest, CrossSiteNavigationBackPreempted) {
 
   // Go back within the site.
   auto back_navigation1 =
-      NavigationSimulator::CreateHistoryNavigation(-1, contents());
+      NavigationSimulatorImpl::CreateHistoryNavigation(-1, contents());
   back_navigation1->Start();
-  EXPECT_FALSE(contents()->CrossProcessNavigationPending());
+
+  auto* first_pending_rfh = contents()->GetPendingMainFrame();
+  GlobalFrameRoutingId first_pending_rfh_id;
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    EXPECT_TRUE(contents()->CrossProcessNavigationPending());
+    EXPECT_TRUE(first_pending_rfh);
+    first_pending_rfh_id = first_pending_rfh->GetGlobalFrameRoutingId();
+  } else {
+    EXPECT_FALSE(contents()->CrossProcessNavigationPending());
+    EXPECT_FALSE(first_pending_rfh);
+  }
   EXPECT_EQ(entry2, controller().GetPendingEntry());
 
   // Before that commits, go back again.
   back_navigation1->ReadyToCommit();
   auto back_navigation2 =
-      NavigationSimulator::CreateHistoryNavigation(-1, contents());
+      NavigationSimulatorImpl::CreateHistoryNavigation(-1, contents());
   back_navigation2->Start();
   EXPECT_TRUE(contents()->CrossProcessNavigationPending());
   EXPECT_TRUE(contents()->GetPendingMainFrame());
   EXPECT_EQ(entry1, controller().GetPendingEntry());
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // When ProactivelySwapBrowsingInstance or RenderDocument is enabled on
+    // same-site main frame navigation, the first back navigation will create a
+    // speculative RFH even though it's a same-site navigation, and the
+    // speculative RFH will be overwritten by the second back-navigation that
+    // will also create a speculative RFH.
+    EXPECT_NE(first_pending_rfh_id,
+              contents()->GetPendingMainFrame()->GetGlobalFrameRoutingId());
+    // Calling Commit() on the first back navigation below will cause a DCHECK
+    // failure because we've already called DidFinishNavigaition on it, so we
+    // will call it on the second back navigation instead.
+    back_navigation2->Commit();
+  } else {
+    // DidNavigate from the first back. This aborts the second back's
+    // speculative RFH.
+    back_navigation1->Commit();
+  }
 
-  // DidNavigate from the first back. This aborts the second back's pending RFH.
-  back_navigation1->Commit();
-
-  // We should commit this page and forget about the second back.
+  // We have committed this navigation and forgot about the second back if
+  // CanSameSiteMainFrameNavigationsChangeRenderFrameHosts() is false, or the
+  // first back if it's true.
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
   EXPECT_FALSE(controller().GetPendingEntry());
   EXPECT_EQ(google_rfh, main_test_rfh());
-  EXPECT_EQ(url2, controller().GetLastCommittedEntry()->GetURL());
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // We committed the second back navigation and landed on the first page.
+    EXPECT_EQ(url1, controller().GetLastCommittedEntry()->GetURL());
+  } else {
+    // We committed the second back navigation and landed on the second page.
+    EXPECT_EQ(url2, controller().GetLastCommittedEntry()->GetURL());
+  }
 
   // We should not have corrupted the NTP entry.
   EXPECT_EQ(instance3,
@@ -1109,8 +1173,21 @@ TEST_F(WebContentsImplTest, CrossSiteNavigationBackOldNavigationIgnored) {
   SiteInstance* instance3 = contents()->GetSiteInstance();
 
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
-  EXPECT_EQ(google_rfh, main_test_rfh());
-  EXPECT_EQ(instance2, instance3);
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If same-site ProactivelySwapBrowsingInstance or main-frame RenderDocument
+    // is enabled, the RFH should change.
+    EXPECT_NE(google_rfh, main_test_rfh());
+    google_rfh = main_test_rfh();
+  } else {
+    EXPECT_EQ(google_rfh, main_test_rfh());
+  }
+  if (CanSameSiteMainFrameNavigationsChangeSiteInstances()) {
+    // When ProactivelySwapBrowsingInstance is enabled on same-site navigations,
+    // the SiteInstance will change.
+    EXPECT_NE(instance2, instance3);
+  } else {
+    EXPECT_EQ(instance2, instance3);
+  }
   EXPECT_FALSE(contents()->GetPendingMainFrame());
   EXPECT_EQ(url3, entry3->GetURL());
   EXPECT_EQ(instance3,
@@ -1120,7 +1197,11 @@ TEST_F(WebContentsImplTest, CrossSiteNavigationBackOldNavigationIgnored) {
   auto back_navigation1 =
       NavigationSimulator::CreateHistoryNavigation(-1, contents());
   back_navigation1->ReadyToCommit();
-  EXPECT_FALSE(contents()->CrossProcessNavigationPending());
+  if (CanSameSiteMainFrameNavigationsChangeSiteInstances()) {
+    EXPECT_TRUE(contents()->CrossProcessNavigationPending());
+  } else {
+    EXPECT_FALSE(contents()->CrossProcessNavigationPending());
+  }
   EXPECT_EQ(entry2, controller().GetPendingEntry());
 
   // Before that commits, go back again.
@@ -1196,6 +1277,16 @@ TEST_F(WebContentsImplTest, CrossSiteNotPreemptedDuringBeforeUnload) {
   // First, make a non-user initiated same-site navigation.
   const GURL kSameSiteUrl("http://foo/1");
   TestRenderFrameHost* orig_rfh = main_test_rfh();
+  // When ProactivelySwapBrowsingInstance or RenderDocument is enabled on
+  // same-site main frame navigations, the same-site navigation below will
+  // create a speculative RFH that will be overwritten when the cross-site
+  // navigation starts, finishing the same-site navigation, so the scenario in
+  // this test cannot be tested. We should disable same-site proactive
+  // BrowsingInstance for |orig_rfh| before continuing.
+  // Note: this will not disable RenderDocument.
+  // TODO(crbug.com/936696): Skip this test when main-frame RenderDocument is
+  // enabled.
+  DisableProactiveBrowsingInstanceSwapFor(orig_rfh);
   auto same_site_navigation = NavigationSimulator::CreateRendererInitiated(
       kSameSiteUrl, main_test_rfh());
   same_site_navigation->SetHasUserGesture(false);
@@ -1325,13 +1416,14 @@ TEST_F(WebContentsImplTest, NavigationExitsFullscreen) {
   EXPECT_EQ(orig_rfh, main_test_rfh());
 
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(contents()->IsFullscreen());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
   orig_rfh->EnterFullscreen(blink::mojom::FullscreenOptions::New(),
                             base::BindOnce(&ExpectTrue));
-  EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_TRUE(contents()->IsFullscreen());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   // Navigate to a new site.
@@ -1339,7 +1431,7 @@ TEST_F(WebContentsImplTest, NavigationExitsFullscreen) {
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), url2);
 
   // Confirm fullscreen has exited.
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(contents()->IsFullscreen());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   contents()->SetDelegate(nullptr);
@@ -1360,19 +1452,26 @@ TEST_F(WebContentsImplTest, HistoryNavigationExitsFullscreen) {
   // Now, navigate to another page on the same site.
   const GURL url2("http://www.google.com/search?q=kittens");
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), url2);
-  EXPECT_EQ(orig_rfh, main_test_rfh());
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If ProactivelySwapBrowsingInstance is enabled on same-site navigations,
+    // the same-site navigation above will use a new RFH.
+    EXPECT_NE(orig_rfh, main_test_rfh());
+  } else {
+    EXPECT_EQ(orig_rfh, main_test_rfh());
+  }
 
   // Sanity-check: Confirm we're not starting out in fullscreen mode.
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(contents()->IsFullscreen());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   for (int i = 0; i < 2; ++i) {
     // Toggle fullscreen mode on (as if initiated via IPC from renderer).
     main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-        blink::mojom::UserActivationUpdateType::kNotifyActivation);
-    orig_rfh->EnterFullscreen(blink::mojom::FullscreenOptions::New(),
-                              base::BindOnce(&ExpectTrue));
-    EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
+        blink::mojom::UserActivationUpdateType::kNotifyActivation,
+        blink::mojom::UserActivationNotificationType::kTest);
+    main_test_rfh()->EnterFullscreen(blink::mojom::FullscreenOptions::New(),
+                                     base::BindOnce(&ExpectTrue));
+    EXPECT_TRUE(contents()->IsFullscreen());
     EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
     // Navigate backward (or forward).
@@ -1382,7 +1481,7 @@ TEST_F(WebContentsImplTest, HistoryNavigationExitsFullscreen) {
       NavigationSimulator::GoForward(contents());
 
     // Confirm fullscreen has exited.
-    EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+    EXPECT_FALSE(contents()->IsFullscreen());
     EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
   }
 
@@ -1400,20 +1499,21 @@ TEST_F(WebContentsImplTest, CrashExitsFullscreen) {
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), url);
 
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(contents()->IsFullscreen());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
   main_test_rfh()->frame_tree_node()->UpdateUserActivationState(
-      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+      blink::mojom::UserActivationUpdateType::kNotifyActivation,
+      blink::mojom::UserActivationNotificationType::kTest);
   main_test_rfh()->EnterFullscreen(blink::mojom::FullscreenOptions::New(),
                                    base::BindOnce(&ExpectTrue));
-  EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_TRUE(contents()->IsFullscreen());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   // Crash the renderer.
   main_test_rfh()->GetProcess()->SimulateCrash();
 
   // Confirm fullscreen has exited.
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(contents()->IsFullscreen());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   contents()->SetDelegate(nullptr);
@@ -1429,7 +1529,7 @@ TEST_F(WebContentsImplTest,
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), url);
 
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(contents()->IsFullscreen());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   // When there is no user activation and no orientation change, entering
@@ -1439,7 +1539,7 @@ TEST_F(WebContentsImplTest,
   EXPECT_FALSE(contents()->HasSeenRecentScreenOrientationChange());
   EXPECT_FALSE(
       main_test_rfh()->frame_tree_node()->HasTransientUserActivation());
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
+  EXPECT_FALSE(contents()->IsFullscreen());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   contents()->SetDelegate(nullptr);
@@ -1865,16 +1965,38 @@ TEST_F(WebContentsImplTest, ActiveContentsCountNavigate) {
   navigation2->Start();
   EXPECT_EQ(1u, instance->GetRelatedActiveContentsCount());
   navigation2->Commit();
-  EXPECT_EQ(1u, instance->GetRelatedActiveContentsCount());
+  if (CanSameSiteMainFrameNavigationsChangeSiteInstances()) {
+    // When ProactivelySwapBrowsingInstance turned on for same-site navigations,
+    // the BrowsingInstance will change on same-site navigations.
+    EXPECT_NE(instance, contents->GetSiteInstance());
+    // Check the previous instance's count.
+    EXPECT_EQ(0u, instance->GetRelatedActiveContentsCount());
+    // Update the current instance.
+    instance = contents->GetSiteInstance();
+    EXPECT_EQ(1u, instance->GetRelatedActiveContentsCount());
+  }
 
   // Navigate to a URL in a different site in the same BrowsingInstance.
   const GURL kUrl2("http://b.com");
-  auto navigation3 =
-      NavigationSimulator::CreateRendererInitiated(kUrl2, main_test_rfh());
+  auto navigation3 = NavigationSimulator::CreateRendererInitiated(
+      kUrl2, contents->GetMainFrame());
   navigation3->ReadyToCommit();
-  EXPECT_FALSE(contents->CrossProcessNavigationPending());
   EXPECT_EQ(1u, instance->GetRelatedActiveContentsCount());
+  if (AreAllSitesIsolatedForTesting() ||
+      CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
+    EXPECT_TRUE(contents->CrossProcessNavigationPending());
+  } else {
+    EXPECT_FALSE(contents->CrossProcessNavigationPending());
+  }
   navigation3->Commit();
+  if (CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
+    // When ProactivelySwapBrowsingInstance turned on, the BrowsingInstance will
+    // change on cross-site navigations.
+    EXPECT_NE(instance, contents->GetSiteInstance());
+    EXPECT_EQ(0u, instance->GetRelatedActiveContentsCount());
+    // Update the current instance.
+    instance = contents->GetSiteInstance();
+  }
   EXPECT_EQ(1u, instance->GetRelatedActiveContentsCount());
 
   // Navigate to a URL in a different site and different BrowsingInstance, by
@@ -1915,7 +2037,7 @@ TEST_F(WebContentsImplTest, ActiveContentsCountChangeBrowsingInstance) {
 
   // Navigate to a URL which sort of looks like a chrome:// url.
   contents->NavigateAndCommit(GURL("http://gpu"));
-  if (IsProactivelySwapBrowsingInstanceEnabled()) {
+  if (CanCrossSiteNavigationsProactivelySwapBrowsingInstances()) {
     // The navigation from "a.com" to "gpu" is using a new BrowsingInstance.
     EXPECT_EQ(0u, instance->GetRelatedActiveContentsCount());
     // The rest of the test expects |instance| to match the one in the main
@@ -2118,8 +2240,7 @@ TEST_F(WebContentsImplTestWithSiteIsolation, IsLoadingToDifferentDocument) {
                                        ui::PAGE_TRANSITION_AUTO_SUBFRAME);
   EXPECT_TRUE(contents()->IsLoading());
   EXPECT_FALSE(contents()->IsLoadingToDifferentDocument());
-  subframe->OnMessageReceived(
-      FrameHostMsg_DidStopLoading(subframe->GetRoutingID()));
+  subframe->DidStopLoading();
   EXPECT_FALSE(contents()->IsLoading());
 }
 
@@ -2158,8 +2279,7 @@ TEST_F(WebContentsImplTest, DISABLED_NoEarlyStop) {
   // navigation in the current RenderFrameHost. There should still be a pending
   // RenderFrameHost and the WebContents should still be loading.
   same_process_navigation->Commit();
-  current_rfh->OnMessageReceived(
-      FrameHostMsg_DidStopLoading(current_rfh->GetRoutingID()));
+  current_rfh->DidStopLoading();
   EXPECT_EQ(contents()->GetPendingMainFrame(), pending_rfh);
   EXPECT_TRUE(contents()->IsLoading());
 
@@ -2179,8 +2299,7 @@ TEST_F(WebContentsImplTest, DISABLED_NoEarlyStop) {
 
   // Simulate the new current RenderFrameHost DidStopLoading. The WebContents
   // should now have stopped loading.
-  new_current_rfh->OnMessageReceived(
-      FrameHostMsg_DidStopLoading(new_current_rfh->GetRoutingID()));
+  new_current_rfh->DidStopLoading();
   EXPECT_EQ(main_test_rfh(), new_current_rfh);
   EXPECT_FALSE(contents()->IsLoading());
 }
@@ -2333,7 +2452,15 @@ TEST_F(WebContentsImplTest, ResetJavaScriptDialogOnUserNavigate) {
       NavigationSimulator::CreateRendererInitiated(kUrl2, main_test_rfh());
   navigation->SetHasUserGesture(false);
   navigation->Commit();
-  EXPECT_EQ(1u, dialog_manager.reset_count());
+  if (CanSameSiteMainFrameNavigationsChangeRenderFrameHosts()) {
+    // If we changed RenderFrameHost on a renderer-initiated navigation above,
+    // we would trigger RenderFrameHostManager::UnloadOldFrame, similar to the
+    // first (user/browser-initiated) navigation, which will trigger dialog
+    // cancellations and increment the reset_count to 2.
+    EXPECT_EQ(2u, dialog_manager.reset_count());
+  } else {
+    EXPECT_EQ(1u, dialog_manager.reset_count());
+  }
 
   contents()->SetJavaScriptDialogManagerForTesting(nullptr);
 }
@@ -2384,7 +2511,7 @@ class MockWebContentsDelegate : public WebContentsDelegate {
   MOCK_METHOD2(HandleContextMenu,
                bool(RenderFrameHost*, const ContextMenuParams&));
   MOCK_METHOD4(RegisterProtocolHandler,
-               void(WebContents*, const std::string&, const GURL&, bool));
+               void(RenderFrameHost*, const std::string&, const GURL&, bool));
 };
 
 }  // namespace
@@ -2415,9 +2542,12 @@ TEST_F(WebContentsImplTest, RegisterProtocolHandlerDifferentOrigin) {
 
   // Only the first call to RegisterProtocolHandler should register because the
   // other call has a handler from a different origin.
-  EXPECT_CALL(delegate,
-              RegisterProtocolHandler(contents(), "mailto", handler_url1, true))
+  EXPECT_CALL(delegate, RegisterProtocolHandler(main_test_rfh(), "mailto",
+                                                handler_url1, true))
       .Times(1);
+  EXPECT_CALL(delegate, RegisterProtocolHandler(main_test_rfh(), "mailto",
+                                                handler_url2, true))
+      .Times(0);
 
   {
     contents()->RegisterProtocolHandler(main_test_rfh(), "mailto", handler_url1,
@@ -2444,8 +2574,8 @@ TEST_F(WebContentsImplTest, RegisterProtocolHandlerDataURL) {
   contents()->NavigateAndCommit(data);
 
   // Data URLs should fail.
-  EXPECT_CALL(delegate,
-              RegisterProtocolHandler(contents(), "mailto", data_handler, true))
+  EXPECT_CALL(delegate, RegisterProtocolHandler(contents()->GetMainFrame(),
+                                                "mailto", data_handler, true))
       .Times(0);
 
   {

@@ -11,6 +11,8 @@ import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 import org.chromium.ui.resources.ResourceManager;
 
+import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
+
 class BottomControlsProperties {
     /** The height of the bottom control container (view which includes the top shadow) in px. */
     static final WritableIntPropertyKey BOTTOM_CONTROLS_CONTAINER_HEIGHT_PX =
@@ -37,7 +39,12 @@ class BottomControlsProperties {
     static final WritableObjectPropertyKey<ResourceManager> RESOURCE_MANAGER =
             new WritableObjectPropertyKey<>();
 
+    /** Vivaldi: a handler for swipe events on the toolbar. **/
+    static final WritableObjectPropertyKey<EdgeSwipeHandler> TOOLBAR_SWIPE_HANDLER =
+            new WritableObjectPropertyKey<>();
+
     static final PropertyKey[] ALL_KEYS = new PropertyKey[] {BOTTOM_CONTROLS_CONTAINER_HEIGHT_PX,
             BOTTOM_CONTROLS_HEIGHT_PX, Y_OFFSET, ANDROID_VIEW_VISIBLE, COMPOSITED_VIEW_VISIBLE,
-            LAYOUT_MANAGER, RESOURCE_MANAGER};
+            LAYOUT_MANAGER, RESOURCE_MANAGER,
+            TOOLBAR_SWIPE_HANDLER}; // Vivaldi
 }

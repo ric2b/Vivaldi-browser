@@ -49,9 +49,7 @@ std::unique_ptr<KeyedService> BuildBookmarkModelWithoutLoad(
 
 void LoadBookmarkModel(Profile* profile,
                        bookmarks::BookmarkModel* bookmark_model) {
-  bookmark_model->Load(profile->GetPrefs(), profile->GetPath(),
-                       profile->GetIOTaskRunner(),
-                       content::GetUIThreadTaskRunner({}));
+  bookmark_model->Load(profile->GetPrefs(), profile->GetPath());
 }
 
 bookmarks::BookmarkModel* CreateBookmarkModelWithoutLoad(Profile* profile) {
@@ -101,7 +99,7 @@ TEST_F(ProfileStatisticsTest, WaitOrCountBookmarks) {
   TestingProfile* profile = manager()->CreateTestingProfile("Test 1");
   ASSERT_TRUE(profile);
   // We need history, autofill and password services for the test to succeed.
-  ASSERT_TRUE(profile->CreateHistoryService(true, false));
+  ASSERT_TRUE(profile->CreateHistoryService());
   profile->CreateWebDataService();
   PasswordStoreFactory::GetInstance()->SetTestingFactory(
       profile,

@@ -45,7 +45,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_LAYER_SCROLLABLE_AREA_H_
 
 #include <memory>
-#include "base/macros.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/scroll_anchor.h"
@@ -75,13 +74,15 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData {
 
  public:
   PaintLayerScrollableAreaRareData();
+  PaintLayerScrollableAreaRareData(const PaintLayerScrollableAreaRareData&) =
+      delete;
+  PaintLayerScrollableAreaRareData& operator=(
+      const PaintLayerScrollableAreaRareData&) = delete;
 
   StickyConstraintsMap sticky_constraints_map_;
   base::Optional<cc::SnapContainerData> snap_container_data_;
   bool snap_container_data_needs_update_ = true;
   bool needs_resnap_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(PaintLayerScrollableAreaRareData);
 };
 
 // PaintLayerScrollableArea represents the scrollable area of a LayoutBox.
@@ -122,7 +123,6 @@ struct CORE_EXPORT PaintLayerScrollableAreaRareData {
 class CORE_EXPORT PaintLayerScrollableArea final
     : public GarbageCollected<PaintLayerScrollableArea>,
       public ScrollableArea {
-  USING_GARBAGE_COLLECTED_MIXIN(PaintLayerScrollableArea);
   friend class Internals;
 
  private:
@@ -304,6 +304,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
       const Scrollbar&,
       const IntPoint&) const override;
   IntPoint ConvertFromRootFrame(const IntPoint&) const override;
+  IntPoint ConvertFromRootFrameToVisualViewport(const IntPoint&) const override;
   int ScrollSize(ScrollbarOrientation) const override;
   FloatPoint ScrollPosition() const override {
     return FloatPoint(ScrollOrigin()) + GetScrollOffset();
@@ -482,6 +483,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool RestoreScrollAnchor(const SerializedAnchor&) override;
   ScrollAnchor* GetScrollAnchor() override { return &scroll_anchor_; }
   bool IsPaintLayerScrollableArea() const override { return true; }
+  bool IsRootFrameLayoutViewport() const override;
 
   LayoutBox* GetLayoutBox() const override;
 
@@ -527,9 +529,11 @@ class CORE_EXPORT PaintLayerScrollableArea final
     had_vertical_scrollbar_before_relayout_ = val;
   }
 
-  StickyConstraintsMap& GetStickyConstraintsMap() {
+  const StickyConstraintsMap& GetStickyConstraintsMap() {
     return EnsureRareData().sticky_constraints_map_;
   }
+  StickyPositionScrollingConstraints* GetStickyConstraints(PaintLayer*);
+  void AddStickyConstraints(PaintLayer*, StickyPositionScrollingConstraints);
 
   void InvalidateAllStickyConstraints();
   void InvalidateStickyConstraintsFor(PaintLayer*);
@@ -553,9 +557,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   void InvalidatePaintOfScrollControlsIfNeeded(const PaintInvalidatorContext&);
 
-  // Should be called when the previous visual rects are no longer valid.
-  void ClearPreviousVisualRects();
-
   void DidScrollWithScrollbar(ScrollbarPart,
                               ScrollbarOrientation,
                               WebInputEvent::Type) override;
@@ -568,6 +569,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   void Trace(Visitor*) const override;
 
+  IntRect ScrollingBackgroundVisualRect(
+      const PhysicalOffset& paint_offset) const;
   const DisplayItemClient& GetScrollingBackgroundDisplayItemClient() const {
     return scrolling_background_display_item_client_;
   }
@@ -674,10 +677,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   void ScrollControlWasSetNeedsPaintInvalidation() override;
 
-  void SetHorizontalScrollbarVisualRect(const IntRect&);
-  void SetVerticalScrollbarVisualRect(const IntRect&);
-  void SetScrollCornerAndResizerVisualRect(const IntRect&);
-
   bool HasNonCompositedStickyDescendants() const;
 
   IntSize PixelSnappedBorderBoxSize() const;
@@ -780,7 +779,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
     void Trace(Visitor* visitor) const { visitor->Trace(scrollable_area_); }
 
    private:
-    IntRect VisualRect() const final;
     String DebugName() const final;
     DOMNodeId OwnerNodeId() const final;
 
@@ -798,7 +796,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
     void Trace(Visitor* visitor) const { visitor->Trace(scrollable_area_); }
 
    private:
-    IntRect VisualRect() const final;
     String DebugName() const final;
     DOMNodeId OwnerNodeId() const final;
 

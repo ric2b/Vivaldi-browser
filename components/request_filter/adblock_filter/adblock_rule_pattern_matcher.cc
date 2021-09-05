@@ -272,9 +272,9 @@ RulePatternMatcher::RulePatternMatcher(const flat::FilterRule& rule)
          (rule_.anchor_type() & flat::AnchorType_HOST) == 0);
   DCHECK((rule_.anchor_type() &
           (flat::AnchorType_START | flat::AnchorType_HOST)) == 0 ||
-         !pattern_.starts_with("*"));
+         !base::StartsWith(pattern_, "*"));
   DCHECK((rule_.anchor_type() & (flat::AnchorType_END)) == 0 ||
-         !pattern_.ends_with("*"));
+         !base::EndsWith(pattern_, "*"));
 }
 
 RulePatternMatcher::~RulePatternMatcher() = default;

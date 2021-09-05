@@ -14,13 +14,13 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.GlobalDiscardableReferencePool;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcher;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherConfig;
 import org.chromium.chrome.browser.image_fetcher.ImageFetcherFactory;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteResult.GroupDetails;
 import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionHost;
@@ -35,6 +35,7 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.components.browser_ui.util.ConversionUtils;
+import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
 import org.chromium.components.query_tiles.QueryTile;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -154,7 +155,7 @@ class DropdownItemViewInfoListBuilder {
 
         mIconBridge = new LargeIconBridge(profile);
         mImageFetcher = ImageFetcherFactory.createImageFetcher(ImageFetcherConfig.IN_MEMORY_ONLY,
-                GlobalDiscardableReferencePool.getReferencePool(), MAX_IMAGE_CACHE_SIZE);
+                profile, GlobalDiscardableReferencePool.getReferencePool(), MAX_IMAGE_CACHE_SIZE);
     }
 
     /**
@@ -275,10 +276,18 @@ class DropdownItemViewInfoListBuilder {
 
             if (currentGroup != suggestion.getGroupId()) {
                 currentGroup = suggestion.getGroupId();
-                final PropertyModel model = mHeaderProcessor.createModel();
-                mHeaderProcessor.populateModel(model, currentGroup,
-                        autocompleteResult.getGroupHeaders().get(currentGroup));
-                viewInfoList.add(new DropdownItemViewInfo(mHeaderProcessor, model, currentGroup));
+                final GroupDetails details =
+                        autocompleteResult.getGroupsDetails().get(currentGroup);
+
+                // Only add the Header Group when both ID and details are specified.
+                // Note that despite GroupsDetails map not holding <null> values,
+                // a group definition for specific ID may be unavailable.
+                if (details != null) {
+                    final PropertyModel model = mHeaderProcessor.createModel();
+                    mHeaderProcessor.populateModel(model, currentGroup, details.title);
+                    viewInfoList.add(
+                            new DropdownItemViewInfo(mHeaderProcessor, model, currentGroup));
+                }
             }
 
             final PropertyModel model = processor.createModel();

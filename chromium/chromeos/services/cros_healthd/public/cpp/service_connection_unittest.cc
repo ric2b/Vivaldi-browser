@@ -4,6 +4,8 @@
 
 #include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
 
+#include <sys/types.h>
+
 #include <utility>
 #include <vector>
 
@@ -22,12 +24,15 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using ::chromeos::network_health::mojom::NetworkHealthService;
 using ::testing::_;
 using ::testing::Invoke;
 using ::testing::StrictMock;
 using ::testing::WithArgs;
 
 namespace chromeos {
+using network_diagnostics::mojom::NetworkDiagnosticsRoutines;
+using network_diagnostics::mojom::RoutineVerdict;
 namespace cros_healthd {
 namespace {
 
@@ -135,6 +140,85 @@ class MockCrosHealthdPowerObserver : public mojom::CrosHealthdPowerObserver {
 
  private:
   mojo::Receiver<mojom::CrosHealthdPowerObserver> receiver_;
+};
+
+class MockNetworkHealthService : public NetworkHealthService {
+ public:
+  MockNetworkHealthService() : receiver_{this} {}
+  MockNetworkHealthService(const MockNetworkHealthService&) = delete;
+  MockNetworkHealthService& operator=(const MockNetworkHealthService&) = delete;
+
+  MOCK_METHOD(void,
+              GetNetworkList,
+              (NetworkHealthService::GetNetworkListCallback),
+              (override));
+  MOCK_METHOD(void,
+              GetHealthSnapshot,
+              (NetworkHealthService::GetHealthSnapshotCallback),
+              (override));
+
+  mojo::PendingRemote<NetworkHealthService> pending_remote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+ private:
+  mojo::Receiver<NetworkHealthService> receiver_;
+};
+
+class MockNetworkDiagnosticsRoutines : public NetworkDiagnosticsRoutines {
+ public:
+  MockNetworkDiagnosticsRoutines() : receiver_{this} {}
+  MockNetworkDiagnosticsRoutines(const MockNetworkDiagnosticsRoutines&) =
+      delete;
+  MockNetworkDiagnosticsRoutines& operator=(
+      const MockNetworkDiagnosticsRoutines&) = delete;
+
+  MOCK_METHOD(void,
+              LanConnectivity,
+              (NetworkDiagnosticsRoutines::LanConnectivityCallback),
+              (override));
+  MOCK_METHOD(void,
+              SignalStrength,
+              (NetworkDiagnosticsRoutines::SignalStrengthCallback),
+              (override));
+  MOCK_METHOD(void,
+              GatewayCanBePinged,
+              (NetworkDiagnosticsRoutines::GatewayCanBePingedCallback),
+              (override));
+  MOCK_METHOD(void,
+              HasSecureWiFiConnection,
+              (NetworkDiagnosticsRoutines::HasSecureWiFiConnectionCallback),
+              (override));
+  MOCK_METHOD(void,
+              DnsResolverPresent,
+              (NetworkDiagnosticsRoutines::DnsResolverPresentCallback),
+              (override));
+  MOCK_METHOD(void,
+              DnsLatency,
+              (NetworkDiagnosticsRoutines::DnsLatencyCallback),
+              (override));
+  MOCK_METHOD(void,
+              DnsResolution,
+              (NetworkDiagnosticsRoutines::DnsResolutionCallback),
+              (override));
+  MOCK_METHOD(void,
+              CaptivePortal,
+              (NetworkDiagnosticsRoutines::CaptivePortalCallback),
+              (override));
+  MOCK_METHOD(void,
+              HttpFirewall,
+              (NetworkDiagnosticsRoutines::HttpFirewallCallback),
+              (override));
+
+  mojo::PendingRemote<NetworkDiagnosticsRoutines> pending_remote() {
+    if (receiver_.is_bound()) {
+      receiver_.reset();
+    }
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+ private:
+  mojo::Receiver<NetworkDiagnosticsRoutines> receiver_;
 };
 
 class CrosHealthdServiceConnectionTest : public testing::Test {
@@ -449,6 +533,61 @@ TEST_F(CrosHealthdServiceConnectionTest, AddPowerObserver) {
   run_loop.Run();
 }
 
+// Test that we can set the callback to get the NetworkHealthService remote and
+// request the network health state snapshot.
+TEST_F(CrosHealthdServiceConnectionTest, SetBindNetworkHealthService) {
+  MockNetworkHealthService service;
+  ServiceConnection::GetInstance()->SetBindNetworkHealthServiceCallback(
+      base::BindLambdaForTesting(
+          [&service] { return service.pending_remote(); }));
+
+  base::RunLoop run_loop;
+  auto canned_response = network_health::mojom::NetworkHealthState::New();
+  EXPECT_CALL(service, GetHealthSnapshot(_))
+      .WillOnce(
+          Invoke([&](NetworkHealthService::GetHealthSnapshotCallback callback) {
+            std::move(callback).Run(canned_response.Clone());
+          }));
+
+  FakeCrosHealthdClient::Get()->RequestNetworkHealthForTesting(
+      base::BindLambdaForTesting(
+          [&](network_health::mojom::NetworkHealthStatePtr response) {
+            EXPECT_EQ(canned_response, response);
+            run_loop.Quit();
+          }));
+
+  run_loop.Run();
+}
+
+// Test that we can set the callback to get the NetworkDiagnosticsRoutines
+// remote and run the lan connectivity routine.
+TEST_F(CrosHealthdServiceConnectionTest, SetBindNetworkDiagnosticsRoutines) {
+  MockNetworkDiagnosticsRoutines network_diagnostics_routines;
+  ServiceConnection::GetInstance()->SetBindNetworkDiagnosticsRoutinesCallback(
+      base::BindLambdaForTesting([&network_diagnostics_routines] {
+        return network_diagnostics_routines.pending_remote();
+      }));
+
+  // Run the LanConnectivity routine so we know that
+  // |network_diagnostics_routines| is connected.
+  base::RunLoop run_loop;
+  RoutineVerdict routine_verdict = RoutineVerdict::kNoProblem;
+  EXPECT_CALL(network_diagnostics_routines, LanConnectivity(_))
+      .WillOnce(Invoke(
+          [&](NetworkDiagnosticsRoutines::LanConnectivityCallback callback) {
+            std::move(callback).Run(routine_verdict);
+          }));
+
+  FakeCrosHealthdClient::Get()->RunLanConnectivityRoutineForTesting(
+      base::BindLambdaForTesting([&](RoutineVerdict response) {
+        EXPECT_EQ(routine_verdict, response);
+        run_loop.Quit();
+      }));
+
+  run_loop.Run();
+}
+
+// Test that we can probe telemetry info.
 TEST_F(CrosHealthdServiceConnectionTest, ProbeTelemetryInfo) {
   auto response = mojom::TelemetryInfo::New();
   FakeCrosHealthdClient::Get()->SetProbeTelemetryInfoResponseForTesting(
@@ -457,6 +596,21 @@ TEST_F(CrosHealthdServiceConnectionTest, ProbeTelemetryInfo) {
   ServiceConnection::GetInstance()->ProbeTelemetryInfo(
       {}, base::BindLambdaForTesting([&](mojom::TelemetryInfoPtr info) {
         EXPECT_EQ(info, response);
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can request process info.
+TEST_F(CrosHealthdServiceConnectionTest, ProbeProcessInfo) {
+  auto response =
+      mojom::ProcessResult::NewProcessInfo(mojom::ProcessInfo::New());
+  FakeCrosHealthdClient::Get()->SetProbeProcessInfoResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->ProbeProcessInfo(
+      /*process_id=*/13,
+      base::BindLambdaForTesting([&](mojom::ProcessResultPtr result) {
+        EXPECT_EQ(result, response);
         run_loop.Quit();
       }));
   run_loop.Run();

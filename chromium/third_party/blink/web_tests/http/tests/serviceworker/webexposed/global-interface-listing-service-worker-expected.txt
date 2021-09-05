@@ -14,6 +14,22 @@ interface AbortSignal : EventTarget
     getter onabort
     method constructor
     setter onabort
+interface AudioDecoder
+    attribute @@toStringTag
+    getter decodeQueueSize
+    getter state
+    method close
+    method configure
+    method constructor
+    method decode
+    method flush
+    method reset
+interface AudioFrame
+    attribute @@toStringTag
+    getter buffer
+    getter timestamp
+    method close
+    method constructor
 interface BackgroundFetchEvent : ExtendableEvent
     attribute @@toStringTag
     getter registration
@@ -409,6 +425,12 @@ interface DecompressionStream
     getter readable
     getter writable
     method constructor
+interface EncodedAudioChunk
+    attribute @@toStringTag
+    getter data
+    getter timestamp
+    getter type
+    method constructor
 interface ErrorEvent : Event
     attribute @@toStringTag
     getter colno
@@ -490,6 +512,7 @@ interface FaceDetector
 interface FetchEvent : ExtendableEvent
     attribute @@toStringTag
     getter clientId
+    getter handled
     getter isReload
     getter preloadResponse
     getter request
@@ -537,14 +560,16 @@ interface FileReader : EventTarget
     setter onloadstart
     setter onprogress
 interface FileSystemDirectoryHandle : FileSystemHandle
-    static method getSystemDirectory
     attribute @@toStringTag
+    method @@asyncIterator
     method constructor
-    method getDirectory
-    method getEntries
-    method getFile
+    method entries
+    method getDirectoryHandle
+    method getFileHandle
+    method keys
     method removeEntry
     method resolve
+    method values
 interface FileSystemFileHandle : FileSystemHandle
     attribute @@toStringTag
     method constructor
@@ -552,8 +577,7 @@ interface FileSystemFileHandle : FileSystemHandle
     method getFile
 interface FileSystemHandle
     attribute @@toStringTag
-    getter isDirectory
-    getter isFile
+    getter kind
     getter name
     method constructor
     method isSameEntry
@@ -707,6 +731,7 @@ interface IDBObjectStore
     method openCursor
     method openKeyCursor
     method put
+    method putAllValues
     setter name
 interface IDBObservation
     attribute @@toStringTag
@@ -793,10 +818,12 @@ interface ImageDecoder
     getter complete
     getter frameCount
     getter repetitionCount
+    getter tracks
     getter type
     method constructor
     method decode
     method decodeMetadata
+    method selectTrack
 interface InstallEvent : ExtendableEvent
     attribute @@toStringTag
     method constructor
@@ -897,7 +924,10 @@ interface NativeIOFile
     attribute @@toStringTag
     method close
     method constructor
+    method flush
+    method getLength
     method read
+    method setLength
     method write
 interface NativeIOManager
     attribute @@toStringTag
@@ -1009,6 +1039,7 @@ interface OffscreenCanvasRenderingContext2D
     method closePath
     method commit
     method constructor
+    method createConicGradient
     method createImageData
     method createLinearGradient
     method createPattern
@@ -1200,6 +1231,13 @@ interface Permissions
     method request
     method requestAll
     method revoke
+interface Plane
+    attribute @@toStringTag
+    getter length
+    getter rows
+    getter stride
+    method constructor
+    method readInto
 interface Profiler
     attribute @@toStringTag
     getter sampleInterval
@@ -1290,6 +1328,7 @@ interface ReportingObserver
     method takeRecords
 interface Request
     attribute @@toStringTag
+    getter body
     getter bodyUsed
     getter cache
     getter credentials
@@ -1388,11 +1427,14 @@ interface ServiceWorkerRegistration : EventTarget
     method unregister
     method update
     setter onupdatefound
-interface StorageManager
+interface StorageManager : EventTarget
     attribute @@toStringTag
+    getter onquotachange
     method constructor
     method estimate
+    method getDirectory
     method persisted
+    setter onquotachange
 interface SubtleCrypto
     attribute @@toStringTag
     method constructor
@@ -1472,11 +1514,12 @@ interface TransformStream
     getter readable
     getter writable
     method constructor
-interface TrustedTypePolicyFactory
+interface TrustedTypePolicyFactory : EventTarget
     attribute @@toStringTag
     getter defaultPolicy
     getter emptyHTML
     getter emptyScript
+    getter onbeforecreatepolicy
     method constructor
     method createPolicy
     method getAttributeType
@@ -1485,6 +1528,7 @@ interface TrustedTypePolicyFactory
     method isHTML
     method isScript
     method isScriptURL
+    setter onbeforecreatepolicy
 interface URL
     attribute @@toStringTag
     getter hash
@@ -1533,6 +1577,24 @@ interface UserActivation
     getter hasBeenActive
     getter isActive
     method constructor
+interface VideoFrame
+    attribute @@toStringTag
+    getter codedHeight
+    getter codedWidth
+    getter cropHeight
+    getter cropLeft
+    getter cropTop
+    getter cropWidth
+    getter displayHeight
+    getter displayWidth
+    getter duration
+    getter format
+    getter planes
+    getter timestamp
+    method clone
+    method constructor
+    method createImageBitmap
+    method destroy
 interface WebGL2ComputeRenderingContext
     attribute @@toStringTag
     attribute ACTIVE_ATOMIC_COUNTER_BUFFERS
@@ -3767,7 +3829,6 @@ interface WorkerGlobalScope : EventTarget
     method constructor
     method createImageBitmap
     method fetch
-    method getOriginPrivateDirectory
     method importScripts
     method queueMicrotask
     method setInterval

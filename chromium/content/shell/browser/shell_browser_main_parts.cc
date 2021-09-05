@@ -9,7 +9,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/message_loop/message_loop_current.h"
+#include "base/task/current_thread.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -114,7 +114,7 @@ ShellBrowserMainParts::ShellBrowserMainParts(
 ShellBrowserMainParts::~ShellBrowserMainParts() {
 }
 
-#if !defined(OS_MACOSX)
+#if !defined(OS_MAC)
 void ShellBrowserMainParts::PreMainMessageLoopStart() {
 #if defined(USE_AURA) && defined(USE_X11)
   if (!features::IsUsingOzonePlatform())
@@ -167,7 +167,8 @@ void ShellBrowserMainParts::ToolkitInitialized() {
   if (features::IsUsingOzonePlatform())
     return;
 #endif
-  gtk_ui_delegate_ = std::make_unique<ui::GtkUiDelegateX11>(gfx::GetXDisplay());
+  gtk_ui_delegate_ =
+      std::make_unique<ui::GtkUiDelegateX11>(x11::Connection::Get());
   ui::GtkUiDelegate::SetInstance(gtk_ui_delegate_.get());
   views::LinuxUI* linux_ui = BuildGtkUi(gtk_ui_delegate_.get());
   linux_ui->UpdateDeviceScaleFactor();

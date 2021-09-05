@@ -313,18 +313,22 @@ enum class CompareCase {
   INSENSITIVE_ASCII,
 };
 
-BASE_EXPORT bool StartsWith(StringPiece str,
-                            StringPiece search_for,
-                            CompareCase case_sensitivity);
-BASE_EXPORT bool StartsWith(StringPiece16 str,
-                            StringPiece16 search_for,
-                            CompareCase case_sensitivity);
-BASE_EXPORT bool EndsWith(StringPiece str,
-                          StringPiece search_for,
-                          CompareCase case_sensitivity);
-BASE_EXPORT bool EndsWith(StringPiece16 str,
-                          StringPiece16 search_for,
-                          CompareCase case_sensitivity);
+BASE_EXPORT bool StartsWith(
+    StringPiece str,
+    StringPiece search_for,
+    CompareCase case_sensitivity = CompareCase::SENSITIVE);
+BASE_EXPORT bool StartsWith(
+    StringPiece16 str,
+    StringPiece16 search_for,
+    CompareCase case_sensitivity = CompareCase::SENSITIVE);
+BASE_EXPORT bool EndsWith(
+    StringPiece str,
+    StringPiece search_for,
+    CompareCase case_sensitivity = CompareCase::SENSITIVE);
+BASE_EXPORT bool EndsWith(
+    StringPiece16 str,
+    StringPiece16 search_for,
+    CompareCase case_sensitivity = CompareCase::SENSITIVE);
 
 // Determines the type of ASCII character, independent of locale (the C
 // library versions will change based on locale).

@@ -45,7 +45,6 @@ namespace {
 
 class TestResourceClient final : public GarbageCollected<TestResourceClient>,
                                  public ResourceClient {
-  USING_GARBAGE_COLLECTED_MIXIN(TestResourceClient);
 
  public:
   TestResourceClient() : finished_(false) {}
@@ -72,7 +71,7 @@ class NoopLoaderFactory final : public ResourceFetcher::LoaderFactory {
       scoped_refptr<base::SingleThreadTaskRunner>) override {
     return std::make_unique<NoopWebURLLoader>();
   }
-  std::unique_ptr<CodeCacheLoader> CreateCodeCacheLoader() override {
+  std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() override {
     return Platform::Current()->CreateCodeCacheLoader();
   }
 
@@ -128,7 +127,7 @@ class ScriptStreamingTest : public testing::Test {
     request.SetRequestContext(mojom::RequestContextType::SCRIPT);
 
     resource_client_ = MakeGarbageCollected<TestResourceClient>();
-    FetchParameters params(std::move(request));
+    FetchParameters params = FetchParameters::CreateForTest(std::move(request));
     resource_ = ScriptResource::Fetch(params, fetcher, resource_client_,
                                       ScriptResource::kAllowStreaming);
     resource_->AddClient(resource_client_, loading_task_runner_.get());

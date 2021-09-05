@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.safety_check;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.password_check.BulkLeakCheckServiceState;
 
 /**
  * Provides access to the C++ multi-platform Safety check code in
@@ -26,25 +25,6 @@ public class SafetyCheckBridge {
          */
         @CalledByNative("SafetyCheckCommonObserver")
         void onSafeBrowsingCheckResult(@SafeBrowsingStatus int status);
-
-        /**
-         * Gets invoked by the C++ code every time another credential is checked.
-         *
-         * @param checked Number of passwords already checked.
-         * @param total   Total number of passwords to check.
-         */
-        @CalledByNative("SafetyCheckCommonObserver")
-        void onPasswordCheckCredentialDone(int checked, int total);
-
-        /**
-         * Gets invoked by the C++ code when the status of the password check changes.
-         *
-         * @param state BulkLeakCheckService::State enum value representing the state
-         *              (see //components/password_manager/core/browser
-         *                  /bulk_leak_check_service_interface.h).
-         */
-        @CalledByNative("SafetyCheckCommonObserver")
-        void onPasswordCheckStateChange(@BulkLeakCheckServiceState int state);
     }
 
     /**
@@ -64,41 +44,17 @@ public class SafetyCheckBridge {
     }
 
     /**
+     * Returns whether the user is signed in for the purposes of password check.
+     */
+    boolean userSignedIn() {
+        return SafetyCheckBridgeJni.get().userSignedIn();
+    }
+
+    /**
      * Triggers the Safe Browsing check on the C++ side.
      */
     void checkSafeBrowsing() {
         SafetyCheckBridgeJni.get().checkSafeBrowsing(
-                mNativeSafetyCheckBridge, SafetyCheckBridge.this);
-    }
-
-    /**
-     * Triggers the passwords check on the C++ side.
-     */
-    void checkPasswords() {
-        SafetyCheckBridgeJni.get().checkPasswords(mNativeSafetyCheckBridge, SafetyCheckBridge.this);
-    }
-
-    /**
-     * @return Number of password leaks discovered during the last check.
-     */
-    int getNumberOfPasswordLeaksFromLastCheck() {
-        return SafetyCheckBridgeJni.get().getNumberOfPasswordLeaksFromLastCheck(
-                mNativeSafetyCheckBridge, SafetyCheckBridge.this);
-    }
-
-    /**
-     * @return Whether the user has some passwords saved.
-     */
-    boolean savedPasswordsExist() {
-        return SafetyCheckBridgeJni.get().savedPasswordsExist(
-                mNativeSafetyCheckBridge, SafetyCheckBridge.this);
-    }
-
-    /**
-     * Stops observing the events of the passwords leak check.
-     */
-    void stopObservingPasswordsCheck() {
-        SafetyCheckBridgeJni.get().stopObservingPasswordsCheck(
                 mNativeSafetyCheckBridge, SafetyCheckBridge.this);
     }
 
@@ -117,14 +73,8 @@ public class SafetyCheckBridge {
     @NativeMethods
     interface Natives {
         long init(SafetyCheckBridge safetyCheckBridge, SafetyCheckCommonObserver observer);
+        boolean userSignedIn();
         void checkSafeBrowsing(long nativeSafetyCheckBridge, SafetyCheckBridge safetyCheckBridge);
-        void checkPasswords(long nativeSafetyCheckBridge, SafetyCheckBridge safetyCheckBridge);
-        int getNumberOfPasswordLeaksFromLastCheck(
-                long nativeSafetyCheckBridge, SafetyCheckBridge safetyCheckBridge);
-        boolean savedPasswordsExist(
-                long nativeSafetyCheckBridge, SafetyCheckBridge safetyCheckBridge);
-        void stopObservingPasswordsCheck(
-                long nativeSafetyCheckBridge, SafetyCheckBridge safetyCheckBridge);
         void destroy(long nativeSafetyCheckBridge, SafetyCheckBridge safetyCheckBridge);
     }
 }

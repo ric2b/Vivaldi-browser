@@ -4,14 +4,13 @@
 
 module content.mojom;
 
-import "content/common/ax_content_tree_update.mojom";
 import "content/common/document_scoped_interface_bundle.mojom";
 import "content/common/frame_messages.mojom";
 import "content/common/native_types.mojom";
 import "content/common/navigation_client.mojom";
 import "content/common/navigation_params.mojom";
+import "content/common/web_ui.mojom";
 import "content/public/common/browser_controls_state.mojom";
-import "content/public/common/transferrable_url_loader.mojom";
 import "content/public/common/window_container_type.mojom";
 import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/string16.mojom";
@@ -41,10 +40,13 @@ import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
 import "third_party/blink/public/mojom/page/page.mojom";
 import "third_party/blink/public/mojom/page/widget.mojom";
 import "third_party/blink/public/mojom/portal/portal.mojom";
-import "third_party/blink/public/mojom/referrer.mojom";
+import "third_party/blink/public/mojom/loader/referrer.mojom";
 import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
 import "third_party/blink/public/mojom/service_worker/service_worker_container.mojom";
+import "third_party/blink/public/mojom/tokens/tokens.mojom";
+import "third_party/blink/public/mojom/widget/visual_properties.mojom";
 import "third_party/blink/public/mojom/window_features/window_features.mojom";
+import "ui/accessibility/mojom/ax_tree_update.mojom";
 import "ui/base/mojom/window_open_disposition.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/origin.mojom";
@@ -102,7 +104,7 @@ interface Frame {
   // accessibility if it wasn't already enabled.
   // See ui/accessibility/ax_mode.h for valid values of |ax_mode|.
   SnapshotAccessibilityTree(uint32 ax_mode)
-      => (ax.mojom.AXContentTreeUpdate snapshot);
+      => (ax.mojom.AXTreeUpdate snapshot);
 
   // Get HTML data by serializing the target frame and replacing all resource
   // links with a path to the local copy passed in the message payload. In order
@@ -189,26 +191,6 @@ interface FrameNavigationControl {
       bool wants_result,
       int32 world_id) => (mojo_base.mojom.Value result);
 
-  // Forwards a message from a portal's host to the main frame in the portal's
-  // guest contents.
-  ForwardMessageFromHost(blink.mojom.TransferableMessage message,
-                         url.mojom.Origin source_origin,
-                         url.mojom.Origin? target_origin);
-
-  // Called on the main frame of a page embedded in a Portal when it is
-  // activated. The frame has the option to adopt the previous page as a portal
-  // identified by |portal_token| with the interface |portal|. The activation
-  // can optionally include a message |data| dispatched with the
-  // PortalActivateEvent. The return value |was_adopted| indicates if the portal
-  // for the predecessor (identified by |portal_token|) was adopted by the
-  // current frame.
-  OnPortalActivated(
-      mojo_base.mojom.UnguessableToken portal_token,
-      pending_associated_remote<blink.mojom.Portal> portal,
-      pending_associated_receiver<blink.mojom.PortalClient> portal_client,
-      blink.mojom.TransferableMessage data)
-      => (blink.mojom.PortalActivateResult result);
-
   // Requests that a provisional RenderFrame swap itself into the frame tree,
   // replacing the RenderFrameProxy that it is associated with. This is used
   // with remote-to-local frame navigations when the RenderFrameProxy
@@ -233,6 +215,10 @@ interface FrameBindingsControl {
   // and make method calls on them.
   // This is used for WebUI only at this time.
   EnableMojoJsBindings();
+
+  // Used to bind WebUI and WebUIHost mojo connections.
+  BindWebUI(pending_receiver<content.mojom.WebUI> receiver,
+            pending_remote<content.mojom.WebUIHost> remote);
 };
 
 // Implemented by a service that provides implementations of the Frame
@@ -306,7 +292,7 @@ struct CreateNewWindowReply {
   int32 main_frame_widget_route_id;
 
   // Initial properties for the main frame RenderWidget.
-  VisualProperties visual_properties;
+  blink.mojom.VisualProperties visual_properties;
 
   // The communication interfaces for the WebFrameWidget in blink.
   pending_associated_remote<blink.mojom.FrameWidgetHost> frame_widget_host;
@@ -392,7 +378,7 @@ interface FrameHost {
       pending_associated_remote<blink.mojom.PortalClient> client)
       => (int32 proxy_routing_id,
           FrameReplicationState initial_replicated_state,
-          mojo_base.mojom.UnguessableToken portal_token,
+          blink.mojom.PortalToken portal_token,
           mojo_base.mojom.UnguessableToken frame_token,
           mojo_base.mojom.UnguessableToken devtools_frame_token);
 
@@ -404,7 +390,7 @@ interface FrameHost {
   // |frame_token| - the unique identifier of the RenderFrameProxy
   // |devtools_frame_token| - the unique identifier of the frame node in the
   //                          frame tree
-  [Sync] AdoptPortal(mojo_base.mojom.UnguessableToken portal_token)
+  [Sync] AdoptPortal(blink.mojom.PortalToken portal_token)
       => (int32 proxy_routing_id,
           viz.mojom.FrameSinkId frame_sink_id,
           FrameReplicationState replicated_state,
@@ -525,12 +511,6 @@ interface FrameHost {
       int32 line_number,
       mojo_base.mojom.String16 source_id);
 
-  // Sent to the browser process to transfer the user activation state from the
-  // source frame to the frame sending this IPC. The browser will update the
-  // user activation state of the frames in the frame tree in the non-source and
-  // non-target renderer processes.
-  TransferUserActivationFrom(int32 source_routing_id);
-
   // Causes a window previously opened via RenderMessageFilter::CreateNewWindow
   // to be shown on the screen. This message is routed to the preexisting frame
   // that opened the window, and |pending_widget_routing_id| corresponds to the
@@ -539,12 +519,12 @@ interface FrameHost {
                     ui.mojom.WindowOpenDisposition disposition,
                     gfx.mojom.Rect rect, bool opened_by_user_gesture);
 
-  // Requests an overlay routing token.
-  RequestOverlayRoutingToken() => (mojo_base.mojom.UnguessableToken token);
-
   // Notifies the browser that this frame has new session history information.
   UpdateState(PageState state);
 
   // Requests that the given URL be opened in the specified manner.
   OpenURL(OpenURLParams params);
+
+  // Called when the renderer is done loading a frame.
+  DidStopLoading();
 };

@@ -9,7 +9,8 @@
 #include "components/google/core/common/google_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
-#import "ios/chrome/browser/ui/ntp/incognito_cookies_view.h"
+#include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
+#import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
 #import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
@@ -121,9 +122,7 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
 
 }  // namespace
 
-@interface IncognitoView ()
-
-@property(nonatomic, strong) IncognitoCookiesView* cookiesView;
+@interface IncognitoView () <URLDropDelegate>
 
 @end
 
@@ -150,12 +149,22 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
 
   // The UrlLoadingService associated with this view.
   UrlLoadingBrowserAgent* _URLLoader;  // weak
+
+  // Handles drop interactions for this view.
+  URLDragDropHandler* _dragDropHandler;
 }
 - (instancetype)initWithFrame:(CGRect)frame
                     URLLoader:(UrlLoadingBrowserAgent*)URLLoader {
   self = [super initWithFrame:frame];
   if (self) {
     _URLLoader = URLLoader;
+
+    if (DragAndDropIsEnabled()) {
+      _dragDropHandler = [[URLDragDropHandler alloc] init];
+      _dragDropHandler.dropDelegate = self;
+      [self addInteraction:[[UIDropInteraction alloc]
+                               initWithDelegate:_dragDropHandler]];
+    }
 
     self.alwaysBounceVertical = YES;
     // The bottom safe area is taken care of with the bottomUnsafeArea guides.
@@ -188,9 +197,6 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
                        afterView:incognitoImageView];
 
     [self addTextSections];
-
-    if (base::FeatureList::IsEnabled(content_settings::kImprovedCookieControls))
-      [self addCookiesViewController];
 
     // |topGuide| and |bottomGuide| exist to vertically position the stackview
     // inside the container scrollview.
@@ -285,12 +291,6 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
   return self;
 }
 
-#pragma mark - Properties
-
-- (UISwitch*)cookiesBlockedSwitch {
-  return self.cookiesView.cookiesBlockedSwitch;
-}
-
 #pragma mark - UIView overrides
 
 - (void)didMoveToSuperview {
@@ -348,6 +348,16 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
   _visibleDataLabel.attributedText =
       FormatHTMLListForUILabel(l10n_util::GetNSString(IDS_NEW_TAB_OTR_VISIBLE));
   _visibleDataLabel.textColor = bodyTextColor;
+}
+
+#pragma mark - URLDropDelegate
+
+- (BOOL)canHandleURLDropInView:(UIView*)view {
+  return YES;
+}
+
+- (void)view:(UIView*)view didDropURL:(const GURL&)URL atPoint:(CGPoint)point {
+  _URLLoader->Load(UrlLoadParams::InCurrentTab(URL));
 }
 
 #pragma mark - Private
@@ -472,11 +482,6 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
          selector:@selector(contentSizeCategoryDidChange)
              name:UIContentSizeCategoryDidChangeNotification
            object:nil];
-}
-
-- (void)addCookiesViewController {
-  self.cookiesView = [[IncognitoCookiesView alloc] init];
-  [_stackView addArrangedSubview:self.cookiesView];
 }
 
 @end

@@ -13,6 +13,8 @@
 #include "base/files/file_path.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
+#include "chrome/browser/nearby_sharing/mock_nearby_connections.h"
+#include "chrome/browser/nearby_sharing/mock_nearby_sharing_decoder.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/services/sharing/public/mojom/nearby_connections.mojom.h"
 #include "chrome/services/sharing/public/mojom/nearby_connections_types.mojom.h"
@@ -30,38 +32,13 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using NearbyConnectionsMojom =
-    location::nearby::connections::mojom::NearbyConnections;
-using NearbyConnectionsHostMojom =
-    location::nearby::connections::mojom::NearbyConnectionsHost;
+using NearbyConnectionsDependencies =
+    location::nearby::connections::mojom::NearbyConnectionsDependencies;
+using NearbyConnectionsDependenciesPtr =
+    location::nearby::connections::mojom::NearbyConnectionsDependenciesPtr;
 using NearbySharingDecoderMojom = sharing::mojom::NearbySharingDecoder;
 
 namespace {
-
-class MockNearbyConnections : public NearbyConnectionsMojom {
- public:
-};
-
-class MockNearbySharingDecoder : public NearbySharingDecoderMojom {
- public:
-  MockNearbySharingDecoder() = default;
-  explicit MockNearbySharingDecoder(
-      const sharing::mojom::NearbySharingDecoder&) = delete;
-  MockNearbySharingDecoder& operator=(
-      const sharing::mojom::NearbySharingDecoder&) = delete;
-  ~MockNearbySharingDecoder() override = default;
-
-  // sharing::mojom::NearbySharingDecoder:
-  MOCK_METHOD(void,
-              DecodeAdvertisement,
-              (const std::vector<uint8_t>& data,
-               DecodeAdvertisementCallback callback),
-              (override));
-  MOCK_METHOD(void,
-              DecodeFrame,
-              (const std::vector<uint8_t>& data, DecodeFrameCallback callback),
-              (override));
-};
 
 class FakeSharingMojoService : public sharing::mojom::Sharing {
  public:
@@ -70,8 +47,8 @@ class FakeSharingMojoService : public sharing::mojom::Sharing {
 
   // sharing::mojom::Sharing:
   void CreateSharingWebRtcConnection(
-      mojo::PendingRemote<sharing::mojom::SignallingSender>,
-      mojo::PendingReceiver<sharing::mojom::SignallingReceiver>,
+      mojo::PendingRemote<sharing::mojom::SignalingSender>,
+      mojo::PendingReceiver<sharing::mojom::SignalingReceiver>,
       mojo::PendingRemote<sharing::mojom::SharingWebRtcConnectionDelegate>,
       mojo::PendingReceiver<sharing::mojom::SharingWebRtcConnection>,
       mojo::PendingRemote<network::mojom::P2PSocketManager>,
@@ -80,10 +57,9 @@ class FakeSharingMojoService : public sharing::mojom::Sharing {
     NOTIMPLEMENTED();
   }
   void CreateNearbyConnections(
-      mojo::PendingRemote<NearbyConnectionsHostMojom> host,
+      NearbyConnectionsDependenciesPtr dependencies,
       CreateNearbyConnectionsCallback callback) override {
-    connections_host.Bind(std::move(host));
-
+    dependencies_ = std::move(dependencies);
     mojo::PendingRemote<NearbyConnectionsMojom> remote;
     mojo::MakeSelfOwnedReceiver(std::make_unique<MockNearbyConnections>(),
                                 remote.InitWithNewPipeAndPassReceiver());
@@ -112,11 +88,13 @@ class FakeSharingMojoService : public sharing::mojom::Sharing {
 
   void Reset() { receiver.reset(); }
 
+  NearbyConnectionsDependencies* dependencies() { return dependencies_.get(); }
+
  private:
   base::RunLoop run_loop_connections;
   base::RunLoop run_loop_decoder;
   mojo::Receiver<sharing::mojom::Sharing> receiver{this};
-  mojo::Remote<NearbyConnectionsHostMojom> connections_host;
+  NearbyConnectionsDependenciesPtr dependencies_;
 };
 
 class MockNearbyProcessManagerObserver : public NearbyProcessManager::Observer {
@@ -160,7 +138,8 @@ class NearbyProcessManagerTest : public testing::Test {
         profile->GetProfileUserName());
   }
 
-  content::BrowserTaskEnvironment task_environment_;
+  content::BrowserTaskEnvironment task_environment_{
+      content::BrowserTaskEnvironment::MainThreadType::IO};
   content::InProcessUtilityThreadHelper in_process_utility_thread_helper_;
   TestingProfileManager testing_profile_manager_{
       TestingBrowserProcess::GetGlobal()};
@@ -259,6 +238,10 @@ TEST_F(NearbyProcessManagerTest, StartStopProcessWithNearbyConnections) {
   FakeSharingMojoService fake_sharing_service;
   manager.BindSharingProcess(fake_sharing_service.BindSharingService());
 
+  auto adapter = base::MakeRefCounted<device::MockBluetoothAdapter>();
+  EXPECT_CALL(*adapter, IsPresent()).WillOnce(testing::Return(true));
+  device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
+
   MockNearbyProcessManagerObserver observer;
   base::RunLoop run_loop_started;
   base::RunLoop run_loop_stopped;
@@ -291,10 +274,40 @@ TEST_F(NearbyProcessManagerTest, GetOrStartNearbyConnections) {
   FakeSharingMojoService fake_sharing_service;
   manager.BindSharingProcess(fake_sharing_service.BindSharingService());
 
+  auto adapter = base::MakeRefCounted<device::MockBluetoothAdapter>();
+  EXPECT_CALL(*adapter, IsPresent()).WillOnce(testing::Return(true));
+  device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
+
   // Request a new Nearby Connections interface.
   EXPECT_NE(nullptr, manager.GetOrStartNearbyConnections(profile));
   // Expect the manager to bind a new Nearby Connections pipe.
   fake_sharing_service.WaitForConnections();
+
+  EXPECT_TRUE(fake_sharing_service.dependencies()->bluetooth_adapter);
+  EXPECT_TRUE(fake_sharing_service.dependencies()->webrtc_dependencies);
+}
+
+TEST_F(NearbyProcessManagerTest,
+       GetOrStartNearbyConnections_BluetoothNotPresent) {
+  auto& manager = NearbyProcessManager::GetInstance();
+  Profile* profile = CreateProfile("name");
+  manager.SetActiveProfile(profile);
+
+  // Inject fake Nearby process mojo connection.
+  FakeSharingMojoService fake_sharing_service;
+  manager.BindSharingProcess(fake_sharing_service.BindSharingService());
+
+  auto adapter = base::MakeRefCounted<device::MockBluetoothAdapter>();
+  EXPECT_CALL(*adapter, IsPresent()).WillOnce(testing::Return(false));
+  device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
+
+  // Request a new Nearby Connections interface.
+  EXPECT_NE(nullptr, manager.GetOrStartNearbyConnections(profile));
+  // Expect the manager to bind a new Nearby Connections pipe.
+  fake_sharing_service.WaitForConnections();
+
+  EXPECT_FALSE(fake_sharing_service.dependencies()->bluetooth_adapter);
+  EXPECT_TRUE(fake_sharing_service.dependencies()->webrtc_dependencies);
 }
 
 TEST_F(NearbyProcessManagerTest, ResetNearbyProcess) {
@@ -377,6 +390,10 @@ TEST_F(NearbyProcessManagerTest, GetOrStartNearbySharingDecoderAndConnections) {
   FakeSharingMojoService fake_sharing_service;
   manager.BindSharingProcess(fake_sharing_service.BindSharingService());
 
+  auto adapter = base::MakeRefCounted<device::MockBluetoothAdapter>();
+  EXPECT_CALL(*adapter, IsPresent()).WillOnce(testing::Return(true));
+  device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
+
   MockNearbyProcessManagerObserver observer;
   base::RunLoop run_loop_started;
   base::RunLoop run_loop_stopped;
@@ -403,17 +420,4 @@ TEST_F(NearbyProcessManagerTest, GetOrStartNearbySharingDecoderAndConnections) {
   EXPECT_TRUE(manager.IsActiveProfile(profile));
 
   manager.RemoveObserver(&observer);
-}
-
-TEST_F(NearbyProcessManagerTest, GetBluetoothAdapter) {
-  auto& manager = NearbyProcessManager::GetInstance();
-
-  auto adapter = base::MakeRefCounted<device::MockBluetoothAdapter>();
-  device::BluetoothAdapterFactory::SetAdapterForTesting(adapter);
-
-  base::RunLoop loop;
-  manager.GetBluetoothAdapter(base::BindLambdaForTesting(
-      [&](mojo::PendingRemote<::bluetooth::mojom::Adapter>
-              pending_remote_adapter) { loop.Quit(); }));
-  loop.Run();
 }

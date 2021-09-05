@@ -57,6 +57,11 @@ void RemoteFrameClientImpl::Detached(FrameDetachType type) {
   if (!client)
     return;
 
+  // We only notify the browser process when the frame is being detached for
+  // removal, not after a swap.
+  if (type == FrameDetachType::kRemove)
+    web_frame_->GetFrame()->GetRemoteFrameHostRemote().Detach();
+
   client->FrameDetached(static_cast<WebRemoteFrameClient::DetachType>(type));
 
   if (web_frame_->Parent()) {
@@ -135,14 +140,30 @@ void RemoteFrameClientImpl::FrameRectsChanged(
   web_frame_->Client()->FrameRectsChanged(local_frame_rect, screen_space_rect);
 }
 
+void RemoteFrameClientImpl::ZoomLevelChanged(double zoom_level) {
+  web_frame_->Client()->ZoomLevelChanged(zoom_level);
+}
+
+void RemoteFrameClientImpl::UpdateCaptureSequenceNumber(
+    uint32_t sequence_number) {
+  web_frame_->Client()->UpdateCaptureSequenceNumber(sequence_number);
+}
+
+void RemoteFrameClientImpl::PageScaleFactorChanged(
+    float page_scale_factor,
+    bool is_pinch_gesture_active) {
+  web_frame_->Client()->PageScaleFactorChanged(page_scale_factor,
+                                               is_pinch_gesture_active);
+}
+
+void RemoteFrameClientImpl::DidChangeScreenInfo(
+    const ScreenInfo& original_screen_info) {
+  web_frame_->Client()->DidChangeScreenInfo(original_screen_info);
+}
+
 void RemoteFrameClientImpl::UpdateRemoteViewportIntersection(
     const ViewportIntersectionState& intersection_state) {
   web_frame_->Client()->UpdateRemoteViewportIntersection(intersection_state);
-}
-
-uint32_t RemoteFrameClientImpl::Print(const IntRect& rect,
-                                      cc::PaintCanvas* canvas) const {
-  return web_frame_->Client()->Print(rect, canvas);
 }
 
 AssociatedInterfaceProvider*

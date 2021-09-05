@@ -5,6 +5,7 @@
 #include "gn/rust_project_writer.h"
 
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <tuple>
 
@@ -44,7 +45,9 @@
 //              "unix", // "atomic" value config options
 //              "rust_panic=\"abort\""", // key="value" config options
 //            ]
-//            "root_module": "absolute path to crate"
+//            "root_module": "absolute path to crate",
+//            "label": "//path/target:value", // GN target for the crate
+//            "target": "x86_64-unknown-linux" // optional rustc target
 //        },
 // }
 //
@@ -105,8 +108,62 @@ TargetsVector GetRustDeps(const Target* target) {
   return deps;
 }
 
-// TODO(bwb) Parse sysroot structure from toml files. This is fragile and might
-// break if upstream changes the dependency structure.
+std::vector<std::string> ExtractCompilerArgs(const Target* target) {
+  std::vector<std::string> args;
+  for (ConfigValuesIterator iter(target); !iter.done(); iter.Next()) {
+    auto rustflags = iter.cur().rustflags();
+    for (auto flag_iter = rustflags.begin(); flag_iter != rustflags.end();
+         flag_iter++) {
+      args.push_back(*flag_iter);
+    }
+  }
+  return args;
+}
+
+std::optional<std::string> FindArgValue(const char* arg,
+                                        const std::vector<std::string>& args) {
+  for (auto current = args.begin(); current != args.end();) {
+    // capture the current value
+    auto previous = *current;
+    // and increment
+    current++;
+
+    // if the previous argument matches `arg`, and after the above increment the
+    // end hasn't been reached, this current argument is the desired value.
+    if (previous == arg && current != args.end()) {
+      return std::make_optional(*current);
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<std::string> FindArgValueAfterPrefix(
+    const std::string& prefix,
+    const std::vector<std::string>& args) {
+  for (auto arg : args) {
+    if (!arg.compare(0, prefix.size(), prefix)) {
+      auto value = arg.substr(prefix.size());
+      return std::make_optional(value);
+    }
+  }
+  return std::nullopt;
+}
+
+std::vector<std::string> FindAllArgValuesAfterPrefix(
+    const std::string& prefix,
+    const std::vector<std::string>& args) {
+  std::vector<std::string> values;
+  for (auto arg : args) {
+    if (!arg.compare(0, prefix.size(), prefix)) {
+      auto value = arg.substr(prefix.size());
+      values.push_back(value);
+    }
+  }
+  return values;
+}
+
+// TODO(bwb) Parse sysroot structure from toml files. This is fragile and
+// might break if upstream changes the dependency structure.
 const std::string_view sysroot_crates[] = {"std",
                                            "core",
                                            "alloc",
@@ -164,7 +221,7 @@ void AddSysrootCrate(const BuildSettings* build_settings,
       build_settings->GetFullPath(build_settings->build_dir());
   auto crate_path =
       FilePathToUTF8(rebased_out_dir) + std::string(current_sysroot) +
-      "/lib/rustlib/src/rust/src/lib" + std::string(crate) + "/lib.rs";
+      "/lib/rustlib/src/rust/library/" + std::string(crate) + "/src/lib.rs";
 
   Crate sysroot_crate =
       Crate(SourceFile(crate_path), crate_index, std::string(crate), "2018");
@@ -199,6 +256,15 @@ void AddSysroot(const BuildSettings* build_settings,
   }
 }
 
+void AddSysrootDependencyToCrate(Crate* crate,
+                                 const SysrootCrateIndexMap& sysroot,
+                                 const std::string_view crate_name) {
+  if (const auto crate_idx = sysroot.find(crate_name);
+      crate_idx != sysroot.end()) {
+    crate->AddDependency(crate_idx->second, std::string(crate_name));
+  }
+}
+
 void AddTarget(const BuildSettings* build_settings,
                const Target* target,
                TargetIndexMap& lookup,
@@ -208,6 +274,9 @@ void AddTarget(const BuildSettings* build_settings,
     // If target is already in the lookup, we don't add it again.
     return;
   }
+
+  auto compiler_args = ExtractCompilerArgs(target);
+  auto compiler_target = FindArgValue("--target", compiler_args);
 
   // Check what sysroot this target needs.  Add it to the crate list if it
   // hasn't already been added.
@@ -234,28 +303,21 @@ void AddTarget(const BuildSettings* build_settings,
   SourceFile crate_root = target->rust_values().crate_root();
   std::string crate_label = target->label().GetUserVisibleName(false);
 
-  std::string cfg_prefix("--cfg=");
-  std::string edition_prefix("--edition=");
-  ConfigList cfgs;
-
-  std::string edition = "2015";  // default to be overridden as needed
-
-  for (ConfigValuesIterator iter(target); !iter.done(); iter.Next()) {
-    for (const auto& flag : iter.cur().rustflags()) {
-      // extract the edition of this target
-      if (!flag.compare(0, edition_prefix.size(), edition_prefix)) {
-        edition = flag.substr(edition_prefix.size());
-      }
-      if (!flag.compare(0, cfg_prefix.size(), cfg_prefix)) {
-        auto cfg = flag.substr(cfg_prefix.size());
-        std::string escaped_config;
-        base::EscapeJSONString(cfg, false, &escaped_config);
-        cfgs.push_back(escaped_config);
-      }
-    }
+  auto edition =
+      FindArgValueAfterPrefix(std::string("--edition="), compiler_args);
+  if (!edition.has_value()) {
+    edition = FindArgValue("--edition", compiler_args);
   }
 
-  Crate crate = Crate(crate_root, crate_id, crate_label, edition);
+  Crate crate =
+      Crate(crate_root, crate_id, crate_label, edition.value_or("2015"));
+
+  crate.SetCompilerArgs(compiler_args);
+  if (compiler_target.has_value())
+    crate.SetCompilerTarget(compiler_target.value());
+
+  ConfigList cfgs =
+      FindAllArgValuesAfterPrefix(std::string("--cfg="), compiler_args);
 
   crate.AddConfigItem("test");
   crate.AddConfigItem("debug_assertions");
@@ -264,13 +326,12 @@ void AddTarget(const BuildSettings* build_settings,
     crate.AddConfigItem(cfg);
   }
 
-  // Add the sysroot dependency, if there is one.
+  // Add the sysroot dependencies, if there is one.
   if (current_sysroot != "") {
-    // TODO(bwb) If this library doesn't depend on std, use core instead
-    auto std_idx = sysroot_lookup[current_sysroot].find("std");
-    if (std_idx != sysroot_lookup[current_sysroot].end()) {
-      crate.AddDependency(std_idx->second, "std");
-    }
+    const auto& sysroot = sysroot_lookup[current_sysroot];
+    AddSysrootDependencyToCrate(&crate, sysroot, "core");
+    AddSysrootDependencyToCrate(&crate, sysroot, "alloc");
+    AddSysrootDependencyToCrate(&crate, sysroot, "std");
   }
 
   // Add the rest of the crate dependencies.
@@ -285,17 +346,22 @@ void AddTarget(const BuildSettings* build_settings,
 void WriteCrates(const BuildSettings* build_settings,
                  CrateList& crate_list,
                  std::ostream& rust_project) {
+  // produce a de-duplicated set of source roots:
+  std::set<std::string> roots;
+  for (auto& crate : crate_list) {
+    roots.insert(
+        FilePathToUTF8(build_settings->GetFullPath(crate.root().GetDir())));
+  }
+
   rust_project << "{" NEWLINE;
   rust_project << "  \"roots\": [";
   bool first_root = true;
-  for (auto& crate : crate_list) {
+  for (auto& root : roots) {
     if (!first_root)
       rust_project << ",";
     first_root = false;
 
-    std::string root_dir =
-        FilePathToUTF8(build_settings->GetFullPath(crate.root().GetDir()));
-    rust_project << NEWLINE "    \"" << root_dir << "\"";
+    rust_project << NEWLINE "    \"" << root << "\"";
   }
   rust_project << NEWLINE "  ]," NEWLINE;
   rust_project << "  \"crates\": [";
@@ -305,14 +371,38 @@ void WriteCrates(const BuildSettings* build_settings,
       rust_project << ",";
     first_crate = false;
 
-    auto crate_root = FilePathToUTF8(build_settings->GetFullPath(crate.root()));
+    auto crate_module =
+        FilePathToUTF8(build_settings->GetFullPath(crate.root()));
 
     rust_project << NEWLINE << "    {" NEWLINE
                  << "      \"crate_id\": " << crate.index() << "," NEWLINE
-                 << "      \"root_module\": \"" << crate_root << "\"," NEWLINE
-                 << "      \"label\": \"" << crate.label() << "\"," NEWLINE
-                 << "      \"deps\": [";
+                 << "      \"root_module\": \"" << crate_module << "\"," NEWLINE
+                 << "      \"label\": \"" << crate.label() << "\"," NEWLINE;
 
+    auto compiler_target = crate.CompilerTarget();
+    if (compiler_target.has_value()) {
+      rust_project << "      \"target\": \"" << compiler_target.value()
+                   << "\"," NEWLINE;
+    }
+
+    auto compiler_args = crate.CompilerArgs();
+    if (!compiler_args.empty()) {
+      rust_project << "      \"compiler_args\": [";
+      bool first_arg = true;
+      for (auto& arg : crate.CompilerArgs()) {
+        if (!first_arg)
+          rust_project << ", ";
+        first_arg = false;
+
+        std::string escaped_arg;
+        base::EscapeJSONString(arg, false, &escaped_arg);
+
+        rust_project << "\"" << escaped_arg << "\"";
+      }
+      rust_project << "]," << NEWLINE;
+    }
+
+    rust_project << "      \"deps\": [";
     bool first_dep = true;
     for (auto& dep : crate.dependencies()) {
       if (!first_dep)
@@ -335,8 +425,11 @@ void WriteCrates(const BuildSettings* build_settings,
         rust_project << ",";
       first_cfg = false;
 
+      std::string escaped_config;
+      base::EscapeJSONString(cfg, false, &escaped_config);
+
       rust_project << NEWLINE;
-      rust_project << "        \"" << cfg << "\"";
+      rust_project << "        \"" << escaped_config << "\"";
     }
     rust_project << NEWLINE;
     rust_project << "      ]" NEWLINE;  // end cfgs

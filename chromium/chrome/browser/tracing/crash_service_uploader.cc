@@ -152,13 +152,13 @@ void TraceCrashServiceUploader::DoCompressOnBackgroundThread(
 
 #if defined(OS_WIN)
   const char product[] = "Chrome";
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   const char product[] = "Chrome_Mac";
 #elif defined(OS_CHROMEOS)
   // On ChromeOS, defined(OS_LINUX) also evalutes to true, so the
   // defined(OS_CHROMEOS) block must come first.
   const char product[] = "Chrome_ChromeOS";
-#elif defined(OS_LINUX)
+#elif defined(OS_LINUX) || defined(OS_CHROMEOS)
   const char product[] = "Chrome_Linux";
 #elif defined(OS_ANDROID)
   const char product[] = "Chrome_Android";

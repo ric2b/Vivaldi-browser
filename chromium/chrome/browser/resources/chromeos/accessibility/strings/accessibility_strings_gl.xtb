@@ -6,6 +6,7 @@
 <translation id="1012173283529841972">Elemento da lista</translation>
 <translation id="1013742170491673792">srched</translation>
 <translation id="1014370462248694370">Pasa dous dedos cara á dereita</translation>
+<translation id="1016393160682012902">Fai un xesto táctil ou ben preme unha tecla dunha liña de braille ou dun teclado qwerty para obter información sobre esta función. Preme Control+W ou Esc para saír.</translation>
 <translation id="1022586497894531524">Estás utilizando os comentarios de voz de ChromeVox por primeira vez? Este rápido titorial explica os conceptos básicos para empezar con ChromeVox.</translation>
 <translation id="1025074108959230262">Modo de teclas presas desactivado</translation>
 <translation id="1031961866430398710">e, a continuación,</translation>
@@ -504,7 +505,6 @@
 <translation id="489907760999452556">Ligazón interna</translation>
 <translation id="4909019435900810068">Retroceder unha palabra</translation>
 <translation id="4911349081560453449">Non hai ningunha caixa de verificación anterior</translation>
-<translation id="4915087353619183190">Iniciando o modo de aprendizaxe. Fai un xesto táctil ou ben preme unha tecla dunha liña de braille ou dun teclado qwerty para obter información sobre esta función. Preme Control + W ou Esc para saír.</translation>
 <translation id="492295894462528572">Limiar</translation>
 <translation id="495046168593986294">Desprazarse cara arriba</translation>
 <translation id="495170559598752135">Accións</translation>
@@ -647,6 +647,7 @@
 <translation id="6017514345406065928">Verde</translation>
 <translation id="602001110135236999">Desprazarse á esquerda</translation>
 <translation id="6034000775414344507">Gris claro</translation>
+<translation id="6036135911048686884">Exploración táctil</translation>
 <translation id="6037602951055904232">Despraza cara adiante</translation>
 <translation id="6044160928851315051">Escurece a pantalla</translation>
 <translation id="6082768461603900813">Navegación básica</translation>
@@ -923,6 +924,7 @@
 <translation id="8345569862449483843">{COUNT,plural, =1{libra}other{# signos da libra}}</translation>
 <translation id="8378855320830505539">Rexión</translation>
 <translation id="8382679411218029383">Autocompletar en liña e lista</translation>
+<translation id="8394908167088220973">Reproducir/pausar ficheiro multimedia</translation>
 <translation id="8428213095426709021">Configuración</translation>
 <translation id="8428603554127842284">nivel <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
@@ -967,6 +969,7 @@
 <translation id="8770473310765924354">permite saír de contido estruturado, como táboas</translation>
 <translation id="8779057862865475116">Non hai ningunha ligazón anterior</translation>
 <translation id="8796411681063377102">Título de nivel 3 seguinte</translation>
+<translation id="8823311177246872527">Páxina <ph name="CURRENTPAGE" /> de <ph name="TOTALPAGES" /></translation>
 <translation id="8825828890761629845">bnr</translation>
 <translation id="8851136666856101339">principal</translation>
 <translation id="8882002077197914455">Cabeceira da fila</translation>

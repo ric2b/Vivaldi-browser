@@ -14,7 +14,7 @@
 #include "ash/ambient/ui/ambient_view_delegate.h"
 #include "ash/ash_export.h"
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
-#include "ash/session/session_observer.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/system/power/power_status.h"
 #include "base/macros.h"
@@ -38,10 +38,14 @@ class AmbientViewDelegateObserver;
 // Class to handle all ambient mode functionalities.
 class ASH_EXPORT AmbientController
     : public AmbientUiModelObserver,
+      public AmbientBackendModelObserver,
       public SessionObserver,
       public PowerStatus::Observer,
       public chromeos::PowerManagerClient::Observer {
  public:
+  static constexpr base::TimeDelta kAutoShowWaitTimeInterval =
+      base::TimeDelta::FromSeconds(7);
+
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   AmbientController();
@@ -57,19 +61,13 @@ class ASH_EXPORT AmbientController
   void OnPowerStatusChanged() override;
 
   // chromeos::PowerManagerClient::Observer:
-  void LidEventReceived(chromeos::PowerManagerClient::LidState state,
-                        const base::TimeTicks& timestamp) override;
-  void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
-  void SuspendDone(const base::TimeDelta& sleep_duration) override;
   void ScreenIdleStateChanged(
       const power_manager::ScreenIdleState& idle_state) override;
+  void ScreenBrightnessChanged(
+      const power_manager::BacklightBrightnessChange& change) override;
 
   void AddAmbientViewDelegateObserver(AmbientViewDelegateObserver* observer);
   void RemoveAmbientViewDelegateObserver(AmbientViewDelegateObserver* observer);
-
-  // Initializes the |container_view_|. Called in |CreateWidget()| to create the
-  // contents view.
-  std::unique_ptr<AmbientContainerView> CreateContainerView();
 
   // Invoked to show/close ambient UI in |mode|.
   void ShowUi(AmbientUiMode mode);
@@ -88,12 +86,17 @@ class ASH_EXPORT AmbientController
   void UpdateUiMode(AmbientUiMode ui_mode);
 
   void RequestAccessToken(
-      AmbientAccessTokenController::AccessTokenCallback callback);
+      AmbientAccessTokenController::AccessTokenCallback callback,
+      bool may_refresh_token_on_lock = false);
 
   AmbientBackendModel* GetAmbientBackendModel();
 
   AmbientBackendController* ambient_backend_controller() {
     return ambient_backend_controller_.get();
+  }
+
+  AmbientPhotoController* ambient_photo_controller() {
+    return &ambient_photo_controller_;
   }
 
   AmbientUiModel* ambient_ui_model() { return &ambient_ui_model_; }
@@ -102,10 +105,17 @@ class ASH_EXPORT AmbientController
   class InactivityMonitor;
   friend class AmbientAshTestBase;
 
+  // AmbientBackendModelObserver overrides:
+  void OnImagesChanged() override;
+
+  // Initializes the |container_view_|. Called in |CreateWidget()| to create the
+  // contents view.
+  std::unique_ptr<AmbientContainerView> CreateContainerView();
+
   // TODO(meilinw): reuses the lock-screen widget: b/156531168, b/157175030.
   // Creates and shows a full-screen widget responsible for showing
   // the ambient UI.
-  void CreateWidget();
+  void CreateAndShowWidget();
 
   void StartRefreshingImages();
   void StopRefreshingImages();
@@ -113,8 +123,6 @@ class ASH_EXPORT AmbientController
   // Invoked when the auto-show timer in |InactivityMonitor| gets fired after
   // device being inactive for a specific amount of time.
   void OnAutoShowTimeOut();
-
-  void CleanUpOnClosed();
 
   void set_backend_controller_for_testing(
       std::unique_ptr<AmbientBackendController> photo_client);
@@ -126,22 +134,14 @@ class ASH_EXPORT AmbientController
   // Release |wake_lock_|. Unbalanced release call will have no effect.
   void ReleaseWakeLock();
 
-  // Updates |autoshow_enabled_| flag based on the lid state.
-  void OnReceiveSwitchStates(
-      base::Optional<chromeos::PowerManagerClient::SwitchStates> switch_states);
-
-  // Invoked to dismiss ambient when the device is suspending.
-  void HandleOnSuspend();
-
-  // Invoked to restart the auto-show timer when the device is resuming.
-  void HandleOnResume();
-
-  AmbientPhotoController* get_ambient_photo_controller_for_testing() {
-    return &ambient_photo_controller_;
-  }
+  void CloseWidget(bool immediately);
 
   AmbientContainerView* get_container_view_for_testing() {
     return container_view_;
+  }
+
+  AmbientAccessTokenController* access_token_controller_for_testing() {
+    return &access_token_controller_;
   }
 
   // Owned by |RootView| of its parent widget.
@@ -162,6 +162,8 @@ class ASH_EXPORT AmbientController
 
   ScopedObserver<AmbientUiModel, AmbientUiModelObserver>
       ambient_ui_model_observer_{this};
+  ScopedObserver<AmbientBackendModel, AmbientBackendModelObserver>
+      ambient_backend_model_observer_{this};
   ScopedObserver<SessionControllerImpl, SessionObserver> session_observer_{
       this};
   ScopedObserver<PowerStatus, PowerStatus::Observer> power_status_observer_{
@@ -170,9 +172,10 @@ class ASH_EXPORT AmbientController
                  chromeos::PowerManagerClient::Observer>
       power_manager_client_observer_{this};
 
-  // Whether ambient screen will be brought up from hidden after long device
-  // inactivity.
-  bool autoshow_enabled_ = false;
+  bool is_screen_off_ = false;
+
+  // Used to record Ambient mode engagement metrics.
+  base::Optional<base::Time> start_time_ = base::nullopt;
 
   base::WeakPtrFactory<AmbientController> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(AmbientController);

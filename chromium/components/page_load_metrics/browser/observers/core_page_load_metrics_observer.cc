@@ -75,6 +75,30 @@ std::unique_ptr<base::trace_event::TracedValue> FirstInputDelayTraceData(
   return data;
 }
 
+// TODO(crbug/1097328): Remove collecting visits to support.google.com after
+// language settings update fully launches.
+#if defined(OS_CHROMEOS)
+void RecordVisitToLanguageSettingsSupportPage(const GURL& url) {
+  if (url.is_empty() || !url.DomainIs("support.google.com"))
+    return;
+
+  // Keep these pages in order with SettingsLanguagesSupportPage in enums.xml
+  std::vector<std::string> kSupportPages = {
+      "chrome/answer/173424?co=GENIE.Platform%3DDesktop",
+      "chromebook/answer/1059490",
+      "chromebook/answer/1059492",
+  };
+  const size_t num_pages = 3;
+  for (size_t i = 0; i < num_pages; ++i) {
+    if (url.spec().find(kSupportPages[i]) != std::string::npos) {
+      UMA_HISTOGRAM_ENUMERATION("ChromeOS.Settings.Languages.SupportPageVisits",
+                                i, num_pages);
+      return;
+    }
+  }
+}
+#endif  // defined(OS_CHROMEOS)
+
 }  // namespace
 
 namespace internal {
@@ -167,6 +191,9 @@ const char kHistogramFirstContentfulPaintOnBattery[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.OnBattery";
 const char kHistogramFirstContentfulPaintNotOnBattery[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.NotOnBattery";
+
+const char kHistogramFirstContentfulPaintHiddenWhileFlushing[] =
+    "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.HiddenWhileFlushing";
 
 const char kHistogramLoadTypeFirstContentfulPaintReload[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.LoadType."
@@ -297,20 +324,6 @@ const char kBackgroundHistogramInputToFirstContentfulPaint[] =
 const char kHistogramBackForwardCacheEvent[] =
     "PageLoad.BackForwardCache.Event";
 
-const char kHistogramFontPreloadFirstPaint[] =
-    "PageLoad.Clients.FontPreload.PaintTiming.NavigationToFirstPaint";
-const char kHistogramFontPreloadFirstContentfulPaint[] =
-    "PageLoad.Clients.FontPreload.PaintTiming.NavigationToFirstContentfulPaint";
-const char kHistogramFontPreloadLargestContentfulPaint[] =
-    "PageLoad.Clients.FontPreload.PaintTiming."
-    "NavigationToLargestContentfulPaint";
-const char kHistogramFontPreloadLargestImagePaint[] =
-    "PageLoad.Clients.FontPreload.PaintTiming."
-    "NavigationToLargestImagePaint";
-const char kHistogramFontPreloadLargestTextPaint[] =
-    "PageLoad.Clients.FontPreload.PaintTiming."
-    "NavigationToLargestTextPaint";
-
 // Navigation metrics from the navigation start.
 const char kHistogramNavigationTimingNavigationStartToFirstRequestStart[] =
     "PageLoad.Experimental.NavigationTiming.NavigationStartToFirstRequestStart";
@@ -393,6 +406,12 @@ CorePageLoadMetricsObserver::OnCommit(
   UMA_HISTOGRAM_COUNTS_100("PageLoad.Navigation.RedirectChainLength",
                            redirect_chain_size_);
   navigation_handle_timing_ = navigation_handle->GetNavigationHandleTiming();
+
+  // TODO(crbug/1097328): Remove collecting visits to support.google.com after
+  // language settings update fully launches.
+#if defined(OS_CHROMEOS)
+  RecordVisitToLanguageSettingsSupportPage(navigation_handle->GetURL());
+#endif  // defined(OS_CHROMEOS)
   return CONTINUE_OBSERVING;
 }
 
@@ -432,12 +451,6 @@ void CorePageLoadMetricsObserver::OnFirstPaintInPage(
     PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstPaint,
                         timing.paint_timing->first_paint.value());
 
-    // Note: This depends on PageLoadMetrics internally processing loading
-    // behavior before timing metrics if they come in the same IPC update.
-    if (font_preload_started_before_rendering_observed_) {
-      PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadFirstPaint,
-                          timing.paint_timing->first_paint.value());
-    }
     if (timing.input_to_navigation_start) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramInputToFirstPaint,
                           timing.input_to_navigation_start.value() +
@@ -482,13 +495,6 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     PAGE_LOAD_HISTOGRAM(internal::kHistogramParseStartToFirstContentfulPaint,
                         timing.paint_timing->first_contentful_paint.value() -
                             timing.parse_timing->parse_start.value());
-
-    // Note: This depends on PageLoadMetrics internally processing loading
-    // behavior before timing metrics if they come in the same IPC update.
-    if (font_preload_started_before_rendering_observed_) {
-      PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadFirstContentfulPaint,
-                          timing.paint_timing->first_contentful_paint.value());
-    }
 
     // Emit a trace event to highlight a long navigation to first contentful
     // paint.
@@ -552,6 +558,16 @@ void CorePageLoadMetricsObserver::OnFirstContentfulPaintInPage(
         PAGE_LOAD_HISTOGRAM(internal::kHistogramInputToNavigationOmnibox,
                             timing.input_to_navigation_start.value());
       }
+    }
+
+    if (GetDelegate().GetFirstBackgroundTime()) {
+      // We were started in the foreground, and got FCP while in foreground, but
+      // became hidden while propagating the FCP value from Blink into the PLM
+      // observer. In this case, we will have missed the FCP UKM value, since it
+      // is logged in UkmPageLoadMetricsObserver::OnHidden.
+      PAGE_LOAD_HISTOGRAM(
+          internal::kHistogramFirstContentfulPaintHiddenWhileFlushing,
+          timing.paint_timing->first_contentful_paint.value());
     }
 
     switch (GetPageLoadType(transition_)) {
@@ -949,30 +965,6 @@ void CorePageLoadMetricsObserver::RecordTimingHistograms(
   }
 
   const page_load_metrics::ContentfulPaintTimingInfo&
-      main_frame_largest_image_paint = GetDelegate()
-                                           .GetLargestContentfulPaintHandler()
-                                           .MainFrameLargestImagePaint();
-  if (main_frame_largest_image_paint.ContainsValidTime() &&
-      WasStartedInForegroundOptionalEventInForeground(
-          main_frame_largest_image_paint.Time(), GetDelegate()) &&
-      font_preload_started_before_rendering_observed_) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadLargestImagePaint,
-                        main_frame_largest_image_paint.Time().value());
-  }
-
-  const page_load_metrics::ContentfulPaintTimingInfo&
-      main_frame_largest_text_paint = GetDelegate()
-                                          .GetLargestContentfulPaintHandler()
-                                          .MainFrameLargestTextPaint();
-  if (main_frame_largest_text_paint.ContainsValidTime() &&
-      WasStartedInForegroundOptionalEventInForeground(
-          main_frame_largest_text_paint.Time(), GetDelegate()) &&
-      font_preload_started_before_rendering_observed_) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadLargestTextPaint,
-                        main_frame_largest_text_paint.Time().value());
-  }
-
-  const page_load_metrics::ContentfulPaintTimingInfo&
       main_frame_largest_contentful_paint =
           GetDelegate()
               .GetLargestContentfulPaintHandler()
@@ -1005,13 +997,6 @@ void CorePageLoadMetricsObserver::RecordTimingHistograms(
         GetDelegate().GetNavigationStart() +
             all_frames_largest_contentful_paint.Time().value(),
         "data", all_frames_largest_contentful_paint.DataAsTraceValue());
-
-    // Note: This depends on PageLoadMetrics internally processing loading
-    // behavior before timing metrics if they come in the same IPC update.
-    if (font_preload_started_before_rendering_observed_) {
-      PAGE_LOAD_HISTOGRAM(internal::kHistogramFontPreloadLargestContentfulPaint,
-                          all_frames_largest_contentful_paint.Time().value());
-    }
   }
 
   const page_load_metrics::ContentfulPaintTimingInfo&
@@ -1187,7 +1172,7 @@ void CorePageLoadMetricsObserver::RecordByteAndResourceHistograms(
   PAGE_RESOURCE_COUNT_HISTOGRAM(internal::kHistogramTotalCompletedResources,
                                 num_cache_resources_ + num_network_resources_);
 
-  click_tracker_.RecordClickBurst(GetDelegate().GetSourceId());
+  click_tracker_.RecordClickBurst(GetDelegate().GetPageUkmSourceId());
 }
 
 void CorePageLoadMetricsObserver::RecordCpuUsageHistograms() {
@@ -1207,7 +1192,8 @@ CorePageLoadMetricsObserver::OnEnterBackForwardCache(
 }
 
 void CorePageLoadMetricsObserver::OnRestoreFromBackForwardCache(
-    const page_load_metrics::mojom::PageLoadTiming& timing) {
+    const page_load_metrics::mojom::PageLoadTiming& timing,
+    content::NavigationHandle* navigation_handle) {
   // This never reaches yet because OnEnterBackForwardCache returns
   // STOP_OBSERVING.
   // TODO(hajimehoshi): After changing OnEnterBackForwardCache to continue
@@ -1215,13 +1201,4 @@ void CorePageLoadMetricsObserver::OnRestoreFromBackForwardCache(
   UMA_HISTOGRAM_ENUMERATION(
       internal::kHistogramBackForwardCacheEvent,
       internal::PageLoadBackForwardCacheEvent::kRestoreFromBackForwardCache);
-}
-
-void CorePageLoadMetricsObserver::OnLoadingBehaviorObserved(
-    content::RenderFrameHost* rfh,
-    int behavior_flag) {
-  if (behavior_flag & blink::LoadingBehaviorFlag::
-                          kLoadingBehaviorFontPreloadStartedBeforeRendering) {
-    font_preload_started_before_rendering_observed_ = true;
-  }
 }

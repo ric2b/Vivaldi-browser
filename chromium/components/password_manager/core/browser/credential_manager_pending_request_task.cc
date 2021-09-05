@@ -8,10 +8,12 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <tuple>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/flat_set.h"
 #include "base/metrics/user_metrics.h"
 #include "base/stl_util.h"
 #include "components/autofill/core/common/password_form.h"
@@ -39,30 +41,71 @@ bool IsBetterMatch(const autofill::PasswordForm& form1,
   return form1.date_created > form2.date_created;
 }
 
+// Creates a base::flat_set of std::unique_ptr<autofill::PasswordForm> that uses
+// |key_getter| to compute the key used when comparing forms.
+template <typename KeyGetter>
+auto MakeFlatSet(KeyGetter key_getter) {
+  auto cmp = [key_getter](const auto& lhs, const auto& rhs) {
+    return key_getter(lhs) < key_getter(rhs);
+  };
+
+  return base::flat_set<std::unique_ptr<autofill::PasswordForm>, decltype(cmp)>(
+      cmp);
+}
+
 // Remove duplicates in |forms| before displaying them in the account chooser.
 void FilterDuplicates(
     std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) {
-  std::vector<std::unique_ptr<autofill::PasswordForm>> federated_forms;
-  // The key is [username, signon_realm]. signon_realm is used only for PSL
-  // matches because those entries have it in the UI.
-  std::map<std::pair<base::string16, std::string>,
-           std::unique_ptr<autofill::PasswordForm>>
-      credentials;
+  auto federated_forms_with_unique_username =
+      MakeFlatSet(/*key_getter=*/[](const auto& form) {
+        return std::make_pair(form->username_value, form->federation_origin);
+      });
+
+  // The key is [username, signon_realm, store]. signon_realm is used only for
+  // PSL matches because those entries have it in the UI.
+  auto credentials = MakeFlatSet(/*key_getter=*/[](const auto& form) {
+    return std::make_tuple(
+        form->username_value,
+        form->is_public_suffix_match ? form->signon_realm : std::string(),
+        form->in_store);
+  });
   for (auto& form : *forms) {
     if (!form->federation_origin.opaque()) {
-      federated_forms.push_back(std::move(form));
+      // |forms| contains credentials from both the profile and account stores.
+      // Therefore, it could potentially contains duplicate federated
+      // credentials. In case of duplicates, favor the account store version.
+      auto result =
+          federated_forms_with_unique_username.insert(std::move(form));
+      if (!result.second && form->IsUsingAccountStore())
+        *result.first = std::move(form);
     } else {
-      auto key = std::make_pair(
-          form->username_value,
-          form->is_public_suffix_match ? form->signon_realm : std::string());
-      auto it = credentials.find(key);
-      if (it == credentials.end() || IsBetterMatch(*form, *it->second))
-        credentials[key] = std::move(form);
+      auto result = credentials.insert(std::move(form));
+      if (!result.second && IsBetterMatch(*form, **result.first))
+        *result.first = std::move(form);
     }
   }
-  forms->clear();
-  for (auto& form_pair : credentials)
-    forms->push_back(std::move(form_pair.second));
+  // |credentials| contains credentials from both profile and account stores.
+  // There could potentially be duplicate credentials with the same password in
+  // which case it doesn't make sense to show both in the UI. When such
+  // duplicates exist, we favor the account store version to make it clear in
+  // the UI that this credential is available on other devices.
+  auto credentials_with_unique_passwords =
+      MakeFlatSet(/*key_getter=*/[](const auto& form) {
+        return std::make_tuple(
+            form->username_value,
+            form->is_public_suffix_match ? form->signon_realm : std::string(),
+            form->password_value);
+      });
+
+  for (auto& form : std::move(credentials).extract()) {
+    auto result = credentials_with_unique_passwords.insert(std::move(form));
+    if (!result.second && form->IsUsingAccountStore())
+      *result.first = std::move(form);
+  }
+  *forms = std::move(credentials_with_unique_passwords).extract();
+
+  std::vector<std::unique_ptr<autofill::PasswordForm>> federated_forms =
+      std::move(federated_forms_with_unique_username).extract();
   std::move(federated_forms.begin(), federated_forms.end(),
             std::back_inserter(*forms));
 }
@@ -87,13 +130,23 @@ CredentialManagerPendingRequestTask::CredentialManagerPendingRequestTask(
     SendCredentialCallback callback,
     CredentialMediationRequirement mediation,
     bool include_passwords,
-    const std::vector<GURL>& request_federations)
+    const std::vector<GURL>& request_federations,
+    StoresToQuery stores_to_query)
     : delegate_(delegate),
       send_callback_(std::move(callback)),
       mediation_(mediation),
       origin_(delegate_->GetOrigin()),
       include_passwords_(include_passwords) {
   CHECK(!net::IsCertStatusError(delegate_->client()->GetMainFrameCertStatus()));
+  switch (stores_to_query) {
+    case StoresToQuery::kProfileStore:
+      expected_stores_to_respond_ = 1;
+      break;
+    case StoresToQuery::kProfileAndAccountStores:
+      expected_stores_to_respond_ = 2;
+      break;
+  }
+
   for (const GURL& federation : request_federations)
     federations_.insert(
         url::Origin::Create(federation.GetOrigin()).Serialize());
@@ -104,19 +157,40 @@ CredentialManagerPendingRequestTask::~CredentialManagerPendingRequestTask() =
 
 void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+  // This class overrides OnGetPasswordStoreResultsFrom() (the version of this
+  // method that also receives the originating store), so the store-less version
+  // never gets called.
+  NOTREACHED();
+}
+
+void CredentialManagerPendingRequestTask::OnGetPasswordStoreResultsFrom(
+    PasswordStore* store,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
   // localhost is a secure origin but not https.
   if (results.empty() && origin_.scheme() == url::kHttpsScheme) {
     // Try to migrate the HTTP passwords and process them later.
-    http_migrator_ = std::make_unique<HttpPasswordStoreMigrator>(
-        origin_, delegate_->client(), this);
+    http_migrators_[store] = std::make_unique<HttpPasswordStoreMigrator>(
+        origin_, store, delegate_->client()->GetNetworkContext(), this);
     return;
   }
-  ProcessForms(std::move(results));
+  AggregatePasswordStoreResults(std::move(results));
 }
 
 void CredentialManagerPendingRequestTask::ProcessMigratedForms(
     std::vector<std::unique_ptr<autofill::PasswordForm>> forms) {
-  ProcessForms(std::move(forms));
+  AggregatePasswordStoreResults(std::move(forms));
+}
+
+void CredentialManagerPendingRequestTask::AggregatePasswordStoreResults(
+    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+  // Store the results.
+  for (auto& form : results)
+    partial_results_.push_back(std::move(form));
+
+  // If we're still awaiting more results, nothing else to do.
+  if (--expected_stores_to_respond_ > 0)
+    return;
+  ProcessForms(std::move(partial_results_));
 }
 
 void CredentialManagerPendingRequestTask::ProcessForms(
@@ -128,10 +202,10 @@ void CredentialManagerPendingRequestTask::ProcessForms(
     delegate_->SendCredential(std::move(send_callback_), CredentialInfo());
     return;
   }
-  // Get rid of the blacklisted credentials.
+  // Get rid of the blocked credentials.
   base::EraseIf(results,
                 [](const std::unique_ptr<autofill::PasswordForm>& form) {
-                  return form->blacklisted_by_user;
+                  return form->blocked_by_user;
                 });
 
   std::vector<std::unique_ptr<autofill::PasswordForm>> local_results;
@@ -241,7 +315,7 @@ void CredentialManagerPendingRequestTask::ProcessForms(
       base::AdaptCallbackForRepeating(std::move(send_callback_));
   if (!delegate_->client()->PromptUserToChooseCredentials(
           std::move(local_results), origin_,
-          base::Bind(
+          base::BindOnce(
               &CredentialManagerPendingRequestTaskDelegate::SendPasswordForm,
               base::Unretained(delegate_), repeating_send_callback,
               mediation_))) {

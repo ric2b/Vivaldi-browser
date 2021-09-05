@@ -18,6 +18,7 @@
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
+#include "build/build_config.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/swap_result.h"
@@ -28,8 +29,6 @@ class SingleThreadTaskRunner;
 
 namespace gpu {
 
-class VulkanCommandBuffer;
-class VulkanCommandPool;
 class VulkanDeviceQueue;
 
 class COMPONENT_EXPORT(VULKAN) VulkanSwapChain {
@@ -43,14 +42,8 @@ class COMPONENT_EXPORT(VULKAN) VulkanSwapChain {
     VkImage image() const { return image_; }
     uint32_t image_index() const { return image_index_; }
     VkImageLayout image_layout() const { return image_layout_; }
-    void set_image_layout(VkImageLayout layout) { image_layout_ = layout; }
-
-    // Take the begin write semaphore. The ownership of the semaphore will be
-    // transferred to the caller.
-    VkSemaphore TakeBeginSemaphore();
-
-    // Get the end write semaphore.
-    VkSemaphore GetEndSemaphore();
+    VkSemaphore begin_semaphore() const { return begin_semaphore_; }
+    VkSemaphore end_semaphore() const { return end_semaphore_; }
 
    private:
     VulkanSwapChain* const swap_chain_;
@@ -73,6 +66,7 @@ class COMPONENT_EXPORT(VULKAN) VulkanSwapChain {
                   const VkSurfaceFormatKHR& surface_format,
                   const gfx::Size& image_size,
                   uint32_t min_image_count,
+                  VkImageUsageFlags image_usage_flags,
                   VkSurfaceTransformFlagBitsKHR pre_transform,
                   bool use_protected_memory,
                   std::unique_ptr<VulkanSwapChain> old_swap_chain);
@@ -113,10 +107,20 @@ class COMPONENT_EXPORT(VULKAN) VulkanSwapChain {
   }
 
  private:
+  struct ImageData {
+    VkImage image = VK_NULL_HANDLE;
+    VkImageLayout image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    // Semaphore used for vkAcquireNextImageKHR()
+    VkSemaphore acquire_semaphore = VK_NULL_HANDLE;
+    // Semaphore used for vkQueuePresentKHR()
+    VkSemaphore present_semaphore = VK_NULL_HANDLE;
+  };
+
   bool InitializeSwapChain(VkSurfaceKHR surface,
                            const VkSurfaceFormatKHR& surface_format,
                            const gfx::Size& image_size,
                            uint32_t min_image_count,
+                           VkImageUsageFlags image_usage_flags,
                            VkSurfaceTransformFlagBitsKHR pre_transform,
                            bool use_protected_memory,
                            std::unique_ptr<VulkanSwapChain> old_swap_chain)
@@ -130,12 +134,23 @@ class COMPONENT_EXPORT(VULKAN) VulkanSwapChain {
   bool BeginWriteCurrentImage(VkImage* image,
                               uint32_t* image_index,
                               VkImageLayout* layout,
-                              VkSemaphore* semaphore);
-  void EndWriteCurrentImage(VkImageLayout layout, VkSemaphore semaphore);
+                              VkSemaphore* begin_semaphore,
+                              VkSemaphore* end_semaphore);
+  void EndWriteCurrentImage();
+
   bool PresentBuffer(const gfx::Rect& rect) EXCLUSIVE_LOCKS_REQUIRED(lock_);
   bool AcquireNextImage() EXCLUSIVE_LOCKS_REQUIRED(lock_);
   // Wait until PostSubBufferAsync() is finished on ThreadPool.
   void WaitUntilPostSubBufferAsyncFinished() EXCLUSIVE_LOCKS_REQUIRED(lock_);
+
+  struct FenceAndSemaphores {
+    VkFence fence = VK_NULL_HANDLE;
+    VkSemaphore semaphores[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+  };
+  FenceAndSemaphores GetOrCreateFenceAndSemaphores()
+      EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  void ReturnFenceAndSemaphores(const FenceAndSemaphores& fence_and_semaphores)
+      EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   mutable base::Lock lock_;
 
@@ -143,31 +158,18 @@ class COMPONENT_EXPORT(VULKAN) VulkanSwapChain {
   VulkanDeviceQueue* device_queue_ = nullptr;
   bool is_incremental_present_supported_ = false;
   VkSwapchainKHR swap_chain_ GUARDED_BY(lock_) = VK_NULL_HANDLE;
-  std::unique_ptr<VulkanCommandPool> command_pool_;
   gfx::Size size_;
-
-  struct ImageData {
-    ImageData();
-    ImageData(ImageData&& other);
-    ~ImageData();
-
-    ImageData& operator=(ImageData&& other);
-
-    VkImage image = VK_NULL_HANDLE;
-    VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    std::unique_ptr<VulkanCommandBuffer> command_buffer;
-    // Semaphore passed to vkQueuePresentKHR to wait on.
-    VkSemaphore present_begin_semaphore = VK_NULL_HANDLE;
-    // Semaphore signaled when present engine is done with the image.
-    VkSemaphore present_end_semaphore = VK_NULL_HANDLE;
-  };
 
   // Images in the swap chain.
   std::vector<ImageData> images_ GUARDED_BY(lock_);
 
-  base::circular_deque<uint32_t> in_present_images_ GUARDED_BY(lock_);
+  // True if BeginWriteCurrentImage() is called, but EndWriteCurrentImage() is
+  // not.
   bool is_writing_ GUARDED_BY(lock_) = false;
-  VkSemaphore end_write_semaphore_ GUARDED_BY(lock_) = VK_NULL_HANDLE;
+
+  // True if the current image is new required, and BeginWriteCurrentImage() and
+  // EndWriteCurrentImage() pair are not called.
+  bool new_acquired_ GUARDED_BY(lock_) = true;
 
   // Condition variable is signalled when a PostSubBufferAsync() is finished.
   base::ConditionVariable condition_variable_{&lock_};
@@ -186,6 +188,14 @@ class COMPONENT_EXPORT(VULKAN) VulkanSwapChain {
 
   // For executing PosSubBufferAsync tasks off the GPU main thread.
   scoped_refptr<base::SequencedTaskRunner> post_sub_buffer_task_runner_;
+
+#if !defined(OS_FUCHSIA)
+  // Available fence and semaphores can be reused when fence is passed.
+  // Not used on Fuchsia because Fuchsia's swapchain implementation doesn't
+  // support fences.
+  base::circular_deque<FenceAndSemaphores> fence_and_semaphores_queue_
+      GUARDED_BY(lock_);
+#endif
 
   THREAD_CHECKER(thread_checker_);
 

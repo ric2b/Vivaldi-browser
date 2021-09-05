@@ -36,13 +36,11 @@ class CustomTabSessionImplTest : public InProcessBrowserTest,
 
   void SetUpOnMainThread() override {
     wm_helper_ = std::make_unique<exo::WMHelperChromeOS>();
-    exo::WMHelper::SetInstance(wm_helper_.get());
     DCHECK(exo::WMHelper::HasInstance());
   }
 
   void TearDownOnMainThread() override {
     DCHECK(exo::WMHelper::HasInstance());
-    exo::WMHelper::SetInstance(nullptr);
     wm_helper_.reset();
   }
 
@@ -100,9 +98,7 @@ IN_PROC_BROWSER_TEST_F(CustomTabSessionImplTest,
       test_window.shell_surface()->GetWidget()->GetNativeWindow();
   ASSERT_TRUE(aura_window);
 
-  auto custom_tab = std::make_unique<arc::CustomTab>(aura_window,
-                                                     /* surface_id= */ 0,
-                                                     /* top_margin= */ 0);
+  auto custom_tab = std::make_unique<arc::CustomTab>(aura_window);
 
   auto web_contents = arc::CreateArcCustomTabWebContents(browser()->profile(),
                                                          GURL("http://foo/"));

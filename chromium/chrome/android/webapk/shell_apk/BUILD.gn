@@ -44,7 +44,11 @@ mustache_pass("generate_new_style_manifest_for_upload") {
 # name conflict.
 template("webapk_java") {
   android_library(target_name) {
-    forward_variables_from(invoker, [ "deps" ])
+    forward_variables_from(invoker,
+                           [
+                             "deps",
+                             "resources_package",
+                           ])
 
     sources = [
       "src/org/chromium/webapk/shell_apk/ChooseHostBrowserDialog.java",
@@ -71,6 +75,7 @@ template("webapk_java") {
       "//chrome/android/webapk/libs/common:common_java",
       "//chrome/android/webapk/libs/common:splash_java",
       "//components/webapk/android/libs/common:java",
+      "//third_party/android_deps:androidx_annotation_annotation_java",
     ]
   }
 }
@@ -132,7 +137,7 @@ template("webapk_tmpl") {
   }
 
   android_resources(_resources_target_name) {
-    custom_package = "org.chromium.webapk.shell_apk"
+    create_srcjar = false
     sources = [
       "res/drawable-hdpi/last_resort_runtime_host_logo.png",
       "res/drawable-hdpi/notification_badge.png",
@@ -219,6 +224,7 @@ template("webapk_tmpl") {
   }
 
   webapk_java(_java_without_services_target_name) {
+    resources_package = "org.chromium.webapk.shell_apk"
     deps = [
       ":$_manifest_target_name",
       ":$_resources_target_name",
@@ -242,10 +248,8 @@ template("webapk_tmpl") {
 
     android_manifest = _manifest_output
     android_manifest_dep = ":$_manifest_target_name"
-    min_sdk_version = 21
     target_sdk_version = 29
     never_incremental = true
-    enable_multidex = false
 
     # Force 32 bit mode on 64 bit devices.
     native_lib_placeholders = [ "libfoo.so" ]
@@ -254,7 +258,7 @@ template("webapk_tmpl") {
       proguard_enabled = true
       proguard_configs = [
         "//chrome/android/webapk/shell_apk/proguard.flags",
-        "//chrome/android/java/proguard.flags",
+        "//chrome/android/proguard/main.flags",
         "//base/android/proguard/chromium_apk.flags",
         "//base/android/proguard/chromium_code.flags",
       ]
@@ -308,7 +312,7 @@ webapk_tmpl("new_splash_webapk") {
   config_file = "manifest/bound_manifest_config.json"
   manifest_to_upload_dep = ":generate_new_style_manifest_for_upload"
   apk_name = "NewSplashWebApk"
-  apk_package_name = "org.chromium.webapk.new.splash"
+  apk_package_name = "org.chromium.webapk.new_splash"
 }
 
 # Used by javatests
@@ -343,6 +347,7 @@ android_library("shell_apk_javatests") {
     "//base:base_java_test_support",
     "//chrome/android/webapk/libs/common:common_java",
     "//content/public/test/android:content_java_test_support",
+    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/junit",
   ]
@@ -367,6 +372,7 @@ junit_binary("webapk_shell_apk_junit_tests") {
     "//chrome/android/webapk/libs/runtime_library:runtime_library_for_tests_java",
     "//chrome/android/webapk/test:junit_test_support",
     "//components/webapk/android/libs/common:java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
   ]
 }
 

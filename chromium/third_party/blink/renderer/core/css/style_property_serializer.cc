@@ -26,6 +26,7 @@
 #include <bitset>
 
 #include "base/stl_util.h"
+#include "third_party/blink/renderer/core/animation/css/css_animation_data.h"
 #include "third_party/blink/renderer/core/css/css_custom_property_declaration.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_markup.h"
@@ -54,7 +55,7 @@ StylePropertySerializer::CSSPropertyValueSetForSerializer::
   for (unsigned i = 0; i < property_set_->PropertyCount(); ++i) {
     CSSPropertyValueSet::PropertyReference property =
         property_set_->PropertyAt(i);
-    if (property.Property().IsAffectedByAll()) {
+    if (property.IsAffectedByAll()) {
       if (all_property.IsImportant() && !property.IsImportant())
         continue;
       if (static_cast<unsigned>(all_index_) >= i)
@@ -117,8 +118,7 @@ bool StylePropertySerializer::CSSPropertyValueSetForSerializer::
   if (!need_to_expand_all_) {
     CSSPropertyValueSet::PropertyReference property =
         property_set_->PropertyAt(index);
-    if (property.Property().IDEquals(CSSPropertyID::kAll) ||
-        !property.Property().IsAffectedByAll())
+    if (property.Id() == CSSPropertyID::kAll || !property.IsAffectedByAll())
       return true;
     if (!isCSSPropertyIDWithName(property.Id()))
       return false;
@@ -1010,7 +1010,22 @@ String StylePropertySerializer::GetLayeredShorthandValue(
         }
       }
 
-      if (!value->IsInitialValue()) {
+      bool is_initial_value = value->IsInitialValue();
+
+      // When serializing shorthands, a component value must be omitted
+      // if doesn't change the meaning of the overall value.
+      // https://drafts.csswg.org/cssom/#serializing-css-values
+      if (property->IDEquals(CSSPropertyID::kAnimationTimeline)) {
+        if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+          if (ident->GetValueID() ==
+              CSSAnimationData::InitialTimeline().GetKeyword()) {
+            DCHECK(RuntimeEnabledFeatures::CSSScrollTimelineEnabled());
+            is_initial_value = true;
+          }
+        }
+      }
+
+      if (!is_initial_value) {
         if (property->IDEquals(CSSPropertyID::kBackgroundSize) ||
             property->IDEquals(CSSPropertyID::kWebkitMaskSize)) {
           if (found_position_ycss_property || found_position_xcss_property)

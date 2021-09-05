@@ -20,7 +20,6 @@ NGPageLayoutAlgorithm::NGPageLayoutAlgorithm(
     : NGLayoutAlgorithm(params) {
   container_builder_.SetIsNewFormattingContext(
       params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
 }
 
 scoped_refptr<const NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
@@ -63,11 +62,7 @@ scoped_refptr<const NGLayoutResult> NGPageLayoutAlgorithm::Layout() {
       container_builder_.InitialBorderBoxSize().inline_size);
   container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  NGOutOfFlowLayoutPart(
-      Node(), ConstraintSpace(),
-      container_builder_.Borders() + container_builder_.Scrollbar(),
-      &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   // TODO(mstensho): Propagate baselines.
 

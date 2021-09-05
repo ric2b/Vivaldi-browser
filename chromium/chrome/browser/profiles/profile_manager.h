@@ -103,6 +103,9 @@ class ProfileManager : public content::NotificationObserver,
   // make this method private.
   Profile* GetProfile(const base::FilePath& profile_dir);
 
+  // Returns regular or off-the-record profile given its profile key.
+  static Profile* GetProfileFromProfileKey(ProfileKey* profile_key);
+
   // Returns total number of profiles available on this machine.
   size_t GetNumberOfProfiles();
 
@@ -234,11 +237,9 @@ class ProfileManager : public content::NotificationObserver,
   // Register and add testing profile to the ProfileManager. Use ONLY in tests.
   // This allows the creation of Profiles outside of the standard creation path
   // for testing. If |addToStorage|, adds to ProfileAttributesStorage as well.
-  // If |start_deferred_task_runners|, starts the deferred task runners.
   // Use ONLY in tests.
   void RegisterTestingProfile(std::unique_ptr<Profile> profile,
-                              bool addToStorage,
-                              bool start_deferred_task_runners);
+                              bool add_to_storage);
 
   const base::FilePath& user_data_dir() const { return user_data_dir_; }
 

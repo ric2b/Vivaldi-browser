@@ -79,6 +79,7 @@ const char kExternalClearKeyStorageIdTestKeySystem[] =
 const char kNoSessionToLoad[] = "";
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 const char kPersistentLicense[] = "PersistentLicense";
+const char kPersistentUsageRecord[] = "PersistentUsageRecord";
 const char kUnknownSession[] = "UnknownSession";
 #endif
 
@@ -115,14 +116,7 @@ enum class ConfigChangeType {
 enum class PlayCount { ONCE, TWICE };
 
 // Base class for encrypted media tests.
-#if defined(OS_ANDROID)
-// Flaky on Android: https://crbug.com/1099384
-#define MAYBE_EncryptedMediaTestBase DISABLED_EncryptedMediaTestBase
-#else
-#define MAYBE_EncryptedMediaTestBase EncryptedMediaTestBase
-#endif
-
-class MAYBE_EncryptedMediaTestBase : public MediaBrowserTest {
+class EncryptedMediaTestBase : public MediaBrowserTest {
  public:
   bool IsExternalClearKey(const std::string& key_system) {
     if (key_system == kExternalClearKeyKeySystem)
@@ -364,6 +358,9 @@ class ECKEncryptedMediaTest : public EncryptedMediaTestBase,
     command_line->AppendSwitchASCII(
         switches::kOverrideEnabledCdmInterfaceVersion,
         base::NumberToString(GetCdmInterfaceVersion()));
+    command_line->AppendSwitchASCII(
+        switches::kEnableBlinkFeatures,
+        "EncryptedMediaPersistentUsageRecordSession");
   }
 };
 
@@ -884,6 +881,18 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadSessionAfterClose) {
   RunEncryptedMediaTestPage("eme_load_session_after_close_test.html",
                             kExternalClearKeyKeySystem, query_params,
                             media::kEnded);
+}
+
+IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, VerifyPersistentUsageRecord) {
+  TestPlaybackCase(kExternalClearKeyKeySystem, kPersistentUsageRecord,
+                   media::kEnded);
+}
+
+IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, RemovePersistentUsageRecord) {
+  RunEncryptedMediaTest("eme_remove_session_test.html",
+                        "bear-320x240-v_enc-v.webm", kExternalClearKeyKeySystem,
+                        SrcType::MSE, kPersistentUsageRecord, false,
+                        PlayCount::ONCE, media::kEnded);
 }
 
 const char kExternalClearKeyDecryptOnlyKeySystem[] =

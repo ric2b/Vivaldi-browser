@@ -10,7 +10,6 @@
 
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "chrome/browser/ui/tabs/hover_tab_selector.h"
 #include "chrome/browser/ui/tabs/tab_menu_model_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -44,6 +43,9 @@ class BrowserTabStripController : public TabStripController,
                             BrowserView* browser_view,
                             std::unique_ptr<TabMenuModelFactory>
                                 menu_model_factory_override = nullptr);
+  BrowserTabStripController(const BrowserTabStripController&) = delete;
+  BrowserTabStripController& operator=(const BrowserTabStripController&) =
+      delete;
   ~BrowserTabStripController() override;
 
   void InitFromModel(TabStrip* tabstrip);
@@ -129,6 +131,7 @@ class BrowserTabStripController : public TabStripController,
   void TabBlockedStateChanged(content::WebContents* contents,
                               int model_index) override;
   void TabGroupedStateChanged(base::Optional<tab_groups::TabGroupId> group,
+                              content::WebContents* contents,
                               int index) override;
   void SetTabNeedsAttentionAt(int index, bool attention) override;
 
@@ -169,8 +172,6 @@ class BrowserTabStripController : public TabStripController,
   PrefChangeRegistrar local_pref_registrar_;
 
   std::unique_ptr<TabMenuModelFactory> menu_model_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserTabStripController);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_BROWSER_TAB_STRIP_CONTROLLER_H_

@@ -8,7 +8,6 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
-import android.os.Build;
 import android.util.Pair;
 
 import androidx.annotation.VisibleForTesting;
@@ -19,7 +18,9 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabStateFileManager;
-import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
+import org.chromium.chrome.browser.tabmodel.IncognitoTabHost;
+import org.chromium.chrome.browser.tabmodel.IncognitoTabHostRegistry;
+import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
 import org.chromium.chrome.browser.util.AndroidTaskUtils;
 
 import java.io.File;
@@ -43,8 +44,7 @@ public class IncognitoUtils {
     @SuppressLint("NewApi")
     public static boolean shouldDestroyIncognitoProfileOnStartup(
             boolean selectedTabModelIsIncognito) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP
-                || !Profile.getLastUsedRegularProfile().hasOffTheRecordProfile()) {
+        if (!Profile.getLastUsedRegularProfile().hasOffTheRecordProfile()) {
             return false;
         }
 
@@ -111,7 +111,7 @@ public class IncognitoUtils {
      * @return whether successful.
      */
     public static boolean deleteIncognitoStateFiles() {
-        File directory = TabbedModeTabPersistencePolicy.getOrCreateTabbedModeStateDirectory();
+        File directory = TabStateDirectory.getOrCreateTabbedModeStateDirectory();
         File[] tabStateFiles = directory.listFiles();
         if (tabStateFiles == null) return true;
 

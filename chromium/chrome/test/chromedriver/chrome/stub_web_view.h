@@ -20,6 +20,7 @@ class StubWebView : public WebView {
   std::string GetId() override;
   bool WasCrashed() override;
   Status ConnectIfNecessary() override;
+  Status SetUpDevTools() override;
   Status HandleReceivedEvents() override;
   Status GetUrl(std::string* url) override;
   Status Load(const std::string& url, const Timeout* timeout) override;
@@ -95,6 +96,8 @@ class StubWebView : public WebView {
   Status IsPendingNavigation(const Timeout* timeout,
                              bool* is_pending) const override;
   JavaScriptDialogManager* GetJavaScriptDialogManager() override;
+  MobileEmulationOverrideManager* GetMobileEmulationOverrideManager()
+      const override;
   Status OverrideGeolocation(const Geoposition& geoposition) override;
   Status OverrideNetworkConditions(
       const NetworkConditions& network_conditions) override;

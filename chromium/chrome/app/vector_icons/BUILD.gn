@@ -58,6 +58,8 @@ aggregate_vector_icons("chrome_vector_icons") {
     "input.icon",
     "key.icon",
     "keyboard_arrow_down.icon",
+    "keyboard_arrow_right.icon",
+    "keyboard_arrow_up.icon",
     "laptop.icon",
     "media_toolbar_button.icon",
     "media_toolbar_button_touch.icon",
@@ -70,6 +72,8 @@ aggregate_vector_icons("chrome_vector_icons") {
     "nfc.icon",
     "overflow_chevron.icon",
     "paintbrush.icon",
+    "person_filled_padded_large.icon",
+    "person_filled_padded_small.icon",
     "photo_camera.icon",
     "picture_in_picture_control_background.icon",
     "picture_in_picture_alt.icon",
@@ -104,6 +108,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "tab_audio_muting_rounded.icon",
     "tab_audio_rounded.icon",
     "tab_bluetooth_connected.icon",
+    "tab_bluetooth_scan_active.icon",
     "tab_close_normal.icon",
     "tab_group.icon",
     "tab_media_capturing.icon",
@@ -184,9 +189,14 @@ aggregate_vector_icons("chrome_vector_icons") {
       "notification_storage_full.icon",
       "notification_vpn.icon",
       "notification_wifi_off.icon",
+      "notification_wifi.icon",
       "shutdown_guest_os.icon",
       "warning_badge_circle.icon",
     ]
+  }
+
+  if (!is_android) {
+    icons += [ "nearby_share.icon" ]
   }
 
   if (enable_vr && !is_android) {

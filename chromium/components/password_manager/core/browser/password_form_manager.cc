@@ -35,6 +35,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/gaia/core_account_id.h"
 
+using autofill::FieldDataManager;
 using autofill::FieldRendererId;
 using autofill::FormData;
 using autofill::FormFieldData;
@@ -311,7 +312,7 @@ void PasswordFormManager::Save() {
     newly_blacklisted_ = false;
   }
 
-  password_save_manager_->Save(observed_form_, *parsed_submitted_form_);
+  password_save_manager_->Save(&observed_form_, *parsed_submitted_form_);
 
   client_->UpdateFormManagers();
 }
@@ -322,7 +323,7 @@ void PasswordFormManager::Update(const PasswordForm& credentials_to_update) {
   metrics_recorder_->SetSubmissionIndicatorEvent(
       parsed_submitted_form_->submission_event);
 
-  password_save_manager_->Update(credentials_to_update, observed_form_,
+  password_save_manager_->Update(credentials_to_update, &observed_form_,
                                  *parsed_submitted_form_);
 
   client_->UpdateFormManagers();
@@ -566,6 +567,20 @@ void PasswordFormManager::SetDriver(
     const base::WeakPtr<PasswordManagerDriver>& driver) {
   driver_ = driver;
 }
+
+void PasswordFormManager::UpdateObservedFormDataWithFieldDataManagerInfo(
+    const FieldDataManager* field_data_manager) {
+  for (FormFieldData& field : observed_form_.fields) {
+    FieldRendererId field_id = field.unique_renderer_id;
+    if (!field_data_manager->HasFieldData(field_id))
+      continue;
+    field.typed_value = field_data_manager->GetUserTypedValue(field_id);
+    field.properties_mask =
+        field_data_manager->GetFieldPropertiesMask(field_id);
+    field.value =
+        field_data_manager->GetAutofilledValue(field_id).value_or(field.value);
+  }
+}
 #endif  // defined(OS_IOS)
 
 std::unique_ptr<PasswordFormManager> PasswordFormManager::Clone() {
@@ -670,8 +685,15 @@ void PasswordFormManager::CreatePendingCredentials() {
     return;
 
   password_save_manager_->CreatePendingCredentials(
-      *parsed_submitted_form_, observed_form_, submitted_form_, IsHttpAuth(),
+      *parsed_submitted_form_, &observed_form_, submitted_form_, IsHttpAuth(),
       IsCredentialAPISave());
+}
+
+void PasswordFormManager::ResetState() {
+  parsed_submitted_form_.reset();
+  submitted_form_ = FormData();
+  password_save_manager_->ResetPendingCredentials();
+  is_submitted_ = false;
 }
 
 bool PasswordFormManager::ProvisionallySave(
@@ -690,10 +712,7 @@ bool PasswordFormManager::ProvisionallySave(
 
   if (!have_password_to_save) {
     // In case of error during parsing, reset the state.
-    parsed_submitted_form_.reset();
-    submitted_form_ = FormData();
-    password_save_manager_->ResetPendingCrednetials();
-    is_submitted_ = false;
+    ResetState();
     return false;
   }
 
@@ -956,9 +975,6 @@ void PasswordFormManager::PresaveGeneratedPasswordInternal(
 
 void PasswordFormManager::CalculateFillingAssistanceMetric(
     const FormData& submitted_form) {
-  // TODO(https://crbug.com/918846): implement collecting all necessary data
-  // on iOS.
-#if not defined(OS_IOS)
   std::set<std::pair<base::string16, PasswordForm::Store>> saved_usernames;
   std::set<std::pair<base::string16, PasswordForm::Store>> saved_passwords;
 
@@ -975,7 +991,6 @@ void PasswordFormManager::CalculateFillingAssistanceMetric(
       form_fetcher_->GetInteractionsStats(),
       client_->GetPasswordFeatureManager()
           ->ComputePasswordAccountStorageUsageLevel());
-#endif
 }
 
 bool PasswordFormManager::UsePossibleUsername(

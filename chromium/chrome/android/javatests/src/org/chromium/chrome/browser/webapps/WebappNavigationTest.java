@@ -22,6 +22,7 @@ import android.util.Base64;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -37,9 +38,9 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -202,8 +203,10 @@ public class WebappNavigationTest {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
         addAnchorAndClick(offOriginUrl(), "_blank");
         ChromeActivity activity = mActivityTestRule.getActivity();
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                2, () -> activity.getTabModelSelector().getModel(false).getCount()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    activity.getTabModelSelector().getModel(false).getCount(), Matchers.is(2));
+        });
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), offOriginUrl());
 
         WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
@@ -223,8 +226,10 @@ public class WebappNavigationTest {
         runWebappActivityAndWaitForIdle(mActivityTestRule.createIntent());
         addAnchorAndClick(inScopeUrl, "_blank");
         ChromeActivity activity = mActivityTestRule.getActivity();
-        CriteriaHelper.pollUiThread(Criteria.equals(
-                2, () -> activity.getTabModelSelector().getModel(false).getCount()));
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    activity.getTabModelSelector().getModel(false).getCount(), Matchers.is(2));
+        });
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), inScopeUrl);
 
         WebappActivityTestRule.assertToolbarShownMaybeHideable(activity);
@@ -270,11 +275,8 @@ public class WebappNavigationTest {
                 mActivityTestRule.getActivity().getActivityTab(), "myTestAnchorId",
                 R.id.contextmenu_open_in_chrome);
 
-        CriteriaHelper.pollInstrumentationThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return InstrumentationRegistry.getInstrumentation().checkMonitorHit(monitor, 1);
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            return InstrumentationRegistry.getInstrumentation().checkMonitorHit(monitor, 1);
         });
     }
 
@@ -354,7 +356,7 @@ public class WebappNavigationTest {
         String otherInScopeUrl =
                 WebappTestPage.getNonServiceWorkerUrl(mActivityTestRule.getTestServer());
         mActivityTestRule.loadUrlInTab(otherInScopeUrl, PageTransition.LINK, tab);
-        assertEquals(otherInScopeUrl, tab.getUrlString());
+        assertEquals(otherInScopeUrl, ChromeTabUtils.getUrlStringOnUiThread(tab));
 
         mActivityTestRule.loadUrlInTab(
                 offOriginUrl(), PageTransition.LINK, tab, 10 /* secondsToWait */);
@@ -457,13 +459,10 @@ public class WebappNavigationTest {
     }
 
     private void waitForExternalAppOrIntentPicker() {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return ApplicationStatus.getStateForApplication() == HAS_PAUSED_ACTIVITIES
-                        || ApplicationStatus.getStateForApplication() == HAS_STOPPED_ACTIVITIES
-                        || ApplicationStatus.getStateForApplication() == HAS_DESTROYED_ACTIVITIES;
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(ApplicationStatus.getStateForApplication(),
+                    Matchers.isOneOf(HAS_PAUSED_ACTIVITIES, HAS_STOPPED_ACTIVITIES,
+                            HAS_DESTROYED_ACTIVITIES));
         });
     }
 }

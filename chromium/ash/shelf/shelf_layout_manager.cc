@@ -63,6 +63,7 @@
 #include "components/prefs/pref_service.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animator.h"
@@ -129,26 +130,21 @@ ui::Layer* GetLayer(views::Widget* widget) {
 
 void SetupAnimator(ui::ScopedLayerAnimationSettings* animation_setter,
                    base::TimeDelta animation_duration,
-                   gfx::Tween::Type type,
-                   ui::AnimationMetricsReporter* animation_metrics_reporter) {
+                   gfx::Tween::Type type) {
   animation_setter->SetTransitionDuration(animation_duration);
   if (!animation_duration.is_zero()) {
     animation_setter->SetTweenType(type);
     animation_setter->SetPreemptionStrategy(
         ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-    if (animation_metrics_reporter)
-      animation_setter->SetAnimationMetricsReporter(animation_metrics_reporter);
   }
 }
 
 void AnimateOpacity(ui::Layer* layer,
                     float target_opacity,
                     base::TimeDelta animation_duration,
-                    gfx::Tween::Type type,
-                    ui::AnimationMetricsReporter* animation_metrics_reporter) {
+                    gfx::Tween::Type type) {
   ui::ScopedLayerAnimationSettings animation_setter(layer->GetAnimator());
-  SetupAnimator(&animation_setter, animation_duration, type,
-                animation_metrics_reporter);
+  SetupAnimator(&animation_setter, animation_duration, type);
   layer->SetOpacity(target_opacity);
 }
 
@@ -411,7 +407,6 @@ void ShelfLayoutManager::InitObservers() {
   shell->AddShellObserver(this);
   SplitViewController::Get(shelf_widget_->GetNativeWindow())->AddObserver(this);
   ShelfConfig::Get()->AddObserver(this);
-  Shell::Get()->tablet_mode_controller()->AddObserver(this);
   shell->overview_controller()->AddObserver(this);
   shell->app_list_controller()->AddObserver(this);
   shell->lock_state_controller()->AddObserver(this);
@@ -439,7 +434,6 @@ void ShelfLayoutManager::PrepareForShutdown() {
   // Stop observing changes to avoid updating a partially destructed shelf.
   Shell::Get()->activation_client()->RemoveObserver(this);
   ShelfConfig::Get()->RemoveObserver(this);
-  Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
 
   // DesksController could be null when virtual desks feature is not enabled.
   if (DesksController::Get())
@@ -518,6 +512,8 @@ void ShelfLayoutManager::UpdateVisibilityState() {
     // Needed to show system tray in non active session state.
     SetState(SHELF_VISIBLE);
   } else if (Shell::Get()->screen_pinning_controller()->IsPinned()) {
+    SetState(SHELF_HIDDEN);
+  } else if (Shell::Get()->session_controller()->IsRunningInAppMode()) {
     SetState(SHELF_HIDDEN);
   } else {
     // TODO(zelidrag): Verify shelf drag animation still shows on the device
@@ -710,8 +706,16 @@ void ShelfLayoutManager::ProcessGestureEventOfInAppHotseat(
 
   base::AutoReset<bool> hide_hotseat(&should_hide_hotseat_, true);
 
-  // Record gesture metrics only for ET_GESTURE_BEGIN to avoid over counting.
-  if (event->type() == ui::ET_GESTURE_BEGIN) {
+  // In overview mode, only the gesture tap event is able to make the hotseat
+  // exit the extended mode.
+  const bool in_overview =
+      Shell::Get()->overview_controller() &&
+      Shell::Get()->overview_controller()->InOverviewSession();
+  ui::EventType interesting_type =
+      in_overview ? ui::ET_GESTURE_TAP : ui::ET_GESTURE_BEGIN;
+
+  // Record gesture metrics only for `interesting_type` to avoid over counting.
+  if (event->type() == interesting_type) {
     UMA_HISTOGRAM_ENUMERATION(
         kHotseatGestureHistogramName,
         InAppShelfGestures::kHotseatHiddenDueToInteractionOutsideOfShelf);
@@ -1185,16 +1189,6 @@ void ShelfLayoutManager::OnShelfConfigUpdated() {
   UpdateContextualNudges();
 }
 
-void ShelfLayoutManager::OnTabletModeStarted() {
-  LayoutShelf(/*animate=*/true);
-  UpdateContextualNudges();
-}
-
-void ShelfLayoutManager::OnTabletModeEnded() {
-  LayoutShelf(/*animate=*/true);
-  UpdateContextualNudges();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // ShelfLayoutManager, private:
 
@@ -1334,7 +1328,7 @@ void ShelfLayoutManager::SetState(ShelfVisibilityState visibility_state) {
 
 HotseatState ShelfLayoutManager::CalculateHotseatState(
     ShelfVisibilityState visibility_state,
-    ShelfAutoHideState auto_hide_state) {
+    ShelfAutoHideState auto_hide_state) const {
   if (!IsHotseatEnabled() || !shelf_->IsHorizontalAlignment())
     return HotseatState::kShownClamshell;
 
@@ -1523,6 +1517,7 @@ bool ShelfLayoutManager::SetDimmed(bool dimmed) {
     return false;
 
   dimmed_for_inactivity_ = dimmed;
+
   CalculateTargetBoundsAndUpdateWorkArea();
 
   const base::TimeDelta dim_animation_duration =
@@ -1530,18 +1525,23 @@ bool ShelfLayoutManager::SetDimmed(bool dimmed) {
   const gfx::Tween::Type dim_animation_tween =
       ShelfConfig::Get()->DimAnimationTween();
 
+  const bool animate = !dim_animation_duration.is_zero();
+  base::Optional<ui::AnimationThroughputReporter> navigation_widget_reporter;
+  if (animate) {
+    navigation_widget_reporter.emplace(
+        GetLayer(shelf_->navigation_widget())->GetAnimator(),
+        shelf_->GetNavigationWidgetAnimationReportCallback(hotseat_state()));
+  }
+
   AnimateOpacity(GetLayer(shelf_->navigation_widget()), target_opacity_,
-                 dim_animation_duration, dim_animation_tween,
-                 shelf_->GetNavigationWidgetAnimationMetricsReporter());
+                 dim_animation_duration, dim_animation_tween);
 
   AnimateOpacity(shelf_->hotseat_widget()->GetShelfView()->layer(),
                  shelf_->hotseat_widget()->CalculateShelfViewOpacity(),
-                 dim_animation_duration, dim_animation_tween,
-                 /*animation_metrics_reporter=*/nullptr);
+                 dim_animation_duration, dim_animation_tween);
 
   AnimateOpacity(GetLayer(shelf_->status_area_widget()), target_opacity_,
-                 dim_animation_duration, dim_animation_tween,
-                 /*animation_metrics_reporter=*/nullptr);
+                 dim_animation_duration, dim_animation_tween);
 
   shelf_widget_->SetLoginShelfButtonOpacity(target_opacity_);
   return true;
@@ -2410,11 +2410,6 @@ void ShelfLayoutManager::CompleteDrag(const ui::LocatedEvent& event_in_screen) {
   else
     CancelDrag(window_drag_result);
 
-  // Dragged window is finalized after drag handling is completed so drag state
-  // does not interfere with updates on shelf state during window state changes.
-  if (window_drag_controller_.get())
-    window_drag_controller_->FinalizeDraggedWindow();
-
   // Hotseat gestures are meaningful only in tablet mode with hotseat enabled.
   if (chromeos::switches::ShouldShowShelfHotseat() &&
       Shell::Get()->IsInTabletMode()) {
@@ -2475,12 +2470,21 @@ void ShelfLayoutManager::CancelDrag(
     else
       Shell::Get()->app_list_controller()->DismissAppList();
   } else {
-    MaybeCancelWindowDrag();
     // Set |drag_status_| to kDragCancelInProgress to set the
     // auto hide state to |drag_auto_hide_state_|, which is the
     // visibility state before starting drag.
     drag_status_ = kDragCancelInProgress;
     UpdateVisibilityState();
+
+    // Dragged window is finalized after drag handling is completed so drag
+    // state does not interfere with updates on shelf state during window state
+    // changes.
+    if (window_drag_controller_.get()) {
+      if (window_drag_result.has_value())
+        window_drag_controller_->FinalizeDraggedWindow();
+      else
+        MaybeCancelWindowDrag();
+    }
   }
   if (hotseat_is_in_drag_) {
     // If the gesture started the overview session, the hotseat will be
@@ -2520,6 +2524,12 @@ void ShelfLayoutManager::CompleteDragWithChangedVisibility() {
   drag_status_ = kDragCompleteInProgress;
 
   UpdateVisibilityState();
+
+  // Dragged window is finalized after drag handling is completed so drag state
+  // does not interfere with updates on shelf state during window state changes.
+  if (window_drag_controller_.get())
+    window_drag_controller_->FinalizeDraggedWindow();
+
   drag_status_ = kDragNone;
   if (hotseat_is_in_drag_)
     hotseat_presentation_time_recorder_.reset();

@@ -4,7 +4,6 @@
 <translation id="1038842779957582377">emër i panjohur</translation>
 <translation id="1089439967362294234">Ndryshoj fjalëkalimin</translation>
 <translation id="1110994991967754504">Përzgjedh autorizimin për <ph name="PERMISSION_NAME" /></translation>
-<translation id="1152921474424827756">Hap <ph name="BEGIN_LINK" />kopjen nga cache<ph name="END_LINK" /> të <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> e preu lidhjen papritur.</translation>
 <translation id="1161325031994447685">Të rilidheni me Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Printoj...</translation>
@@ -22,9 +21,7 @@
 <translation id="1834321415901700177">Faqja përmban programe të rrezikshme</translation>
 <translation id="1916770123977586577">Parametrat e përditësuar do të zbatohen kur faqja të rifreskohet</translation>
 <translation id="1919345977826869612">Reklamat</translation>
-<translation id="194030505837763158">Shkoj te <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Parametrat e avancuar</translation>
-<translation id="2030481566774242610">Mos po kërkoni <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Të kontrolloni proxy-n dhe sistemin mbrojtës të rrjetit<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Tingulli</translation>
 <translation id="2119505898009119320">E lëshuar për: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -87,7 +84,7 @@
 <translation id="3681007416295224113">Informacion për certifikatën</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Të kontrolloni konfigurimin e proxy-t, të sistemit mbrojtës të rrjetit dhe të DNS-së<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Nëse përdorni server proxy...</translation>
-<translation id="3894751534882749287">Gjithsesi, për ta parë faqen, mund të ndryshoni nivelin e mbrojtjes nga gjurmimi nëpërmjet dritares automatike të gjurmuesve ose klikoni butonin Autorizoj</translation>
+<translation id="3894751534882749287">Gjithsesi, për ta parë faqen, ndryshoni nivelin e mbrojtjes nga gjurmimi nëpërmjet dritares automatike për gjurmuesit ose klikoni butonin Autorizoj</translation>
 <translation id="3950820424414687140">Lidhem</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> është bllokuar</translation>
 <translation id="3987940399970879459">Më pak se 1 MB</translation>
@@ -128,7 +125,6 @@
 <translation id="5287240709317226393">Tregoj cookies</translation>
 <translation id="5355557959165512791">Për momentin nuk mund ta vizitoni <ph name="SITE" />, sepse përdor certifikatë të revokuar. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="5386426401304769735">Lista e certifikatave të faqes është firmosur me standardin SHA-1.</translation>
-<translation id="5431657950005405462">Nuk u gjet skedari juaj</translation>
 <translation id="5452270690849572955">Nuk u gjet faqja <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">E pavlefshme</translation>
 <translation id="5492298309214877701">Kjo faqe intraneti e kompanisë, organizatës apo shkollës ka të njëjtën URL me faqen e jashtme të internetit.
@@ -174,7 +170,6 @@
 <translation id="6897140037006041989">Agjenti ndërmjetësues</translation>
 <translation id="7053983685419859001">Bllokoj</translation>
 <translation id="7079718277001814089">Faqja përmban programe komprometuese</translation>
-<translation id="7090678807593890770">Kërkoni në Google për <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Autorizohet nga një shtesë</translation>
 <translation id="7111012039238467737">(E vlefshme)</translation>
 <translation id="7113310725918019676">Autorizoj <ph name="BLOCKED_TYPE" /> nga <ph name="DOMAIN" /></translation>
@@ -198,7 +193,6 @@
 <translation id="7716424297397655342">Nuk hapet faqja nga cache</translation>
 <translation id="7758069387465995638">Lidhja mund të jetë bllokuar nga programi mbrojtës i rrjetit ose antivirusi.</translation>
 <translation id="7800304661137206267">Lidhja mbrohet me shifrimin <ph name="CIPHER" />, duke përdorur <ph name="MAC" /> për vërtetimin e mesazhit dhe <ph name="KX" /> për shkëmbimin e algoritmeve kriptografike.</translation>
-<translation id="7802523362929240268">Faqe legjitime</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> normalisht përdor metodën e shifrimit për mbrojtjen e informacioneve tuaja. Këtë herë, kur Vivaldi tentoi lidhjen me <ph name="SITE" />, faqja e internetit ktheu kredenciale të pazakonta dhe të pasakta. Kjo ndodh kur piratët e internetit kamuflohen si <ph name="SITE" /> ose kur një dritare për qasjen me Wi-Fi e ndërpret lidhjen. Informacionet tuaja janë të sigurta sepse Vivaldi e ndali lidhjen para shkëmbimit të të dhënave.</translation>
 <translation id="7878562273885520351">Ky fjalëkalim mund të jetë komprometuar</translation>
 <translation id="7951415247503192394">(32-bit)</translation>

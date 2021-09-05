@@ -63,7 +63,7 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/ppapi_constants.h"
 #include "ppapi/shared_impl/ppapi_nacl_plugin_args.h"
-#include "services/service_manager/sandbox/switches.h"
+#include "sandbox/policy/switches.h"
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
 #include "content/public/common/zygote/zygote_handle.h"  // nogncheck
@@ -190,8 +190,8 @@ class NaClSandboxedProcessLauncherDelegate
   }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
-  service_manager::SandboxType GetSandboxType() override {
-    return service_manager::SandboxType::kPpapi;
+  sandbox::policy::SandboxType GetSandboxType() override {
+    return sandbox::policy::SandboxType::kPpapi;
   }
 };
 
@@ -355,7 +355,7 @@ void NaClProcessHost::Launch(
   const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 #if defined(OS_WIN)
   if (cmd->HasSwitch(switches::kEnableNaClDebug) &&
-      !cmd->HasSwitch(service_manager::switches::kNoSandbox)) {
+      !cmd->HasSwitch(sandbox::policy::switches::kNoSandbox)) {
     // We don't switch off sandbox automatically for security reasons.
     SendErrorToRenderer("NaCl's GDB debug stub requires --no-sandbox flag"
                         " on Windows. See crbug.com/265624.");
@@ -381,7 +381,7 @@ void NaClProcessHost::Launch(
 
   if (uses_nonsfi_mode_) {
     bool nonsfi_mode_forced_by_command_line = false;
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     nonsfi_mode_forced_by_command_line =
         cmd->HasSwitch(switches::kEnableNaClNonSfiMode);
 #endif
@@ -478,9 +478,9 @@ bool NaClProcessHost::LaunchSelLdr() {
 
   // Build command line for nacl.
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   int flags = ChildProcessHost::CHILD_ALLOW_SELF;
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
   int flags = ChildProcessHost::CHILD_PLUGIN;
 #else
   int flags = ChildProcessHost::CHILD_NORMAL;
@@ -843,7 +843,7 @@ void NaClProcessHost::StartNaClFileResolved(
     params.nexe_file = IPC::TakePlatformFileForTransit(std::move(nexe_file_));
   }
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // In Non-SFI mode, create socket pairs for IPC channels here, unlike in
   // SFI-mode, in which those channels are created in nacl_listener.cc.
   // This is for security hardening. We can then prohibit the socketpair()
@@ -984,9 +984,8 @@ bool NaClProcessHost::StartWithLaunchedProcess() {
   if (nacl_browser->IsReady())
     return StartNaClExecution();
   if (nacl_browser->IsOk()) {
-    nacl_browser->WaitForResources(
-        base::Bind(&NaClProcessHost::OnResourcesReady,
-                   weak_factory_.GetWeakPtr()));
+    nacl_browser->WaitForResources(base::BindOnce(
+        &NaClProcessHost::OnResourcesReady, weak_factory_.GetWeakPtr()));
     return true;
   }
   SendErrorToRenderer("previously failed to acquire shared resources");
@@ -1137,8 +1136,9 @@ bool NaClProcessHost::AttachDebugExceptionHandler(const std::string& info,
   }
   NaClStartDebugExceptionHandlerThread(
       std::move(process), info, base::ThreadTaskRunnerHandle::Get(),
-      base::Bind(&NaClProcessHost::OnDebugExceptionHandlerLaunchedByBroker,
-                 weak_factory_.GetWeakPtr()));
+      base::BindRepeating(
+          &NaClProcessHost::OnDebugExceptionHandlerLaunchedByBroker,
+          weak_factory_.GetWeakPtr()));
   return true;
 }
 #endif

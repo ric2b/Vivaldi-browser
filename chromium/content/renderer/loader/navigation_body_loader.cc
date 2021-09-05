@@ -6,12 +6,12 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "content/public/common/referrer.h"
-#include "content/renderer/loader/code_cache_loader_impl.h"
 #include "content/renderer/loader/resource_load_stats.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/blink/public/common/loader/referrer_utils.h"
+#include "third_party/blink/public/platform/web_code_cache_loader.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 
 namespace content {
@@ -68,7 +68,7 @@ void NavigationBodyLoader::FillNavigationParamsResponseAndBodyLoader(
     redirect.new_referrer =
         blink::WebString::FromUTF8(redirect_info.new_referrer);
     redirect.new_referrer_policy =
-        Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
+        blink::ReferrerUtils::NetToMojoReferrerPolicy(
             redirect_info.new_referrer_policy);
     redirect.new_http_method =
         blink::WebString::FromLatin1(redirect_info.new_method);
@@ -191,10 +191,10 @@ void NavigationBodyLoader::StartLoadingBody(
   base::Time response_head_response_time = response_head_->response_time;
   NotifyResourceResponseReceived(render_frame_id_, resource_load_info_.get(),
                                  std::move(response_head_),
-                                 content::PREVIEWS_OFF);
+                                 blink::PreviewsTypes::PREVIEWS_OFF);
 
   if (use_isolated_code_cache) {
-    code_cache_loader_ = std::make_unique<CodeCacheLoaderImpl>();
+    code_cache_loader_ = blink::WebCodeCacheLoader::Create();
     code_cache_loader_->FetchFromCodeCache(
         blink::mojom::CodeCacheType::kJavascript,
         resource_load_info_->original_url,
@@ -211,6 +211,8 @@ void NavigationBodyLoader::CodeCacheReceived(
     base::Time response_head_response_time,
     base::Time response_time,
     mojo_base::BigBuffer data) {
+  // Check that the times match to ensure that the code cache data is for this
+  // response. See https://crbug.com/1099587.
   if (response_head_response_time == response_time && client_) {
     base::WeakPtr<NavigationBodyLoader> weak_self = weak_factory_.GetWeakPtr();
     client_->BodyCodeCacheReceived(std::move(data));

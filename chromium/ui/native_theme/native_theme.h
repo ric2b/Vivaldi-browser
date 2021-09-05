@@ -249,7 +249,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     ScrollbarOverlayColorTheme scrollbar_theme;
   };
 
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
   enum ScrollbarOrientation {
     // Vertical scrollbar on the right side of content.
     kVerticalOnRight,
@@ -310,7 +310,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     MenuBackgroundExtraParams menu_background;
     ProgressBarExtraParams progress_bar;
     ScrollbarArrowExtraParams scrollbar_arrow;
-#if defined(OS_MACOSX)
+#if defined(OS_APPLE)
     ScrollbarExtraParams scrollbar_extra;
 #endif
     ScrollbarTrackExtraParams scrollbar_track;
@@ -470,6 +470,9 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // On certain platforms, currently only Mac, there is a unique visual for
   // pressed states.
   virtual SkColor GetSystemButtonPressedColor(SkColor base_color) const;
+
+  // Assign the focus-ring-appropriate alpha value to the provided base_color.
+  virtual SkColor FocusRingColorForBaseColor(SkColor base_color) const;
 
  protected:
   explicit NativeTheme(bool should_only_use_dark_colors);

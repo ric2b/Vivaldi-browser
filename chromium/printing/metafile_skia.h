@@ -10,7 +10,6 @@
 #include <memory>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_canvas.h"
 #include "printing/common/metafile_utils.h"
@@ -22,6 +21,10 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #endif
+
+namespace base {
+class UnguessableToken;
+}  // namespace base
 
 namespace printing {
 
@@ -35,6 +38,8 @@ class PRINTING_EXPORT MetafileSkia : public Metafile {
   //              comments before InitFromData()'s implementation.
   MetafileSkia();
   MetafileSkia(mojom::SkiaDocumentType type, int document_cookie);
+  MetafileSkia(const MetafileSkia&) = delete;
+  MetafileSkia& operator=(const MetafileSkia&) = delete;
   ~MetafileSkia() override;
 
   // Metafile methods.
@@ -60,7 +65,7 @@ class PRINTING_EXPORT MetafileSkia : public Metafile {
   bool Playback(printing::NativeDrawingContext hdc,
                 const RECT* rect) const override;
   bool SafePlayback(printing::NativeDrawingContext hdc) const override;
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
   bool RenderPage(unsigned int page_number,
                   printing::NativeDrawingContext context,
                   const CGRect& rect,
@@ -99,11 +104,14 @@ class PRINTING_EXPORT MetafileSkia : public Metafile {
   // For such a subframe, since the content is in another process, we create a
   // place holder picture now, and replace it with actual content by pdf
   // compositor service later.
-  uint32_t CreateContentForRemoteFrame(const gfx::Rect& rect,
-                                       int render_proxy_id);
+  uint32_t CreateContentForRemoteFrame(
+      const gfx::Rect& rect,
+      const base::UnguessableToken& render_proxy_token);
 
   int GetDocumentCookie() const;
-  const ContentToProxyIdMap& GetSubframeContentInfo() const;
+  const ContentToProxyTokenMap& GetSubframeContentInfo() const;
+
+  void UtilizeTypefaceContext(ContentProxySet* typeface_content_info);
 
   const ui::AXTreeUpdate& accessibility_tree() const {
     return accessibility_tree_;
@@ -112,11 +120,12 @@ class PRINTING_EXPORT MetafileSkia : public Metafile {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MetafileSkiaTest, TestFrameContent);
+  FRIEND_TEST_ALL_PREFIXES(MetafileSkiaTest, TestMultiPictureDocumentTypefaces);
 
   // The following three functions are used for tests only.
   void AppendPage(const SkSize& page_size, sk_sp<cc::PaintRecord> record);
   void AppendSubframeInfo(uint32_t content_id,
-                          int proxy_id,
+                          const base::UnguessableToken& proxy_token,
                           sk_sp<SkPicture> subframe_pic_holder);
   SkStreamAsset* GetPdfData() const;
 
@@ -127,8 +136,6 @@ class PRINTING_EXPORT MetafileSkia : public Metafile {
   std::unique_ptr<MetafileSkiaData> data_;
 
   ui::AXTreeUpdate accessibility_tree_;
-
-  DISALLOW_COPY_AND_ASSIGN(MetafileSkia);
 };
 
 }  // namespace printing

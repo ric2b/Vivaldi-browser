@@ -8,6 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/message_loop/message_pump_type.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "chrome/updater/prefs.h"
@@ -60,6 +61,7 @@ void ClearPrefs() {
 
 class AppServerTestCase : public testing::Test {
  public:
+  AppServerTestCase() : main_task_executor_(base::MessagePumpType::UI) {}
   ~AppServerTestCase() override = default;
 
   void SetUp() override {
@@ -71,6 +73,9 @@ class AppServerTestCase : public testing::Test {
     base::ThreadPoolInstance::Get()->JoinForTesting();
     base::ThreadPoolInstance::Set(nullptr);
   }
+
+ private:
+  base::SingleThreadTaskExecutor main_task_executor_;
 };
 
 }  // namespace
@@ -83,18 +88,16 @@ TEST_F(AppServerTestCase, SimpleQualify) {
   EXPECT_CALL(*app, SwapRPCInterfaces).Times(0);
   EXPECT_CALL(*app, UninstallSelf).Times(0);
   EXPECT_EQ(app->Run(), 0);
-  EXPECT_TRUE(CreateLocalPrefs()->GetPrefService()->GetBoolean(kPrefQualified));
+  EXPECT_TRUE(CreateLocalPrefs()->GetQualified());
 }
 
 TEST_F(AppServerTestCase, SelfUninstall) {
   {
-    base::SingleThreadTaskExecutor main_task_executor(
-        base::MessagePumpType::UI);
-    std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-    global_prefs->GetPrefService()->SetString(kPrefActiveVersion, "9999999");
+    std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+    global_prefs->SetActiveVersion("9999999");
     PrefsCommitPendingWrites(global_prefs->GetPrefService());
-    std::unique_ptr<UpdaterPrefs> local_prefs = CreateLocalPrefs();
-    local_prefs->GetPrefService()->SetBoolean(kPrefQualified, true);
+    std::unique_ptr<LocalPrefs> local_prefs = CreateLocalPrefs();
+    local_prefs->SetQualified(true);
     PrefsCommitPendingWrites(local_prefs->GetPrefService());
   }
   auto app = base::MakeRefCounted<AppServerTest>();
@@ -104,15 +107,13 @@ TEST_F(AppServerTestCase, SelfUninstall) {
   EXPECT_CALL(*app, SwapRPCInterfaces).Times(0);
   EXPECT_CALL(*app, UninstallSelf).Times(1);
   EXPECT_EQ(app->Run(), 0);
-  EXPECT_TRUE(CreateLocalPrefs()->GetPrefService()->GetBoolean(kPrefQualified));
+  EXPECT_TRUE(CreateLocalPrefs()->GetQualified());
 }
 
 TEST_F(AppServerTestCase, SelfPromote) {
   {
-    base::SingleThreadTaskExecutor main_task_executor(
-        base::MessagePumpType::UI);
-    std::unique_ptr<UpdaterPrefs> local_prefs = CreateLocalPrefs();
-    local_prefs->GetPrefService()->SetBoolean(kPrefQualified, true);
+    std::unique_ptr<LocalPrefs> local_prefs = CreateLocalPrefs();
+    local_prefs->SetQualified(true);
     PrefsCommitPendingWrites(local_prefs->GetPrefService());
   }
   auto app = base::MakeRefCounted<AppServerTest>();
@@ -122,18 +123,15 @@ TEST_F(AppServerTestCase, SelfPromote) {
   EXPECT_CALL(*app, SwapRPCInterfaces).WillOnce(Return(true));
   EXPECT_CALL(*app, UninstallSelf).Times(0);
   EXPECT_EQ(app->Run(), 0);
-  std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-  EXPECT_FALSE(global_prefs->GetPrefService()->GetBoolean(kPrefSwapping));
-  EXPECT_EQ(global_prefs->GetPrefService()->GetString(kPrefActiveVersion),
-            UPDATER_VERSION_STRING);
+  std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+  EXPECT_FALSE(global_prefs->GetSwapping());
+  EXPECT_EQ(global_prefs->GetActiveVersion(), UPDATER_VERSION_STRING);
 }
 
 TEST_F(AppServerTestCase, SelfPromoteFails) {
   {
-    base::SingleThreadTaskExecutor main_task_executor(
-        base::MessagePumpType::UI);
-    std::unique_ptr<UpdaterPrefs> local_prefs = CreateLocalPrefs();
-    local_prefs->GetPrefService()->SetBoolean(kPrefQualified, true);
+    std::unique_ptr<LocalPrefs> local_prefs = CreateLocalPrefs();
+    local_prefs->SetQualified(true);
     PrefsCommitPendingWrites(local_prefs->GetPrefService());
   }
   auto app = base::MakeRefCounted<AppServerTest>();
@@ -143,21 +141,18 @@ TEST_F(AppServerTestCase, SelfPromoteFails) {
   EXPECT_CALL(*app, SwapRPCInterfaces).WillOnce(Return(false));
   EXPECT_CALL(*app, UninstallSelf).Times(0);
   EXPECT_EQ(app->Run(), 2);
-  std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-  EXPECT_TRUE(global_prefs->GetPrefService()->GetBoolean(kPrefSwapping));
-  EXPECT_EQ(global_prefs->GetPrefService()->GetString(kPrefActiveVersion), "0");
+  std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+  EXPECT_TRUE(global_prefs->GetSwapping());
+  EXPECT_EQ(global_prefs->GetActiveVersion(), "0");
 }
 
 TEST_F(AppServerTestCase, ActiveDutyAlready) {
   {
-    base::SingleThreadTaskExecutor main_task_executor(
-        base::MessagePumpType::UI);
-    std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-    global_prefs->GetPrefService()->SetString(kPrefActiveVersion,
-                                              UPDATER_VERSION_STRING);
+    std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+    global_prefs->SetActiveVersion(UPDATER_VERSION_STRING);
     PrefsCommitPendingWrites(global_prefs->GetPrefService());
-    std::unique_ptr<UpdaterPrefs> local_prefs = CreateLocalPrefs();
-    local_prefs->GetPrefService()->SetBoolean(kPrefQualified, true);
+    std::unique_ptr<LocalPrefs> local_prefs = CreateLocalPrefs();
+    local_prefs->SetQualified(true);
     PrefsCommitPendingWrites(local_prefs->GetPrefService());
   }
   auto app = base::MakeRefCounted<AppServerTest>();
@@ -167,23 +162,19 @@ TEST_F(AppServerTestCase, ActiveDutyAlready) {
   EXPECT_CALL(*app, SwapRPCInterfaces).Times(0);
   EXPECT_CALL(*app, UninstallSelf).Times(0);
   EXPECT_EQ(app->Run(), 0);
-  std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-  EXPECT_FALSE(global_prefs->GetPrefService()->GetBoolean(kPrefSwapping));
-  EXPECT_EQ(global_prefs->GetPrefService()->GetString(kPrefActiveVersion),
-            UPDATER_VERSION_STRING);
+  std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+  EXPECT_FALSE(global_prefs->GetSwapping());
+  EXPECT_EQ(global_prefs->GetActiveVersion(), UPDATER_VERSION_STRING);
 }
 
 TEST_F(AppServerTestCase, StateDirty) {
   {
-    base::SingleThreadTaskExecutor main_task_executor(
-        base::MessagePumpType::UI);
-    std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-    global_prefs->GetPrefService()->SetString(kPrefActiveVersion,
-                                              UPDATER_VERSION_STRING);
-    global_prefs->GetPrefService()->SetBoolean(kPrefSwapping, true);
+    std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+    global_prefs->SetActiveVersion(UPDATER_VERSION_STRING);
+    global_prefs->SetSwapping(true);
     PrefsCommitPendingWrites(global_prefs->GetPrefService());
-    std::unique_ptr<UpdaterPrefs> local_prefs = CreateLocalPrefs();
-    local_prefs->GetPrefService()->SetBoolean(kPrefQualified, true);
+    std::unique_ptr<LocalPrefs> local_prefs = CreateLocalPrefs();
+    local_prefs->SetQualified(true);
     PrefsCommitPendingWrites(local_prefs->GetPrefService());
   }
   auto app = base::MakeRefCounted<AppServerTest>();
@@ -194,23 +185,19 @@ TEST_F(AppServerTestCase, StateDirty) {
   EXPECT_CALL(*app, SwapRPCInterfaces).WillOnce(Return(true));
   EXPECT_CALL(*app, UninstallSelf).Times(0);
   EXPECT_EQ(app->Run(), 0);
-  std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-  EXPECT_FALSE(global_prefs->GetPrefService()->GetBoolean(kPrefSwapping));
-  EXPECT_EQ(global_prefs->GetPrefService()->GetString(kPrefActiveVersion),
-            UPDATER_VERSION_STRING);
+  std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+  EXPECT_FALSE(global_prefs->GetSwapping());
+  EXPECT_EQ(global_prefs->GetActiveVersion(), UPDATER_VERSION_STRING);
 }
 
 TEST_F(AppServerTestCase, StateDirtySwapFails) {
   {
-    base::SingleThreadTaskExecutor main_task_executor(
-        base::MessagePumpType::UI);
-    std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-    global_prefs->GetPrefService()->SetString(kPrefActiveVersion,
-                                              UPDATER_VERSION_STRING);
-    global_prefs->GetPrefService()->SetBoolean(kPrefSwapping, true);
+    std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+    global_prefs->SetActiveVersion(UPDATER_VERSION_STRING);
+    global_prefs->SetSwapping(true);
     PrefsCommitPendingWrites(global_prefs->GetPrefService());
-    std::unique_ptr<UpdaterPrefs> local_prefs = CreateLocalPrefs();
-    local_prefs->GetPrefService()->SetBoolean(kPrefQualified, true);
+    std::unique_ptr<LocalPrefs> local_prefs = CreateLocalPrefs();
+    local_prefs->SetQualified(true);
     PrefsCommitPendingWrites(local_prefs->GetPrefService());
   }
   auto app = base::MakeRefCounted<AppServerTest>();
@@ -220,10 +207,9 @@ TEST_F(AppServerTestCase, StateDirtySwapFails) {
   EXPECT_CALL(*app, SwapRPCInterfaces).WillOnce(Return(false));
   EXPECT_CALL(*app, UninstallSelf).Times(0);
   EXPECT_EQ(app->Run(), 2);
-  std::unique_ptr<UpdaterPrefs> global_prefs = CreateGlobalPrefs();
-  EXPECT_TRUE(global_prefs->GetPrefService()->GetBoolean(kPrefSwapping));
-  EXPECT_EQ(global_prefs->GetPrefService()->GetString(kPrefActiveVersion),
-            UPDATER_VERSION_STRING);
+  std::unique_ptr<GlobalPrefs> global_prefs = CreateGlobalPrefs();
+  EXPECT_TRUE(global_prefs->GetSwapping());
+  EXPECT_EQ(global_prefs->GetActiveVersion(), UPDATER_VERSION_STRING);
 }
 
 }  // namespace updater

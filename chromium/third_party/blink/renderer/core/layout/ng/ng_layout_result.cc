@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_positioned_float.h"
+#include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
 namespace blink {
 
@@ -33,8 +34,7 @@ struct SameSizeAsNGLayoutResult : public RefCounted<SameSizeAsNGLayoutResult> {
 #endif
 };
 
-static_assert(sizeof(NGLayoutResult) == sizeof(SameSizeAsNGLayoutResult),
-              "NGLayoutResult should stay small.");
+ASSERT_SIZE(NGLayoutResult, SameSizeAsNGLayoutResult);
 
 }  // namespace
 
@@ -96,6 +96,8 @@ NGLayoutResult::NGLayoutResult(
         static_cast<unsigned>(builder->previous_break_after_);
     bitfields_.has_forced_break = builder->has_forced_break_;
   }
+  if (builder->table_column_count_)
+    EnsureRareData()->table_column_count_ = *builder->table_column_count_;
 }
 
 NGLayoutResult::NGLayoutResult(
@@ -301,10 +303,6 @@ void NGLayoutResult::CheckSameForSimplifiedLayout(
             other.bitfields_.initial_break_before);
   DCHECK_EQ(bitfields_.final_break_after, other.bitfields_.final_break_after);
 
-  if (check_same_block_size) {
-    DCHECK_EQ(bitfields_.is_initial_block_size_indefinite,
-              other.bitfields_.is_initial_block_size_indefinite);
-  }
   DCHECK_EQ(
       bitfields_.has_descendant_that_depends_on_percentage_block_size,
       other.bitfields_.has_descendant_that_depends_on_percentage_block_size);

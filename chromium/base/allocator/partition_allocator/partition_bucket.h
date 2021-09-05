@@ -61,15 +61,14 @@ struct PartitionBucket {
   }
 
   static ALWAYS_INLINE size_t get_direct_map_size(size_t size) {
-    // Caller must check that the size is not above the kGenericMaxDirectMapped
+    // Caller must check that the size is not above the kMaxDirectMapped
     // limit before calling. This also guards against integer overflow in the
     // calculation here.
-    PA_DCHECK(size <= kGenericMaxDirectMapped);
+    PA_DCHECK(size <= kMaxDirectMapped);
     return (size + kSystemPageOffsetMask) & kSystemPageBaseMask;
   }
 
-  // TODO(ajwong): Can this be made private?  https://crbug.com/787153
-  static PartitionBucket* get_sentinel_bucket();
+  BASE_EXPORT static PartitionBucket* get_sentinel_bucket();
 
   // This helper function scans a bucket's active page list for a suitable new
   // active page.  When it finds a suitable new active page (one that has

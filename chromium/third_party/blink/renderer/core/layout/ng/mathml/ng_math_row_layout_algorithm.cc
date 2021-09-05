@@ -34,7 +34,6 @@ NGMathRowLayoutAlgorithm::NGMathRowLayoutAlgorithm(
   DCHECK(!ConstraintSpace().HasBlockFragmentation());
   container_builder_.SetIsNewFormattingContext(
       params.space.IsNewFormattingContext());
-  container_builder_.SetInitialFragmentGeometry(params.fragment_geometry);
 }
 
 void NGMathRowLayoutAlgorithm::LayoutRowItems(
@@ -67,8 +66,7 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
         ComputeMarginsFor(child_space, child_style, ConstraintSpace());
     inline_offset += margins.inline_start;
 
-    LayoutUnit ascent = margins.block_start +
-                        fragment.Baseline().value_or(fragment.BlockSize());
+    LayoutUnit ascent = margins.block_start + fragment.BaselineOrSynthesize();
     *max_row_block_baseline = std::max(*max_row_block_baseline, ascent);
 
     // TODO(rbuis): Operators can add lspace and rspace.
@@ -127,11 +125,7 @@ scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
       border_box_size.inline_size);
   container_builder_.SetFragmentsTotalBlockSize(block_size);
 
-  NGOutOfFlowLayoutPart(
-      Node(), ConstraintSpace(),
-      container_builder_.Borders() + container_builder_.Scrollbar(),
-      &container_builder_)
-      .Run();
+  NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
 
   return container_builder_.ToBoxFragment();
 }
@@ -149,8 +143,8 @@ MinMaxSizesResult NGMathRowLayoutAlgorithm::ComputeMinMaxSizes(
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
-    MinMaxSizesResult child_result =
-        ComputeMinAndMaxContentContribution(Style(), child, child_input);
+    MinMaxSizesResult child_result = ComputeMinAndMaxContentContribution(
+        Style(), To<NGBlockNode>(child), child_input);
     NGBoxStrut child_margins = ComputeMinMaxMargins(Style(), child);
     child_result.sizes += child_margins.InlineSum();
 

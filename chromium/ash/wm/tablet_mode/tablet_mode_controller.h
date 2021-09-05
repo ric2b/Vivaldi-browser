@@ -12,8 +12,8 @@
 #include "ash/ash_export.h"
 #include "ash/bluetooth_devices_observer.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/tablet_mode.h"
-#include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -28,6 +28,7 @@
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_observer.h"
 #include "ui/compositor/layer_tree_owner.h"
+#include "ui/compositor/throughput_tracker.h"
 #include "ui/events/devices/input_device_event_observer.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 
@@ -191,6 +192,15 @@ class ASH_EXPORT TabletModeController
   // Returns true if the system tray should have a overview button.
   bool ShouldShowOverviewButton() const;
 
+  // ForcePhysicalTabletState is to control physical tablet state. The default
+  // state is not to force the state, so the tablet-mode controller will observe
+  // device configurations.
+  enum class ForcePhysicalTabletState {
+    kDefault,
+    kForceTabletMode,
+    kForceClamshellMode,
+  };
+
   // Defines how the tablet mode controller controls the
   // tablet mode and its transition between clamshell mode.
   // This is defined as a public to define constexpr in cc.
@@ -200,12 +210,12 @@ class ASH_EXPORT TabletModeController
     bool observe_pointer_device_events = true;
     bool block_internal_input_device = false;
     bool always_show_overview_button = false;
-    bool force_physical_tablet_state = false;
+    ForcePhysicalTabletState force_physical_tablet_state =
+        ForcePhysicalTabletState::kDefault;
   };
 
  private:
   class DestroyObserver;
-  class TabletModeTransitionFpsCounter;
   class ScopedShelfHider;
   friend class TabletModeControllerTestApi;
 
@@ -449,7 +459,8 @@ class ASH_EXPORT TabletModeController
   // does not show the old version of shelf in the background).
   std::unique_ptr<ScopedShelfHider> shelf_hider_;
 
-  std::unique_ptr<TabletModeTransitionFpsCounter> fps_counter_;
+  // Tracks and record transition smoothness.
+  base::Optional<ui::ThroughputTracker> transition_tracker_;
 
   base::CancelableOnceCallback<void(std::unique_ptr<viz::CopyOutputResult>)>
       screenshot_taken_callback_;

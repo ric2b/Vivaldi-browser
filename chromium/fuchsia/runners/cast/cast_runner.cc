@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/files/file_path.h"
 #include "base/fuchsia/file_utils.h"
 #include "base/fuchsia/filtered_service_directory.h"
 #include "base/fuchsia/fuchsia_logging.h"
@@ -210,10 +211,16 @@ fuchsia::web::CreateContextParams CastRunner::GetCommonContextParams() {
         fuchsia::web::ContextFeatureFlags::VULKAN;
   }
 
+  // TODO(b/154204041) Migrate to using persistent data, and specifying an
+  // explicit quota for CDM storage.
+  params.set_cdm_data_directory(base::fuchsia::OpenDirectory(
+      base::FilePath(base::fuchsia::kPersistedCacheDirectoryPath)));
+  CHECK(params.cdm_data_directory());
+
   const char kCastPlayreadyKeySystem[] = "com.chromecast.playready";
   params.set_playready_key_system(kCastPlayreadyKeySystem);
 
-  // TODO(b/141956135): Use CrKey version provided by the Agent.
+  // See http://b/141956135.
   params.set_user_agent_product("CrKey");
   params.set_user_agent_version("1.43.000000");
 
@@ -343,9 +350,11 @@ void CastRunner::OnCameraServiceRequest(
     return;
   }
 
-  LOG(WARNING) << "fuchsia.camera3.DeviceWatcher request was received while no "
-                  "apps with the CAMERA permission are running.";
-  // Drop the request.
+  // fuchsia.camera3.DeviceWatcher may be requested while none of the running
+  // apps have the CAMERA permission. Return ZX_ERR_UNAVAILABLE, which implies
+  // that the client should try connecting again later, since the service may
+  // become available after a web.Frame with camera access is created.
+  request.Close(ZX_ERR_UNAVAILABLE);
 }
 
 void CastRunner::OnMetricsRecorderServiceRequest(

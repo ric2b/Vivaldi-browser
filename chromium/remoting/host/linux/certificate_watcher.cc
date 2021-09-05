@@ -112,9 +112,10 @@ void CertDbContentWatcher::StartWatching() {
   current_hash_ = ComputeHash();
 
   // base::Unretained() is safe since this class owns the FileWatcher.
-  file_watcher_->Watch(cert_watch_path_, true,
-                       base::Bind(&CertDbContentWatcher::OnCertDirectoryChanged,
-                                  base::Unretained(this)));
+  file_watcher_->Watch(
+      cert_watch_path_, true,
+      base::BindRepeating(&CertDbContentWatcher::OnCertDirectoryChanged,
+                          base::Unretained(this)));
 
   read_timer_.reset(new base::DelayTimer(FROM_HERE, delay_, this,
                                          &CertDbContentWatcher::OnTimer));
@@ -169,7 +170,7 @@ CertDbContentWatcher::HashValue CertDbContentWatcher::ComputeHash() {
 }
 
 CertificateWatcher::CertificateWatcher(
-    const base::Closure& restart_action,
+    const base::RepeatingClosure& restart_action,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
     : restart_action_(restart_action),
       caller_task_runner_(base::ThreadTaskRunnerHandle::Get()),

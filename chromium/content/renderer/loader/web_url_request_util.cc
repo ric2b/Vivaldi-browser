@@ -107,14 +107,6 @@ class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
 
 }  // namespace
 
-net::HttpRequestHeaders GetWebURLRequestHeaders(
-    const blink::WebURLRequest& request) {
-  net::HttpRequestHeaders headers;
-  HttpRequestHeadersVisitor visitor(&headers);
-  request.VisitHttpHeaderFields(&visitor);
-  return headers;
-}
-
 std::string GetWebURLRequestHeadersAsString(
     const blink::WebURLRequest& request) {
   HeaderFlattener flattener;
@@ -155,6 +147,7 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
       case network::mojom::DataElementType::kUnknown:
       case network::mojom::DataElementType::kRawFile:
       case network::mojom::DataElementType::kChunkedDataPipe:
+      case network::mojom::DataElementType::kReadOnceStream:
         NOTREACHED();
         break;
     }
@@ -244,10 +237,6 @@ scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebHTTPBody(
   static_assert(static_cast<int>(a) == static_cast<int>(b), \
                 "mismatching enums: " #a)
 
-std::string GetFetchIntegrityForWebURLRequest(const WebURLRequest& request) {
-  return request.GetFetchIntegrity().Utf8();
-}
-
 blink::mojom::RequestContextType GetRequestContextTypeForWebURLRequest(
     const WebURLRequest& request) {
   return static_cast<blink::mojom::RequestContextType>(
@@ -264,7 +253,7 @@ blink::WebMixedContentContextType GetMixedContentContextTypeForWebURLRequest(
     const WebURLRequest& request) {
   return blink::WebMixedContent::ContextTypeFromRequestContext(
       request.GetRequestContext(),
-      /*strict_mixed_content_checking_for_plugin=*/false);
+      blink::WebMixedContent::CheckModeForPlugin::kLax);
 }
 
 #undef STATIC_ASSERT_ENUM

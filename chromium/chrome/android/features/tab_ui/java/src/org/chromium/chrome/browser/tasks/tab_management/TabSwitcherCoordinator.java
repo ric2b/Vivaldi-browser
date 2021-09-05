@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
-import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityEvent;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,11 +19,12 @@ import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -33,6 +34,7 @@ import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
+import org.chromium.chrome.browser.tasks.tab_management.TabSelectionEditorCoordinator.TabSelectionEditorNavigationProvider;
 import org.chromium.chrome.browser.tasks.tab_management.suggestions.TabSuggestionsOrchestrator;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
@@ -56,8 +58,7 @@ import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
  */
 public class TabSwitcherCoordinator
         implements Destroyable, TabSwitcher, TabSwitcher.TabListDelegate,
-                   TabSwitcher.TabDialogDelegation, TabSwitcherMediator.ResetHandler,
-                   TabSwitcherMediator.MessageItemsController {
+                   TabSwitcherMediator.ResetHandler, TabSwitcherMediator.MessageItemsController {
     /**
      * Interface to control the IPH dialog.
      */
@@ -70,16 +71,17 @@ public class TabSwitcherCoordinator
 
     private class TabGroupManualSelectionMode {
         public final String actionString;
+        public final int actionButtonDescriptionResourceId;
         public final int enablingThreshold;
         public final TabSelectionEditorActionProvider actionProvider;
         public final TabSelectionEditorCoordinator
                 .TabSelectionEditorNavigationProvider navigationProvider;
 
-        TabGroupManualSelectionMode(String actionString, int enablingThreshold,
-                TabSelectionEditorActionProvider actionProvider,
-                TabSelectionEditorCoordinator
-                        .TabSelectionEditorNavigationProvider navigationProvider) {
+        TabGroupManualSelectionMode(String actionString, int actionButtonDescriptionResourceId,
+                int enablingThreshold, TabSelectionEditorActionProvider actionProvider,
+                TabSelectionEditorNavigationProvider navigationProvider) {
             this.actionString = actionString;
+            this.actionButtonDescriptionResourceId = actionButtonDescriptionResourceId;
             this.enablingThreshold = enablingThreshold;
             this.actionProvider = actionProvider;
             this.navigationProvider = navigationProvider;
@@ -122,6 +124,7 @@ public class TabSwitcherCoordinator
 
                         mTabSelectionEditorCoordinator.getController().configureToolbar(
                                 mTabGroupManualSelectionMode.actionString,
+                                mTabGroupManualSelectionMode.actionButtonDescriptionResourceId,
                                 mTabGroupManualSelectionMode.actionProvider,
                                 mTabGroupManualSelectionMode.enablingThreshold,
                                 mTabGroupManualSelectionMode.navigationProvider);
@@ -144,7 +147,7 @@ public class TabSwitcherCoordinator
 
     public TabSwitcherCoordinator(Context context, ActivityLifecycleDispatcher lifecycleDispatcher,
             TabModelSelector tabModelSelector, TabContentManager tabContentManager,
-            ChromeFullscreenManager fullscreenManager, TabCreatorManager tabCreatorManager,
+            BrowserControlsStateProvider browserControls, TabCreatorManager tabCreatorManager,
             MenuOrKeyboardActionController menuOrKeyboardActionController, ViewGroup container,
             ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
@@ -157,9 +160,9 @@ public class TabSwitcherCoordinator
 
         PropertyModel containerViewModel = new PropertyModel(TabListContainerProperties.ALL_KEYS);
 
-        mMediator = new TabSwitcherMediator(this, containerViewModel, tabModelSelector,
-                fullscreenManager, container, tabContentManager, this,
-                multiWindowModeStateDispatcher, mode);
+        mMediator =
+                new TabSwitcherMediator(this, containerViewModel, tabModelSelector, browserControls,
+                        container, tabContentManager, this, multiWindowModeStateDispatcher, mode);
 
         mMultiThumbnailCardProvider =
                 new MultiThumbnailCardProvider(context, tabContentManager, tabModelSelector);
@@ -211,6 +214,36 @@ public class TabSwitcherCoordinator
                 TabProperties.UiType.CLOSABLE, null, container, true, COMPONENT_NAME);
         mContainerViewChangeProcessor = PropertyModelChangeProcessor.create(containerViewModel,
                 mTabListCoordinator.getContainerView(), TabListContainerViewBinder::bind);
+        }
+
+        if (TabUiFeatureUtilities.isLaunchPolishEnabled()
+                && TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled()) {
+            mMediator.addOverviewModeObserver(new OverviewModeObserver() {
+                @Override
+                public void startedShowing() {}
+
+                @Override
+                public void finishedShowing() {
+                    int selectedIndex = mTabModelSelector.getTabModelFilterProvider()
+                                                .getCurrentTabModelFilter()
+                                                .index();
+                    ViewHolder selectedViewHolder =
+                            mTabListCoordinator.getContainerView().findViewHolderForAdapterPosition(
+                                    selectedIndex);
+
+                    if (selectedViewHolder == null) return;
+
+                    View focusView = selectedViewHolder.itemView;
+                    focusView.requestFocus();
+                    focusView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
+                }
+
+                @Override
+                public void startedHiding() {}
+
+                @Override
+                public void finishedHiding() {}
+            });
         }
 
         mMessageCardProviderCoordinator =
@@ -274,6 +307,11 @@ public class TabSwitcherCoordinator
         setUpTabGroupManualSelectionMode(context, tabContentManager);
 
         mTabListCoordinator.initWithNative(dynamicResourceLoader);
+
+        // Note(david@vivaldi.com): Init appropriate coordinators for different tab pages.
+        for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++)
+            mTabGridCoordinators.get(i).initWithNative(dynamicResourceLoader);
+
         if (mTabGridDialogCoordinator != null) {
             mTabGridDialogCoordinator.initWithNative(context, mTabModelSelector, tabContentManager,
                     mTabListCoordinator.getTabGroupTitleEditor());
@@ -328,10 +366,11 @@ public class TabSwitcherCoordinator
         mMediator.initWithNative(mTabSelectionEditorCoordinator.getController());
 
         mTabGroupManualSelectionMode = new TabGroupManualSelectionMode(
-                context.getString(R.string.tab_selection_editor_group), 2,
+                context.getString(R.string.tab_selection_editor_group),
+                R.plurals.accessibility_tab_selection_editor_group_button, 2,
                 new TabSelectionEditorActionProvider(mTabSelectionEditorCoordinator.getController(),
                         TabSelectionEditorActionProvider.TabSelectionEditorAction.GROUP),
-                new TabSelectionEditorCoordinator.TabSelectionEditorNavigationProvider(
+                new TabSelectionEditorNavigationProvider(
                         mTabSelectionEditorCoordinator.getController()));
     }
 
@@ -352,8 +391,8 @@ public class TabSwitcherCoordinator
     }
 
     @Override
-    public TabDialogDelegation getTabGridDialogDelegation() {
-        return this;
+    public Supplier<Boolean> getTabGridDialogVisibilitySupplier() {
+        return mTabGridDialogCoordinator::isVisible;
     }
 
     @Override
@@ -431,13 +470,6 @@ public class TabSwitcherCoordinator
     @VisibleForTesting
     public int getCleanupDelayForTesting() {
         return mMediator.getCleanupDelayForTesting();
-    }
-
-    // TabDialogDelegation implementation.
-    @Override
-    @VisibleForTesting
-    public void setSourceRectCallbackForTesting(Callback<RectF> callback) {
-        TabGridDialogView.setSourceRectCallbackForTesting(callback);
     }
 
     // ResetHandler implementation.

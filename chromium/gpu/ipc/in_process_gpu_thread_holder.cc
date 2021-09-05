@@ -73,10 +73,14 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
   mailbox_manager_ = gles2::CreateMailboxManager(gpu_preferences_);
   shared_image_manager_ = std::make_unique<SharedImageManager>();
 
+  bool use_passthrough_cmd_decoder =
+      gpu_preferences_.use_passthrough_cmd_decoder &&
+      gles2::PassthroughCommandDecoderSupported();
+
   share_group_ = new gl::GLShareGroup();
   surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size());
   gl::GLContextAttribs attribs = gles2::GenerateGLContextAttribs(
-      ContextCreationAttribs(), false /* use_passthrough_decoder */);
+      ContextCreationAttribs(), use_passthrough_cmd_decoder);
   context_ =
       gl::init::CreateGLContext(share_group_.get(), surface_.get(), attribs);
   CHECK(context_->MakeCurrent(surface_.get()));
@@ -84,13 +88,18 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
       gpu_feature_info_.enabled_gpu_driver_bug_workarounds);
 
   bool use_virtualized_gl_context = false;
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
   // Virtualize GpuPreference:::kLowPower contexts by default on OS X to prevent
   // performance regressions when enabling FCM. https://crbug.com/180463
   use_virtualized_gl_context = true;
 #endif
   use_virtualized_gl_context |=
       gpu_driver_bug_workarounds.use_virtualized_gl_contexts;
+  if (use_passthrough_cmd_decoder) {
+    // Virtualized contexts don't work with passthrough command decoder.
+    // See https://crbug.com/914976
+    use_virtualized_gl_context = false;
+  }
   if (use_virtualized_gl_context)
     share_group_->SetSharedContext(context_.get());
 

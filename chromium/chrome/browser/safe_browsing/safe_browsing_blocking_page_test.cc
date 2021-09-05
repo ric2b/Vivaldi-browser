@@ -22,6 +22,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_clock.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -46,6 +47,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/google/core/common/google_util.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/permissions/permission_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/threat_details.h"
@@ -92,6 +94,16 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+// Delayed warnings feature checks if the Suspicious Site Reporter extension
+// is installed. These includes are to fake-install this extension.
+#include "chrome/browser/extensions/chrome_extension_test_notification_observer.h"
+#include "chrome/browser/extensions/crx_installer.h"
+#include "extensions/browser/notification_types.h"
+#include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/common/extension.h"
+#endif
 
 using chrome_browser_interstitials::SecurityInterstitialIDNTest;
 using content::BrowserThread;
@@ -275,7 +287,8 @@ class FakeSafeBrowsingUIManager : public TestSafeBrowsingUIManager {
         hit_report_sent_(false) {}
 
   // Overrides SafeBrowsingUIManager
-  void SendSerializedThreatDetails(const std::string& serialized) override {
+  void SendSerializedThreatDetails(content::BrowserContext* browser_context,
+                                   const std::string& serialized) override {
     // Notify the UI thread that we got a report.
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
@@ -922,7 +935,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, IframeProceed) {
             browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #define MAYBE_IframeOptInAndReportThreatDetails \
   DISABLED_IframeOptInAndReportThreatDetails
 #else
@@ -1845,6 +1858,8 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
     host_resolver()->AddRule("*", "127.0.0.1");
     content::SetupCrossSiteRedirector(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
+    SafeBrowsingUserInteractionObserver::
+        ResetSuspiciousSiteReporterExtensionIdForTesting();
   }
 
   void CreatedBrowserMainParts(
@@ -1971,6 +1986,34 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
   }
 
  protected:
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Installs an extension and returns its ID.
+  std::string InstallTestExtension() {
+    base::FilePath path = ui_test_utils::GetTestFilePath(
+        base::FilePath().AppendASCII("extensions"),
+        base::FilePath().AppendASCII("theme.crx"));
+    extensions::ExtensionService* service =
+        extensions::ExtensionSystem::Get(browser()->profile())
+            ->extension_service();
+    scoped_refptr<extensions::CrxInstaller> installer =
+        extensions::CrxInstaller::CreateSilent(service);
+
+    extensions::ChromeExtensionTestNotificationObserver observer(browser());
+    observer.Watch(extensions::NOTIFICATION_CRX_INSTALLER_DONE,
+                   content::Source<extensions::CrxInstaller>(installer.get()));
+
+    installer->set_install_cause(extension_misc::INSTALL_CAUSE_AUTOMATION);
+    installer->set_install_immediately(true);
+    installer->set_allow_silent_install(true);
+    installer->set_off_store_install_allow_reason(
+        extensions::CrxInstaller::OffStoreInstallAllowedInTest);
+    installer->set_creation_flags(extensions::Extension::FROM_WEBSTORE);
+    installer->InstallCrx(path);
+    observer.Wait();
+    return observer.last_loaded_extension_id();
+  }
+#endif
+
   base::test::ScopedFeatureList scoped_feature_list_;
 
  private:
@@ -2030,8 +2073,21 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
                        KeyPress_WarningShown) {
+  constexpr int kTimeOnPage = 10;
   base::HistogramTester histograms;
   NavigateAndAssertNoInterstitial();
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Inject a test clock to test the histogram that records the time on the
+  // delayed warning page before the warning shows or the user leaves the page.
+  base::SimpleTestClock clock;
+  SafeBrowsingUserInteractionObserver* observer =
+      SafeBrowsingUserInteractionObserver::FromWebContents(web_contents);
+  ASSERT_TRUE(observer);
+  clock.SetNow(observer->GetCreationTimeForTesting());
+  observer->SetClockForTesting(&clock);
+  clock.Advance(base::TimeDelta::FromSeconds(kTimeOnPage));
 
   // Type something. An interstitial should be shown.
   EXPECT_TRUE(TypeAndWaitForInterstitial(browser()));
@@ -2045,6 +2101,76 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
   histograms.ExpectBucketCount(kDelayedWarningsHistogram,
                                DelayedWarningEvent::kPageLoaded, 1);
   histograms.ExpectBucketCount(kDelayedWarningsHistogram,
+                               DelayedWarningEvent::kWarningShownOnKeypress, 1);
+  histograms.ExpectUniqueTimeSample(kDelayedWarningsTimeOnPageHistogram,
+                                    base::TimeDelta::FromSeconds(kTimeOnPage),
+                                    1);
+}
+
+// Same as KeyPress_WarningShown, but user disabled URL elision by enabling
+// "Always Show Full URLs" option. A separate histogram must be recorded.
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
+                       KeyPress_WarningShown_UrlElisionDisabled) {
+  constexpr int kTimeOnPage = 10;
+  browser()->profile()->GetPrefs()->SetBoolean(
+      omnibox::kPreventUrlElisionsInOmnibox, true);
+
+  base::HistogramTester histograms;
+  NavigateAndAssertNoInterstitial();
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Inject a test clock to test the histogram that records the time on the
+  // delayed warning page before the warning shows or the user leaves the page.
+  base::SimpleTestClock clock;
+  SafeBrowsingUserInteractionObserver* observer =
+      SafeBrowsingUserInteractionObserver::FromWebContents(web_contents);
+  ASSERT_TRUE(observer);
+  clock.SetNow(observer->GetCreationTimeForTesting());
+  observer->SetClockForTesting(&clock);
+  clock.Advance(base::TimeDelta::FromSeconds(kTimeOnPage));
+
+  // Type something. An interstitial should be shown.
+  EXPECT_TRUE(TypeAndWaitForInterstitial(browser()));
+
+  EXPECT_TRUE(ClickAndWaitForDetach(browser(), "primary-button"));
+  AssertNoInterstitial(browser(), false);  // Assert the interstitial is gone
+  EXPECT_EQ(GURL(url::kAboutBlankURL),     // Back to "about:blank"
+            web_contents->GetURL());
+
+  histograms.ExpectTotalCount(kDelayedWarningsWithElisionDisabledHistogram, 2);
+  histograms.ExpectBucketCount(kDelayedWarningsWithElisionDisabledHistogram,
+                               DelayedWarningEvent::kPageLoaded, 1);
+  histograms.ExpectBucketCount(kDelayedWarningsWithElisionDisabledHistogram,
+                               DelayedWarningEvent::kWarningShownOnKeypress, 1);
+  histograms.ExpectUniqueTimeSample(
+      kDelayedWarningsTimeOnPageWithElisionDisabledHistogram,
+      base::TimeDelta::FromSeconds(kTimeOnPage), 1);
+}
+
+// Same as KeyPress_WarningShown_UrlElisionDisabled, but user disabled URL
+// elision by installing Suspicious Site Reporter extension.
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
+                       KeyPress_WarningShown_UrlElisionDisabled_Extension) {
+  const std::string extension_id = InstallTestExtension();
+  SafeBrowsingUserInteractionObserver::
+      SetSuspiciousSiteReporterExtensionIdForTesting(extension_id.c_str());
+
+  base::HistogramTester histograms;
+  NavigateAndAssertNoInterstitial();
+
+  // Type something. An interstitial should be shown.
+  EXPECT_TRUE(TypeAndWaitForInterstitial(browser()));
+
+  EXPECT_TRUE(ClickAndWaitForDetach(browser(), "primary-button"));
+  AssertNoInterstitial(browser(), false);  // Assert the interstitial is gone
+  EXPECT_EQ(GURL(url::kAboutBlankURL),     // Back to "about:blank"
+            browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
+
+  histograms.ExpectTotalCount(kDelayedWarningsWithElisionDisabledHistogram, 2);
+  histograms.ExpectBucketCount(kDelayedWarningsWithElisionDisabledHistogram,
+                               DelayedWarningEvent::kPageLoaded, 1);
+  histograms.ExpectBucketCount(kDelayedWarningsWithElisionDisabledHistogram,
                                DelayedWarningEvent::kWarningShownOnKeypress, 1);
 }
 
@@ -2078,6 +2204,73 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
                                DelayedWarningEvent::kPageLoaded, 1);
   histograms.ExpectBucketCount(kDelayedWarningsHistogram,
                                DelayedWarningEvent::kWarningNotShown, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
+                       KeyPress_ModifierKey_WarningNotShown) {
+  base::HistogramTester histograms;
+  NavigateAndAssertNoInterstitial();
+
+  // Press CTRL+A key. The interstitial should not be shown because we ignore
+  // the CTRL modifier unless it's CTRL+C or CTRL+V.
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::NativeWebKeyboardEvent event(
+      blink::WebKeyboardEvent::Type::kRawKeyDown,
+      blink::WebInputEvent::kControlKey,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  event.windows_key_code = ui::VKEY_A;
+  // Browser expects a non-synthesized event to have an os_event. Make the
+  // browser ignore this event instead.
+  event.skip_in_browser = true;
+  contents->GetRenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
+  AssertNoInterstitial(browser(), false);
+
+  // Navigate to about:blank twice to "flush" metrics, if any. The delayed
+  // warning user interaction observer may not have been deleted after the first
+  // navigation.
+  ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+
+  histograms.ExpectTotalCount(kDelayedWarningsHistogram, 2);
+  histograms.ExpectBucketCount(kDelayedWarningsHistogram,
+                               DelayedWarningEvent::kPageLoaded, 1);
+  histograms.ExpectBucketCount(kDelayedWarningsHistogram,
+                               DelayedWarningEvent::kWarningNotShown, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
+                       KeyPress_CtrlC_WarningShown) {
+  base::HistogramTester histograms;
+  NavigateAndAssertNoInterstitial();
+
+  // Press CTRL+C. The interstitial should be shown.
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::TestNavigationObserver observer(contents);
+
+  content::NativeWebKeyboardEvent event(
+      blink::WebKeyboardEvent::Type::kRawKeyDown,
+      blink::WebInputEvent::kControlKey,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  event.windows_key_code = ui::VKEY_C;
+  event.native_key_code = ui::VKEY_C;
+  // We don't set event.skip_in_browser = true here because the event will be
+  // consumed by UserInteractionObserver and not passed to the browser.
+  contents->GetRenderViewHost()->GetWidget()->ForwardKeyboardEvent(event);
+
+  observer.WaitForNavigationFinished();
+  EXPECT_TRUE(WaitForReady(browser()));
+
+  EXPECT_TRUE(ClickAndWaitForDetach(browser(), "primary-button"));
+  AssertNoInterstitial(browser(), false);  // Assert the interstitial is gone
+  EXPECT_EQ(GURL(url::kAboutBlankURL),     // Back to "about:blank"
+            browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
+
+  histograms.ExpectTotalCount(kDelayedWarningsHistogram, 2);
+  histograms.ExpectBucketCount(kDelayedWarningsHistogram,
+                               DelayedWarningEvent::kPageLoaded, 1);
+  histograms.ExpectBucketCount(kDelayedWarningsHistogram,
+                               DelayedWarningEvent::kWarningShownOnKeypress, 1);
 }
 
 // Similar to KeyPress_ESC_WarningNotShown, but a character key is pressed after

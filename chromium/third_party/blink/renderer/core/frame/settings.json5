@@ -266,15 +266,6 @@
       type: "int",
     },
 
-    // Whether touch gestures should be "fuzzed" to nearest touch targets.
-    // It's expected that this is enabled everywhere by default, but it may be
-    // disabled for testing purposes as the algorithm is not yet perfect.
-    // crbug.com/304895 tracks removal once we're satisfied with the algorithm.
-    {
-      name: "touchAdjustmentEnabled",
-      initial: true,
-    },
-
     // Determines whether WebViewClient::didTapMultipleTargets will be used for
     // touch disambiguation.
     {
@@ -328,6 +319,14 @@
     // crbug.com/304894 tracks removal once it's been enabled on all platforms.
     {
       name: "touchDragDropEnabled",
+      initial: false,
+    },
+
+    // Fires a contextmenu event when a touch-drag ends, which by default shows
+    // a context-menu.  When implementation issues have been resolved, this
+    // should be merged to touchDragDropEnabled.  See crbug.com/1126473.
+    {
+      name: "touchDragEndContextMenu",
       initial: false,
     },
 
@@ -463,6 +462,7 @@
     {
       name: "caretBrowsingEnabled",
       initial: false,
+      invalidate: "Style",
     },
 
     // Font scale factor for accessibility, applied as part of text autosizing.
@@ -977,12 +977,12 @@
     },
     {
       name: "lazyFrameLoadingDistanceThresholdPx3G",
-      initial: 5000,
+      initial: 3500,
       type: "int",
     },
     {
       name: "lazyFrameLoadingDistanceThresholdPx4G",
-      initial: 4000,
+      initial: 2500,
       type: "int",
     },
 
@@ -1011,12 +1011,12 @@
     },
     {
       name: "lazyImageLoadingDistanceThresholdPx3G",
-      initial: 4000,
+      initial: 2500,
       type: "int",
     },
     {
       name: "lazyImageLoadingDistanceThresholdPx4G",
-      initial: 3000,
+      initial: 1250,
       type: "int",
     },
     //
@@ -1091,6 +1091,20 @@
       initial: false,
       type: "bool",
     },
+    // The AXMenuList class provides a fake implementation of the
+    // select element pop-up menu, which is required on platforms like
+    // Mac and Android that use a native pop-up. On other platforms you
+    // can set this flag to false and expose the actual pop-up menu
+    // instead of letting AXMenuList handle it.
+    {
+      name: "useAXMenuList",
+      initial: true,
+    },
+    {
+      name: "selectionClipboardBufferAvailable",
+      initial: false,
+      type: "bool",
+    },
 
     // Vivaldi:
     // Will only serve a resource that is in cache,
@@ -1112,6 +1126,6 @@
     {
       name: "vivaldiShowContextMenuOnDoubleClick",
       initial: false,
-    }
+    },
   ],
 }

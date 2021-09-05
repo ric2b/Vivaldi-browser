@@ -10,6 +10,7 @@
 
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "extensions/browser/extension_function.h"
 #include "prefs/vivaldi_browser_prefs.h"

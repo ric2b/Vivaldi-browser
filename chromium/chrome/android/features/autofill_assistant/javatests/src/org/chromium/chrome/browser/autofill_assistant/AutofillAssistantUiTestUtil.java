@@ -7,8 +7,6 @@ package org.chromium.chrome.browser.autofill_assistant;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-
 import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
 import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 
@@ -16,6 +14,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Build.VERSION;
 import android.support.test.InstrumentationRegistry;
 import android.text.Spanned;
@@ -33,6 +33,7 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.test.espresso.NoMatchingViewException;
+import androidx.test.espresso.Root;
 import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
 import androidx.test.espresso.ViewAssertion;
@@ -47,7 +48,7 @@ import org.json.JSONArray;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
@@ -58,6 +59,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
@@ -236,6 +238,32 @@ class AutofillAssistantUiTestUtil {
         };
     }
 
+    static Matcher<View> hasBackgroundColor(final int colorResId) {
+        return new BoundedMatcher<View, View>(View.class) {
+            private Context mContext;
+
+            @Override
+            protected boolean matchesSafely(View imageView) {
+                this.mContext = imageView.getContext();
+                Drawable background = imageView.getBackground();
+                if (!(background instanceof ColorDrawable)) return false;
+                int expectedColor =
+                        ApiCompatibilityUtils.getColor(mContext.getResources(), colorResId);
+                return ((ColorDrawable) background).getColor() == expectedColor;
+            }
+
+            @Override
+            public void describeTo(Description description) {
+                String colorId = String.valueOf(colorResId);
+                if (this.mContext != null) {
+                    colorId = this.mContext.getResources().getResourceName(colorResId);
+                }
+
+                description.appendText("has background color with ID " + colorId);
+            }
+        };
+    }
+
     static Matcher<View> isNextAfterSibling(final Matcher<View> siblingMatcher) {
         assert siblingMatcher != null;
         return new TypeSafeMatcher<View>() {
@@ -398,24 +426,37 @@ class AutofillAssistantUiTestUtil {
         waitUntilViewMatchesCondition(matcher, condition, DEFAULT_MAX_TIME_TO_POLL);
     }
 
+    /**
+     * Same as {@link #waitUntilViewMatchesCondition(Matcher, Matcher)} but also uses {@code
+     * rootMatcher} to select the correct window.
+     */
+    public static void waitUntilViewInRootMatchesCondition(
+            Matcher<View> matcher, Matcher<Root> rootMatcher, Matcher<View> condition) {
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                onView(matcher).inRoot(rootMatcher).check(matches(condition));
+            } catch (NoMatchingViewException | AssertionError e) {
+                // Note: all other exceptions are let through, in particular
+                // AmbiguousViewMatcherException.
+                throw new CriteriaNotSatisfiedException(
+                        "Timeout while waiting for " + matcher + " to satisfy " + condition);
+            }
+        }, DEFAULT_MAX_TIME_TO_POLL, DEFAULT_POLLING_INTERVAL);
+    }
+
     /** @see {@link #waitUntilViewMatchesCondition(Matcher, Matcher)} */
     public static void waitUntilViewMatchesCondition(
             Matcher<View> matcher, Matcher<View> condition, long maxTimeoutMs) {
-        CriteriaHelper.pollInstrumentationThread(
-                new Criteria("Timeout while waiting for " + matcher + " to satisfy " + condition) {
-                    @Override
-                    public boolean isSatisfied() {
-                        try {
-                            onView(matcher).check(matches(condition));
-                            return true;
-                        } catch (NoMatchingViewException | AssertionError e) {
-                            // Note: all other exceptions are let through, in particular
-                            // AmbiguousViewMatcherException.
-                            return false;
-                        }
-                    }
-                },
-                maxTimeoutMs, DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                onView(matcher).check(matches(condition));
+            } catch (NoMatchingViewException | AssertionError e) {
+                // Note: all other exceptions are let through, in particular
+                // AmbiguousViewMatcherException.
+                throw new CriteriaNotSatisfiedException(
+                        "Timeout while waiting for " + matcher + " to satisfy " + condition);
+            }
+        }, maxTimeoutMs, DEFAULT_POLLING_INTERVAL);
     }
 
     /**
@@ -424,22 +465,16 @@ class AutofillAssistantUiTestUtil {
      */
     public static void waitUntilViewAssertionTrue(
             Matcher<View> matcher, ViewAssertion viewAssertion, long maxTimeoutMs) {
-        CriteriaHelper.pollInstrumentationThread(
-                new Criteria(
-                        "Timeout while waiting for " + matcher + " to satisfy " + viewAssertion) {
-                    @Override
-                    public boolean isSatisfied() {
-                        try {
-                            onView(matcher).check(viewAssertion);
-                            return true;
-                        } catch (NoMatchingViewException | AssertionError e) {
-                            // Note: all other exceptions are let through, in particular
-                            // AmbiguousViewMatcherException.
-                            return false;
-                        }
-                    }
-                },
-                maxTimeoutMs, DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                onView(matcher).check(viewAssertion);
+            } catch (NoMatchingViewException | AssertionError e) {
+                // Note: all other exceptions are let through, in particular
+                // AmbiguousViewMatcherException.
+                throw new CriteriaNotSatisfiedException(
+                        "Timeout while waiting for " + matcher + " to satisfy " + viewAssertion);
+            }
+        }, maxTimeoutMs, DEFAULT_POLLING_INTERVAL);
     }
 
     /**
@@ -448,40 +483,27 @@ class AutofillAssistantUiTestUtil {
      */
     public static void waitUntilKeyboardMatchesCondition(
             ChromeActivityTestRule testRule, boolean isShowing) {
-        CriteriaHelper.pollInstrumentationThread(new Criteria(
-                "Timeout while waiting for the keyboard to be "
-                + (isShowing ? "visible" : "hidden")) {
-            @Override
-            public boolean isSatisfied() {
-                try {
-                    boolean isKeyboardShowing =
-                            testRule.getActivity()
-                                    .getWindowAndroid()
-                                    .getKeyboardDelegate()
-                                    .isKeyboardShowing(testRule.getActivity(),
-                                            testRule.getActivity().getCompositorViewHolder());
-                    assertThat("", isKeyboardShowing == isShowing);
-                    return true;
-                } catch (AssertionError e) {
-                    return false;
-                }
-            }
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            boolean isKeyboardShowing =
+                    testRule.getActivity()
+                            .getWindowAndroid()
+                            .getKeyboardDelegate()
+                            .isKeyboardShowing(testRule.getActivity(),
+                                    testRule.getActivity().getCompositorViewHolder());
+            String errorMsg = "Timeout while waiting for the keyboard to be "
+                    + (isShowing ? "visible" : "hidden");
+            Criteria.checkThat(errorMsg, isKeyboardShowing, Matchers.is(isShowing));
         });
     }
 
     public static void waitUntil(Callable<Boolean> condition) {
-        CriteriaHelper.pollInstrumentationThread(
-                new Criteria("Timeout while waiting for condition") {
-                    @Override
-                    public boolean isSatisfied() {
-                        try {
-                            return condition.call();
-                        } catch (Exception e) {
-                            return false;
-                        }
-                    }
-                },
-                DEFAULT_MAX_TIME_TO_POLL, DEFAULT_POLLING_INTERVAL);
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                Criteria.checkThat(condition.call(), Matchers.is(true));
+            } catch (Exception e) {
+                throw new CriteriaNotSatisfiedException(e);
+            }
+        }, DEFAULT_MAX_TIME_TO_POLL, DEFAULT_POLLING_INTERVAL);
     }
 
     /**
@@ -559,7 +581,7 @@ class AutofillAssistantUiTestUtil {
         int[] compositorLocation = new int[2];
         testRule.getActivity().getCompositorViewHolder().getLocationOnScreen(compositorLocation);
         int offsetY = compositorLocation[1]
-                + testRule.getActivity().getFullscreenManager().getContentOffset();
+                + testRule.getActivity().getBrowserControlsManager().getContentOffset();
         return new Rect((int) ((elementRect.left - viewport.left) * cssToPysicalPixels),
                 (int) ((elementRect.top - viewport.top) * cssToPysicalPixels + offsetY),
                 (int) ((elementRect.right - viewport.left) * cssToPysicalPixels),
@@ -622,6 +644,16 @@ class AutofillAssistantUiTestUtil {
         javascriptHelper.waitUntilHasValue();
         JSONArray result = new JSONArray(javascriptHelper.getJsonResultAndClear());
         return result.getBoolean(0);
+    }
+
+    /**
+     * Wait for an element to be removed from the web page shown by the given {@link WebContents}.
+     * @param webContents The web content to check.
+     * @param id The ID of the element to look for.
+     */
+    public static void waitForElementRemoved(WebContents webContents, String id) {
+        CriteriaHelper.pollInstrumentationThread(
+                () -> !checkElementExists(webContents, id), "Element is still on the page!");
     }
 
     /** Checks whether the specified element is displayed in the DOM tree. */

@@ -186,7 +186,7 @@ bool ParseMultipartResponse(const std::string& content_type,
     return false;
 
   base::StringPiece content_type_piece(content_type);
-  if (!content_type_piece.starts_with(kMultipartMixedMimeTypePrefix)) {
+  if (!base::StartsWith(content_type_piece, kMultipartMixedMimeTypePrefix)) {
     return false;
   }
   content_type_piece.remove_prefix(
@@ -228,7 +228,7 @@ bool ParseMultipartResponse(const std::string& content_type,
     }
 
     if (state == STATE_PART_HTTP_STATUS_LINE) {
-      if (line.starts_with(kHttpStatusPrefix)) {
+      if (base::StartsWith(line, kHttpStatusPrefix)) {
         int int_code;
         base::StringToInt(
             line.substr(base::StringPiece(kHttpStatusPrefix).size()),
@@ -507,12 +507,10 @@ bool FilesCopyRequest::GetContentData(std::string* upload_content_type,
 TeamDriveListRequest::TeamDriveListRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
-    const TeamDriveListCallback& callback)
-    : DriveApiDataRequest<TeamDriveList>(sender, callback),
+    TeamDriveListCallback callback)
+    : DriveApiDataRequest<TeamDriveList>(sender, std::move(callback)),
       url_generator_(url_generator),
-      max_results_(30) {
-  DCHECK(!callback.is_null());
-}
+      max_results_(30) {}
 
 TeamDriveListRequest::~TeamDriveListRequest() {}
 
@@ -575,11 +573,9 @@ GURL FilesListNextPageRequest::GetURLInternal() const {
 FilesDeleteRequest::FilesDeleteRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
-    const EntryActionCallback& callback)
-    : EntryActionRequest(sender, callback),
-      url_generator_(url_generator) {
-  DCHECK(!callback.is_null());
-}
+    EntryActionCallback callback)
+    : EntryActionRequest(sender, std::move(callback)),
+      url_generator_(url_generator) {}
 
 FilesDeleteRequest::~FilesDeleteRequest() {}
 
@@ -635,14 +631,12 @@ GURL AboutGetRequest::GetURLInternal() const {
 ChangesListRequest::ChangesListRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
-    const ChangeListCallback& callback)
-    : DriveApiDataRequest<ChangeList>(sender, callback),
+    ChangeListCallback callback)
+    : DriveApiDataRequest<ChangeList>(sender, std::move(callback)),
       url_generator_(url_generator),
       include_deleted_(true),
       max_results_(100),
-      start_change_id_(0) {
-  DCHECK(!callback.is_null());
-}
+      start_change_id_(0) {}
 
 ChangesListRequest::~ChangesListRequest() {}
 
@@ -656,10 +650,8 @@ GURL ChangesListRequest::GetURLInternal() const {
 
 ChangesListNextPageRequest::ChangesListNextPageRequest(
     RequestSender* sender,
-    const ChangeListCallback& callback)
-    : DriveApiDataRequest<ChangeList>(sender, callback) {
-  DCHECK(!callback.is_null());
-}
+    ChangeListCallback callback)
+    : DriveApiDataRequest<ChangeList>(sender, std::move(callback)) {}
 
 ChangesListNextPageRequest::~ChangesListNextPageRequest() {
 }
@@ -673,11 +665,9 @@ GURL ChangesListNextPageRequest::GetURLInternal() const {
 ChildrenInsertRequest::ChildrenInsertRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
-    const EntryActionCallback& callback)
-    : EntryActionRequest(sender, callback),
-      url_generator_(url_generator) {
-  DCHECK(!callback.is_null());
-}
+    EntryActionCallback callback)
+    : EntryActionRequest(sender, std::move(callback)),
+      url_generator_(url_generator) {}
 
 ChildrenInsertRequest::~ChildrenInsertRequest() {}
 
@@ -707,11 +697,9 @@ bool ChildrenInsertRequest::GetContentData(std::string* upload_content_type,
 ChildrenDeleteRequest::ChildrenDeleteRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
-    const EntryActionCallback& callback)
-    : EntryActionRequest(sender, callback),
-      url_generator_(url_generator) {
-  DCHECK(!callback.is_null());
-}
+    EntryActionCallback callback)
+    : EntryActionRequest(sender, std::move(callback)),
+      url_generator_(url_generator) {}
 
 ChildrenDeleteRequest::~ChildrenDeleteRequest() {}
 
@@ -1018,12 +1006,11 @@ DownloadFileRequest::~DownloadFileRequest() {
 PermissionsInsertRequest::PermissionsInsertRequest(
     RequestSender* sender,
     const DriveApiUrlGenerator& url_generator,
-    const EntryActionCallback& callback)
-    : EntryActionRequest(sender, callback),
+    EntryActionCallback callback)
+    : EntryActionRequest(sender, std::move(callback)),
       url_generator_(url_generator),
       type_(PERMISSION_TYPE_USER),
-      role_(PERMISSION_ROLE_READER) {
-}
+      role_(PERMISSION_ROLE_READER) {}
 
 PermissionsInsertRequest::~PermissionsInsertRequest() {
 }

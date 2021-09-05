@@ -5,12 +5,16 @@
 #include "ui/base/clipboard/test/test_clipboard.h"
 
 #include <stddef.h>
+#include <memory>
+#include <utility>
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "skia/ext/skia_utils_base.h"
 #include "ui/base/clipboard/clipboard_constants.h"
+#include "ui/base/clipboard/clipboard_data_endpoint.h"
+#include "ui/base/clipboard/clipboard_dlp_controller.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 
 namespace ui {
@@ -38,14 +42,25 @@ uint64_t TestClipboard::GetSequenceNumber(ClipboardBuffer buffer) const {
   return GetStore(buffer).sequence_number;
 }
 
-bool TestClipboard::IsFormatAvailable(const ClipboardFormatType& format,
-                                      ClipboardBuffer buffer) const {
-#if defined(OS_LINUX)
+void TestClipboard::SetClipboardDlpController(
+    std::unique_ptr<ClipboardDlpController> dlp_controller) {
+  dlp_controller_ = std::move(dlp_controller);
+}
+
+bool TestClipboard::IsFormatAvailable(
+    const ClipboardFormatType& format,
+    ClipboardBuffer buffer,
+    const ui::ClipboardDataEndpoint* data_dst) const {
+  if (dlp_controller_ && !dlp_controller_->IsDataReadAllowed(
+                             GetStore(buffer).data_src.get(), data_dst))
+    return false;
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // The linux clipboard treats the presence of text on the clipboard
   // as the url format being available.
-  if (format.Equals(ClipboardFormatType::GetUrlType()))
-    return IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer);
-#endif  // OS_LINUX
+  if (format == ClipboardFormatType::GetUrlType())
+    return IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer,
+                             data_dst);
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
   const DataStore& store = GetStore(buffer);
   return base::Contains(store.data, format);
 }
@@ -56,25 +71,36 @@ void TestClipboard::Clear(ClipboardBuffer buffer) {
 
 void TestClipboard::ReadAvailableTypes(
     ClipboardBuffer buffer,
+    const ClipboardDataEndpoint* data_dst,
     std::vector<base::string16>* types) const {
   DCHECK(types);
   types->clear();
+  if (dlp_controller_ && !dlp_controller_->IsDataReadAllowed(
+                             GetStore(buffer).data_src.get(), data_dst))
+    return;
 
-  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer,
+                        data_dst))
     types->push_back(base::UTF8ToUTF16(kMimeTypeText));
-  if (IsFormatAvailable(ClipboardFormatType::GetHtmlType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetHtmlType(), buffer, data_dst))
     types->push_back(base::UTF8ToUTF16(kMimeTypeHTML));
 
-  if (IsFormatAvailable(ClipboardFormatType::GetRtfType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetRtfType(), buffer, data_dst))
     types->push_back(base::UTF8ToUTF16(kMimeTypeRTF));
-  if (IsFormatAvailable(ClipboardFormatType::GetBitmapType(), buffer))
+  if (IsFormatAvailable(ClipboardFormatType::GetBitmapType(), buffer, data_dst))
     types->push_back(base::UTF8ToUTF16(kMimeTypePNG));
 }
 
 std::vector<base::string16>
 TestClipboard::ReadAvailablePlatformSpecificFormatNames(
-    ClipboardBuffer buffer) const {
-  const auto& data = GetStore(buffer).data;
+    ClipboardBuffer buffer,
+    const ui::ClipboardDataEndpoint* data_dst) const {
+  const DataStore& store = GetStore(buffer);
+  if (dlp_controller_ &&
+      !dlp_controller_->IsDataReadAllowed(store.data_src.get(), data_dst))
+    return {};
+
+  const auto& data = store.data;
   std::vector<base::string16> types;
   types.reserve(data.size());
   for (const auto& it : data)
@@ -82,7 +108,8 @@ TestClipboard::ReadAvailablePlatformSpecificFormatNames(
 
   // Some platforms add additional raw types to represent text, or offer them
   // as available formats by automatically converting between them.
-  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer)) {
+  if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer,
+                        data_dst)) {
 #if defined(USE_X11)
     types.push_back(base::ASCIIToUTF16("TEXT"));
     types.push_back(base::ASCIIToUTF16("STRING"));
@@ -90,7 +117,7 @@ TestClipboard::ReadAvailablePlatformSpecificFormatNames(
 #elif defined(OS_WIN)
     types.push_back(base::ASCIIToUTF16("CF_LOCALE"));
     types.push_back(base::ASCIIToUTF16("CF_OEMTEXT"));
-#elif defined(OS_MACOSX)
+#elif defined(OS_APPLE)
     types.push_back(base::ASCIIToUTF16("NSStringPboardType"));
 #endif
   }
@@ -99,29 +126,45 @@ TestClipboard::ReadAvailablePlatformSpecificFormatNames(
 }
 
 void TestClipboard::ReadText(ClipboardBuffer buffer,
+                             const ClipboardDataEndpoint* data_dst,
                              base::string16* result) const {
+  if (dlp_controller_ && !dlp_controller_->IsDataReadAllowed(
+                             GetStore(buffer).data_src.get(), data_dst))
+    return;
+
   std::string result8;
-  ReadAsciiText(buffer, &result8);
+  ReadAsciiText(buffer, data_dst, &result8);
   *result = base::UTF8ToUTF16(result8);
 }
 
+// TODO(crbug.com/1103215): |data_dst| should be supported.
 void TestClipboard::ReadAsciiText(ClipboardBuffer buffer,
+                                  const ClipboardDataEndpoint* data_dst,
                                   std::string* result) const {
-  result->clear();
   const DataStore& store = GetStore(buffer);
+  if (dlp_controller_ &&
+      !dlp_controller_->IsDataReadAllowed(store.data_src.get(), data_dst))
+    return;
+
+  result->clear();
   auto it = store.data.find(ClipboardFormatType::GetPlainTextType());
   if (it != store.data.end())
     *result = it->second;
 }
 
 void TestClipboard::ReadHTML(ClipboardBuffer buffer,
+                             const ClipboardDataEndpoint* data_dst,
                              base::string16* markup,
                              std::string* src_url,
                              uint32_t* fragment_start,
                              uint32_t* fragment_end) const {
+  const DataStore& store = GetStore(buffer);
+  if (dlp_controller_ &&
+      !dlp_controller_->IsDataReadAllowed(store.data_src.get(), data_dst))
+    return;
+
   markup->clear();
   src_url->clear();
-  const DataStore& store = GetStore(buffer);
   auto it = store.data.find(ClipboardFormatType::GetHtmlType());
   if (it != store.data.end())
     *markup = base::UTF8ToUTF16(it->second);
@@ -130,26 +173,41 @@ void TestClipboard::ReadHTML(ClipboardBuffer buffer,
   *fragment_end = base::checked_cast<uint32_t>(markup->size());
 }
 
-void TestClipboard::ReadRTF(ClipboardBuffer buffer, std::string* result) const {
-  result->clear();
+void TestClipboard::ReadRTF(ClipboardBuffer buffer,
+                            const ClipboardDataEndpoint* data_dst,
+                            std::string* result) const {
   const DataStore& store = GetStore(buffer);
+  if (dlp_controller_ &&
+      !dlp_controller_->IsDataReadAllowed(store.data_src.get(), data_dst))
+    return;
+
+  result->clear();
   auto it = store.data.find(ClipboardFormatType::GetRtfType());
   if (it != store.data.end())
     *result = it->second;
 }
 
 void TestClipboard::ReadImage(ClipboardBuffer buffer,
+                              const ClipboardDataEndpoint* data_dst,
                               ReadImageCallback callback) const {
   std::move(callback).Run(GetStore(buffer).image);
 }
 
+// TODO(crbug.com/1103215): |data_dst| should be supported.
 void TestClipboard::ReadCustomData(ClipboardBuffer buffer,
                                    const base::string16& type,
+                                   const ClipboardDataEndpoint* data_dst,
                                    base::string16* result) const {}
 
-void TestClipboard::ReadBookmark(base::string16* title,
+// TODO(crbug.com/1103215): |data_dst| should be supported.
+void TestClipboard::ReadBookmark(const ClipboardDataEndpoint* data_dst,
+                                 base::string16* title,
                                  std::string* url) const {
   const DataStore& store = GetDefaultStore();
+  if (dlp_controller_ &&
+      !dlp_controller_->IsDataReadAllowed(store.data_src.get(), data_dst))
+    return;
+
   if (url) {
     auto it = store.data.find(ClipboardFormatType::GetUrlType());
     if (it != store.data.end())
@@ -160,9 +218,14 @@ void TestClipboard::ReadBookmark(base::string16* title,
 }
 
 void TestClipboard::ReadData(const ClipboardFormatType& format,
+                             const ClipboardDataEndpoint* data_dst,
                              std::string* result) const {
-  result->clear();
   const DataStore& store = GetDefaultStore();
+  if (dlp_controller_ &&
+      !dlp_controller_->IsDataReadAllowed(store.data_src.get(), data_dst))
+    return;
+
+  result->clear();
   auto it = store.data.find(format);
   if (it != store.data.end())
     *result = it->second;
@@ -176,22 +239,33 @@ void TestClipboard::ClearLastModifiedTime() {
   last_modified_time_ = base::Time();
 }
 
-void TestClipboard::WritePortableRepresentations(ClipboardBuffer buffer,
-                                                 const ObjectMap& objects) {
+#if defined(USE_OZONE)
+bool TestClipboard::IsSelectionBufferAvailable() const {
+  return false;
+}
+#endif  // defined(USE_OZONE)
+
+void TestClipboard::WritePortableRepresentations(
+    ClipboardBuffer buffer,
+    const ObjectMap& objects,
+    std::unique_ptr<ClipboardDataEndpoint> data_src) {
   Clear(buffer);
   default_store_buffer_ = buffer;
   for (const auto& kv : objects)
     DispatchPortableRepresentation(kv.first, kv.second);
   default_store_buffer_ = ClipboardBuffer::kCopyPaste;
+  GetStore(buffer).SetDataSource(std::move(data_src));
 }
 
 void TestClipboard::WritePlatformRepresentations(
     ClipboardBuffer buffer,
-    std::vector<Clipboard::PlatformRepresentation> platform_representations) {
+    std::vector<Clipboard::PlatformRepresentation> platform_representations,
+    std::unique_ptr<ClipboardDataEndpoint> data_src) {
   Clear(buffer);
   default_store_buffer_ = buffer;
   DispatchPlatformRepresentations(std::move(platform_representations));
   default_store_buffer_ = ClipboardBuffer::kCopyPaste;
+  GetStore(buffer).SetDataSource(std::move(data_src));
 }
 
 void TestClipboard::WriteText(const char* text_data, size_t text_len) {
@@ -255,9 +329,31 @@ void TestClipboard::WriteData(const ClipboardFormatType& format,
   GetDefaultStore().data[format] = std::string(data_data, data_len);
 }
 
-TestClipboard::DataStore::DataStore() : sequence_number(0) {}
+TestClipboard::DataStore::DataStore() = default;
 
-TestClipboard::DataStore::DataStore(const DataStore& other) = default;
+TestClipboard::DataStore::DataStore(const DataStore& other) {
+  sequence_number = other.sequence_number;
+  data = other.data;
+  url_title = other.url_title;
+  html_src_url = other.html_src_url;
+  image = other.image;
+  data_src = other.data_src ? std::make_unique<ClipboardDataEndpoint>(
+                                  ClipboardDataEndpoint(*(other.data_src)))
+                            : nullptr;
+}
+
+TestClipboard::DataStore& TestClipboard::DataStore::operator=(
+    const DataStore& other) {
+  sequence_number = other.sequence_number;
+  data = other.data;
+  url_title = other.url_title;
+  html_src_url = other.html_src_url;
+  image = other.image;
+  data_src = other.data_src ? std::make_unique<ClipboardDataEndpoint>(
+                                  ClipboardDataEndpoint(*(other.data_src)))
+                            : nullptr;
+  return *this;
+}
 
 TestClipboard::DataStore::~DataStore() = default;
 
@@ -266,6 +362,11 @@ void TestClipboard::DataStore::Clear() {
   url_title.clear();
   html_src_url.clear();
   image = SkBitmap();
+}
+
+void TestClipboard::DataStore::SetDataSource(
+    std::unique_ptr<ClipboardDataEndpoint> data_src) {
+  this->data_src = std::move(data_src);
 }
 
 const TestClipboard::DataStore& TestClipboard::GetStore(

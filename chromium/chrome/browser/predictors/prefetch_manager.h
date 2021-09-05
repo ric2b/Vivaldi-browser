@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/containers/id_map.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/predictors/resource_prefetch_predictor.h"
 #include "net/base/network_isolation_key.h"
@@ -34,7 +33,8 @@ class SharedURLLoaderFactory;
 namespace predictors {
 
 struct PrefetchRequest;
-class PrefetchManager;
+struct PrefetchInfo;
+struct PrefetchJob;
 
 struct PrefetchStats {
   explicit PrefetchStats(const GURL& url);
@@ -47,44 +47,6 @@ struct PrefetchStats {
   base::TimeTicks start_time;
   // TODO(falken): Add stats about what was requested to measure
   // the accuracy.
-};
-
-// Stores the status of all prefetches associated with a given |url|.
-struct PrefetchInfo {
-  PrefetchInfo(const GURL& url, PrefetchManager& manager);
-  ~PrefetchInfo();
-
-  PrefetchInfo(const PrefetchInfo&) = delete;
-  PrefetchInfo& operator=(const PrefetchInfo&) = delete;
-
-  // Called by PrefetchJob only.
-  void OnJobCreated();
-  void OnJobDestroyed();
-
-  bool is_done() const { return job_count == 0; }
-
-  GURL url;
-  size_t job_count = 0;
-  bool was_canceled = false;
-  std::unique_ptr<PrefetchStats> stats;
-  // Owns |this|.
-  PrefetchManager* const manager;
-
-  base::WeakPtrFactory<PrefetchInfo> weak_factory{this};
-};
-
-// Stores all data need for running a prefetch to a |url|.
-struct PrefetchJob {
-  PrefetchJob(PrefetchRequest prefetch_request, PrefetchInfo& info);
-  ~PrefetchJob();
-
-  PrefetchJob(const PrefetchJob&) = delete;
-  PrefetchJob& operator=(const PrefetchJob&) = delete;
-
-  GURL url;
-  net::NetworkIsolationKey network_isolation_key;
-  // PrefetchJob can outlive PrefetchInfo.
-  base::WeakPtr<PrefetchInfo> info;
 };
 
 // PrefetchManager prefetches input lists of URLs.
@@ -102,12 +64,27 @@ class PrefetchManager {
    public:
     virtual ~Delegate() = default;
 
+    // Called when a prefetch is initiated. |prefetch_url| is the subresource
+    // being prefetched, and |url| is the main frame of the navigation.
+    virtual void PrefetchInitiated(const GURL& url,
+                                   const GURL& prefetch_url) = 0;
+
     // Called when all prefetch jobs for the |stats->url| are finished.
     // Called on the UI thread.
     virtual void PrefetchFinished(std::unique_ptr<PrefetchStats> stats) = 0;
   };
 
-  static const size_t kMaxInflightJobs = 3;
+  // For testing.
+  class Observer {
+   public:
+    virtual ~Observer() = default;
+
+    virtual void OnPrefetchFinished(
+        const GURL& url,
+        const GURL& prefetch_url,
+        const network::URLLoaderCompletionStatus& status) {}
+    virtual void OnAllPrefetchesFinished(const GURL& url) {}
+  };
 
   PrefetchManager(base::WeakPtr<Delegate> delegate, Profile* profile);
   ~PrefetchManager();
@@ -129,6 +106,10 @@ class PrefetchManager {
   // Called by PrefetchInfo.
   void AllPrefetchJobsForUrlFinished(PrefetchInfo& info);
 
+  void set_observer_for_testing(Observer* observer) {
+    observer_for_testing_ = observer;
+  }
+
  private:
   friend class PrefetchManagerTest;
 
@@ -137,7 +118,8 @@ class PrefetchManager {
   void OnPrefetchFinished(
       std::unique_ptr<PrefetchJob> job,
       std::unique_ptr<blink::ThrottlingURLLoader> loader,
-      std::unique_ptr<network::mojom::URLLoaderClient> client);
+      std::unique_ptr<network::mojom::URLLoaderClient> client,
+      const network::URLLoaderCompletionStatus& status);
   void TryToLaunchPrefetchJobs();
 
   base::WeakPtr<Delegate> delegate_;
@@ -152,6 +134,8 @@ class PrefetchManager {
   // The total number of prefetches that have started and not yet finished,
   // across all main frame URLs.
   size_t inflight_jobs_count_ = 0;
+
+  Observer* observer_for_testing_ = nullptr;
 
   base::WeakPtrFactory<PrefetchManager> weak_factory_{this};
 };

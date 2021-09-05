@@ -34,12 +34,15 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/chromeos/account_manager/account_manager_welcome_dialog.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
 #include "components/account_id/account_id.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user_manager.h"
@@ -53,6 +56,8 @@ namespace {
 
 constexpr char kProfileSigninNotificationId[] = "chrome://settings/signin/";
 constexpr char kSecondaryAccountNotificationIdSuffix[] = "/secondary-account";
+
+bool g_ignore_sync_errors_for_test_ = false;
 
 void HandleDeviceAccountReauthNotificationClick(
     base::Optional<int> button_index) {
@@ -68,6 +73,22 @@ bool AreAllAccountsMigrated(
     }
   }
   return true;
+}
+
+// Returns true if the child user has migrated at least one of their
+// secondary edu accounts to ARC++.
+bool IsSecondaryEduAccountMigratedForChildUser(
+    Profile* profile,
+    const std::vector<chromeos::AccountManager::Account>& accounts) {
+  // If the profile is not a child then there is no migration required.
+  // If the profile is child but has only one account on device, then there is
+  // no migration required; i.e. there is no secondary edu account to migrate.
+  if (!profile->IsChild() || accounts.size() < 2) {
+    return true;
+  }
+
+  return profile->GetPrefs()->GetBoolean(
+      prefs::kEduCoexistenceArcMigrationCompleted);
 }
 
 }  // namespace
@@ -90,7 +111,8 @@ SigninErrorNotifier::SigninErrorNotifier(SigninErrorController* controller,
   error_controller_->AddObserver(this);
   const AccountId account_id =
       multi_user_util::GetAccountIdFromProfile(profile_);
-  if (TokenHandleUtil::HasToken(account_id)) {
+  if (TokenHandleUtil::HasToken(account_id) &&
+      !TokenHandleUtil::IsRecentlyChecked(account_id)) {
     token_handle_util_ = std::make_unique<TokenHandleUtil>();
     token_handle_util_->CheckToken(
         account_id, profile->GetURLLoaderFactory(),
@@ -114,12 +136,28 @@ SigninErrorNotifier::~SigninErrorNotifier() {
       << "SigninErrorNotifier::Shutdown() was not called";
 }
 
+// static
+std::unique_ptr<base::AutoReset<bool>>
+SigninErrorNotifier::IgnoreSyncErrorsForTesting() {
+  return std::make_unique<base::AutoReset<bool>>(
+      &g_ignore_sync_errors_for_test_, true);
+}
+
+// static
+void SigninErrorNotifier::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(prefs::kEduCoexistenceArcMigrationCompleted,
+                                false);
+}
+
 void SigninErrorNotifier::Shutdown() {
   error_controller_->RemoveObserver(this);
   error_controller_ = nullptr;
 }
 
 void SigninErrorNotifier::OnErrorChanged() {
+  if (g_ignore_sync_errors_for_test_)
+    return;
+
   if (!error_controller_->HasError()) {
     NotificationDisplayService::GetForProfile(profile_)->Close(
         NotificationHandler::Type::TRANSIENT, device_account_notification_id_);
@@ -178,10 +216,6 @@ void SigninErrorNotifier::HandleDeviceAccountError() {
   user_manager::UserManager::Get()->SaveForceOnlineSignin(
       account_id, true /* force_online_signin */);
 
-  // We need to remove the handle so it won't be checked next time session is
-  // started.
-  TokenHandleUtil::DeleteHandle(account_id);
-
   // Add an accept button to sign the user out.
   message_center::RichNotificationData data;
   data.buttons.push_back(message_center::ButtonInfo(
@@ -233,7 +267,9 @@ void SigninErrorNotifier::OnGetAccounts(
       multi_user_util::GetAccountIdFromProfile(profile_).GetUserEmail();
 
   const bool are_all_accounts_migrated =
-      AreAllAccountsMigrated(account_manager_, accounts);
+      AreAllAccountsMigrated(account_manager_, accounts) &&
+      IsSecondaryEduAccountMigratedForChildUser(profile_, accounts);
+
   const base::string16 message_title =
       are_all_accounts_migrated
           ? l10n_util::GetStringUTF16(
@@ -271,6 +307,16 @@ void SigninErrorNotifier::OnGetAccounts(
 
 void SigninErrorNotifier::HandleSecondaryAccountReauthNotificationClick(
     base::Optional<int> button_index) {
+  if (profile_->IsChild() && !profile_->GetPrefs()->GetBoolean(
+                                 prefs::kEduCoexistenceArcMigrationCompleted)) {
+    if (!chromeos::AccountManagerWelcomeDialog::
+            ShowIfRequiredForEduCoexistence()) {
+      chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+          profile_, chromeos::settings::mojom::kMyAccountsSubpagePath);
+    }
+    return;
+  }
+
   if (!chromeos::AccountManagerWelcomeDialog::ShowIfRequired()) {
     // The welcome dialog was not shown (because it has been shown too many
     // times already). Take users to Account Manager UI directly.

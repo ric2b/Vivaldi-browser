@@ -44,7 +44,6 @@ class CORE_EXPORT DOMTimer final : public GarbageCollected<DOMTimer>,
                                    public ExecutionContextLifecycleObserver,
                                    public TimerBase,
                                    public NameClient {
-  USING_GARBAGE_COLLECTED_MIXIN(DOMTimer);
   USING_PRE_FINALIZER(DOMTimer, Dispose);
 
  public:
@@ -58,7 +57,7 @@ class CORE_EXPORT DOMTimer final : public GarbageCollected<DOMTimer>,
 
   DOMTimer(ExecutionContext*,
            ScheduledAction*,
-           base::TimeDelta interval,
+           base::TimeDelta timeout,
            bool single_shot,
            int timeout_id);
   ~DOMTimer() override;

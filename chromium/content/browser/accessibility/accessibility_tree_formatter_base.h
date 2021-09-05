@@ -48,10 +48,10 @@ class CONTENT_EXPORT PropertyNode final {
   explicit operator bool() const;
 
   // Key name in case of { key: value } dictionary.
-  base::string16 key;
+  std::string key;
 
   // Value or a property name, for example 3 or AXLineForIndex
-  base::string16 name_or_value;
+  std::string name_or_value;
 
   // Parameters if it's a property, for example, it is a vector of a single
   // value 3 in case of AXLineForIndex(3)
@@ -59,27 +59,30 @@ class CONTENT_EXPORT PropertyNode final {
 
   // Used to store the origianl unparsed property including invocation
   // parameters if any.
-  base::string16 original_property;
+  std::string original_property;
 
   // The list of line indexes of accessible objects the property is allowed to
   // be called for.
-  std::vector<base::string16> line_indexes;
+  std::vector<std::string> line_indexes;
+
+  bool IsMatching(const std::string& pattern) const;
 
   // Argument conversion methods.
   bool IsArray() const;
   bool IsDict() const;
   base::Optional<int> AsInt() const;
-  base::Optional<base::string16> FindKey(const char* refkey) const;
+  const PropertyNode* FindKey(const char* refkey) const;
+  base::Optional<std::string> FindStringKey(const char* refkey) const;
   base::Optional<int> FindIntKey(const char* key) const;
 
   std::string ToString() const;
 
  private:
-  using iterator = base::string16::const_iterator;
+  using iterator = std::string::const_iterator;
 
   explicit PropertyNode(iterator key_begin,
                         iterator key_end,
-                        const base::string16&);
+                        const std::string&);
   PropertyNode(iterator begin, iterator end);
   PropertyNode(iterator key_begin,
                iterator key_end,
@@ -150,11 +153,13 @@ class CONTENT_EXPORT AccessibilityTreeFormatterBase
   // Overridden by platform subclasses.
   //
 
-  // Returns a property node struct built for a matching property filter,
-  // which includes a property name and invocation parameters if any.
-  // If no matching property filter, then empty property node is returned.
-  PropertyNode GetMatchingPropertyNode(const base::string16& line_index,
-                                       const base::string16& property_name);
+  // Returns property nodes complying to the line index filter for all
+  // allow/allow_empty property filters.
+  std::vector<PropertyNode> PropertyFilterNodesFor(
+      const std::string& line_index) const;
+
+  // Return true if match-all filter is present.
+  bool HasMatchAllPropertyFilter() const;
 
   // Process accessibility tree with filters for output.
   // Given a dictionary that contains a platform-specific dictionary
@@ -205,7 +210,7 @@ class CONTENT_EXPORT AccessibilityTreeFormatterBase
                                         base::string16* contents,
                                         int depth = 0);
 
-  bool MatchesPropertyFilters(const base::string16& text,
+  bool MatchesPropertyFilters(const std::string& text,
                               bool default_result) const;
   bool MatchesNodeFilters(const base::DictionaryValue& dict) const;
 

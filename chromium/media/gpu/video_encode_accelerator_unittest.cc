@@ -44,6 +44,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/bitstream_buffer.h"
@@ -78,6 +79,7 @@
 #include "mojo/core/embedder/embedder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
+#include "ui/gfx/geometry/size.h"
 
 #if BUILDFLAG(USE_VAAPI)
 #include "media/gpu/vaapi/vaapi_wrapper.h"
@@ -131,6 +133,15 @@ const unsigned int kLoggedLatencyPercentiles[] = {50, 75, 95};
 // https://crbug.com/1019307.
 const unsigned int kBitstreamBufferReadyTimeoutMs =
     10 * base::Time::kMillisecondsPerSecond;
+// How much to scale down the input stream by for the scaling test.
+constexpr unsigned int kScalingDenominator = 2u;
+// The smallest test stream visible size for which the scaling test will run. If
+// any of the test streams has a size below this, the scaling test will be
+// skipped. This is used to ensure that all boards are able to pass the scaling
+// test successfully. For example, if |kScalingDenominator| is 2 and
+// |kMinVisibleSizeForScalingTest| is 640x360, it's expected that all boards can
+// encode a stream that is 320x180.
+constexpr gfx::Size kMinVisibleSizeForScalingTest(640, 360);
 
 // The syntax of multiple test streams is:
 //  test-stream1;test-stream2;test-stream3
@@ -172,7 +183,7 @@ const unsigned int kBitstreamBufferReadyTimeoutMs =
 const char kDefaultInputFileName[] = "bear_320x192_40frames.yuv.webm";
 const base::FilePath::CharType kDefaultInputParameters[] =
     FILE_PATH_LITERAL(":320:192:1:out.h264:200000");
-#elif defined(OS_MACOSX)
+#elif defined(OS_MAC)
 // VideoToolbox falls back to SW encoder with resolutions lower than this.
 const char kDefaultInputFileName[] = "bear_640x384_40frames.yuv.webm";
 const base::FilePath::CharType kDefaultInputParameters[] =
@@ -1787,12 +1798,8 @@ VEAClient::VEAClient(TestStream* test_stream,
   if (scale) {
     LOG_ASSERT(g_native_input)
         << "Scaling is only supported on native input mode";
-    // Scale to 3/4 of the original size. The reason we don't go smaller is that
-    // we don't want to go below the minimum supported resolution of the
-    // hardware encoder and 3/4 works across all boards with the current test
-    // videos.
-    encoded_visible_size_.set_width(3 * encoded_visible_size_.width() / 4);
-    encoded_visible_size_.set_height(3 * encoded_visible_size_.height() / 4);
+    encoded_visible_size_ = gfx::ScaleToFlooredSize(encoded_visible_size_,
+                                                    1.0 / kScalingDenominator);
   }
 
   if (save_to_file_) {
@@ -1846,7 +1853,7 @@ void VEAClient::CreateEncoder() {
   const VideoEncodeAccelerator::Config config(
       test_stream_->pixel_format, encoded_visible_size_,
       test_stream_->requested_profile, requested_bitrate_, requested_framerate_,
-      keyframe_period_, test_stream_->requested_level, storage_type);
+      keyframe_period_, test_stream_->requested_level, false, storage_type);
   encoder_ = CreateVideoEncodeAccelerator(config, this, gpu::GpuPreferences());
   if (!encoder_) {
     LOG(ERROR) << "Failed creating a VideoEncodeAccelerator.";
@@ -2151,7 +2158,7 @@ scoped_refptr<VideoFrame> VEAClient::CreateFrame(off_t position) {
           base::TimeDelta().FromMilliseconds(
               (next_input_id_ + 1) * base::Time::kMillisecondsPerSecond /
               current_framerate_));
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (video_frame) {
     if (g_native_input) {
       video_frame = test::CloneVideoFrame(
@@ -2731,15 +2738,14 @@ void VEACacheLineUnalignedInputClient::FeedEncoderWithOneInput(
 // - If true, verify the timestamps of output frames.
 // - If true, verify the output level is as provided in input stream. Only
 //   available for H264 encoder for now.
-// - If true, request that the encoder scales the input stream to 75% of the
+// - If true, request that the encoder scales the input stream to 50% of the
 //   original size prior to encoding. This is only applicable when
 //   |g_native_input| is true. Otherwise, the test is skipped. This is because
 //   the intention is to exercise the image processor path inside the decoder,
 //   and in non-native input mode, the scaling is done by the client instead of
-//   the encoder (and we're not interested in testing that).
-//   Note: we don't go smaller than 75% because we don't want to go below the
-//   minimum supported resolution by the encoder (75% happens to work across all
-//   devices with the current test videos).
+//   the encoder (and we're not interested in testing that). This is also
+//   skipped if any of the test streams have a visible size smaller than
+//   |kMinVisibleSizeForScalingTest|.
 class VideoEncodeAcceleratorTest
     : public ::testing::TestWithParam<
           std::
@@ -2747,8 +2753,20 @@ class VideoEncodeAcceleratorTest
  public:
   void SetUp() override {
     const bool scale = std::get<9>(GetParam());
-    if (scale && !g_native_input)
-      GTEST_SKIP();
+    if (scale) {
+      if (!g_native_input) {
+        GTEST_SKIP() << "Test skipped because scaling should only occur when "
+                        "using native input";
+      }
+      for (const auto& test_stream : g_env->test_streams_) {
+        if (!gfx::Rect(test_stream->visible_size)
+                 .Contains(gfx::Rect(kMinVisibleSizeForScalingTest))) {
+          GTEST_SKIP() << "Test skipped because the resolution of one of the "
+                          "input streams is below the minimum "
+                       << kMinVisibleSizeForScalingTest.ToString();
+        }
+      }
+    }
   }
 };
 
@@ -3067,7 +3085,7 @@ INSTANTIATE_TEST_SUITE_P(CacheLineUnalignedInputTest,
                          VideoEncodeAcceleratorSimpleTest,
                          ::testing::Values(1));
 
-#elif defined(OS_MACOSX) || defined(OS_WIN)
+#elif defined(OS_MAC) || defined(OS_WIN)
 INSTANTIATE_TEST_SUITE_P(SimpleEncode,
                          VideoEncodeAcceleratorTest,
                          ::testing::Values(std::make_tuple(1,

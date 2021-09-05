@@ -160,8 +160,7 @@ class CalendarEventCreateFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateEventComplete(
-      std::shared_ptr<calendar::CreateEventResult> results);
+  void CreateEventComplete(std::shared_ptr<calendar::EventResultCB> results);
 
  private:
   // The task tracker for the CalendarService callbacks.
@@ -403,7 +402,7 @@ class CalendarCreateEventExceptionFunction : public CalendarAsyncFunction {
 
   // Callback for the calendar function to provide results.
   void CreateEventExceptionComplete(
-      std::shared_ptr<calendar::CreateRecurrenceExceptionResult> results);
+      std::shared_ptr<calendar::EventResultCB> results);
 
  private:
   // The task tracker for the CalendarService callbacks.
@@ -616,12 +615,14 @@ class CalendarGetAllAccountsFunction : public CalendarFunctionWithCallback {
   DISALLOW_COPY_AND_ASSIGN(CalendarGetAllAccountsFunction);
 };
 
-class CalendarGetAllEventTemplatesFunction : public CalendarFunctionWithCallback {
-  DECLARE_EXTENSION_FUNCTION("calendar.getAllEventTemplates", CALENDAR_GETALLEVENT_TEMPLATES)
-public:
+class CalendarGetAllEventTemplatesFunction
+    : public CalendarFunctionWithCallback {
+  DECLARE_EXTENSION_FUNCTION("calendar.getAllEventTemplates",
+                             CALENDAR_GETALLEVENT_TEMPLATES)
+ public:
   CalendarGetAllEventTemplatesFunction() = default;
 
-protected:
+ protected:
   ~CalendarGetAllEventTemplatesFunction() override = default;
 
   // ExtensionFunction:
@@ -629,9 +630,9 @@ protected:
 
   // Callback for the calendar function to provide results.
   void GetAllEventTemplatesComplete(
-    std::shared_ptr<calendar::EventQueryResults> results);
+      std::shared_ptr<calendar::EventQueryResults> results);
 
-private:
+ private:
   DISALLOW_COPY_AND_ASSIGN(CalendarGetAllEventTemplatesFunction);
 };
 

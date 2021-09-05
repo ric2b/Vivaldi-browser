@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/anchor_element_metrics.h"
@@ -83,7 +84,7 @@ bool ShouldInterveneDownloadByFramePolicy(LocalFrame* frame) {
         should_intervene_download = true;
     }
   }
-  if (document.IsSandboxed(
+  if (frame->DomWindow()->IsSandboxed(
           network::mojom::blink::WebSandboxFlags::kDownloads)) {
     UseCounter::Count(document, WebFeature::kDownloadInSandbox);
     if (RuntimeEnabledFeatures::BlockingDownloadsInSandboxEnabled())
@@ -351,6 +352,10 @@ base::Optional<WebImpression> HTMLAnchorElement::GetImpressionForNavigation()
     const {
   DCHECK(HasImpression());
 
+  if (!RuntimeEnabledFeatures::ConversionMeasurementEnabled(
+          GetExecutionContext()))
+    return base::nullopt;
+
   if (!GetExecutionContext()->IsFeatureEnabled(
           mojom::blink::FeaturePolicyFeature::kConversionMeasurement)) {
     String message =
@@ -459,8 +464,8 @@ void HTMLAnchorElement::SendPings(const KURL& destination_url) const {
 void HTMLAnchorElement::HandleClick(Event& event) {
   event.SetDefaultHandled();
 
-  LocalFrame* frame = GetDocument().GetFrame();
-  if (!frame)
+  LocalDOMWindow* window = GetDocument().domWindow();
+  if (!window)
     return;
 
   if (!isConnected()) {
@@ -495,15 +500,24 @@ void HTMLAnchorElement::HandleClick(Event& event) {
 
   // Ignore the download attribute if we either can't read the content, or
   // the event is an alt-click or similar.
+  LocalFrame* frame = window->GetFrame();
   if (FastHasAttribute(html_names::kDownloadAttr) &&
       NavigationPolicyFromEvent(&event) != kNavigationPolicyDownload &&
-      GetDocument().GetSecurityOrigin()->CanReadContent(completed_url)) {
+      window->GetSecurityOrigin()->CanReadContent(completed_url)) {
     if (ShouldInterveneDownloadByFramePolicy(frame))
       return;
     request.SetSuggestedFilename(
         static_cast<String>(FastGetAttribute(html_names::kDownloadAttr)));
     request.SetRequestContext(mojom::RequestContextType::DOWNLOAD);
-    request.SetRequestorOrigin(GetDocument().GetSecurityOrigin());
+    request.SetRequestorOrigin(window->GetSecurityOrigin());
+    network::mojom::ReferrerPolicy referrer_policy =
+        request.GetReferrerPolicy();
+    if (referrer_policy == network::mojom::ReferrerPolicy::kDefault)
+      referrer_policy = window->GetReferrerPolicy();
+    Referrer referrer = SecurityPolicy::GenerateReferrer(
+        referrer_policy, completed_url, window->OutgoingReferrer());
+    request.SetReferrerString(referrer.referrer);
+    request.SetReferrerPolicy(referrer.referrer_policy);
     frame->DownloadURL(request, network::mojom::blink::RedirectMode::kManual);
     return;
   }
@@ -511,7 +525,7 @@ void HTMLAnchorElement::HandleClick(Event& event) {
   request.SetRequestContext(mojom::RequestContextType::HYPERLINK);
   request.SetHasUserGesture(LocalFrame::HasTransientUserActivation(frame));
   const AtomicString& target = FastGetAttribute(html_names::kTargetAttr);
-  FrameLoadRequest frame_request(&GetDocument(), request);
+  FrameLoadRequest frame_request(window, request);
   frame_request.SetNavigationPolicy(NavigationPolicyFromEvent(&event));
   frame_request.SetClientRedirectReason(ClientNavigationReason::kAnchorClick);
   if (HasRel(kRelationNoReferrer)) {
@@ -546,9 +560,7 @@ void HTMLAnchorElement::HandleClick(Event& event) {
   }
 
   // Only attach impressions for main frame navigations.
-  if (RuntimeEnabledFeatures::ConversionMeasurementEnabled(
-          GetExecutionContext()) &&
-      target_frame && target_frame->IsMainFrame() && request.HasUserGesture() &&
+  if (target_frame && target_frame->IsMainFrame() && request.HasUserGesture() &&
       HasImpression()) {
     base::Optional<WebImpression> impression = GetImpressionForNavigation();
     if (impression)

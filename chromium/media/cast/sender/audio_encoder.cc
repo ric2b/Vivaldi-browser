@@ -29,7 +29,7 @@
 #include "third_party/opus/src/include/opus.h"
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 #include <AudioToolbox/AudioToolbox.h>
 #endif
 
@@ -64,9 +64,8 @@ class AudioEncoder::ImplBase
         samples_per_frame_(samples_per_frame),
         callback_(std::move(callback)),
         operational_status_(STATUS_UNINITIALIZED),
-        frame_duration_(base::TimeDelta::FromMicroseconds(
-            base::Time::kMicrosecondsPerSecond * samples_per_frame_ /
-            sampling_rate)),
+        frame_duration_(base::TimeDelta::FromSecondsD(
+            double{samples_per_frame_} / sampling_rate)),
         buffer_fill_end_(0),
         frame_id_(FrameId::first()),
         samples_dropped_from_buffer_(0) {
@@ -105,7 +104,7 @@ class AudioEncoder::ImplBase
     if (!frame_capture_time_.is_null()) {
       const base::TimeDelta amount_ahead_by =
           recorded_time - (frame_capture_time_ + buffer_fill_duration);
-      const int64_t num_frames_missed = amount_ahead_by / frame_duration_;
+      const int64_t num_frames_missed = amount_ahead_by.IntDiv(frame_duration_);
       if (num_frames_missed > kUnderrunSkipThreshold) {
         samples_dropped_from_buffer_ += buffer_fill_end_;
         buffer_fill_end_ = 0;
@@ -157,8 +156,7 @@ class AudioEncoder::ImplBase
         // Compute encoder utilization as the real-world time elapsed divided
         // by the signal duration.
         audio_frame->encoder_utilization =
-            (base::TimeTicks::Now() - start_time).InSecondsF() /
-            frame_duration_.InSecondsF();
+            (base::TimeTicks::Now() - start_time) / frame_duration_;
 
         TRACE_EVENT_ASYNC_END1("cast.stream", "Audio Encode", audio_frame.get(),
                                "encoder_utilization",
@@ -332,7 +330,7 @@ class AudioEncoder::OpusImpl : public AudioEncoder::ImplBase {
 };
 #endif
 
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
 class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
   // AAC-LC has two access unit sizes (960 and 1024). The Apple encoder only
   // supports the latter.
@@ -705,7 +703,7 @@ class AudioEncoder::AppleAacImpl : public AudioEncoder::ImplBase {
 
   DISALLOW_COPY_AND_ASSIGN(AppleAacImpl);
 };
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
 
 class AudioEncoder::Pcm16Impl : public AudioEncoder::ImplBase {
  public:
@@ -772,12 +770,12 @@ AudioEncoder::AudioEncoder(
                            bitrate, std::move(frame_encoded_callback));
       break;
 #endif
-#if defined(OS_MACOSX)
+#if defined(OS_MAC)
     case CODEC_AUDIO_AAC:
       impl_ = new AppleAacImpl(cast_environment, num_channels, sampling_rate,
                                bitrate, std::move(frame_encoded_callback));
       break;
-#endif  // defined(OS_MACOSX)
+#endif  // defined(OS_MAC)
     case CODEC_AUDIO_PCM16:
       impl_ = new Pcm16Impl(cast_environment, num_channels, sampling_rate,
                             std::move(frame_encoded_callback));

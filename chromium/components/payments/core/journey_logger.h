@@ -62,7 +62,7 @@ class JourneyLogger {
     EVENT_SKIPPED_SHOW = 1 << 3,
     // .complete() was called by the merchant, completing the flow.
     EVENT_COMPLETED = 1 << 4,
-    // The user aborted the flow by either dismissing it explicitely, or
+    // The user aborted the flow by either dismissing it explicitly, or
     // navigating away (if possible).
     EVENT_USER_ABORTED = 1 << 5,
     // Other reasons for aborting include the merchant calling .abort(), the
@@ -108,7 +108,12 @@ class JourneyLogger {
     EVENT_AVAILABLE_METHOD_BASIC_CARD = 1 << 27,
     EVENT_AVAILABLE_METHOD_GOOGLE = 1 << 28,
     EVENT_AVAILABLE_METHOD_OTHER = 1 << 29,
-    EVENT_ENUM_MAX = 1 << 30,
+
+    // Bits for secure-payment-confirmation method.
+    EVENT_REQUEST_METHOD_SECURE_PAYMENT_CONFIRMATION = 1 << 30,
+    EVENT_SELECTED_SECURE_PAYMENT_CONFIRMATION = 1 << 31,
+
+    EVENT_ENUM_MAX = EVENT_SELECTED_SECURE_PAYMENT_CONFIRMATION,
   };
 
   // The reason why the Payment Request was aborted.
@@ -152,6 +157,30 @@ class JourneyLogger {
     kMaxValue = kRegularTransaction,
   };
 
+  // Records different checkout steps for payment requests. The difference
+  // between number of requests recorded for each step and its successor shows
+  // the drop-off that happened during that step.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.payments
+  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: CheckoutFunnelStep
+  enum class CheckoutFunnelStep {
+    // Payment request has been initiated.
+    kInitiated = 0,
+    // .show() has been called. (a.k.a. the user has clicked on the checkout/buy
+    // button on merchant's site.)
+    kShowCalled = 1,
+    // Payment request UI has been shown or skipped in favor of the payment
+    // handler UI. Drop-off before this step means that the browser could not
+    // proceed with the payment request. (e.g. because of no payment app being
+    // available for requested payment method(s) or an unsecured origin.)
+    kPaymentRequestTriggered = 2,
+    // Payment handler UI has been invoked either by skipping to it directly or
+    // the user clicking on the "Continue" button in payment sheet UI.
+    kPaymentHandlerInvoked = 3,
+    // Payment request has been completed with 'success' status.
+    kCompleted = 4,
+    kMaxValue = kCompleted,
+  };
+
   JourneyLogger(bool is_incognito, ukm::SourceId payment_request_source_id);
   ~JourneyLogger();
 
@@ -187,12 +216,15 @@ class JourneyLogger {
                                bool requested_name);
 
   // Records the requested payment method types. A value should be true if at
-  // least one payment method in the category (basic-card, google payment method
-  // or other url-based payment method, respectively) is requested.
+  // least one payment method in the category (basic-card, google payment
+  // method, secure payment confirmation method or other url-based payment
+  // method, respectively) is requested.
   // TODO(crbug.com/754811): Add support for non-basic-card, non-URL methods.
-  void SetRequestedPaymentMethodTypes(bool requested_basic_card,
-                                      bool requested_method_google,
-                                      bool requested_method_other);
+  void SetRequestedPaymentMethodTypes(
+      bool requested_basic_card,
+      bool requested_method_google,
+      bool requested_method_secure_payment_confirmation,
+      bool requested_method_other);
 
   // Records that the Payment Request was completed successfully, and starts the
   // logging of all the journey metrics.
@@ -206,16 +238,19 @@ class JourneyLogger {
   // reason.
   void SetNotShown(NotShownReason reason);
 
-  // Records the transcation amount after converting to USD separated by
+  // Records the transaction amount after converting to USD separated by
   // completion status (complete vs triggered).
   void RecordTransactionAmount(std::string currency,
                                const std::string& value,
                                bool completed);
 
+  // Increments the bucket count for the given checkout step.
+  void RecordCheckoutStep(CheckoutFunnelStep step);
+
   // Records when Payment Request .show is called.
   void SetTriggerTime();
 
-  // Sets the ukm source id of the selected app when it gets invoked.
+  // Sets the UKM source id of the selected app when it gets invoked.
   void SetPaymentAppUkmSourceId(ukm::SourceId payment_app_source_id);
 
  private:

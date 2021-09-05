@@ -78,19 +78,30 @@ void ClientSettings::UpdateFromProto(const ClientSettingsProto& proto) {
     tap_shutdown_delay =
         base::TimeDelta::FromMilliseconds(proto.tap_shutdown_delay_ms());
   }
-  if (proto.has_overlay_image() &&
-      IsValidOverlayImageProto(proto.overlay_image())) {
-    overlay_image = proto.overlay_image();
-  } else {
-    overlay_image.reset();
+  if (proto.has_overlay_image()) {
+    if (IsValidOverlayImageProto(proto.overlay_image())) {
+      overlay_image = proto.overlay_image();
+    } else {
+      overlay_image.reset();
+    }
   }
+  if (proto.has_talkback_sheet_size_fraction()) {
+    talkback_sheet_size_fraction = proto.talkback_sheet_size_fraction();
+  }
+  if (proto.has_back_button_settings()) {
+    if (proto.back_button_settings().has_message() &&
+        proto.back_button_settings().has_undo_label()) {
+      back_button_settings = proto.back_button_settings();
+    } else {
+      back_button_settings.reset();
+    }
+  }
+
+  // Test only settings.
   if (proto.has_integration_test_settings()) {
     integration_test_settings = proto.integration_test_settings();
   } else {
     integration_test_settings.reset();
-  }
-  if (proto.has_talkback_sheet_size_fraction()) {
-    talkback_sheet_size_fraction = proto.talkback_sheet_size_fraction();
   }
 }
 

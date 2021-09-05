@@ -26,7 +26,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/storage_partition.h"
@@ -35,14 +34,17 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/url_request/referrer_policy.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
+#include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/policy/status_collector/device_status_collector.h"
@@ -50,11 +52,15 @@
 #include "chrome/browser/chromeos/policy/status_uploader.h"
 #include "chrome/browser/chromeos/policy/system_log_uploader.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/ui/webui/management_ui_handler_chromeos.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/proxy/proxy_config_handler.h"
 #include "chromeos/network/proxy/ui_proxy_config_service.h"
+#include "chromeos/settings/cros_settings_names.h"
+#include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -129,6 +135,10 @@ const char kManagementOnBulkDataEntryEvent[] = "managementOnBulkDataEntryEvent";
 const char kManagementOnBulkDataEntryVisibleData[] =
     "managementOnBulkDataEntryVisibleData";
 
+const char kManagementOnPageVisitedEvent[] = "managementOnPageVisitedEvent";
+const char kManagementOnPageVisitedVisibleData[] =
+    "managementOnPageVisitedVisibleData";
+
 const char kReportingTypeDevice[] = "device";
 const char kReportingTypeExtensions[] = "extensions";
 const char kReportingTypeSecurity[] = "security";
@@ -160,7 +170,6 @@ const char kManagementPrinting[] = "managementPrinting";
 const char kManagementCrostini[] = "managementCrostini";
 const char kManagementCrostiniContainerConfiguration[] =
     "managementCrostiniContainerConfiguration";
-const char kManagementReportProxyServer[] = "managementReportProxyServer";
 const char kAccountManagedInfo[] = "accountManagedInfo";
 const char kDeviceManagedInfo[] = "deviceManagedInfo";
 const char kOverview[] = "overview";
@@ -178,9 +187,7 @@ bool IsProfileManaged(Profile* profile) {
 
 #if defined(OS_CHROMEOS)
 bool IsDeviceManaged() {
-  policy::BrowserPolicyConnectorChromeOS* connector =
-      g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return connector->IsEnterpriseManaged();
+  return webui::IsEnterpriseManaged();
 }
 #endif  // defined(OS_CHROMEOS)
 
@@ -205,8 +212,7 @@ enum class DeviceReportingType {
   kCrostini,
   kUsername,
   kExtensions,
-  kAndroidApplication,
-  kProxyServer
+  kAndroidApplication
 };
 
 // Corresponds to DeviceReportingType in management_browser_proxy.js
@@ -236,8 +242,6 @@ std::string ToJSDeviceReportingType(const DeviceReportingType& type) {
       return "extension";
     case DeviceReportingType::kAndroidApplication:
       return "android application";
-    case DeviceReportingType::kProxyServer:
-      return "proxy server";
     default:
       NOTREACHED() << "Unknown device reporting type";
       return "device";
@@ -384,6 +388,11 @@ void ManagementUIHandler::RegisterMessages() {
       "getDeviceReportingInfo",
       base::BindRepeating(&ManagementUIHandler::HandleGetDeviceReportingInfo,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getPluginVmDataCollectionStatus",
+      base::BindRepeating(
+          &ManagementUIHandler::HandleGetPluginVmDataCollectionStatus,
+          base::Unretained(this)));
 #endif  // defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "getThreatProtectionInfo",
@@ -585,7 +594,7 @@ void ManagementUIHandler::AddDeviceReportingInfo(
   }
 
   if (g_browser_process->local_state()->GetBoolean(
-          prefs::kCloudReportingEnabled) &&
+          enterprise_reporting::kCloudReportingEnabled) &&
       base::FeatureList::IsEnabled(features::kEnterpriseReportingInChromeOS)) {
     AddDeviceReportingElement(report_sources,
                               kManagementExtensionReportUsername,
@@ -596,18 +605,49 @@ void ManagementUIHandler::AddDeviceReportingInfo(
                               kManagementReportAndroidApplications,
                               DeviceReportingType::kAndroidApplication);
   }
+}
 
+bool ManagementUIHandler::IsUpdateRequiredEol() const {
+  const policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  policy::MinimumVersionPolicyHandler* handler =
+      connector->GetMinimumVersionPolicyHandler();
+  return handler && handler->ShouldShowUpdateRequiredEolBanner();
+}
+
+void ManagementUIHandler::AddUpdateRequiredEolInfo(
+    base::Value* response) const {
+  if (!device_managed_ || !IsUpdateRequiredEol()) {
+    response->SetStringPath("eolMessage", std::string());
+    return;
+  }
+
+  response->SetStringPath(
+      "eolMessage",
+      l10n_util::GetStringFUTF16(IDS_MANAGEMENT_UPDATE_REQUIRED_EOL_MESSAGE,
+                                 base::UTF8ToUTF16(GetDeviceDomain()),
+                                 ui::GetChromeOSDeviceName()));
+  std::string eol_admin_message;
+  chromeos::CrosSettings::Get()->GetString(
+      chromeos::kDeviceMinimumVersionAueMessage, &eol_admin_message);
+  response->SetStringPath("eolAdminMessage", eol_admin_message);
+}
+
+void ManagementUIHandler::AddProxyServerPrivacyDisclosure(
+    base::Value* response) const {
+  bool showProxyDisclosure = false;
   chromeos::NetworkHandler* network_handler = chromeos::NetworkHandler::Get();
   base::Value proxy_settings(base::Value::Type::DICTIONARY);
   // |ui_proxy_config_service| may be missing in tests. If the device is offline
   // (no network connected) the |DefaultNetwork| is null.
-  if (network_handler->has_ui_proxy_config_service() &&
+  if (chromeos::NetworkHandler::HasUiProxyConfigService() &&
       network_handler->network_state_handler()->DefaultNetwork()) {
     // Check if proxy is enforced by user policy, a forced install extension or
     // ONC policies. This will only read managed settings.
-    network_handler->ui_proxy_config_service()->MergeEnforcedProxyConfig(
-        network_handler->network_state_handler()->DefaultNetwork()->guid(),
-        &proxy_settings);
+    chromeos::NetworkHandler::GetUiProxyConfigService()
+        ->MergeEnforcedProxyConfig(
+            network_handler->network_state_handler()->DefaultNetwork()->guid(),
+            &proxy_settings);
   }
   if (!proxy_settings.DictEmpty()) {
     // Proxies can be specified by web server url, via a PAC script or via the
@@ -615,14 +655,12 @@ void ManagementUIHandler::AddDeviceReportingInfo(
     // mode, in which no proxy is used.
     base::Value* proxy_specification_mode = proxy_settings.FindPath(
         {::onc::network_config::kType, ::onc::kAugmentationActiveSetting});
-    bool use_proxy =
+    showProxyDisclosure =
         proxy_specification_mode &&
         proxy_specification_mode->GetString() != ::onc::proxy::kDirect;
-    if (use_proxy) {
-      AddDeviceReportingElement(report_sources, kManagementReportProxyServer,
-                                DeviceReportingType::kProxyServer);
-    }
   }
+  response->SetBoolPath("showProxyServerPrivacyDisclosure",
+                        showProxyDisclosure);
 }
 #endif
 
@@ -632,6 +670,8 @@ base::Value ManagementUIHandler::GetContextualManagedData(Profile* profile) {
   std::string management_domain = GetDeviceDomain();
   if (management_domain.empty())
     management_domain = GetAccountDomain(profile);
+  AddUpdateRequiredEolInfo(&response);
+  AddProxyServerPrivacyDisclosure(&response);
 #else
   std::string management_domain = GetAccountDomain(profile);
 
@@ -746,6 +786,17 @@ base::Value ManagementUIHandler::GetThreatProtectionInfo(
     info.Append(std::move(value));
   }
 
+  auto* on_page_visited_event =
+      chrome_policies.GetValue(policy::key::kEnterpriseRealTimeUrlCheckMode);
+  if (on_page_visited_event && on_page_visited_event->is_int() &&
+      on_page_visited_event->GetInt() !=
+          safe_browsing::REAL_TIME_CHECK_DISABLED) {
+    base::Value value(base::Value::Type::DICTIONARY);
+    value.SetStringKey("title", kManagementOnPageVisitedEvent);
+    value.SetStringKey("permission", kManagementOnPageVisitedVisibleData);
+    info.Append(std::move(value));
+  }
+
 #if defined(OS_CHROMEOS)
   std::string management_domain = GetDeviceDomain();
   if (management_domain.empty())
@@ -787,7 +838,7 @@ void ManagementUIHandler::AsyncUpdateLogo() {
   if (!url.empty() && GURL(url) != logo_url_) {
     icon_fetcher_ = std::make_unique<BitmapFetcher>(
         GURL(url), this, GetManagementUICustomerLogoAnnotation());
-    icon_fetcher_->Init(std::string(), net::URLRequest::NEVER_CLEAR_REFERRER,
+    icon_fetcher_->Init(std::string(), net::ReferrerPolicy::NEVER_CLEAR,
                         network::mojom::CredentialsMode::kOmit);
     auto* profile = Profile::FromWebUI(web_ui());
     icon_fetcher_->Start(
@@ -941,6 +992,18 @@ void ManagementUIHandler::HandleGetDeviceReportingInfo(
   ResolveJavascriptCallback(args->GetList()[0] /* callback_id */,
                             report_sources);
 }
+
+void ManagementUIHandler::HandleGetPluginVmDataCollectionStatus(
+    const base::ListValue* args) {
+  CHECK_EQ(1U, args->GetSize());
+  base::Value plugin_vm_data_collection_enabled(
+      Profile::FromWebUI(web_ui())->GetPrefs()->GetBoolean(
+          plugin_vm::prefs::kPluginVmDataCollectionAllowed));
+  AllowJavascript();
+  ResolveJavascriptCallback(args->GetList()[0] /* callback_id */,
+                            plugin_vm_data_collection_enabled);
+}
+
 #endif  // defined(OS_CHROMEOS)
 
 void ManagementUIHandler::HandleGetContextualManagedData(
@@ -973,6 +1036,15 @@ void ManagementUIHandler::NotifyBrowserReportingInfoUpdated() {
   AddReportingInfo(&report_sources);
   FireWebUIListener("browser-reporting-info-updated", report_sources);
 }
+
+#if defined(OS_CHROMEOS)
+void ManagementUIHandler::NotifyPluginVmDataCollectionUpdated() {
+  FireWebUIListener(
+      "plugin-vm-data-collection-updated",
+      base::Value(Profile::FromWebUI(web_ui())->GetPrefs()->GetBoolean(
+          plugin_vm::prefs::kPluginVmDataCollectionAllowed)));
+}
+#endif  // defined(OS_CHROMEOS)
 
 void ManagementUIHandler::NotifyThreatProtectionInfoUpdated() {
   FireWebUIListener("threat-protection-info-updated",
@@ -1044,6 +1116,14 @@ void ManagementUIHandler::AddObservers() {
       prefs::kSupervisedUserId,
       base::BindRepeating(&ManagementUIHandler::UpdateManagedState,
                           base::Unretained(this)));
+
+#if defined(OS_CHROMEOS)
+  pref_registrar_.Add(
+      plugin_vm::prefs::kPluginVmDataCollectionAllowed,
+      base::BindRepeating(
+          &ManagementUIHandler::NotifyPluginVmDataCollectionUpdated,
+          base::Unretained(this)));
+#endif  // defined(OS_CHROMEOS)
 }
 
 void ManagementUIHandler::RemoveObservers() {

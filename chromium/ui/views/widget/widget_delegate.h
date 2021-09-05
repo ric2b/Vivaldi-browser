@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_WIDGET_WIDGET_DELEGATE_H_
 #define UI_VIEWS_WIDGET_WIDGET_DELEGATE_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -242,19 +243,14 @@ class VIEWS_EXPORT WidgetDelegate {
 
   // Called by the Widget to create the NonClient Frame View for this widget.
   // Return NULL to use the default one.
-  virtual NonClientFrameView* CreateNonClientFrameView(Widget* widget);
+  virtual std::unique_ptr<NonClientFrameView> CreateNonClientFrameView(
+      Widget* widget);
 
   // Called by the Widget to create the overlay View for this widget. Return
   // NULL for no overlay. The overlay View will fill the Widget and sit on top
   // of the ClientView and NonClientFrameView (both visually and wrt click
   // targeting).
   virtual View* CreateOverlayView();
-
-  // Returns true if the window can be notified with the work area change.
-  // Otherwise, the work area change for the top window will be processed by
-  // the default window manager. In some cases, like panel, we would like to
-  // manage the positions by ourselves.
-  virtual bool WillProcessWorkAreaChange() const;
 
   // Returns true if window has a hit-test mask.
   virtual bool WidgetHasHitTestMask() const;

@@ -94,6 +94,8 @@ template("google_apis_tmpl") {
       "gaia/gaia_auth_fetcher.h",
       "gaia/gaia_auth_util.cc",
       "gaia/gaia_auth_util.h",
+      "gaia/gaia_config.cc",
+      "gaia/gaia_config.h",
       "gaia/gaia_constants.cc",
       "gaia/gaia_constants.h",
       "gaia/gaia_oauth_client.cc",
@@ -151,7 +153,7 @@ template("google_apis_tmpl") {
       deps += invoker.deps
     }
 
-    if (is_mac || is_ios) {
+    if (is_apple) {
       set_sources_assignment_filter([])
       sources += [
         "google_api_keys_mac.h",
@@ -159,7 +161,7 @@ template("google_apis_tmpl") {
       ]
       set_sources_assignment_filter(sources_assignment_filter)
 
-      libs = [ "Foundation.framework" ]
+      frameworks = [ "Foundation.framework" ]
     }
   }
 }
@@ -250,7 +252,7 @@ test("google_apis_unittests") {
     deps += [ "//google_apis/drive:drive_unittests" ]
   }
 
-  if (is_mac || is_ios) {
+  if (is_apple) {
     set_sources_assignment_filter([])
     sources += [ "google_api_keys_mac_unittest.mm" ]
     set_sources_assignment_filter(sources_assignment_filter)
@@ -264,6 +266,7 @@ bundle_data("google_apis_unittest_bundle_data") {
   sources = [
     "test/data/gaia/all_base_urls.json",
     "test/data/gaia/all_urls.json",
+    "test/data/gaia/api_keys.json",
     "test/data/gaia/bad_url.json",
     "test/data/gaia/bad_url_key.json",
     "test/data/gaia/bad_urls_key.json",
