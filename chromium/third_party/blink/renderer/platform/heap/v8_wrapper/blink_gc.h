@@ -5,8 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_V8_WRAPPER_BLINK_GC_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_V8_WRAPPER_BLINK_GC_H_
 
+#include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "v8/include/cppgc/liveness-broker.h"
+#include "v8/include/cppgc/trace-trait.h"
 
 namespace blink {
 
@@ -21,6 +24,11 @@ class PLATFORM_EXPORT BlinkGC final {
   enum StackState { kNoHeapPointersOnStack, kHeapPointersOnStack };
 };
 
+using Address = uint8_t*;
+using ConstAddress = const uint8_t*;
+
+using TraceCallback = cppgc::TraceCallback;
+using WeakCallback = void (*)(const cppgc::LivenessBroker&, const void*);
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_V8_WRAPPER_BLINK_GC_H_

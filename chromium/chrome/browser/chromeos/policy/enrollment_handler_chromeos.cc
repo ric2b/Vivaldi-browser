@@ -18,18 +18,16 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/policy/active_directory_join_delegate.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/dm_token_storage.h"
 #include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/policy/enrollment_status.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/attestation/attestation_flow.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/authpolicy/authpolicy_client.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -178,7 +176,7 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
     const std::string& client_id,
     const std::string& requisition,
     const std::string& sub_organization,
-    const EnrollmentCallback& completion_callback)
+    EnrollmentCallback completion_callback)
     : store_(store),
       install_attributes_(install_attributes),
       state_keys_broker_(state_keys_broker),
@@ -189,7 +187,7 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
       enrollment_config_(enrollment_config),
       client_id_(client_id),
       sub_organization_(sub_organization),
-      completion_callback_(completion_callback),
+      completion_callback_(std::move(completion_callback)),
       enrollment_step_(STEP_PENDING) {
   dm_auth_ = std::move(dm_auth);
   CHECK(!client_->is_registered());
@@ -765,7 +763,7 @@ void EnrollmentHandlerChromeOS::Stop() {
 }
 
 void EnrollmentHandlerChromeOS::ReportResult(EnrollmentStatus status) {
-  EnrollmentCallback callback = completion_callback_;
+  EnrollmentCallback callback = std::move(completion_callback_);
   Stop();
 
   if (status.status() != EnrollmentStatus::SUCCESS) {
@@ -777,7 +775,7 @@ void EnrollmentHandlerChromeOS::ReportResult(EnrollmentStatus status) {
   }
 
   if (!callback.is_null())
-    callback.Run(status);
+    std::move(callback).Run(status);
 }
 
 void EnrollmentHandlerChromeOS::SetStep(EnrollmentStep step) {

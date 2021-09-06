@@ -35,6 +35,11 @@
 // Delegate for actions relating to the NTP content.
 @property(nonatomic, weak) id<NewTabPageContentDelegate> ntpContentDelegate;
 
+// Identity disc shown in the NTP.
+// TODO(crbug.com/1170995): Remove once the Feed header properly supports
+// ContentSuggestions.
+@property(nonatomic, weak) UIButton* identityDiscButton;
+
 // Initializes view controller with NTP content view controllers.
 // |discoverFeedViewController| represents the Discover feed for suggesting
 // articles. |contentSuggestionsViewController| represents other content
@@ -50,22 +55,21 @@
 // Called when a snapshot of the content will be taken.
 - (void)willUpdateSnapshot;
 
-// Sets the feed collection contentOffset to |offset| to set the initial scroll
-// position.
-- (void)setContentOffset:(CGFloat)offset;
+// Stops scrolling in the scroll view.
+- (void)stopScrolling;
 
-// Updates this ViewController layout to match the new ContentSuggestions
+// Sets the feed collection contentOffset from the saved state to |offset| to
+// set the initial scroll position.
+- (void)setSavedContentOffset:(CGFloat)offset;
+
+// Updates the ContentSuggestionsViewController and its header for the current
 // layout.
 // TODO(crbug.com/1170995): Remove once ContentSuggestions can be added as part
 // of a header.
-- (void)updateLayoutForContentSuggestions;
+- (void)updateContentSuggestionForCurrentLayout;
 
 // Returns the current height of the content suggestions content.
 - (CGFloat)contentSuggestionsContentHeight;
-
-// Handles device rotation logic.
-// TODO(crbug.com/1177953): Detect device rotation in NewTabPageViewController.
-- (void)handleDeviceRotation;
 
 @end
 

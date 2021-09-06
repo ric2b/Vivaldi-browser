@@ -35,14 +35,34 @@ constexpr base::FeatureParam<base::TimeDelta> kFallbackDelay{
     omnibox::kDefaultTypedNavigationsToHttpsTimeoutParam,
     base::TimeDelta::FromSeconds(3)};
 
+int g_https_port_for_testing = 0;
+
+// Used to compute the fallback URL from the https URL.
+int g_http_port_for_testing = 0;
+
 bool IsNavigationUsingHttpsAsDefaultScheme(content::NavigationHandle* handle) {
   content::NavigationUIData* ui_data = handle->GetNavigationUIData();
   // UI data can be null in the case of navigations to interstitials.
   if (!ui_data) {
     return false;
   }
-  return static_cast<ChromeNavigationUIData*>(ui_data)
-      ->is_using_https_as_default_scheme();
+  // Only handle HTTPS navigations typed in the omnibox. If a navigation has
+  // HTTP URL, either the omnibox didn't upgrade the navigation to HTTPS, or it
+  // previously upgraded and we fell back to HTTP so there is no need to
+  // observe again.
+  // TODO(crbug.com/1161620): There are cases where we don't currently upgrade
+  // even though we probably should. Make a decision for the ones listed in the
+  // bug and potentially identify more.
+  bool is_using_https_as_default_scheme =
+      static_cast<ChromeNavigationUIData*>(ui_data)
+          ->is_using_https_as_default_scheme();
+  return is_using_https_as_default_scheme && handle->IsInMainFrame() &&
+         !handle->IsSameDocument() &&
+         handle->GetURL().SchemeIs(url::kHttpsScheme) &&
+         !handle->GetWebContents()->IsPortal() &&
+         ui::PageTransitionCoreTypeIs(handle->GetPageTransition(),
+                                      ui::PAGE_TRANSITION_TYPED) &&
+         ui::PageTransitionIsNewNavigation(handle->GetPageTransition());
 }
 
 void RecordUMA(TypedNavigationUpgradeThrottle::Event event) {
@@ -86,10 +106,20 @@ class TypedNavigationUpgradeLifetimeHelper
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(TypedNavigationUpgradeLifetimeHelper)
 
-GURL GetHttpUrl(const GURL& url) {
+GURL GetHttpUrl(const GURL& url, int http_fallback_port_for_testing) {
   DCHECK_EQ(url::kHttpsScheme, url.scheme());
   GURL::Replacements replacements;
   replacements.SetSchemeStr(url::kHttpScheme);
+
+  // This needs to be in scope when ReplaceComponents() is called:
+  const std::string port_str =
+      base::NumberToString(http_fallback_port_for_testing);
+  if (http_fallback_port_for_testing) {
+    // We'll only get here in tests. Tests should always have a non-default
+    // port on the input text.
+    DCHECK(!url.port().empty());
+    replacements.SetPortStr(port_str);
+  }
   return url.ReplaceComponents(replacements);
 }
 
@@ -105,29 +135,13 @@ TypedNavigationUpgradeThrottle::MaybeCreateThrottleFor(
     content::NavigationHandle* handle) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // Only observe HTTPS navigations typed in the omnibox. If a navigation has
-  // HTTP URL, either the omnibox didn't upgrade the navigation to HTTPS, or it
-  // previously upgraded and we fell back to HTTP so there is no need to
-  // observe again.
-  // TODO(crbug.com/1161620): There are cases where we don't currently upgrade
-  // even though we probably should. Make a decision for the ones listed in the
-  // bug and potentially identify more.
-  if (!handle->IsInMainFrame() || handle->IsSameDocument() ||
-      !handle->GetURL().SchemeIs(url::kHttpsScheme) ||
-      handle->GetWebContents()->IsPortal() ||
-      !ui::PageTransitionCoreTypeIs(handle->GetPageTransition(),
-                                    ui::PAGE_TRANSITION_TYPED) ||
-      !ui::PageTransitionIsNewNavigation(handle->GetPageTransition())) {
-    return nullptr;
-  }
-  // Typed main frame navigations can only be GET requests.
-  DCHECK(!handle->IsPost());
-
   // Check if the omnibox added https as the default scheme for this navigation.
   // If not, no need to create the throttle.
   if (!IsNavigationUsingHttpsAsDefaultScheme(handle)) {
     return nullptr;
   }
+  // Typed main frame navigations can only be GET requests.
+  DCHECK(!handle->IsPost());
 
   return base::WrapUnique(new TypedNavigationUpgradeThrottle(handle));
 }
@@ -138,6 +152,7 @@ content::NavigationThrottle::ThrottleCheckResult
 TypedNavigationUpgradeThrottle::WillStartRequest() {
   DCHECK_EQ(url::kHttpsScheme, navigation_handle()->GetURL().scheme());
   RecordUMA(Event::kHttpsLoadStarted);
+  metrics_timer_.Begin();
   timer_.Start(FROM_HERE, kFallbackDelay.Get(), this,
                &TypedNavigationUpgradeThrottle::OnHttpsLoadTimeout);
   return content::NavigationThrottle::PROCEED;
@@ -158,6 +173,9 @@ TypedNavigationUpgradeThrottle::WillFailRequest() {
     return content::NavigationThrottle::PROCEED;
   }
 
+  UmaHistogramTimes("TypedNavigationUpgradeThrottle.UpgradeFailTime",
+                    metrics_timer_.Elapsed());
+
   if (net::IsCertStatusError(cert_status)) {
     RecordUMA(Event::kHttpsLoadFailedWithCertError);
   } else if (navigation_handle()->GetNetErrorCode() != net::OK) {
@@ -174,11 +192,19 @@ TypedNavigationUpgradeThrottle::WillFailRequest() {
 }
 
 content::NavigationThrottle::ThrottleCheckResult
+TypedNavigationUpgradeThrottle::WillRedirectRequest() {
+  RecordUMA(Event::kRedirected);
+  return content::NavigationThrottle::PROCEED;
+}
+
+content::NavigationThrottle::ThrottleCheckResult
 TypedNavigationUpgradeThrottle::WillProcessResponse() {
   DCHECK_EQ(url::kHttpsScheme, navigation_handle()->GetURL().scheme());
   // If we got here, HTTPS load succeeded. Stop the timer.
   RecordUMA(Event::kHttpsLoadSucceeded);
   timer_.Stop();
+  UmaHistogramTimes("TypedNavigationUpgradeThrottle.UpgradeSuccessTime",
+                    metrics_timer_.Elapsed());
   return content::NavigationThrottle::PROCEED;
 }
 
@@ -196,10 +222,27 @@ bool TypedNavigationUpgradeThrottle::
          IsNavigationUsingHttpsAsDefaultScheme(handle);
 }
 
+// static
+int TypedNavigationUpgradeThrottle::GetHttpsPortForTesting() {
+  return g_https_port_for_testing;
+}
+
+// static
+void TypedNavigationUpgradeThrottle::SetHttpsPortForTesting(
+    int https_port_for_testing) {
+  g_https_port_for_testing = https_port_for_testing;
+}
+
+// static
+void TypedNavigationUpgradeThrottle::SetHttpPortForTesting(
+    int http_port_for_testing) {
+  g_http_port_for_testing = http_port_for_testing;
+}
+
 TypedNavigationUpgradeThrottle::TypedNavigationUpgradeThrottle(
     content::NavigationHandle* handle)
     : content::NavigationThrottle(handle),
-      http_url_(GetHttpUrl(handle->GetURL())) {}
+      http_url_(GetHttpUrl(handle->GetURL(), g_http_port_for_testing)) {}
 
 void TypedNavigationUpgradeThrottle::OnHttpsLoadTimeout() {
   RecordUMA(Event::kHttpsLoadTimedOut);

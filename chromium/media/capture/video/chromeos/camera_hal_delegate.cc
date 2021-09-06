@@ -22,9 +22,9 @@
 #include "base/strings/string_util.h"
 #include "base/system/system_monitor.h"
 #include "base/unguessable_token.h"
-#include "media/capture/video/chromeos/camera_app_device_bridge_impl.h"
+#include "components/device_event_log/device_event_log.h"
+#include "media/capture/video/chromeos/ash/camera_hal_dispatcher_impl.h"
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
-#include "media/capture/video/chromeos/camera_hal_dispatcher_impl.h"
 #include "media/capture/video/chromeos/camera_metadata_utils.h"
 #include "media/capture/video/chromeos/video_capture_device_chromeos_delegate.h"
 #include "media/capture/video/chromeos/video_capture_device_chromeos_halv3.h"
@@ -164,7 +164,7 @@ void CameraHalDelegate::OnRegisteredCameraHalClient(int32_t result) {
     camera_hal_client_registered_.Signal();
     return;
   }
-  VLOG(1) << "Registered camera HAL client";
+  CAMERA_LOG(EVENT) << "Registered camera HAL client";
   authenticated_ = true;
   camera_hal_client_registered_.Signal();
 }
@@ -184,8 +184,7 @@ void CameraHalDelegate::Reset() {
 
 std::unique_ptr<VideoCaptureDevice> CameraHalDelegate::CreateDevice(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_screen_observer,
-    const VideoCaptureDeviceDescriptor& device_descriptor,
-    CameraAppDeviceBridgeImpl* camera_app_device_bridge) {
+    const VideoCaptureDeviceDescriptor& device_descriptor) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!UpdateBuiltInCameraInfo()) {
     return nullptr;
@@ -196,8 +195,8 @@ std::unique_ptr<VideoCaptureDevice> CameraHalDelegate::CreateDevice(
     return nullptr;
   }
 
-  auto* delegate = GetVCDDelegate(task_runner_for_screen_observer,
-                                  device_descriptor, camera_app_device_bridge);
+  auto* delegate =
+      GetVCDDelegate(task_runner_for_screen_observer, device_descriptor);
   return std::make_unique<VideoCaptureDeviceChromeOSHalv3>(delegate,
                                                            device_descriptor);
 }
@@ -265,8 +264,9 @@ void CameraHalDelegate::GetSupportedFormats(
         continue;
       }
 
-      VLOG(1) << "Supported format: " << width << "x" << height
-              << " fps=" << fps << " format=" << cr_format.video_format;
+      CAMERA_LOG(EVENT) << "Supported format: " << width << "x" << height
+                        << " fps=" << fps
+                        << " format=" << cr_format.video_format;
       supported_formats->emplace_back(gfx::Size(width, height), fps,
                                       cr_format.video_format);
     }
@@ -494,39 +494,19 @@ int CameraHalDelegate::GetCameraIdFromDeviceId(const std::string& device_id) {
 
 VideoCaptureDeviceChromeOSDelegate* CameraHalDelegate::GetVCDDelegate(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_screen_observer,
-    const VideoCaptureDeviceDescriptor& device_descriptor,
-    CameraAppDeviceBridgeImpl* camera_app_device_bridge) {
+    const VideoCaptureDeviceDescriptor& device_descriptor) {
   auto camera_id = GetCameraIdFromDeviceId(device_descriptor.device_id);
   auto it = vcd_delegate_map_.find(camera_id);
   if (it == vcd_delegate_map_.end() || it->second->HasDeviceClient() == 0) {
-    std::unique_ptr<VideoCaptureDeviceChromeOSDelegate> delegate;
-    if (camera_app_device_bridge) {
-      auto* camera_app_device = camera_app_device_bridge->GetCameraAppDevice(
-          device_descriptor.device_id);
-      // Since the cleanup callback will be triggered when VideoCaptureDevice
-      // died and |camera_app_device_bridge| is actually owned by
-      // VideoCaptureServiceImpl, it should be safe to assume
-      // |camera_app_device_bridge| is still valid here.
-      auto cleanup_callback = base::BindOnce(
-          [](const std::string& device_id, int camera_id,
-             CameraAppDeviceBridgeImpl* bridge,
-             base::flat_map<
-                 int, std::unique_ptr<VideoCaptureDeviceChromeOSDelegate>>*
-                 vcd_delegate_map) {
-            bridge->OnDeviceClosed(device_id);
-            vcd_delegate_map->erase(camera_id);
-          },
-          device_descriptor.device_id, camera_id, camera_app_device_bridge,
-          &vcd_delegate_map_);
-
-      delegate = std::make_unique<VideoCaptureDeviceChromeOSDelegate>(
-          std::move(task_runner_for_screen_observer), device_descriptor, this,
-          camera_app_device, std::move(cleanup_callback));
-    } else {
-      delegate = std::make_unique<VideoCaptureDeviceChromeOSDelegate>(
-          std::move(task_runner_for_screen_observer), device_descriptor, this,
-          nullptr, base::DoNothing());
-    }
+    auto cleanup_callback = base::BindOnce(
+        [](int camera_id,
+           base::flat_map<int,
+                          std::unique_ptr<VideoCaptureDeviceChromeOSDelegate>>*
+               vcd_delegate_map) { vcd_delegate_map->erase(camera_id); },
+        camera_id, &vcd_delegate_map_);
+    auto delegate = std::make_unique<VideoCaptureDeviceChromeOSDelegate>(
+        std::move(task_runner_for_screen_observer), device_descriptor, this,
+        std::move(cleanup_callback));
     vcd_delegate_map_[camera_id] = std::move(delegate);
     return vcd_delegate_map_[camera_id].get();
   }
@@ -600,7 +580,7 @@ void CameraHalDelegate::OnGotNumberOfCamerasOnIpcThread(int32_t num_cameras) {
     LOG(ERROR) << "Failed to get number of cameras: " << num_cameras;
     return;
   }
-  VLOG(1) << "Number of built-in cameras: " << num_cameras;
+  CAMERA_LOG(EVENT) << "Number of built-in cameras: " << num_cameras;
   num_builtin_cameras_ = num_cameras;
   // Per camera HAL v3 specification SetCallbacks() should be called after the
   // first time GetNumberOfCameras() is called, and before other CameraModule
@@ -709,7 +689,8 @@ void CameraHalDelegate::CameraDeviceStatusChange(
     int32_t camera_id,
     cros::mojom::CameraDeviceStatus new_status) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
-  VLOG(1) << "camera_id = " << camera_id << ", new_status = " << new_status;
+  CAMERA_LOG(EVENT) << "camera_id = " << camera_id
+                    << ", new_status = " << new_status;
   base::AutoLock lock(camera_info_lock_);
   auto it = camera_info_.find(camera_id);
   switch (new_status) {

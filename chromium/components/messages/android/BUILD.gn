@@ -32,11 +32,12 @@ android_library("java") {
     "//components/browser_ui/banners/android:java",
     "//components/browser_ui/widget/android:java",
     "//content/public/android:content_java",
-    "//third_party/android_deps:androidx_annotation_annotation_java",
-    "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
-    "//third_party/android_deps:androidx_core_core_java",
+    "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
+    "//third_party/androidx:androidx_core_core_java",
     "//ui/android:ui_java",
   ]
+
   srcjar_deps = [ ":message_enums_java" ]
 }
 
@@ -72,6 +73,19 @@ static_library("android") {
     ":jni_headers",
     "//base",
     "//content/public/browser",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "mock_message_dispatcher_bridge.cc",
+    "mock_message_dispatcher_bridge.h",
+  ]
+
+  deps = [
+    ":android",
+    "//testing/gmock",
   ]
 }
 
@@ -123,14 +137,14 @@ android_library("javatests") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//content/public/test/android:content_java_test_support",
-    "//third_party/android_deps:androidx_annotation_annotation_java",
-    "//third_party/android_deps:androidx_appcompat_appcompat_java",
-    "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
-    "//third_party/android_deps:androidx_core_core_java",
-    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_deps:espresso_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/androidx:androidx_appcompat_appcompat_java",
+    "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
+    "//third_party/androidx:androidx_core_core_java",
+    "//third_party/androidx:androidx_test_runner_java",
     "//third_party/junit",
     "//third_party/mockito:mockito_java",
     "//ui/android:ui_java",
@@ -153,8 +167,8 @@ java_library("junit") {
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
     "//components/browser_ui/widget/android:java",
-    "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_deps:robolectric_all_java",
+    "//third_party/androidx:androidx_test_runner_java",
     "//third_party/hamcrest:hamcrest_core_java",
     "//third_party/hamcrest:hamcrest_library_java",
     "//third_party/junit",

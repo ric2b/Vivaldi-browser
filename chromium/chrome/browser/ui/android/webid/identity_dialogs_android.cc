@@ -13,17 +13,26 @@
 #include "url/gurl.h"
 
 // Stub implementations for Identity UI on Android.
-
-void ShowWebIDPermissionInfoBar(
-    content::WebContents* web_contents,
-    const base::string16& message,
+void ShowInitialWebIdPermissionDialog(
+    content::WebContents* rp_web_contents,
+    const base::string16& idp_hostname,
+    const base::string16& rp_hostname,
     content::IdentityRequestDialogController::InitialApprovalCallback
         callback) {
   NOTIMPLEMENTED();
 }
 
-WebIDSigninWindow* ShowWebIDSigninWindow(
-    content::WebContents* initiator_web_contents,
+void ShowTokenExchangeWebIdPermissionDialog(
+    content::WebContents* rp_web_contents,
+    const base::string16& idp_hostname,
+    const base::string16& rp_hostname,
+    content::IdentityRequestDialogController::TokenExchangeApprovalCallback
+        callback) {
+  NOTIMPLEMENTED();
+}
+
+WebIdSigninWindow* ShowWebIdSigninWindow(
+    content::WebContents* rp_web_contents,
     content::WebContents* idp_web_contents,
     const GURL& idp_signin_url,
     content::IdentityRequestDialogController::IdProviderWindowClosedCallback
@@ -32,6 +41,6 @@ WebIDSigninWindow* ShowWebIDSigninWindow(
   return nullptr;
 }
 
-void CloseWebIDSigninWindow(WebIDSigninWindow* window) {
+void CloseWebIdSigninWindow(WebIdSigninWindow* window) {
   NOTIMPLEMENTED();
 }

@@ -141,6 +141,88 @@ class CC_EXPORT CompositorFrameReporter {
     kSmoothBoth
   };
 
+  // Holds a processed list of Blink breakdowns with an `Iterator` class to
+  // easily iterator over them.
+  class CC_EXPORT ProcessedBlinkBreakdown {
+   public:
+    class Iterator {
+     public:
+      explicit Iterator(const ProcessedBlinkBreakdown* owner);
+      ~Iterator();
+
+      bool IsValid() const;
+      void Advance();
+      BlinkBreakdown GetBreakdown() const;
+      base::TimeDelta GetLatency() const;
+
+     private:
+      const ProcessedBlinkBreakdown* owner_;
+
+      size_t index_ = 0;
+    };
+
+    ProcessedBlinkBreakdown(base::TimeTicks blink_start_time,
+                            base::TimeTicks begin_main_frame_start,
+                            const BeginMainFrameMetrics& blink_breakdown);
+    ~ProcessedBlinkBreakdown();
+
+    ProcessedBlinkBreakdown(const ProcessedBlinkBreakdown&) = delete;
+    ProcessedBlinkBreakdown& operator=(const ProcessedBlinkBreakdown&) = delete;
+
+    // Returns a new iterator for the Blink breakdowns.
+    Iterator CreateIterator() const;
+
+   private:
+    base::TimeDelta list_[static_cast<int>(BlinkBreakdown::kBreakdownCount)];
+  };
+
+  // Holds a processed list of Viz breakdowns with an `Iterator` class to easily
+  // iterate over them.
+  class CC_EXPORT ProcessedVizBreakdown {
+   public:
+    class Iterator {
+     public:
+      Iterator(const ProcessedVizBreakdown* owner,
+               bool skip_swap_start_to_swap_end);
+      ~Iterator();
+
+      bool IsValid() const;
+      void Advance();
+      VizBreakdown GetBreakdown() const;
+      base::TimeTicks GetStartTime() const;
+      base::TimeTicks GetEndTime() const;
+      base::TimeDelta GetDuration() const;
+
+     private:
+      const ProcessedVizBreakdown* owner_;
+      const bool skip_swap_start_to_swap_end_;
+
+      size_t index_ = 0;
+    };
+
+    ProcessedVizBreakdown(base::TimeTicks viz_start_time,
+                          const viz::FrameTimingDetails& viz_breakdown);
+    ~ProcessedVizBreakdown();
+
+    ProcessedVizBreakdown(const ProcessedVizBreakdown&) = delete;
+    ProcessedVizBreakdown& operator=(const ProcessedVizBreakdown&) = delete;
+
+    // Returns a new iterator for the Viz breakdowns. If buffer ready breakdowns
+    // are available, `skip_swap_start_to_swap_end_if_breakdown_available` can
+    // be used to skip `kSwapStartToSwapEnd` breakdown.
+    Iterator CreateIterator(
+        bool skip_swap_start_to_swap_end_if_breakdown_available) const;
+
+    base::TimeTicks swap_start() const { return swap_start_; }
+
+   private:
+    base::Optional<std::pair<base::TimeTicks, base::TimeTicks>>
+        list_[static_cast<int>(VizBreakdown::kBreakdownCount)];
+
+    bool buffer_ready_available_ = false;
+    base::TimeTicks swap_start_;
+  };
+
   using ActiveTrackers =
       std::bitset<static_cast<size_t>(FrameSequenceTrackerType::kMaxType)>;
 
@@ -251,16 +333,6 @@ class CC_EXPORT CompositorFrameReporter {
       base::TimeDelta time_delta) const;
 
   void ReportEventLatencyHistograms() const;
-  void ReportEventLatencyBlinkBreakdowns(
-      int histogram_base_index,
-      const std::string& histogram_base_name) const;
-  void ReportEventLatencyVizBreakdowns(
-      int histogram_base_index,
-      const std::string& histogram_base_name) const;
-  void ReportEventLatencyHistogram(int histogram_base_index,
-                                   const std::string& histogram_base_name,
-                                   int stage_type_index,
-                                   base::TimeDelta latency) const;
 
   void ReportCompositorLatencyTraceEvents() const;
   void ReportEventLatencyTraceEvents() const;
@@ -271,9 +343,6 @@ class CC_EXPORT CompositorFrameReporter {
   bool TestReportType(FrameReportType report_type) const {
     return report_types_.test(static_cast<size_t>(report_type));
   }
-
-  void PopulateBlinkBreakdownList();
-  void PopulateVizBreakdownList();
 
   // This method is only used for DCheck
   base::TimeDelta SumOfStageHistory() const;
@@ -292,13 +361,11 @@ class CC_EXPORT CompositorFrameReporter {
 
   BeginMainFrameMetrics blink_breakdown_;
   base::TimeTicks blink_start_time_;
-  base::TimeDelta
-      blink_breakdown_list_[static_cast<int>(BlinkBreakdown::kBreakdownCount)];
+  std::unique_ptr<ProcessedBlinkBreakdown> processed_blink_breakdown_;
 
   viz::FrameTimingDetails viz_breakdown_;
   base::TimeTicks viz_start_time_;
-  base::Optional<std::pair<base::TimeTicks, base::TimeTicks>>
-      viz_breakdown_list_[static_cast<int>(VizBreakdown::kBreakdownCount)];
+  std::unique_ptr<ProcessedVizBreakdown> processed_viz_breakdown_;
 
   // Stage data is recorded here. On destruction these stages will be reported
   // to UMA if the termination status is |kPresentedFrame|. Reported data will

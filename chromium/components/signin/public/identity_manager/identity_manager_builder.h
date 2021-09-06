@@ -42,7 +42,7 @@ class NetworkConnectionTracker;
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-namespace chromeos {
+namespace ash {
 class AccountManager;
 }
 #endif
@@ -70,7 +70,7 @@ struct IdentityManagerBuildParams {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::AccountManager* account_manager;
+  ash::AccountManager* account_manager;
   bool is_regular_profile;
 #endif
 
@@ -81,6 +81,8 @@ struct IdentityManagerBuildParams {
 #if defined(OS_WIN)
   base::RepeatingCallback<bool()> reauth_callback;
 #endif
+
+  bool allow_access_token_fetch = true;
 };
 
 // Builds all required dependencies to initialize the IdentityManager instance.

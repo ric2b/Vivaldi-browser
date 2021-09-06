@@ -52,6 +52,9 @@ public final class ChromePreferenceKeys {
     public static final String ACCOUNT_PICKER_BOTTOM_SHEET_SHOWN_COUNT =
             "Chrome.AccountPickerBottomSheet.ShownCount";
 
+    public static final String ACCOUNT_PICKER_BOTTOM_SHEET_ACTIVE_DISMISSAL_COUNT =
+            "Chrome.AccountPickerBottomSheet.ConsecutiveActiveDismissalCount";
+
     /** The language code to override application language with. */
     public static final String APPLICATION_OVERRIDE_LANGUAGE =
             "Chrome.Language.ApplicationOverrideLanguage";
@@ -59,8 +62,6 @@ public final class ChromePreferenceKeys {
     public static final String APP_LOCALE = "locale";
 
     /** Assistant voice search keys. */
-    public static final String ASSISTANT_LAST_VERSION = "Chrome.Assistant.LastVersion";
-    public static final String ASSISTANT_VOICE_SEARCH_SUPPORTED = "Chrome.Assistant.Supported";
     public static final String ASSISTANT_VOICE_SEARCH_ENABLED = "Chrome.Assistant.Enabled";
 
     /** Whether Autofill Assistant is enabled */
@@ -438,6 +439,10 @@ public final class ChromePreferenceKeys {
     public static final String FLAGS_CACHED_TAB_GROUPS_ANDROID_ENABLED =
             "tab_group_android_enabled";
 
+    /** See CachedFeatureFlags.getLastCachedMinimalBrowserFlagsTimeMillis(). */
+    public static final String FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS =
+            "Chrome.Flags.LastCachedMinimalBrowserFlagsTimeMillis";
+
     public static final String FONT_USER_FONT_SCALE_FACTOR = "user_font_scale_factor";
     public static final String FONT_USER_SET_FORCE_ENABLE_ZOOM = "user_set_force_enable_zoom";
 
@@ -515,6 +520,27 @@ public final class ChromePreferenceKeys {
     public static final String OFFLINE_INDICATOR_V2_ENABLED = "offline_indicator_v2_enabled";
 
     /**
+     * The wall time of when the offline indicator was shown in milliseconds.
+     */
+    public static final String OFFLINE_INDICATOR_V2_WALL_TIME_SHOWN_MS =
+            "Chrome.OfflineIndicatorV2.WallTimeShownMs";
+
+    /**
+     * Used to divide the duration that the offline indicator is shown between when Chrome is in the
+     * foreground and the background.
+     */
+    public static final String OFFLINE_INDICATOR_V2_LAST_UPDATE_WALL_TIME_MS =
+            "Chrome.OfflineIndicatorV2.LastUpdateWallTimeMs";
+    public static final String OFFLINE_INDICATOR_V2_TIME_IN_FOREGROUND_MS =
+            "Chrome.OfflineIndicatorV2.TimeInForegroundMs";
+    public static final String OFFLINE_INDICATOR_V2_TIME_IN_BACKGROUND_MS =
+            "Chrome.OfflineIndicatorV2.TimeInBackgroundMs";
+    public static final String OFFLINE_INDICATOR_V2_FIRST_TIME_IN_FOREGROUND_MS =
+            "Chrome.OfflineIndicatorV2.FirstTimeInForegroundMs";
+    public static final String OFFLINE_INDICATOR_V2_NUM_TIMES_BACKGROUNDED =
+            "Chrome.OfflineIndicatorV2.NumTimesBackgrounded";
+
+    /**
      * The measurement interval (in minutes) used to schedule the currently running
      * OfflineMeasureBackgroundTask. This value is zero if the OfflineMeasureBackgroundTask is not
      * currently running.
@@ -562,12 +588,17 @@ public final class ChromePreferenceKeys {
     public static final String PREFETCH_OFFLINE_COUNTER = "prefetch_notification_offline_counter";
 
     /**
-     * Whether users turn on the feature getting price drop alerts.
+     * Whether the PriceAlertsMessageCard is enabled.
      */
-    public static final String PRICE_TRACKING_PRICE_DROP_ALERTS =
-            "Chrome.PriceTracking.PriceDropAlerts";
+    public static final String PRICE_TRACKING_PRICE_ALERTS_MESSAGE_CARD =
+            "Chrome.PriceTracking.PriceAlerts";
     /**
-     * Whether users disable the PriceWelcomeMessageCard.
+     * Indicates how many times the PriceAlertsMessageCard has shown in the tab switcher.
+     */
+    public static final String PRICE_TRACKING_PRICE_ALERTS_MESSAGE_CARD_SHOW_COUNT =
+            "Chrome.PriceTracking.PriceAlertsShowCount";
+    /**
+     * Whether the PriceWelcomeMessageCard is enabled.
      */
     public static final String PRICE_TRACKING_PRICE_WELCOME_MESSAGE_CARD =
             "Chrome.PriceTracking.PriceWelcome";
@@ -602,6 +633,29 @@ public final class ChromePreferenceKeys {
      * Default value is false.
      */
     public static final String PROMOS_SKIPPED_ON_FIRST_START = "promos_skipped_on_first_start";
+
+    /**
+     * The next timestamp to decide whether to show query tiles.
+     */
+    public static final String QUERY_TILES_NEXT_DISPLAY_DECISION_TIME_MS =
+            "Chrome.Querytiles.NextDecisionTime";
+
+    /**
+     * Recent number of MV tile clicks, before the decision time.
+     */
+    public static final String QUERY_TILES_NUM_RECENT_MV_TILE_CLICKS =
+            "Chrome.Querytiles.RecentMvClicks";
+
+    /**
+     * Recent number of query tile clicks, before the decision time.
+     */
+    public static final String QUERY_TILES_NUM_RECENT_QUERY_TILE_CLICKS =
+            "Chrome.Querytiles.RecentQueryTileClicks";
+
+    /**
+     * Whether query tiles should be shown on NTP. Default value is false.
+     */
+    public static final String QUERY_TILES_SHOW_ON_NTP = "Chrome.Querytiles.ShowOnNTP";
 
     /**
      * Contains a trial group that was used to determine whether the reached code profiler should be
@@ -717,8 +771,6 @@ public final class ChromePreferenceKeys {
      *  than once.
      */
     public static final String SURVEY_INFO_BAR_DISPLAYED = "chrome_home_survey_info_bar_displayed";
-
-    public static final String SYNC_SESSIONS_UUID = "chromium.sync.sessions.id";
 
     public static final String TABBED_ACTIVITY_LAST_BACKGROUNDED_TIME_MS_PREF =
             "ChromeTabbedActivity.BackgroundTimeMs";
@@ -838,9 +890,8 @@ public final class ChromePreferenceKeys {
         // clang-format off
         return Arrays.asList(
                 ACCOUNT_PICKER_BOTTOM_SHEET_SHOWN_COUNT,
-                ASSISTANT_LAST_VERSION,
+                ACCOUNT_PICKER_BOTTOM_SHEET_ACTIVE_DISMISSAL_COUNT,
                 ASSISTANT_VOICE_SEARCH_ENABLED,
-                ASSISTANT_VOICE_SEARCH_SUPPORTED,
                 AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
                 AUTOFILL_ASSISTANT_NUMBER_OF_LITE_SCRIPTS_CANCELED,
                 AUTOFILL_ASSISTANT_PROACTIVE_HELP,
@@ -868,21 +919,33 @@ public final class ChromePreferenceKeys {
                 FIRST_RUN_SKIPPED_BY_POLICY,
                 FLAGS_CACHED.pattern(),
                 FLAGS_FIELD_TRIAL_PARAM_CACHED.pattern(),
+                FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS,
                 HOMEPAGE_LOCATION_POLICY,
                 HOMEPAGE_USE_CHROME_NTP,
                 IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT,
                 IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN,
                 ISOLATED_SPLITS_DEX_COMPILE_VERSION,
+                OFFLINE_INDICATOR_V2_WALL_TIME_SHOWN_MS,
+                OFFLINE_INDICATOR_V2_LAST_UPDATE_WALL_TIME_MS,
+                OFFLINE_INDICATOR_V2_TIME_IN_FOREGROUND_MS,
+                OFFLINE_INDICATOR_V2_TIME_IN_BACKGROUND_MS,
+                OFFLINE_INDICATOR_V2_FIRST_TIME_IN_FOREGROUND_MS,
+                OFFLINE_INDICATOR_V2_NUM_TIMES_BACKGROUNDED,
                 OFFLINE_MEASUREMENTS_CURRENT_TASK_MEASUREMENT_INTERVAL_IN_MINUTES,
                 OFFLINE_MEASUREMENTS_LAST_CHECK_MILLIS,
                 OFFLINE_MEASUREMENTS_TIME_BETWEEN_CHECKS_MILLIS_LIST,
                 PERSISTENT_OFFLINE_CONTENT_AVAILABILITY_STATUS,
-                PRICE_TRACKING_PRICE_DROP_ALERTS,
+                PRICE_TRACKING_PRICE_ALERTS_MESSAGE_CARD,
+                PRICE_TRACKING_PRICE_ALERTS_MESSAGE_CARD_SHOW_COUNT,
                 PRICE_TRACKING_PRICE_WELCOME_MESSAGE_CARD,
                 PRICE_TRACKING_PRICE_WELCOME_MESSAGE_CARD_SHOW_COUNT,
                 PRICE_TRACKING_TRACK_PRICES_ON_TABS,
                 PROMO_IS_DISMISSED.pattern(),
                 PROMO_TIMES_SEEN.pattern(),
+                QUERY_TILES_NEXT_DISPLAY_DECISION_TIME_MS,
+                QUERY_TILES_NUM_RECENT_MV_TILE_CLICKS,
+                QUERY_TILES_NUM_RECENT_QUERY_TILE_CLICKS,
+                QUERY_TILES_SHOW_ON_NTP,
                 SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP,
                 SETTINGS_SAFETY_CHECK_RUN_COUNTER,
                 SIGNIN_PROMO_IMPRESSIONS_COUNT_NTP,

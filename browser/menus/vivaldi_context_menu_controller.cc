@@ -2,7 +2,6 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
 //
 #include "browser/menus/vivaldi_context_menu_controller.h"
-
 #include "base/base64.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/menus/vivaldi_menu_enums.h"
@@ -12,8 +11,10 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/context_menu_params.h"
+#include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "include/core/SkBitmap.h"
 #include "ui/gfx/favicon_size.h"
@@ -25,12 +26,12 @@ namespace vivaldi {
 #define ICON_SIZE 16
 
 ContextMenuController::ContextMenuController(
-    Delegate* delegate,
+    content::BrowserContext* browser_context,
     content::WebContents* web_contents,
     content::WebContents* window_web_contents,
     VivaldiRenderViewContextMenu* rv_context_menu,
     std::unique_ptr<Params> params)
-  :delegate_(delegate),
+  :browser_context_(browser_context),
    web_contents_(web_contents),
    window_web_contents_(window_web_contents),
    browser_(FindBrowserForEmbedderWebContents(web_contents)),
@@ -67,15 +68,15 @@ ContextMenuController::ContextMenuController(
       new DeveloperToolsMenuController(window_web_contents_, rect_.origin()));
 
   if (rv_context_menu_) {
-    rv_context_menu_->SetDelegate(this);
+    rv_context_menu_->SetModelDelegate(this);
+    rv_context_menu_->SetMenuDelegate(this);
   }
 
 }
 
-ContextMenuController::~ContextMenuController() {
-}
+ContextMenuController::~ContextMenuController() {}
 
-void ContextMenuController::Show() {
+bool ContextMenuController::Show() {
   using Origin = extensions::vivaldi::context_menu::Origin;
 
   // Mac needs the views version for certain origins as we can not position the
@@ -88,22 +89,31 @@ void ContextMenuController::Show() {
     // Give access to the toolkit delegate. Needed for containers that populate
     // content on demand (when folder opens).
     rv_context_menu_->SetToolkitDelegate(menu_->GetToolkitDelegate());
+    menu_->SetParentView(rv_context_menu_->parent_view());
   }
+
+  extensions::MenubarMenuAPI::SendOpen(browser_context_, 0);
 
   // Populate model.
   InitModel();
-  delegate_->OnOpened();
-  // We do not know if count is 0 until after InitModel, but let OnOpened and
-  // OnClosed be called as normal.
+
+  // We do not know if count is 0 until after InitModel().
   if (root_menu_model_->GetItemCount() == 0) {
     MenuClosed(root_menu_model_);
-    return;
+    // We have done a delete this
+    return false;
   }
 
   menu_->Init(root_menu_model_, force_views ? this : nullptr);
-  if (!menu_->Show()) {
+
+  has_shown_ = menu_->Show();
+  if (!has_shown_) {
     MenuClosed(root_menu_model_);
+    // We have done a delete this
+    return false;
   }
+
+  return true;
 }
 
 void ContextMenuController::InitModel() {
@@ -396,14 +406,15 @@ bool ContextMenuController::GetAcceleratorForCommandId(
 
 void ContextMenuController::VivaldiCommandIdHighlighted(int command_id) {
    auto it = id_to_url_map_.find(command_id);
-   delegate_->OnHover(it != id_to_url_map_.end() ? *it->second : "");
+    extensions::MenubarMenuAPI::SendHover(browser_context_,
+      it != id_to_url_map_.end() ? *it->second : "");
 }
 
 void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {
   if (developertools_controller_->HandleCommand(command_id)) {
   } else if (pwa_controller_ && pwa_controller_->HandleCommand(command_id)) {
   } else {
-    delegate_->OnAction(command_id, event_flags);
+    extensions::MenubarMenuAPI::SendAction(browser_context_, command_id, event_flags);
   }
 }
 
@@ -419,11 +430,23 @@ void ContextMenuController::OnMenuWillShow(ui::SimpleMenuModel* source) {
   }
 }
 
+// Called when the VivaldiRenderViewContextMenu object is destroyed by events
+// outside the menu itself (eg, when parent view is destructed).
+// A simple way to test this is to use a timeout when closing a tab and open a
+// document context menu before it expires.
+void ContextMenuController::OnDestroyed(VivaldiRenderViewContextMenu* menu) {
+  rv_context_menu_->SetModelDelegate(nullptr);
+  rv_context_menu_->SetMenuDelegate(nullptr);
+  rv_context_menu_ = nullptr;
+  Delete();
+}
+
 void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
   if (source == root_menu_model_) {
     if (rv_context_menu_) {
       // The object should no longer access us.
-      rv_context_menu_->SetDelegate(nullptr);
+      rv_context_menu_->SetModelDelegate(nullptr);
+      rv_context_menu_->SetMenuDelegate(nullptr);
       // And do not access this object anymore as its root model has signalled.
       rv_context_menu_ = nullptr;
     } else {
@@ -432,20 +455,24 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
       source->SetMenuModelDelegate(nullptr);
     }
 
-    // TODO(espen): Closing by clicking outside the menu triggers a crash on
-    // Mac. It seems to be access to data after a "delete this" which the
-    // OnClosed call to the delegate starts, but the crash log is hard to make
-    // sense of.
-    timer_.reset(new base::OneShotTimer());
-    timer_->Start(FROM_HERE, base::TimeDelta::FromMilliseconds(1),
-        base::Bind(&ContextMenuController::DelayedClose, base::Unretained(
-            this)));
+    if (has_shown_) {
+      // TODO(espen): Closing by clicking outside the menu triggers a crash on
+      // Mac. It seems to be access to data after a "delete this" which the
+      // OnClosed call to the delegate starts, but the crash log is hard to make
+      // sense of.
+      timer_.reset(new base::OneShotTimer());
+      timer_->Start(FROM_HERE, base::TimeDelta::FromMilliseconds(1),
+          base::Bind(&ContextMenuController::Delete, base::Unretained(
+              this)));
+    } else {
+      Delete();
+    }
   }
 }
 
-void ContextMenuController::DelayedClose() {
-  delegate_->OnClosed();
-  // We may now be deleted
+void ContextMenuController::Delete() {
+  extensions::MenubarMenuAPI::SendClose(browser_context_);
+  delete this;
 }
 
 }  // namespace vivaldi

@@ -14,6 +14,15 @@
 
 namespace translate {
 
+// Translation frequency UMA histograms.
+const char kTranslateTranslationSourceLanguage[] =
+    "Translate.Translation.SourceLanguage";
+const char kTranslateTranslationStatus[] = "Translate.Translation.Status";
+const char kTranslateTranslationTargetLanguage[] =
+    "Translate.Translation.TargetLanguage";
+const char kTranslateTranslationType[] = "Translate.Translation.Type";
+
+// Page-load frequency UMA histograms.
 const char kTranslatePageLoadAutofillAssistantDeferredTriggerDecision[] =
     "Translate.PageLoad.AutofillAssistantDeferredTriggerDecision";
 const char kTranslatePageLoadFinalSourceLanguage[] =
@@ -40,6 +49,12 @@ const char kTranslatePageLoadRankerVersion[] =
     "Translate.PageLoad.Ranker.Version";
 const char kTranslatePageLoadTriggerDecision[] =
     "Translate.PageLoad.TriggerDecision";
+const char kTranslatePageLoadHrefTriggerDecision[] =
+    "Translate.PageLoad.HrefHint.TriggerDecision";
+
+TranslationType NullTranslateMetricsLogger::GetNextManualTranslationType() {
+  return TranslationType::kUninitialized;
+}
 
 TranslateMetricsLoggerImpl::TranslateMetricsLoggerImpl(
     base::WeakPtr<TranslateManager> translate_manager)
@@ -66,6 +81,15 @@ void TranslateMetricsLoggerImpl::OnForegroundChange(bool is_foreground) {
 void TranslateMetricsLoggerImpl::RecordMetrics(bool is_final) {
   UpdateTimeTranslated(current_state_is_translated_, is_foreground_);
 
+  // If the status of the most recent translation hasn't be reported yet, report
+  // it as a "success".
+  if (is_translation_status_pending_)
+    RecordTranslationStatus(ConvertTranslationTypeToSuccessfulTranslationStatus(
+        is_translation_in_progress_, current_translation_type_));
+
+  is_translation_status_pending_ = false;
+  current_translation_type_ = TranslationType::kUninitialized;
+
   // If a translation is still in progress, then use the previous state.
   bool this_initial_state_is_translated =
       is_initial_state_dependent_on_in_progress_translation_
@@ -77,9 +101,10 @@ void TranslateMetricsLoggerImpl::RecordMetrics(bool is_final) {
 
   // The first time |RecordMetrics| is called, record all page load frequency
   // UMA metrcis.
-  if (sequence_no_ == 0)
+  if (sequence_no_ == 0) {
     RecordPageLoadUmaMetrics(this_initial_state_is_translated,
                              this_current_state_is_translated);
+  }
 
   // Record metrics to UKM.
   ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
@@ -122,6 +147,12 @@ void TranslateMetricsLoggerImpl::RecordMetrics(bool is_final) {
           total_time_not_translated_.InSeconds()))
       .SetMaxTimeToTranslate(ukm::GetExponentialBucketMinForUserTiming(
           max_time_to_translate_.InMilliseconds()))
+      .SetModelDetectionReliabilityScore(ukm::GetLinearBucketMin(
+          static_cast<int64_t>(100 * model_detection_reliability_score_), 5))
+      .SetModelDetectedLanguage(
+          int(base::HashMetricName(model_detected_language_)))
+      .SetHTMLContentLanguage(int(base::HashMetricName(html_content_language_)))
+      .SetHTMLDocumentLanguage(int(base::HashMetricName(html_doc_language_)))
       .Record(ukm_recorder);
 
   sequence_no_++;
@@ -140,6 +171,10 @@ void TranslateMetricsLoggerImpl::RecordPageLoadUmaMetrics(
                            int(ranker_version_));
   base::UmaHistogramEnumeration(kTranslatePageLoadTriggerDecision,
                                 trigger_decision_);
+  if (has_href_translate_target_) {
+    base::UmaHistogramEnumeration(kTranslatePageLoadHrefTriggerDecision,
+                                  trigger_decision_);
+  }
   base::UmaHistogramBoolean(
       kTranslatePageLoadAutofillAssistantDeferredTriggerDecision,
       autofill_assistant_deferred_trigger_decision_);
@@ -174,6 +209,23 @@ void TranslateMetricsLoggerImpl::RecordPageLoadUmaMetrics(
                                  num_target_language_changes_, 1, 50, 20);
 }
 
+void TranslateMetricsLoggerImpl::RecordTranslationHistograms(
+    TranslationType translation_type,
+    const std::string& source_language,
+    const std::string& target_language) {
+  base::UmaHistogramEnumeration(kTranslateTranslationType, translation_type);
+  base::UmaHistogramSparse(kTranslateTranslationSourceLanguage,
+                           base::HashMetricName(source_language));
+  base::UmaHistogramSparse(kTranslateTranslationTargetLanguage,
+                           base::HashMetricName(target_language));
+}
+
+void TranslateMetricsLoggerImpl::RecordTranslationStatus(
+    TranslationStatus translation_status) {
+  base::UmaHistogramEnumeration(kTranslateTranslationStatus,
+                                translation_status);
+}
+
 void TranslateMetricsLoggerImpl::LogRankerMetrics(
     RankerDecision ranker_decision,
     uint32_t ranker_version) {
@@ -183,10 +235,15 @@ void TranslateMetricsLoggerImpl::LogRankerMetrics(
 
 void TranslateMetricsLoggerImpl::LogTriggerDecision(
     TriggerDecision trigger_decision) {
-  // Only stores the first non-kUninitialized trigger decision in the event that
-  // there are multiple.
-  if (trigger_decision_ == TriggerDecision::kUninitialized)
+  // Only stores the first non-kUninitialized trigger decision that is logged,
+  // except in the case that Href translate overrides the decision to either
+  // auto translate or show the UI.
+  if (trigger_decision_ == TriggerDecision::kUninitialized ||
+      trigger_decision == TriggerDecision::kAutomaticTranslationByHref ||
+      (trigger_decision == TriggerDecision::kShowUIFromHref &&
+       trigger_decision_ != TriggerDecision::kAutomaticTranslationByHref)) {
     trigger_decision_ = trigger_decision;
+  }
 }
 
 void TranslateMetricsLoggerImpl::LogAutofillAssistantDeferredTriggerDecision() {
@@ -208,14 +265,25 @@ void TranslateMetricsLoggerImpl::LogInitialState() {
     is_initial_state_dependent_on_in_progress_translation_ = true;
 }
 
-void TranslateMetricsLoggerImpl::LogTranslationStarted() {
+void TranslateMetricsLoggerImpl::LogTranslationStarted(
+    TranslationType translation_type) {
+  if (is_translation_status_pending_)
+    RecordTranslationStatus(TranslationStatus::kNewTranslation);
+
   // Save the previous state in case the translation fails.
   previous_state_is_translated_ = current_state_is_translated_;
 
   current_state_is_translated_ = true;
   is_translation_in_progress_ = true;
+  is_translation_status_pending_ = true;
+  current_translation_type_ = translation_type;
+  has_any_translation_started_ = true;
 
   time_of_last_translation_start_ = clock_->NowTicks();
+
+  RecordTranslationHistograms(current_translation_type_,
+                              current_source_language_,
+                              current_target_language_);
 }
 
 void TranslateMetricsLoggerImpl::LogTranslationFinished(
@@ -241,6 +309,13 @@ void TranslateMetricsLoggerImpl::LogTranslationFinished(
     // Update the initial state if it was dependent on this translation..
     if (is_initial_state_dependent_on_in_progress_translation_)
       initial_state_is_translated_ = previous_state_is_translated_;
+
+    if (is_translation_status_pending_)
+      RecordTranslationStatus(ConvertTranslationTypeToFailedTranslationStatus(
+          current_translation_type_, error_type != TranslateErrors::NONE));
+
+    is_translation_status_pending_ = false;
+    current_translation_type_ = TranslationType::kUninitialized;
   }
 
   // If there was some error, checks if this was the first error, and increments
@@ -257,7 +332,14 @@ void TranslateMetricsLoggerImpl::LogTranslationFinished(
 
 void TranslateMetricsLoggerImpl::LogReversion() {
   UpdateTimeTranslated(current_state_is_translated_, is_foreground_);
+
+  if (is_translation_status_pending_)
+    RecordTranslationStatus(ConvertTranslationTypeToRevertedTranslationStatus(
+        current_translation_type_));
+
   current_state_is_translated_ = false;
+  is_translation_status_pending_ = false;
+  current_translation_type_ = TranslationType::kUninitialized;
   num_reversions_++;
 }
 
@@ -307,6 +389,17 @@ void TranslateMetricsLoggerImpl::LogUIInteraction(
   num_ui_interactions_++;
 }
 
+TranslationType TranslateMetricsLoggerImpl::GetNextManualTranslationType() {
+  return has_any_translation_started_
+             ? TranslationType::kManualReTranslation
+             : TranslationType::kManualInitialTranslation;
+}
+
+void TranslateMetricsLoggerImpl::SetHasHrefTranslateTarget(
+    bool has_href_translate_target) {
+  has_href_translate_target_ = has_href_translate_target;
+}
+
 TranslateState TranslateMetricsLoggerImpl::ConvertToTranslateState(
     bool is_translated,
     bool is_ui_shown,
@@ -350,10 +443,78 @@ void TranslateMetricsLoggerImpl::UpdateTimeTranslated(bool was_translated,
   time_of_last_state_change_ = current_time;
 }
 
+TranslationStatus
+TranslateMetricsLoggerImpl::ConvertTranslationTypeToRevertedTranslationStatus(
+    TranslationType translation_type) {
+  if (translation_type == TranslationType::kManualInitialTranslation ||
+      translation_type == TranslationType::kManualReTranslation)
+    return TranslationStatus::kRevertedManualTranslation;
+  if (translation_type == TranslationType::kAutomaticTranslationByPref ||
+      translation_type == TranslationType::kAutomaticTranslationByLink)
+    return TranslationStatus::kRevertedAutomaticTranslation;
+  return TranslationStatus::kUninitialized;
+}
+
+TranslationStatus
+TranslateMetricsLoggerImpl::ConvertTranslationTypeToFailedTranslationStatus(
+    TranslationType translation_type,
+    bool was_translation_error) {
+  if (translation_type == TranslationType::kManualInitialTranslation ||
+      translation_type == TranslationType::kManualReTranslation) {
+    if (was_translation_error)
+      return TranslationStatus::kFailedWithErrorManualTranslation;
+    else
+      return TranslationStatus::kFailedWithNoErrorManualTranslation;
+  }
+  if (translation_type == TranslationType::kAutomaticTranslationByPref ||
+      translation_type == TranslationType::kAutomaticTranslationByLink) {
+    if (was_translation_error)
+      return TranslationStatus::kFailedWithErrorAutomaticTranslation;
+    else
+      return TranslationStatus::kFailedWithNoErrorAutomaticTranslation;
+  }
+  return TranslationStatus::kUninitialized;
+}
+
+TranslationStatus
+TranslateMetricsLoggerImpl::ConvertTranslationTypeToSuccessfulTranslationStatus(
+    bool is_translation_in_progress,
+    TranslationType translation_type) {
+  if (is_translation_in_progress)
+    return TranslationStatus::kTranslationAbandoned;
+  if (translation_type == TranslationType::kManualInitialTranslation ||
+      translation_type == TranslationType::kManualReTranslation)
+    return TranslationStatus::kSuccessFromManualTranslation;
+  if (translation_type == TranslationType::kAutomaticTranslationByPref)
+    return TranslationStatus::kSuccessFromAutomaticTranslationByPref;
+  if (translation_type == TranslationType::kAutomaticTranslationByLink)
+    return TranslationStatus::kSuccessFromAutomaticTranslationByLink;
+  return TranslationStatus::kUninitialized;
+}
+
 void TranslateMetricsLoggerImpl::SetInternalClockForTesting(
     base::TickClock* clock) {
   clock_ = clock;
   time_of_last_state_change_ = clock_->NowTicks();
+}
+
+void TranslateMetricsLoggerImpl::LogHTMLDocumentLanguage(
+    const std::string& html_doc_language) {
+  html_doc_language_ = html_doc_language;
+}
+
+void TranslateMetricsLoggerImpl::LogHTMLContentLanguage(
+    const std::string& html_content_language) {
+  html_content_language_ = html_content_language;
+}
+void TranslateMetricsLoggerImpl::LogDetectedLanguage(
+    const std::string& model_detected_language) {
+  model_detected_language_ = model_detected_language;
+}
+
+void TranslateMetricsLoggerImpl::LogDetectionReliabilityScore(
+    const float& model_detection_reliability_score) {
+  model_detection_reliability_score_ = model_detection_reliability_score;
 }
 
 }  // namespace translate

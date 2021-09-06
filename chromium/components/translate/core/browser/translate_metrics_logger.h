@@ -38,6 +38,35 @@ enum class TranslateState {
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+enum class TranslationStatus {
+  kUninitialized = 0,
+  kSuccessFromManualTranslation = 1,
+  kSuccessFromAutomaticTranslationByPref = 2,
+  kSuccessFromAutomaticTranslationByLink = 3,
+  kRevertedManualTranslation = 4,
+  kRevertedAutomaticTranslation = 5,
+  kNewTranslation = 6,
+  kTranslationAbandoned = 7,
+  kFailedWithNoErrorManualTranslation = 8,
+  kFailedWithNoErrorAutomaticTranslation = 9,
+  kFailedWithErrorManualTranslation = 10,
+  kFailedWithErrorAutomaticTranslation = 11,
+  kMaxValue = kFailedWithErrorAutomaticTranslation,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class TranslationType {
+  kUninitialized = 0,
+  kManualInitialTranslation = 1,
+  kManualReTranslation = 2,
+  kAutomaticTranslationByPref = 3,
+  kAutomaticTranslationByLink = 4,
+  kMaxValue = kAutomaticTranslationByLink,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum class TriggerDecision {
   kUninitialized = 0,
   kDisabledDoesntNeedTranslation = 1,
@@ -55,7 +84,9 @@ enum class TriggerDecision {
   kShowUI = 13,
   kAutomaticTranslationByLink = 14,
   kAutomaticTranslationByPref = 15,
-  kMaxValue = kAutomaticTranslationByPref,
+  kShowUIFromHref = 16,
+  kAutomaticTranslationByHref = 17,
+  kMaxValue = kAutomaticTranslationByHref,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -106,7 +137,7 @@ class TranslateMetricsLogger {
 
   // Tracks the state of Translate over the course of the page load.
   virtual void LogInitialState() = 0;
-  virtual void LogTranslationStarted() = 0;
+  virtual void LogTranslationStarted(TranslationType translation_type) = 0;
   virtual void LogTranslationFinished(bool was_successful,
                                       TranslateErrors::Type error_type) = 0;
   virtual void LogReversion() = 0;
@@ -120,8 +151,26 @@ class TranslateMetricsLogger {
   virtual void LogSourceLanguage(const std::string& source_language_code) = 0;
   virtual void LogTargetLanguage(const std::string& target_language_code) = 0;
 
+  // Used to record the language attributes specified by the HTML document.
+  // Recorded for each language detection.
+  virtual void LogHTMLDocumentLanguage(
+      const std::string& html_doc_language) = 0;
+  virtual void LogHTMLContentLanguage(
+      const std::string& html_content_language) = 0;
+
+  // Used to record the language detection model's prediction and reliability
+  // based on the page content's text. Recorded for each language detection.
+  virtual void LogDetectedLanguage(const std::string& detected_language) = 0;
+  virtual void LogDetectionReliabilityScore(
+      const float& model_detection_reliability_score) = 0;
+
   // Records the user's high level interactions with the Translate UI.
   virtual void LogUIInteraction(UIInteraction ui_interaction) = 0;
+
+  // Returns the translation type of the next manual translation.
+  virtual TranslationType GetNextManualTranslationType() = 0;
+
+  virtual void SetHasHrefTranslateTarget(bool has_href_translate_target) = 0;
 };
 
 }  // namespace translate

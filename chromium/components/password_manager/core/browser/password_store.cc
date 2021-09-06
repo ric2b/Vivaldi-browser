@@ -29,9 +29,9 @@
 #include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliated_match_helper.h"
-#include "components/password_manager/core/browser/compromised_credentials_consumer.h"
-#include "components/password_manager/core/browser/compromised_credentials_observer.h"
 #include "components/password_manager/core/browser/field_info_table.h"
+#include "components/password_manager/core/browser/insecure_credentials_consumer.h"
+#include "components/password_manager/core/browser/insecure_credentials_observer.h"
 #include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -44,8 +44,8 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/sync/model_impl/client_tag_based_model_type_processor.h"
-#include "components/sync/model_impl/proxy_model_type_controller_delegate.h"
+#include "components/sync/model/client_tag_based_model_type_processor.h"
+#include "components/sync/model/proxy_model_type_controller_delegate.h"
 
 namespace password_manager {
 
@@ -94,10 +94,9 @@ bool ShouldPhishedCredentialsBeUploadedToSync(const PrefService* prefs) {
 }
 
 // Returns if credentials contains Phished issues.
-bool HasPhishedCredentials(
-    const std::vector<CompromisedCredentials>& credentials) {
-  return base::Contains(credentials, CompromiseType::kPhished,
-                        &CompromisedCredentials::compromise_type);
+bool HasPhishedCredentials(const std::vector<InsecureCredential>& credentials) {
+  return base::Contains(credentials, InsecureType::kPhished,
+                        &InsecureCredential::insecure_type);
 }
 
 }  // namespace
@@ -108,9 +107,9 @@ void PasswordStore::Observer::OnLoginsChangedIn(
   OnLoginsChanged(changes);
 }
 
-void PasswordStore::DatabaseCompromisedCredentialsObserver::
-    OnCompromisedCredentialsChangedIn(PasswordStore* store) {
-  OnCompromisedCredentialsChanged();
+void PasswordStore::DatabaseInsecureCredentialsObserver::
+    OnInsecureCredentialsChangedIn(PasswordStore* store) {
+  OnInsecureCredentialsChanged();
 }
 
 PasswordStore::CheckReuseRequest::CheckReuseRequest(
@@ -404,52 +403,52 @@ void PasswordStore::GetSiteStats(const GURL& origin_domain,
       base::BindOnce(&PasswordStore::GetSiteStatsImpl, this, origin_domain));
 }
 
-void PasswordStore::AddCompromisedCredentials(
-    const CompromisedCredentials& compromised_credentials) {
+void PasswordStore::AddInsecureCredential(
+    const InsecureCredential& insecure_credential) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
-  auto callback = base::BindOnce(&PasswordStore::AddCompromisedCredentialsImpl,
-                                 this, compromised_credentials);
+  auto callback = base::BindOnce(&PasswordStore::AddInsecureCredentialImpl,
+                                 this, insecure_credential);
   ScheduleTask(base::BindOnce(
-      &PasswordStore::InvokeAndNotifyAboutCompromisedPasswordsChange, this,
+      &PasswordStore::InvokeAndNotifyAboutInsecureCredentialsChange, this,
       std::move(callback)));
 }
 
-void PasswordStore::RemoveCompromisedCredentials(
+void PasswordStore::RemoveInsecureCredentials(
     const std::string& signon_realm,
     const base::string16& username,
-    RemoveCompromisedCredentialsReason reason) {
+    RemoveInsecureCredentialsReason reason) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
-  auto callback =
-      base::BindOnce(&PasswordStore::RemoveCompromisedCredentialsImpl, this,
-                     signon_realm, username, reason);
+  auto callback = base::BindOnce(&PasswordStore::RemoveInsecureCredentialsImpl,
+                                 this, signon_realm, username, reason);
   ScheduleTask(base::BindOnce(
-      &PasswordStore::InvokeAndNotifyAboutCompromisedPasswordsChange, this,
+      &PasswordStore::InvokeAndNotifyAboutInsecureCredentialsChange, this,
       std::move(callback)));
 }
 
-void PasswordStore::GetAllCompromisedCredentials(
-    CompromisedCredentialsConsumer* consumer) {
+void PasswordStore::GetAllInsecureCredentials(
+    InsecureCredentialsConsumer* consumer) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
-  PostCompromisedCredentialsTaskAndReplyToConsumerWithResult(
+  PostInsecureCredentialsTaskAndReplyToConsumerWithResult(
       consumer,
-      base::BindOnce(&PasswordStore::GetAllCompromisedCredentialsImpl, this));
+      base::BindOnce(&PasswordStore::GetAllInsecureCredentialsImpl, this));
 }
 
-void PasswordStore::GetMatchingCompromisedCredentials(
+void PasswordStore::GetMatchingInsecureCredentials(
     const std::string& signon_realm,
-    CompromisedCredentialsConsumer* consumer) {
+    InsecureCredentialsConsumer* consumer) {
   if (affiliated_match_helper_) {
     FormDigest form(PasswordForm::Scheme::kHtml, signon_realm,
                     GURL(signon_realm));
     affiliated_match_helper_->GetAffiliatedAndroidRealms(
         form,
-        base::BindOnce(&PasswordStore::ScheduleGetCompromisedWithAffiliations,
-                       this, consumer->GetWeakPtr(), signon_realm));
+        base::BindOnce(
+            &PasswordStore::ScheduleGetInsecureCredentialsWithAffiliations,
+            this, consumer->GetWeakPtr(), signon_realm));
   } else {
-    PostCompromisedCredentialsTaskAndReplyToConsumerWithResult(
+    PostInsecureCredentialsTaskAndReplyToConsumerWithResult(
         consumer,
-        base::BindOnce(&PasswordStore::GetMatchingCompromisedCredentialsImpl,
-                       this, signon_realm));
+        base::BindOnce(&PasswordStore::GetMatchingInsecureCredentialsImpl, this,
+                       signon_realm));
   }
 }
 
@@ -493,14 +492,14 @@ void PasswordStore::RemoveObserver(Observer* observer) {
   observers_->RemoveObserver(observer);
 }
 
-void PasswordStore::AddDatabaseCompromisedCredentialsObserver(
-    DatabaseCompromisedCredentialsObserver* observer) {
-  compromised_credentials_observers_->AddObserver(observer);
+void PasswordStore::AddDatabaseInsecureCredentialsObserver(
+    DatabaseInsecureCredentialsObserver* observer) {
+  insecure_credentials_observers_->AddObserver(observer);
 }
 
-void PasswordStore::RemoveDatabaseCompromisedCredentialsObserver(
-    DatabaseCompromisedCredentialsObserver* observer) {
-  compromised_credentials_observers_->RemoveObserver(observer);
+void PasswordStore::RemoveDatabaseInsecureCredentialsObserver(
+    DatabaseInsecureCredentialsObserver* observer) {
+  insecure_credentials_observers_->RemoveObserver(observer);
 }
 
 bool PasswordStore::ScheduleTask(base::OnceClosure task) {
@@ -690,7 +689,7 @@ bool PasswordStore::InitOnBackgroundSequence(
 
   ForceInitialSyncCycle force_initial_sync_cycle(
       upload_phished_credentials_to_sync &&
-      HasPhishedCredentials(GetAllCompromisedCredentialsImpl()));
+      HasPhishedCredentials(GetAllInsecureCredentialsImpl()));
 
   sync_bridge_ = base::WrapUnique(new PasswordSyncBridge(
       std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
@@ -720,10 +719,10 @@ PasswordStoreChangeList PasswordStore::AddLoginSync(const PasswordForm& form,
   return AddLoginImpl(form, error);
 }
 
-bool PasswordStore::AddCompromisedCredentialsSync(
-    base::span<const CompromisedCredentials> issues) {
-  return base::ranges::all_of(issues, [this](const auto& issue) {
-    return !AddCompromisedCredentialsImpl(issue).empty();
+bool PasswordStore::AddInsecureCredentialsSync(
+    base::span<const InsecureCredential> credentials) {
+  return base::ranges::all_of(credentials, [this](const auto& cred) {
+    return !AddInsecureCredentialImpl(cred).empty();
   });
 }
 
@@ -746,13 +745,12 @@ PasswordStoreChangeList PasswordStore::UpdateLoginSync(
   return UpdateLoginImpl(form, error);
 }
 
-bool PasswordStore::UpdateCompromisedCredentialsSync(
+bool PasswordStore::UpdateInsecureCredentialsSync(
     const PasswordForm& form,
-    base::span<const CompromisedCredentials> credentials) {
-  RemoveCompromisedCredentialsImpl(
-      form.signon_realm, form.username_value,
-      RemoveCompromisedCredentialsReason::kSyncUpdate);
-  return AddCompromisedCredentialsSync(credentials);
+    base::span<const InsecureCredential> credentials) {
+  RemoveInsecureCredentialsImpl(form.signon_realm, form.username_value,
+                                RemoveInsecureCredentialsReason::kSyncUpdate);
+  return AddInsecureCredentialsSync(credentials);
 }
 
 PasswordStoreChangeList PasswordStore::RemoveLoginSync(
@@ -777,15 +775,22 @@ void PasswordStore::NotifyLoginsChanged(
         base::BindRepeating(
             [](scoped_refptr<PasswordStore> store,
                const std::string& signon_realm, const base::string16& username,
-               RemoveCompromisedCredentialsReason reason) {
-              auto callback = base::BindOnce(
-                  &PasswordStore::RemoveCompromisedCredentialsImpl, store,
-                  signon_realm, username, reason);
-              store->InvokeAndNotifyAboutCompromisedPasswordsChange(
+               RemoveInsecureCredentialsReason reason) {
+              auto callback =
+                  base::BindOnce(&PasswordStore::RemoveInsecureCredentialsImpl,
+                                 store, signon_realm, username, reason);
+              store->InvokeAndNotifyAboutInsecureCredentialsChange(
                   std::move(callback));
             },
             scoped_refptr<PasswordStore>(this)));
   }
+}
+
+void PasswordStore::NotifyInsecureCredentialsChanged() {
+  insecure_credentials_observers_->Notify(
+      FROM_HERE,
+      &DatabaseInsecureCredentialsObserver::OnInsecureCredentialsChangedIn,
+      base::RetainedRef(this));
 }
 
 void PasswordStore::NotifyDeletionsHaveSynced(bool success) {
@@ -807,16 +812,12 @@ void PasswordStore::NotifyDeletionsHaveSynced(bool success) {
   deletions_have_synced_callbacks_.clear();
 }
 
-void PasswordStore::InvokeAndNotifyAboutCompromisedPasswordsChange(
+void PasswordStore::InvokeAndNotifyAboutInsecureCredentialsChange(
     base::OnceCallback<PasswordStoreChangeList()> callback) {
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   PasswordStoreChangeList changes = std::move(callback).Run();
   if (!changes.empty()) {
-    compromised_credentials_observers_->Notify(
-        FROM_HERE,
-        &DatabaseCompromisedCredentialsObserver::
-            OnCompromisedCredentialsChangedIn,
-        base::RetainedRef(this));
+    NotifyInsecureCredentialsChanged();
     if (sync_bridge_)
       sync_bridge_->ActOnPasswordStoreChanges(changes);
   }
@@ -950,14 +951,13 @@ void PasswordStore::PostStatsTaskAndReplyToConsumerWithResult(
                      consumer->GetWeakPtr()));
 }
 
-void PasswordStore::PostCompromisedCredentialsTaskAndReplyToConsumerWithResult(
-    CompromisedCredentialsConsumer* consumer,
-    CompromisedCredentialsTask task) {
+void PasswordStore::PostInsecureCredentialsTaskAndReplyToConsumerWithResult(
+    InsecureCredentialsConsumer* consumer,
+    InsecureCredentialsTask task) {
   consumer->cancelable_task_tracker()->PostTaskAndReplyWithResult(
       background_task_runner_.get(), FROM_HERE, std::move(task),
-      base::BindOnce(
-          &CompromisedCredentialsConsumer::OnGetCompromisedCredentialsFrom,
-          consumer->GetWeakPtr(), base::RetainedRef(this)));
+      base::BindOnce(&InsecureCredentialsConsumer::OnGetInsecureCredentialsFrom,
+                     consumer->GetWeakPtr(), base::RetainedRef(this)));
 }
 
 void PasswordStore::AddLoginInternal(const PasswordForm& form) {
@@ -1195,16 +1195,16 @@ PasswordStore::GetLoginsWithAffiliationsImpl(
   return results;
 }
 
-std::vector<CompromisedCredentials>
-PasswordStore::GetCompromisedWithAffiliationsImpl(
+std::vector<InsecureCredential>
+PasswordStore::GetInsecureCredentialsWithAffiliationsImpl(
     const std::string& signon_realm,
     const std::vector<std::string>& additional_android_realms) {
   DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
-  std::vector<CompromisedCredentials> results(
-      GetMatchingCompromisedCredentialsImpl(signon_realm));
+  std::vector<InsecureCredential> results(
+      GetMatchingInsecureCredentialsImpl(signon_realm));
   for (const std::string& realm : additional_android_realms) {
-    std::vector<CompromisedCredentials> more_results(
-        GetMatchingCompromisedCredentialsImpl(realm));
+    std::vector<InsecureCredential> more_results(
+        GetMatchingInsecureCredentialsImpl(realm));
     results.insert(results.end(), std::make_move_iterator(more_results.begin()),
                    std::make_move_iterator(more_results.end()));
   }
@@ -1238,15 +1238,16 @@ void PasswordStore::ScheduleGetFilteredLoginsWithAffiliations(
   }
 }
 
-void PasswordStore::ScheduleGetCompromisedWithAffiliations(
-    base::WeakPtr<CompromisedCredentialsConsumer> consumer,
+void PasswordStore::ScheduleGetInsecureCredentialsWithAffiliations(
+    base::WeakPtr<InsecureCredentialsConsumer> consumer,
     const std::string& signon_realm,
     const std::vector<std::string>& additional_android_realms) {
   if (consumer) {
-    PostCompromisedCredentialsTaskAndReplyToConsumerWithResult(
+    PostInsecureCredentialsTaskAndReplyToConsumerWithResult(
         consumer.get(),
-        base::BindOnce(&PasswordStore::GetCompromisedWithAffiliationsImpl, this,
-                       signon_realm, additional_android_realms));
+        base::BindOnce(
+            &PasswordStore::GetInsecureCredentialsWithAffiliationsImpl, this,
+            signon_realm, additional_android_realms));
   }
 }
 

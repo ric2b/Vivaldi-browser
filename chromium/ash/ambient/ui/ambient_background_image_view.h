@@ -9,7 +9,7 @@
 
 #include "ash/ambient/ui/ambient_view_delegate.h"
 #include "ash/ash_export.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_multi_source_observation.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
@@ -31,7 +31,8 @@ class ASH_EXPORT AmbientBackgroundImageView : public views::View,
 
   explicit AmbientBackgroundImageView(AmbientViewDelegate* delegate);
   AmbientBackgroundImageView(const AmbientBackgroundImageView&) = delete;
-  AmbientBackgroundImageView& operator=(AmbientBackgroundImageView&) = delete;
+  AmbientBackgroundImageView& operator=(const AmbientBackgroundImageView&) =
+      delete;
   ~AmbientBackgroundImageView() override;
 
   // views::View:
@@ -83,7 +84,8 @@ class ASH_EXPORT AmbientBackgroundImageView : public views::View,
 
   MediaStringView* media_string_view_ = nullptr;
 
-  ScopedObserver<views::View, views::ViewObserver> observed_views_{this};
+  base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
+      observed_views_{this};
 };
 }  // namespace ash
 

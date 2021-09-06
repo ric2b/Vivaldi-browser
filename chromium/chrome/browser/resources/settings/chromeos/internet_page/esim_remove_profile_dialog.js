@@ -20,6 +20,12 @@ Polymer({
       value: '',
     },
 
+    /** @type {boolean} */
+    showCellularDisconnectWarning: {
+      type: Boolean,
+      value: false,
+    },
+
     /** @type {string} */
     esimProfileName_: {
       type: String,
@@ -39,46 +45,21 @@ Polymer({
     }
   },
 
-  /**
-   * Provides an interface to the ESimManager Mojo service.
-   * @private {?chromeos.cellularSetup.mojom.ESimManagerRemote}
-   */
-  eSimManagerRemote_: null,
-
-  /** @private {?chromeos.networkConfig.mojom.CrosNetworkConfigRemote} */
-  networkConfig_: null,
-
   /** @private {?chromeos.cellularSetup.mojom.ESimProfileRemote} */
   esimProfileRemote_: null,
 
   /** @override */
-  created() {
-    this.eSimManagerRemote_ = cellular_setup.getESimManagerRemote();
-    this.networkConfig_ = network_config.MojoInterfaceProviderImpl.getInstance()
-                              .getMojoServiceRemote();
+  attached() {
     this.init_();
   },
 
   /** @private */
   async init_() {
-    const response = await this.eSimManagerRemote_.getAvailableEuiccs();
-    const euicc = response.euiccs[0];
-
-    const esimProfilesRemotes = await euicc.getProfileList();
-
-    for (const profileRemote of esimProfilesRemotes.profiles) {
-      const profileProperties = await profileRemote.getProperties();
-
-      if (profileProperties.properties.iccid !== this.iccid) {
-        continue;
-      }
-
-      this.esimProfileRemote_ = profileRemote;
-      this.esimProfileName_ = profileProperties.properties.nickname ?
-          this.convertString16ToJSString_(
-              profileProperties.properties.nickname) :
-          this.convertString16ToJSString_(profileProperties.properties.name);
-    }
+    this.esimProfileRemote_ = await cellular_setup.getESimProfile(this.iccid);
+    const profileProperties = await this.esimProfileRemote_.getProperties();
+    this.esimProfileName_ = profileProperties.properties.nickname ?
+        this.convertString16ToJSString_(profileProperties.properties.nickname) :
+        this.convertString16ToJSString_(profileProperties.properties.name);
   },
 
   /**

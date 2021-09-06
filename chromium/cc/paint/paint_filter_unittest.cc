@@ -23,7 +23,7 @@ class MockImageProvider : public ImageProvider {
     return ScopedResult(
         DecodedDrawImage(CreateBitmapImage(gfx::Size(10, 10)).GetSwSkImage(),
                          nullptr, SkSize::MakeEmpty(), SkSize::Make(1.0f, 1.0f),
-                         draw_image.filter_quality()));
+                         draw_image.filter_quality(), true));
   }
   int image_count_ = 0;
 };
@@ -40,7 +40,7 @@ sk_sp<PaintFilter> CreateTestFilter(PaintFilter::Type filter_type,
       image, SkRect::MakeWH(100.f, 100.f), SkRect::MakeWH(100.f, 100.f),
       kNone_SkFilterQuality);
   auto record = sk_make_sp<PaintOpBuffer>();
-  record->push<DrawImageOp>(image, 0.f, 0.f, nullptr);
+  record->push<DrawImageOp>(image, 0.f, 0.f);
   auto record_filter =
       sk_make_sp<RecordPaintFilter>(record, SkRect::MakeWH(100.f, 100.f));
 

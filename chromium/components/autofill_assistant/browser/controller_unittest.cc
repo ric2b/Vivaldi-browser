@@ -131,8 +131,6 @@ class ControllerTest : public content::RenderViewHostTestHarness {
     ON_CALL(*mock_service_, OnGetNextActions(_, _, _, _, _, _))
         .WillByDefault(RunOnceCallback<5>(net::HTTP_OK, ""));
 
-    ON_CALL(*mock_service_, IsLiteService).WillByDefault(Return(false));
-
     ON_CALL(*mock_web_controller_, OnFindElement(_, _))
         .WillByDefault(RunOnceCallback<1>(ClientStatus(), nullptr));
 
@@ -184,7 +182,7 @@ class ControllerTest : public content::RenderViewHostTestHarness {
   void Start() { Start("http://initialurl.com"); }
 
   void Start(const std::string& url_string) {
-    Start(url_string, TriggerContext::CreateEmpty());
+    Start(url_string, std::make_unique<TriggerContext>());
   }
 
   void Start(const std::string& url_string,
@@ -411,19 +409,25 @@ TEST_F(ControllerTest, RunDirectActionWithArguments) {
                           const std::string& global_payload,
                           const std::string& script_payload,
                           Service::ResponseCallback& callback) {
-        EXPECT_THAT("value",
-                    trigger_context.GetParameter("required").value_or(""));
-        EXPECT_THAT("value0",
-                    trigger_context.GetParameter("arg0").value_or(""));
+        EXPECT_THAT(trigger_context.GetScriptParameters().ToProto(),
+                    testing::UnorderedElementsAreArray(
+                        std::map<std::string, std::string>(
+                            {{"required", "value"}, {"arg0", "value0"}})));
+        EXPECT_TRUE(trigger_context.GetDirectAction());
 
         std::move(callback).Run(true, "");
       }));
 
-  std::map<std::string, std::string> parameters;
-  parameters["required"] = "value";
-  parameters["arg0"] = "value0";
   EXPECT_TRUE(controller_->PerformUserActionWithContext(
-      0, TriggerContext::Create(parameters, "")));
+      0, std::make_unique<TriggerContext>(
+             /* parameters = */ std::make_unique<ScriptParameters>(
+                 std::map<std::string, std::string>{{"required", "value"},
+                                                    {"arg0", "value0"}}),
+             /* experiment_ids = */ std::string(),
+             /* is_cct = */ false,
+             /* onboarding_shown = */ false,
+             /* is_direct_action = */ true,
+             /* caller_account_hash = */ std::string())));
 }
 
 TEST_F(ControllerTest, NoScripts) {
@@ -703,7 +707,7 @@ TEST_F(ControllerTest, InitialUrlLoads) {
   EXPECT_CALL(*mock_service_, OnGetScriptsForUrl(Eq(initialUrl), _, _))
       .WillOnce(RunOnceCallback<2>(net::HTTP_OK, ""));
 
-  controller_->Start(initialUrl, TriggerContext::CreateEmpty());
+  controller_->Start(initialUrl, std::make_unique<TriggerContext>());
 }
 
 TEST_F(ControllerTest, ProgressIncreasesAtStart) {
@@ -1263,7 +1267,7 @@ TEST_F(ControllerTest, Track) {
   // Start tracking at example.com, with one script matching
   SetLastCommittedUrl(GURL("http://example.com/"));
 
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
   ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
 
@@ -1311,7 +1315,7 @@ TEST_F(ControllerTest, TrackScriptWithNoUI) {
   // Start tracking at example.com, with one script matching
   SetLastCommittedUrl(GURL("http://example.com/"));
 
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
 
   EXPECT_TRUE(controller_->PerformUserAction(0));
@@ -1336,7 +1340,7 @@ TEST_F(ControllerTest, TrackScriptShowUIOnTell) {
   // Start tracking at example.com, with one script matching
   SetLastCommittedUrl(GURL("http://example.com/"));
 
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
 
   EXPECT_FALSE(controller_->NeedsUI());
@@ -1367,7 +1371,7 @@ TEST_F(ControllerTest, TrackScriptShowUIOnError) {
   // Start tracking at example.com, with one script matching
   SetLastCommittedUrl(GURL("http://example.com/"));
 
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
 
   EXPECT_FALSE(controller_->NeedsUI());
@@ -1397,7 +1401,7 @@ TEST_F(ControllerTest, TrackContinuesAfterScriptError) {
   // Start tracking at example.com, with one script matching
   SetLastCommittedUrl(GURL("http://example.com/"));
 
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
   ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
 
@@ -1429,7 +1433,7 @@ TEST_F(ControllerTest, TrackReportsFirstSetOfScripts) {
 
   SetLastCommittedUrl(GURL("http://example.com/"));
   bool first_check_done = false;
-  controller_->Track(TriggerContext::CreateEmpty(),
+  controller_->Track(std::make_unique<TriggerContext>(),
                      base::BindOnce(
                          [](Controller* controller, bool* is_done) {
                            // User actions must have been set when this is
@@ -1459,7 +1463,7 @@ TEST_F(ControllerTest, TrackReportsNoScripts) {
   base::MockCallback<base::OnceCallback<void()>> callback;
 
   EXPECT_CALL(callback, Run());
-  controller_->Track(TriggerContext::CreateEmpty(), callback.Get());
+  controller_->Track(std::make_unique<TriggerContext>(), callback.Get());
   EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
 }
 
@@ -1476,7 +1480,7 @@ TEST_F(ControllerTest, TrackReportsNoScriptsForNow) {
   base::MockCallback<base::OnceCallback<void()>> callback;
 
   EXPECT_CALL(callback, Run());
-  controller_->Track(TriggerContext::CreateEmpty(), callback.Get());
+  controller_->Track(std::make_unique<TriggerContext>(), callback.Get());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
 }
 
@@ -1494,7 +1498,7 @@ TEST_F(ControllerTest, TrackReportsNoScriptsForThePage) {
   base::MockCallback<base::OnceCallback<void()>> callback;
 
   EXPECT_CALL(callback, Run());
-  controller_->Track(TriggerContext::CreateEmpty(), callback.Get());
+  controller_->Track(std::make_unique<TriggerContext>(), callback.Get());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
 }
 
@@ -1504,12 +1508,12 @@ TEST_F(ControllerTest, TrackReportsAlreadyDone) {
   SetNextScriptResponse(script_response);
 
   SetLastCommittedUrl(GURL("http://example.com/"));
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
 
   base::MockCallback<base::OnceCallback<void()>> callback;
   EXPECT_CALL(callback, Run());
-  controller_->Track(TriggerContext::CreateEmpty(), callback.Get());
+  controller_->Track(std::make_unique<TriggerContext>(), callback.Get());
 }
 
 TEST_F(ControllerTest, TrackThenAutostart) {
@@ -1521,7 +1525,7 @@ TEST_F(ControllerTest, TrackThenAutostart) {
   SetNextScriptResponse(script_response);
 
   SetLastCommittedUrl(GURL("http://example.com/"));
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
   EXPECT_THAT(controller_->GetUserActions(), SizeIs(1));
 
@@ -1729,7 +1733,7 @@ TEST_F(ControllerTest, UnexpectedNavigationDuringPromptAction_Tracking) {
   SetupActionsForScript("runnable", runnable_script);
 
   SetLastCommittedUrl(GURL("http://example.com/"));
-  controller_->Track(TriggerContext::CreateEmpty(), base::DoNothing());
+  controller_->Track(std::make_unique<TriggerContext>(), base::DoNothing());
   EXPECT_EQ(AutofillAssistantState::TRACKING, controller_->GetState());
   ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
   EXPECT_EQ(controller_->GetUserActions()[0].chip().text, "runnable");
@@ -1822,60 +1826,6 @@ TEST_F(ControllerTest, UnexpectedNavigationDuringPromptAction) {
                                    AutofillAssistantState::RUNNING,
                                    AutofillAssistantState::PROMPT,
                                    AutofillAssistantState::STOPPED));
-}
-
-TEST_F(ControllerTest, UnexpectedNavigationDuringLiteScriptPromptAction) {
-  ON_CALL(*mock_service_, IsLiteService).WillByDefault(Return(true));
-
-  SupportsScriptResponseProto script_response;
-  AddRunnableScript(&script_response, "autostart")
-      ->mutable_presentation()
-      ->set_autostart(true);
-  SetNextScriptResponse(script_response);
-
-  ActionsResponseProto autostart_script;
-  autostart_script.add_actions()
-      ->mutable_prompt()
-      ->add_choices()
-      ->mutable_chip()
-      ->set_text("continue");
-  autostart_script.add_actions()->mutable_tell()->set_message("never shown");
-  SetupActionsForScript("autostart", autostart_script);
-
-  Start();
-  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
-  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
-  EXPECT_EQ(controller_->GetUserActions()[0].chip().text, "continue");
-
-  // No error is shown for lite scripts.
-  EXPECT_CALL(mock_observer_, OnStatusMessageChanged(_)).Times(0);
-
-  // Renderer (Document) initiated navigation is allowed.
-  EXPECT_CALL(mock_client_, Shutdown(_)).Times(0);
-  EXPECT_CALL(mock_client_, RecordDropOut(_)).Times(0);
-  content::NavigationSimulator::NavigateAndCommitFromDocument(
-      GURL("http://a.example.com/page"), web_contents()->GetMainFrame());
-  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
-
-  // Expected browser initiated navigation is allowed.
-  EXPECT_CALL(mock_client_, Shutdown(_)).Times(0);
-  EXPECT_CALL(mock_client_, RecordDropOut(_)).Times(0);
-  controller_->ExpectNavigation();
-  content::NavigationSimulator::NavigateAndCommitFromBrowser(
-      web_contents(), GURL("http://b.example.com/page"));
-  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
-
-  // Unexpected browser initiated navigation is allowed for lite scripts.
-  EXPECT_CALL(mock_client_, Shutdown(_)).Times(0);
-  EXPECT_CALL(mock_client_, RecordDropOut(_)).Times(0);
-  content::NavigationSimulator::NavigateAndCommitFromBrowser(
-      web_contents(), GURL("http://c.example.com/page"));
-  EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
-
-  // Full history of state transitions.
-  EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
-                                   AutofillAssistantState::RUNNING,
-                                   AutofillAssistantState::PROMPT));
 }
 
 TEST_F(ControllerTest, UnexpectedNavigationInRunningState) {
@@ -2328,12 +2278,13 @@ TEST_F(ControllerTest, SetOverlayColors) {
           Field(&Controller::OverlayColors::highlight_border,
                 StrEq("#FFFFFFFF")))));
 
-  std::map<std::string, std::string> parameters;
-  parameters["OVERLAY_COLORS"] = "#FF000000:#FFFFFFFF";
-  auto context = TriggerContext::Create(parameters, "exps");
-
   GURL url("http://a.example.com/path");
-  controller_->Start(url, std::move(context));
+  controller_->Start(url,
+                     std::make_unique<TriggerContext>(
+                         /* parameters = */ std::make_unique<ScriptParameters>(
+                             std::map<std::string, std::string>{
+                                 {"OVERLAY_COLORS", "#FF000000:#FFFFFFFF"}}),
+                         TriggerContext::Options()));
 }
 
 TEST_F(ControllerTest, SetDateTimeRange) {
@@ -2700,15 +2651,16 @@ TEST_F(ControllerTest, StartPasswordChangeFlow) {
   GURL initialUrl("http://example.com/password");
   EXPECT_CALL(*mock_service_, OnGetScriptsForUrl(Eq(initialUrl), _, _))
       .WillOnce(RunOnceCallback<2>(net::HTTP_OK, ""));
-  std::map<std::string, std::string> parameters;
-  std::string username = "test_username";
-  parameters["PASSWORD_CHANGE_USERNAME"] = username;
 
-  EXPECT_TRUE(
-      controller_->Start(initialUrl, TriggerContext::Create(parameters, "")));
+  EXPECT_TRUE(controller_->Start(
+      initialUrl, std::make_unique<TriggerContext>(
+                      /* parameters = */ std::make_unique<ScriptParameters>(
+                          std::map<std::string, std::string>{
+                              {"PASSWORD_CHANGE_USERNAME", "test_username"}}),
+                      TriggerContext::Options())));
   // Initial navigation.
   SimulateNavigateToUrl(GURL("http://b.example.com"));
-  EXPECT_EQ(GetUserData()->selected_login_->username, username);
+  EXPECT_EQ(GetUserData()->selected_login_->username, "test_username");
   EXPECT_EQ(GetUserData()->selected_login_->origin, initialUrl.GetOrigin());
   EXPECT_EQ(controller_->GetCurrentURL().host(), "b.example.com");
 }
@@ -2880,32 +2832,6 @@ TEST_F(ControllerTest, PauseAndNavigate) {
   EXPECT_CALL(mock_client_, Shutdown(Metrics::DropOutReason::NAVIGATION));
   content::NavigationSimulator::NavigateAndCommitFromBrowser(
       web_contents(), GURL("http://b.example.com/path"));
-}
-
-TEST_F(ControllerTest,
-       LiteScriptWithOnboardingDoesNotShowInitialStatusMessage) {
-  SupportsScriptResponseProto script_response;
-  AddRunnableScript(&script_response, "script")
-      ->mutable_presentation()
-      ->set_autostart(true);
-  SetupScripts(script_response);
-
-  ActionsResponseProto actions_response;
-  actions_response.add_actions()->mutable_tell()->set_message("Hello World");
-
-  SetupActionsForScript("script", actions_response);
-  auto trigger_context = std::make_unique<TriggerContextImpl>(
-      std::map<std::string, std::string>{
-          {"TRIGGER_SCRIPT_USED", "example/path"}},
-      /* exp = */ std::string());
-  trigger_context->SetOnboardingShown(true);
-
-  testing::InSequence seq;
-  EXPECT_CALL(mock_observer_,
-              OnStatusMessageChanged(testing::Not("Hello World")))
-      .Times(0);
-  EXPECT_CALL(mock_observer_, OnStatusMessageChanged("Hello World")).Times(1);
-  Start("http://a.example.com/path", std::move(trigger_context));
 }
 
 TEST_F(ControllerTest, RegularScriptShowsDefaultInitialStatusMessage) {

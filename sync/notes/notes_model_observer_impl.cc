@@ -9,9 +9,7 @@
 #include "base/guid.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/base/unique_position.h"
-#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
-#include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
@@ -62,8 +60,7 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
   const sync_pb::UniquePosition unique_position =
       ComputePosition(*new_parent, new_index, sync_id).ToProto();
 
-  sync_pb::EntitySpecifics specifics =
-      CreateSpecificsFromNoteNode(node, model, entity->has_final_guid());
+  sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
 
   note_tracker_->Update(entity, entity->metadata()->server_version(),
                         modification_time, unique_position, specifics);
@@ -85,16 +82,22 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
       ComputePosition(*parent, index, node->guid().AsLowercaseString())
           .ToProto();
 
-  sync_pb::EntitySpecifics specifics =
-      CreateSpecificsFromNoteNode(node, model, /*include_guid=*/true);
+  sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
 
   // It is possible that a created note was restored after deletion and
   // the tombstone was not committed yet. In that case the existing entity
   // should be updated.
   const SyncedNoteTracker::Entity* entity =
-      note_tracker_->GetTombstoneEntityForGuid(node->guid());
+      note_tracker_->GetEntityForClientTagHash(
+          SyncedNoteTracker::GetClientTagHashFromGUID(node->guid()));
   const base::Time creation_time = base::Time::Now();
   if (entity) {
+    // If there is a tracked entity with the same client tag hash (effectively
+    // the same note GUID), it must be a tombstone. Otherwise it means
+    // the note model contains to notes with the same GUID.
+    // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
+    // Should be removed after figuring out the reason for the crash.
+    CHECK(!entity->note_node()) << "Added note with duplicate GUID";
     note_tracker_->UndeleteTombstoneForNoteNode(entity, node);
     note_tracker_->Update(entity, entity->metadata()->server_version(),
                           creation_time, unique_position, specifics);
@@ -167,8 +170,7 @@ void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
   }
 
   const base::Time modification_time = base::Time::Now();
-  sync_pb::EntitySpecifics specifics =
-      CreateSpecificsFromNoteNode(node, model, entity->has_final_guid());
+  sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(node, model);
 
   // TODO(crbug.com/516866): The below CHECKs are added to debug some crashes.
   // Should be removed after figuring out the reason for the crash.
@@ -221,8 +223,8 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
                    ? syncer::UniquePosition::InitialPosition(suffix)
                    : syncer::UniquePosition::After(position, suffix);
 
-    const sync_pb::EntitySpecifics specifics = CreateSpecificsFromNoteNode(
-        child.get(), model, entity->has_final_guid());
+    const sync_pb::EntitySpecifics specifics =
+        CreateSpecificsFromNoteNode(child.get(), model);
 
     note_tracker_->Update(entity, entity->metadata()->server_version(),
                           modification_time, position.ToProto(), specifics);

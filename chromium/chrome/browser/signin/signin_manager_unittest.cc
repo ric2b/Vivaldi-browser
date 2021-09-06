@@ -140,7 +140,8 @@ class SigninManagerTest : public testing::Test {
                            ConsentLevel::kNotRequired));
     EXPECT_EQ(account,
               identity_manager()->GetPrimaryAccountInfo(ConsentLevel::kSync));
-    EXPECT_TRUE(identity_manager()->HasPrimaryAccountWithRefreshToken());
+    EXPECT_TRUE(identity_manager()->HasPrimaryAccountWithRefreshToken(
+        signin::ConsentLevel::kSync));
     return account;
   }
 
@@ -208,13 +209,16 @@ TEST_F(SigninManagerTest, UnconsentedPrimaryAccountNotChangedOnSignout) {
                          ConsentLevel::kNotRequired));
   EXPECT_EQ(account,
             identity_manager()->GetPrimaryAccountInfo(ConsentLevel::kSync));
-  EXPECT_TRUE(identity_manager()->HasPrimaryAccountWithRefreshToken());
+  EXPECT_TRUE(identity_manager()->HasPrimaryAccountWithRefreshToken(
+      signin::ConsentLevel::kSync));
 
   // Verify the primary account changed event.
   ExpectSyncPrimaryAccountSetEvent(account);
 
   // Tests that sync primary account is cleared, but unconsented account is not.
   identity_test_env()->RevokeSyncConsent();
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_EQ(account, identity_manager()->GetPrimaryAccountInfo(
                          ConsentLevel::kNotRequired));
   EXPECT_FALSE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSync));
@@ -349,8 +353,11 @@ TEST_F(SigninManagerTest,
   // Clear primary account but do not delete the account. The unconsented
   // primary account should be updated to be the first account in cookies.
   identity_test_env()->RevokeSyncConsent();
+  base::RunLoop().RunUntilIdle();
+
   // Primary account is cleared, but unconsented account is not.
-  EXPECT_FALSE(identity_manager()->HasPrimaryAccount());
+  EXPECT_FALSE(
+      identity_manager()->HasPrimaryAccount(signin::ConsentLevel::kSync));
   EXPECT_FALSE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSync));
   EXPECT_TRUE(
       identity_manager()->HasPrimaryAccount(ConsentLevel::kNotRequired));
@@ -380,6 +387,7 @@ TEST_F(SigninManagerTest, ClearPrimaryAccountAndSignOut) {
   ExpectSyncPrimaryAccountSetEvent(account);
 
   identity_test_env()->ClearPrimaryAccount();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(1U, observer().events().size());
   auto event = observer().events()[0];

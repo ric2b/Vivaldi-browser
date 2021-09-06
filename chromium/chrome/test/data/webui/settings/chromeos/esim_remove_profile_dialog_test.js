@@ -108,4 +108,15 @@ suite('EsimRemoveProfileDialog', function() {
     assertTrue(!!foundProfile);
     assertFalse(esimRemoveProfileDialog.$$('#errorMessage').hidden);
   });
+
+  test('Warning message visibility', function() {
+    const warningMessage = esimRemoveProfileDialog.$$('#warningMessage');
+    assertTrue(!!warningMessage);
+
+    esimRemoveProfileDialog.showCellularDisconnectWarning = false;
+    assertTrue(warningMessage.hidden);
+
+    esimRemoveProfileDialog.showCellularDisconnectWarning = true;
+    assertFalse(warningMessage.hidden);
+  });
 });

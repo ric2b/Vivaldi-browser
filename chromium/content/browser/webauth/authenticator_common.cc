@@ -9,16 +9,16 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversion_utils.h"
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -70,6 +70,10 @@
 #if defined(OS_WIN)
 #include "device/fido/win/authenticator.h"
 #include "device/fido/win/webauthn_api.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "device/fido/cros/authenticator.h"
 #endif
 
 namespace content {
@@ -318,10 +322,6 @@ CreateMakeCredentialResponse(
   common_info->authenticator_data = response_data.attestation_object()
                                         .authenticator_data()
                                         .SerializeToByteArray();
-  if (response_data.android_client_data_ext()) {
-    DCHECK(base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport));
-    common_info->client_data_json = *response_data.android_client_data_ext();
-  }
   common_info->raw_id = response_data.raw_credential_id();
   common_info->id = response_data.GetId();
   response->info = std::move(common_info);
@@ -426,10 +426,6 @@ blink::mojom::GetAssertionAuthenticatorResponsePtr CreateGetAssertionResponse(
   auto common_info = blink::mojom::CommonCredentialInfo::New();
   common_info->client_data_json.assign(client_data_json.begin(),
                                        client_data_json.end());
-  if (response_data.android_client_data_ext()) {
-    DCHECK(base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport));
-    common_info->client_data_json = *response_data.android_client_data_ext();
-  }
   common_info->raw_id = response_data.raw_credential_id();
   common_info->id = response_data.GetId();
   response->info = std::move(common_info);
@@ -503,6 +499,7 @@ void IsUserVerifyingPlatformAuthenticatorAvailableImpl(
     return;
   }
 
+  // Check for a delegate override. Chrome overrides IsUVPAA() in Guest mode.
   base::Optional<bool> is_uvpaa_override =
       delegate->IsUserVerifyingPlatformAuthenticatorAvailableOverride();
   if (is_uvpaa_override) {
@@ -513,33 +510,25 @@ void IsUserVerifyingPlatformAuthenticatorAvailableImpl(
 #if defined(OS_MAC)
   const base::Optional<device::fido::mac::AuthenticatorConfig> config =
       delegate->GetTouchIdAuthenticatorConfig();
-  std::move(callback).Run(config &&
-                          IsUVPlatformAuthenticatorAvailable(*config));
-  return;
+  if (!config) {
+    std::move(callback).Run(false);
+    return;
+  }
+  IsUVPlatformAuthenticatorAvailable(*config, std::move(callback));
 #elif defined(OS_WIN)
+  // TODO(crbug.com/908622): Enable platform authenticators in Incognito on
+  // Windows once the API allows triggering an adequate warning dialog.
   if (browser_context->IsOffTheRecord()) {
     std::move(callback).Run(false);
     return;
   }
 
-  std::move(callback).Run(IsUVPlatformAuthenticatorAvailable(
-      discovery_factory->win_webauthn_api()));
-  return;
+  IsUVPlatformAuthenticatorAvailable(discovery_factory->win_webauthn_api(),
+                                     std::move(callback));
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
-  if (browser_context->IsOffTheRecord()) {
-    std::move(callback).Run(false);
-    return;
-  }
-
-  // ChromeOS needs to do a dbus call to determine platform authenticator
-  // availability. The call is fast in practice, but nonetheless may
-  // theoretically block.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::TaskPriority::USER_BLOCKING, base::MayBlock()},
-      base::BindOnce(&IsUVPlatformAuthenticatorAvailable), std::move(callback));
+  IsUVPlatformAuthenticatorAvailable(std::move(callback));
 #else
   std::move(callback).Run(false);
-  return;
 #endif
 }
 
@@ -563,23 +552,24 @@ base::flat_set<device::FidoTransportProtocol> GetAvailableTransports(
   base::flat_set<device::FidoTransportProtocol> transports;
   transports.insert(device::FidoTransportProtocol::kUsbHumanInterfaceDevice);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // TODO(crbug.com/1157651): Work around CrOS platform authenticator being
-  // unavailable in Incognito.
-  if (!content::WebContents::FromRenderFrameHost(render_frame_host)
-           ->GetBrowserContext()
-           ->IsOffTheRecord()) {
+  // Only instantiate platform discovery if the embedder hasn't chosen to
+  // override IsUserVerifyingPlatformAuthenticatorAvailable() to be false.
+  // Chrome disables platform authenticators in Guest modes this way.
+  base::Optional<bool> embedder_isuvpaa_override =
+      delegate->IsUserVerifyingPlatformAuthenticatorAvailableOverride();
+  if (!embedder_isuvpaa_override || *embedder_isuvpaa_override) {
     transports.insert(device::FidoTransportProtocol::kInternal);
   }
-#else
-  transports.insert(device::FidoTransportProtocol::kInternal);
-#endif
 
   if (discovery_factory->IsTestOverride()) {
     // The desktop implementation does not support BLE or NFC, but we emulate
     // them if the testing API is enabled.
     transports.insert(device::FidoTransportProtocol::kBluetoothLowEnergy);
     transports.insert(device::FidoTransportProtocol::kNearFieldCommunication);
+
+    // Ensure virtual platform authenticators can be instantiated even if they
+    // are not-user-verifying, i.e. IsUVPAA() returns false.
+    transports.insert(device::FidoTransportProtocol::kInternal);
   }
 
   if (base::FeatureList::IsEnabled(features::kWebAuthCable) ||
@@ -588,9 +578,20 @@ base::flat_set<device::FidoTransportProtocol> GetAvailableTransports(
         device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
   }
 
-  if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
+#if !defined(OS_WIN)
+  // kAndroidAccessory doesn't work on Windows because of USB stack issues.
+  // Note: even if this value were inserted it wouldn't take effect on Windows
+  // versions with a native API because FidoRequestHandlerBase filters out
+  // non-kCloudAssistedBluetoothLowEnergy transports in that case.
+
+  if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport) ||
+      base::FeatureList::IsEnabled(device::kWebAuthCableServerLink)) {
+    // In order for AOA to be active the |AuthenticatorRequestClientDelegate|
+    // must configure a |UsbDeviceManager|, which it'll only do if
+    // |kWebAuthPhoneSupport| is enabled, or if a V2 caBLE extension is seen.
     transports.insert(device::FidoTransportProtocol::kAndroidAccessory);
   }
+#endif
 
   return transports;
 }
@@ -625,7 +626,13 @@ std::unique_ptr<device::FidoDiscoveryFactory> MakeDiscoveryFactory(
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (base::FeatureList::IsEnabled(device::kWebAuthCrosPlatformAuthenticator)) {
+  // Ignore the ChromeOS u2fd virtual U2F HID device for WebAuthn requests so
+  // that it doesn't collide with the ChromeOS platform authenticator, also
+  // implemented in u2fd.
+  if (base::FeatureList::IsEnabled(device::kWebAuthCrosPlatformAuthenticator) &&
+      !is_u2f_api_request) {
+    constexpr device::VidPid kChromeOsU2fdVidPid{0x18d1, 0x502c};
+    discovery_factory->set_hid_ignore_list({kChromeOsU2fdVidPid});
     discovery_factory->set_generate_request_id_callback(
         request_delegate->GetGenerateRequestIdCallback(render_frame_host));
   }
@@ -634,7 +641,100 @@ std::unique_ptr<device::FidoDiscoveryFactory> MakeDiscoveryFactory(
   return discovery_factory;
 }
 
+std::string Base64UrlEncode(const base::span<const uint8_t> input) {
+  std::string ret;
+  base::Base64UrlEncode(
+      base::StringPiece(reinterpret_cast<const char*>(input.data()),
+                        input.size()),
+      base::Base64UrlEncodePolicy::OMIT_PADDING, &ret);
+  return ret;
+}
+
+// ToJSONString encodes |in| as a JSON string, using the specific escaping rules
+// required by https://github.com/w3c/webauthn/pull/1375.
+std::string ToJSONString(base::StringPiece in) {
+  std::string ret;
+  ret.reserve(in.size() + 2);
+  ret.push_back('"');
+
+  const char* const in_bytes = in.data();
+  // ICU uses |int32_t| for lengths.
+  const int32_t length = base::checked_cast<int32_t>(in.size());
+  int32_t offset = 0;
+
+  while (offset < length) {
+    const int32_t prior_offset = offset;
+    // Input strings must be valid UTF-8.
+    uint32_t codepoint;
+    CHECK(base::ReadUnicodeCharacter(in_bytes, length, &offset, &codepoint));
+    // offset is updated by |ReadUnicodeCharacter| to index the last byte of the
+    // codepoint. Increment it to index the first byte of the next codepoint for
+    // the subsequent iteration.
+    offset++;
+
+    if (codepoint == 0x20 || codepoint == 0x21 ||
+        (codepoint >= 0x23 && codepoint <= 0x5b) || codepoint >= 0x5d) {
+      ret.append(&in_bytes[prior_offset], &in_bytes[offset]);
+    } else if (codepoint == 0x22) {
+      ret.append("\\\"");
+    } else if (codepoint == 0x5c) {
+      ret.append("\\\\");
+    } else {
+      static const char hextable[17] = "0123456789abcdef";
+      ret.append("\\u00");
+      ret.push_back(hextable[codepoint >> 4]);
+      ret.push_back(hextable[codepoint & 15]);
+    }
+  }
+
+  ret.push_back('"');
+  return ret;
+}
+
 }  // namespace
+
+std::string SerializeWebAuthnCollectedClientDataToJson(
+    const std::string& type,
+    const std::string& origin,
+    base::span<const uint8_t> challenge,
+    bool is_cross_origin,
+    bool use_legacy_u2f_type_key /* = false */) {
+  std::string ret;
+  ret.reserve(128);
+
+  if (use_legacy_u2f_type_key) {
+    ret.append(R"({"typ":)");
+  } else {
+    ret.append(R"({"type":)");
+  }
+  ret.append(ToJSONString(type));
+
+  ret.append(R"(,"challenge":)");
+  ret.append(ToJSONString(Base64UrlEncode(challenge)));
+
+  ret.append(R"(,"origin":)");
+  ret.append(ToJSONString(origin));
+
+  if (is_cross_origin) {
+    ret.append(R"(,"crossOrigin":true)");
+  } else {
+    ret.append(R"(,"crossOrigin":false)");
+  }
+
+  if (base::RandDouble() < 0.2) {
+    // An extra key is sometimes added to ensure that RPs do not make
+    // unreasonably specific assumptions about the clientData JSON. This is
+    // done in the fashion of
+    // https://tools.ietf.org/html/draft-ietf-tls-grease
+    ret.append(R"(,"other_keys_can_be_added_here":")");
+    ret.append(
+        "do not compare clientDataJSON against a template. See "
+        "https://goo.gl/yabPex\"");
+  }
+
+  ret.append("}");
+  return ret;
+}
 
 AuthenticatorCommon::AuthenticatorCommon(RenderFrameHost* render_frame_host)
     : render_frame_host_(render_frame_host),
@@ -698,10 +798,6 @@ void AuthenticatorCommon::StartMakeCredentialRequest(
       base::BindRepeating(
           &device::FidoRequestHandlerBase::PowerOnBluetoothAdapter,
           request_->GetWeakPtr()) /* bluetooth_adapter_power_on_callback */);
-  if (make_credential_options_->resident_key !=
-      device::ResidentKeyRequirement::kDiscouraged) {
-    request_delegate_->SetMightCreateResidentCredential(true);
-  }
   request_->set_observer(request_delegate_.get());
 }
 
@@ -715,6 +811,10 @@ void AuthenticatorCommon::StartGetAssertionRequest(
   }
   request_delegate_->ConfigureCable(caller_origin_, cable_pairings,
                                     discovery_factory());
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  discovery_factory()->set_get_assertion_request_for_legacy_credential_check(
+      *ctap_get_assertion_request_);
+#endif
 
   request_ = std::make_unique<device::GetAssertionRequestHandler>(
       discovery_factory(),
@@ -765,7 +865,6 @@ void AuthenticatorCommon::OnLargeBlobUncompressed(
                                  app_id_, requested_extensions_));
 }
 
-// static
 // mojom::Authenticator
 void AuthenticatorCommon::MakeCredential(
     url::Origin caller_origin,
@@ -792,7 +891,10 @@ void AuthenticatorCommon::MakeCredential(
   blink::mojom::AuthenticatorStatus status =
       security_checker_->ValidateAncestorOrigins(
           caller_origin,
-          WebAuthRequestSecurityChecker::RequestType::kMakeCredential,
+          options->is_payment_credential_creation
+              ? WebAuthRequestSecurityChecker::RequestType::
+                    kMakePaymentCredential
+              : WebAuthRequestSecurityChecker::RequestType::kMakeCredential,
           &is_cross_origin);
   if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
     InvokeCallbackAndCleanup(std::move(callback), status);
@@ -971,17 +1073,20 @@ void AuthenticatorCommon::MakeCredential(
   // |relying_party| |name| attribute. (The |id| attribute contains the AppID.)
   client_data_json_ =
       origin_is_crypto_token_extension
-          ? device::SerializeCollectedClientDataToJson(
+          ? SerializeWebAuthnCollectedClientDataToJson(
                 client_data::kU2fRegisterType, *options->relying_party.name,
                 options->challenge, /*is_cross_origin=*/false,
                 /*use_legacy_u2f_type_key=*/true)
-          : device::SerializeCollectedClientDataToJson(
+          : SerializeWebAuthnCollectedClientDataToJson(
                 client_data::kCreateType, caller_origin_.Serialize(),
                 options->challenge, is_cross_origin);
 
-  // Cryptotoken requests should be proxied without UI.
-  if (origin_is_crypto_token_extension || disable_ui_)
+  // Cryptotoken requests, making payment credentials, and Touch-to-Autofill
+  // should be proxied without UI.
+  if (origin_is_crypto_token_extension ||
+      options->is_payment_credential_creation || disable_ui_) {
     request_delegate_->DisableUI();
+  }
 
   ctap_make_credential_request_ = device::CtapMakeCredentialRequest(
       client_data_json_, options->relying_party, options->user,
@@ -1007,18 +1112,6 @@ void AuthenticatorCommon::MakeCredential(
       browser_context()->IsOffTheRecord();
   // On dual protocol CTAP2/U2F devices, force credential creation over U2F.
   ctap_make_credential_request_->is_u2f_only = origin_is_crypto_token_extension;
-
-  if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport) &&
-      !origin_is_crypto_token_extension && !is_cross_origin) {
-    // Send the unhashed origin and challenge to caBLEv2 authenticators, because
-    // the Android API requires them. It does not accept clientDataJSON or its
-    // hash.
-    // NOTE: Because Android has no way of building a clientDataJSON for
-    // cross-origin requests, we don't create the extension for those. This
-    // problem will go away once we add clientDataHash inputs to Android.
-    make_credential_options_->android_client_data_ext.emplace(
-        client_data::kCreateType, caller_origin_, options->challenge);
-  }
 
   // Compute the effective attestation conveyance preference.
   device::AttestationConveyancePreference attestation = options->attestation;
@@ -1107,11 +1200,11 @@ void AuthenticatorCommon::GetAssertion(
   // |relying_party_id| attribute.
   client_data_json_ =
       origin_is_crypto_token_extension
-          ? device::SerializeCollectedClientDataToJson(
+          ? SerializeWebAuthnCollectedClientDataToJson(
                 client_data::kU2fSignType, options->relying_party_id,
                 options->challenge, /*is_cross_origin=*/false,
                 /*use_legacy_u2f_type_key=*/true)
-          : device::SerializeCollectedClientDataToJson(
+          : SerializeWebAuthnCollectedClientDataToJson(
                 client_data::kGetType, caller_origin_.Serialize(),
                 options->challenge, is_cross_origin);
 
@@ -1127,8 +1220,12 @@ void AuthenticatorCommon::GetAssertion(
   }
 
   // Cryptotoken requests should be proxied without UI.
-  if (origin_is_crypto_token_extension || disable_ui_)
+  if (origin_is_crypto_token_extension || disable_ui_) {
+    DCHECK(!options->is_conditional);
     request_delegate_->DisableUI();
+  }
+
+  request_delegate_->SetConditionalRequest(options->is_conditional);
 
   if (options->allow_credentials.empty()) {
     if (!request_delegate_->SupportsResidentKeys()) {
@@ -1230,17 +1327,6 @@ void AuthenticatorCommon::GetAssertion(
   }
 
   ctap_get_assertion_request_->is_u2f_only = origin_is_crypto_token_extension;
-  if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport) &&
-      !origin_is_crypto_token_extension && !is_cross_origin) {
-    // Send the unhashed origin and challenge to caBLEv2 authenticators, because
-    // the Android API requires them. It does not accept clientDataJSON or its
-    // hash.
-    // NOTE: Because Android has no way of building a clientDataJSON for
-    // cross-origin requests, we don't create the extension for those. This
-    // problem will go away once we add clientDataHash inputs to Android.
-    ctap_get_assertion_request_->android_client_data_ext.emplace(
-        client_data::kGetType, caller_origin_, options->challenge);
-  }
 
   if (options->large_blob_write) {
     data_decoder_.GzipCompress(
@@ -1410,10 +1496,10 @@ void AuthenticatorCommon::OnRegisterResponse(
       if (transport_used) {
         request_delegate_->UpdateLastTransportUsed(*transport_used);
         is_transport_used_internal =
-            (*transport_used == device::FidoTransportProtocol::kInternal);
+            *transport_used == device::FidoTransportProtocol::kInternal;
         is_transport_used_cable =
-            (*transport_used ==
-             device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
+            *transport_used ==
+            device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy;
       }
 
       const auto attestation =
@@ -1459,6 +1545,15 @@ void AuthenticatorCommon::OnRegisterResponse(
         // maintained.
         attestation_erasure =
             AttestationErasureOption::kEraseAttestationButIncludeAaguid;
+      } else if (is_transport_used_internal) {
+        // Direct attestation from platform authenticators is known to be
+        // privacy preserving, so we always return it when requested. Also,
+        // counter to what the WebAuthn spec says, we do not erase the AAGUID
+        // even when attestation wasn't requested.
+        attestation_erasure =
+            attestation != device::AttestationConveyancePreference::kNone
+                ? AttestationErasureOption::kIncludeAttestation
+                : AttestationErasureOption::kEraseAttestationButIncludeAaguid;
       } else if (attestation !=
                  device::AttestationConveyancePreference::kNone) {
         awaiting_attestation_response_ = true;
@@ -1467,16 +1562,9 @@ void AuthenticatorCommon::OnRegisterResponse(
             response_data->enterprise_attestation_returned,
             base::BindOnce(
                 &AuthenticatorCommon::OnRegisterResponseAttestationDecided,
-                weak_factory_.GetWeakPtr(), std::move(*response_data),
-                is_transport_used_internal));
+                weak_factory_.GetWeakPtr(), std::move(*response_data)));
       } else if (response_data->IsSelfAttestation()) {
         attestation_erasure = AttestationErasureOption::kIncludeAttestation;
-      } else if (is_transport_used_internal) {
-        // Contrary to what the WebAuthn spec says, for internal (platform)
-        // authenticators we do not erase the AAGUID from authenticatorData,
-        // even if requested attestationConveyancePreference is "none".
-        attestation_erasure =
-            AttestationErasureOption::kEraseAttestationButIncludeAaguid;
       } else {
         attestation_erasure =
             AttestationErasureOption::kEraseAttestationAndAaguid;
@@ -1499,7 +1587,6 @@ void AuthenticatorCommon::OnRegisterResponse(
 
 void AuthenticatorCommon::OnRegisterResponseAttestationDecided(
     device::AuthenticatorMakeCredentialResponse response_data,
-    bool is_transport_used_internal,
     bool attestation_permitted) {
   awaiting_attestation_response_ = false;
   if (!request_) {
@@ -1510,16 +1597,7 @@ void AuthenticatorCommon::OnRegisterResponseAttestationDecided(
 
   AttestationErasureOption attestation_erasure;
   if (!attestation_permitted) {
-    if (is_transport_used_internal) {
-      // For internal (platform) authenticators, we do not erase the
-      // AAGUID from authenticatorData even if the user declines to
-      // share attestation.
-      attestation_erasure =
-          AttestationErasureOption::kEraseAttestationButIncludeAaguid;
-    } else {
-      attestation_erasure =
-          AttestationErasureOption::kEraseAttestationAndAaguid;
-    }
+    attestation_erasure = AttestationErasureOption::kEraseAttestationAndAaguid;
   } else {
     attestation_erasure = AttestationErasureOption::kIncludeAttestation;
   }

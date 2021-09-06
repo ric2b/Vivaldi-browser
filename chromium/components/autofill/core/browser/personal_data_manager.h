@@ -17,6 +17,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_profile_validator.h"
@@ -35,6 +36,7 @@
 #include "components/autofill/core/browser/webdata/autofill_change.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service_observer.h"
+#include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -233,6 +235,10 @@ class PersonalDataManager : public KeyedService,
   // owned by this class and must outlive |this|.
   void SetSyncServiceForTest(syncer::SyncService* sync_service);
 
+  // Adds the offer data to local cache for tests. This does not affect data in
+  // the real database.
+  void AddOfferDataForTest(std::unique_ptr<AutofillOfferData> offer_data);
+
   // Returns the credit card with the specified |guid|, or nullptr if there is
   // no credit card with the specified |guid|.
   virtual CreditCard* GetCreditCardByGUID(const std::string& guid);
@@ -241,7 +247,11 @@ class PersonalDataManager : public KeyedService,
   // no credit card with the specified |number|.
   virtual CreditCard* GetCreditCardByNumber(const std::string& number);
 
-  // Gets the field types availabe in the stored address and credit card data.
+  // Returns the credit card with the specified |instrument_id|, or nullptr if
+  // there is no credit card with the specified |instrument_id|.
+  CreditCard* GetCreditCardByInstrumentId(int64_t instrument_id);
+
+  // Gets the field types available in the stored address and credit card data.
   void GetNonEmptyTypes(ServerFieldTypeSet* non_empty_types) const;
 
   // Returns whether the personal data has been loaded from the web database.
@@ -425,6 +435,9 @@ class PersonalDataManager : public KeyedService,
       AutofillProfileValidator* validator) {
     client_profile_validator_ = validator;
   }
+
+  // Returns true if the PDM is in the off-the-record mode.
+  bool IsOffTheRecord() { return is_off_the_record_; }
 
  protected:
   // Only PersonalDataManagerFactory and certain tests can create instances of
@@ -813,6 +826,9 @@ class PersonalDataManager : public KeyedService,
 
   // Whether sync should be considered on in a test.
   bool is_syncing_for_test_ = false;
+
+  base::ScopedObservation<history::HistoryService, HistoryServiceObserver>
+      history_service_observation_{this};
 
   base::WeakPtrFactory<PersonalDataManager> weak_factory_{this};
 

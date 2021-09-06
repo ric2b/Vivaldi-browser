@@ -24,6 +24,10 @@
 
 namespace extensions {
 
+namespace {
+constexpr int kHttpErrorCodeForbidden = 403;
+}  // namespace
+
 ForceInstalledTracker::ForceInstalledTracker(ExtensionRegistry* registry,
                                              Profile* profile)
     : extension_management_(
@@ -45,14 +49,14 @@ ForceInstalledTracker::~ForceInstalledTracker() {
 
 void ForceInstalledTracker::UpdateCounters(ExtensionStatus status, int delta) {
   switch (status) {
-    case ExtensionStatus::PENDING:
+    case ExtensionStatus::kPending:
       load_pending_count_ += delta;
       FALLTHROUGH;
-    case ExtensionStatus::LOADED:
+    case ExtensionStatus::kLoaded:
       ready_pending_count_ += delta;
       break;
-    case ExtensionStatus::READY:
-    case ExtensionStatus::FAILED:
+    case ExtensionStatus::kReady:
+    case ExtensionStatus::kFailed:
       break;
   }
 }
@@ -114,11 +118,11 @@ void ForceInstalledTracker::OnForcedExtensionsPrefReady() {
       bool is_from_store =
           update_url && *update_url == extension_urls::kChromeWebstoreUpdateURL;
 
-      ExtensionStatus status = ExtensionStatus::PENDING;
+      ExtensionStatus status = ExtensionStatus::kPending;
       if (registry_->enabled_extensions().Contains(extension_id)) {
         status = registry_->ready_extensions().Contains(extension_id)
-                     ? ExtensionStatus::READY
-                     : ExtensionStatus::LOADED;
+                     ? ExtensionStatus::kReady
+                     : ExtensionStatus::kLoaded;
       }
       AddExtensionInfo(extension_id, status, is_from_store);
     }
@@ -143,14 +147,14 @@ void ForceInstalledTracker::RemoveObserver(Observer* obs) {
 void ForceInstalledTracker::OnExtensionLoaded(
     content::BrowserContext* browser_context,
     const Extension* extension) {
-  ChangeExtensionStatus(extension->id(), ExtensionStatus::LOADED);
+  ChangeExtensionStatus(extension->id(), ExtensionStatus::kLoaded);
   MaybeNotifyObservers();
 }
 
 void ForceInstalledTracker::OnExtensionReady(
     content::BrowserContext* browser_context,
     const Extension* extension) {
-  ChangeExtensionStatus(extension->id(), ExtensionStatus::READY);
+  ChangeExtensionStatus(extension->id(), ExtensionStatus::kReady);
   MaybeNotifyObservers();
 }
 
@@ -160,10 +164,10 @@ void ForceInstalledTracker::OnExtensionInstallationFailed(
   auto item = extensions_.find(extension_id);
   // If the extension is loaded, ignore the failure.
   if (item == extensions_.end() ||
-      item->second.status == ExtensionStatus::LOADED ||
-      item->second.status == ExtensionStatus::READY)
+      item->second.status == ExtensionStatus::kLoaded ||
+      item->second.status == ExtensionStatus::kReady)
     return;
-  ChangeExtensionStatus(extension_id, ExtensionStatus::FAILED);
+  ChangeExtensionStatus(extension_id, ExtensionStatus::kFailed);
   MaybeNotifyObservers();
 }
 
@@ -250,6 +254,18 @@ bool ForceInstalledTracker::IsMisconfiguration(
     if (extension != extensions_.end() && !extension->second.is_from_store &&
         !IsExtensionFetchedFromCache(
             installation_data.downloading_cache_status)) {
+      return true;
+    }
+  }
+
+  // When we receive 403 during update manifest fetch, it means that either
+  // update URL is wrong, or self-hosting server is misconfigured. Both cases
+  // are misconfigurations from Chrome's point view.
+  if (installation_data.failure_reason ==
+      InstallStageTracker::FailureReason::MANIFEST_FETCH_FAILED) {
+    auto extension = extensions_.find(id);
+    if (installation_data.response_code == kHttpErrorCodeForbidden &&
+        extension != extensions_.end() && !extension->second.is_from_store) {
       return true;
     }
   }

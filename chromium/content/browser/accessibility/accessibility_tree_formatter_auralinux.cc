@@ -2,26 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ui/accessibility/platform/inspect/ax_tree_formatter_base.h"
+#include "content/browser/accessibility/accessibility_tree_formatter_auralinux.h"
 
-#include <atspi/atspi.h>
 #include <dbus/dbus.h>
 
-#include <iostream>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
-#include "content/browser/accessibility/accessibility_tree_formatter_utils_auralinux.h"
 #include "content/browser/accessibility/browser_accessibility_auralinux.h"
 #include "content/public/browser/ax_inspect_factory.h"
 #include "ui/accessibility/platform/ax_platform_node_auralinux.h"
+#include "ui/accessibility/platform/inspect/ax_inspect_utils_auralinux.h"
 
 #define CHECK_ATSPI_ERROR(error)                       \
   if (error) {                                         \
@@ -37,126 +33,22 @@
     return nullptr;                      \
   }
 
-const char kChromeTitle[] = "Google Chrome";
-const char kChromiumTitle[] = "Chromium";
-const char kFirefoxTitle[] = "Firefox";
-
 namespace content {
 
-class AccessibilityTreeFormatterAuraLinux : public ui::AXTreeFormatterBase {
- public:
-  AccessibilityTreeFormatterAuraLinux();
-  ~AccessibilityTreeFormatterAuraLinux() override;
+using ui::AtkRoleToString;
+using ui::ATSPIStateToString;
+using ui::FindAccessible;
 
- private:
-  std::string ProcessTreeForOutput(
-      const base::DictionaryValue& node) const override;
-
-  base::Value BuildTree(ui::AXPlatformNodeDelegate* root) const override;
-  base::Value BuildTreeForWindow(gfx::AcceleratedWidget hwnd) const override;
-  base::Value BuildTreeForSelector(
-      const AXTreeSelector& selector) const override;
-
-  AtspiAccessible* FindActiveDocument(AtspiAccessible* root) const;
-  void RecursiveBuildTree(AtspiAccessible* node,
-                          base::DictionaryValue* dict) const;
-  void RecursiveBuildTree(AtkObject*, base::DictionaryValue*) const;
-
-  void AddProperties(AtkObject*, base::DictionaryValue*) const;
-  void AddProperties(AtspiAccessible*, base::DictionaryValue*) const;
-
-  void AddTextProperties(AtkText* atk_text, base::DictionaryValue* dict) const;
-  void AddActionProperties(AtkObject* atk_object,
-                           base::DictionaryValue* dict) const;
-  void AddValueProperties(AtkObject* atk_object,
-                          base::DictionaryValue* dict) const;
-  void AddTableProperties(AtkObject* atk_object,
-                          base::DictionaryValue* dict) const;
-  void AddTableCellProperties(const ui::AXPlatformNodeAuraLinux* node,
-                              AtkObject* atk_object,
-                              base::DictionaryValue* dict) const;
-};
-
-// TODO(crbug.com/1133330): move implementation into
-// content/public/ax_inspect_factory.cc when AccessibilityTreeFormatterAuraLinux
-// is relocated under ui/accessibility/platform
-
-// static
-std::unique_ptr<ui::AXTreeFormatter>
-AXInspectFactory::CreatePlatformFormatter() {
-  return AXInspectFactory::CreateFormatter(kLinux);
-}
-
-// static
-std::unique_ptr<ui::AXTreeFormatter> AXInspectFactory::CreateFormatter(
-    AXInspectFactory::Type type) {
-  switch (type) {
-    case kBlink:
-      return std::make_unique<AccessibilityTreeFormatterBlink>();
-    case kLinux:
-      return std::make_unique<AccessibilityTreeFormatterAuraLinux>();
-    default:
-      NOTREACHED() << "Unsupported formatter type " << type;
-  }
-  return nullptr;
-}
-
-AccessibilityTreeFormatterAuraLinux::AccessibilityTreeFormatterAuraLinux() {}
+AccessibilityTreeFormatterAuraLinux::AccessibilityTreeFormatterAuraLinux() = default;
 
 AccessibilityTreeFormatterAuraLinux::~AccessibilityTreeFormatterAuraLinux() {}
 
 base::Value AccessibilityTreeFormatterAuraLinux::BuildTreeForSelector(
     const AXTreeSelector& selector) const {
-  std::string title;
-  if (selector.types & AXTreeSelector::Chrome) {
-    title = kChromeTitle;
-  } else if (selector.types & AXTreeSelector::Chromium) {
-    title = kChromiumTitle;
-  } else if (selector.types & AXTreeSelector::Firefox) {
-    title = kFirefoxTitle;
-  }
-
-  // AT-SPI2 always expects the first parameter to this call to be zero.
-  AtspiAccessible* desktop = atspi_get_desktop(0);
-  CHECK(desktop);
-
-  GError* error = nullptr;
-  int child_count = atspi_accessible_get_child_count(desktop, &error);
-  CHECK_ATSPI_ERROR(error)
-
-  std::vector<std::pair<std::string, AtspiAccessible*>> matched_children;
-  for (int i = 0; i < child_count; i++) {
-    AtspiAccessible* child =
-        atspi_accessible_get_child_at_index(desktop, i, &error);
-    CHECK_ATSPI_ERROR(error)
-
-    char* name = atspi_accessible_get_name(child, &error);
-    if (!error && name) {
-      if ((!title.empty() && title == name) ||
-          base::MatchPattern(name, selector.pattern)) {
-        matched_children.emplace_back(name, child);
-      }
-    }
-
-    free(name);
-  }
-
-  if (matched_children.size() == 0) {
-    LOG(ERROR) << "No application matched.";
+  AtspiAccessible* node = FindAccessible(selector);
+  if (!node) {
     return base::Value(base::Value::Type::DICTIONARY);
   }
-
-  if (matched_children.size() > 1) {
-    LOG(ERROR) << "Matched more than one application. "
-               << "Try to make a more specific pattern.";
-    for (auto& match : matched_children) {
-      LOG(ERROR) << "  * " << match.first;
-    }
-    return base::Value(base::Value::Type::DICTIONARY);
-  }
-
-  AtspiAccessible* node = matched_children[0].second;
-  CHECK(node);
 
   // Active tab
   if (selector.types & AXTreeSelector::ActiveTab) {

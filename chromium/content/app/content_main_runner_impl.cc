@@ -14,11 +14,6 @@
 #include <vector>
 
 #include "base/allocator/allocator_check.h"
-#include "base/allocator/allocator_extension.h"
-#include "base/allocator/allocator_shim.h"
-#include "base/allocator/buildflags.h"
-#include "base/allocator/partition_allocator/checked_ptr_support.h"
-#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/at_exit.h"
 #include "base/base_switches.h"
 #include "base/bind.h"
@@ -26,10 +21,10 @@
 #include "base/debug/debugger.h"
 #include "base/debug/leak_annotations.h"
 #include "base/debug/stack_trace.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/i18n/icu_util.h"
 #include "base/lazy_instance.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
@@ -48,11 +43,16 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/hang_watcher.h"
+#include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "components/download/public/common/download_task_runner.h"
+#include "components/power_scheduler/power_mode_arbiter.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/app/mojo_ipc_support.h"
+#include "content/app/partition_alloc_support.h"
 #include "content/browser/browser_main.h"
 #include "content/browser/browser_process_sub_thread.h"
 #include "content/browser/browser_thread_impl.h"
@@ -173,11 +173,6 @@
 #include "content/common/android/cpu_affinity.h"
 #endif
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-#include "base/allocator/partition_allocator/extended_api.h"
-#include "base/allocator/partition_allocator/thread_cache.h"
-#endif
-
 namespace content {
 extern int GpuMain(const content::MainFunctionParams&);
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -242,38 +237,6 @@ void InitializeV8IfNeeded(const base::CommandLine& command_line,
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
 }
 
-void EnablePCScanForMallocPartitionsIfNeeded() {
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && ALLOW_PCSCAN
-  CHECK(base::FeatureList::GetInstance());
-  if (base::FeatureList::IsEnabled(base::features::kPartitionAllocPCScan)) {
-    base::allocator::EnablePCScan();
-  }
-#endif
-}
-
-void EnablePCScanForMallocPartitionsInBrowserProcessIfNeeded() {
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && ALLOW_PCSCAN
-  CHECK(base::FeatureList::GetInstance());
-  if (base::FeatureList::IsEnabled(
-          base::features::kPartitionAllocPCScanBrowserOnly)) {
-    base::allocator::EnablePCScan();
-  }
-#endif
-}
-
-// This function should be executed as early as possible once we can get the
-// command line arguments and determine whether the process needs BRP support.
-// Until that moment, all heap allocations end up in a slower temporary
-// partition with no thread cache and cause heap fragmentation.
-//
-// Furthermore, since the function has to allocate a new partition, it must
-// only run once.
-void ConfigurePartitionRefCountSupportIfNeeded(bool enable_ref_count) {
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && DISABLE_REF_COUNT_IN_RENDERER
-  base::allocator::ConfigurePartitionRefCountSupport(enable_ref_count);
-#endif
-}
-
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
 pid_t LaunchZygoteHelper(base::CommandLine* cmd_line,
                          base::ScopedFD* control_fd) {
@@ -330,7 +293,9 @@ void InitializeZygoteSandboxForBrowserProcess(
 
   // Tickle the zygote host so it forks now.
   ZygoteHostImpl::GetInstance()->Init(parsed_command_line);
-  CreateUnsandboxedZygote(base::BindOnce(LaunchZygoteHelper));
+  if (!parsed_command_line.HasSwitch(switches::kNoUnsandboxedZygote)) {
+    CreateUnsandboxedZygote(base::BindOnce(LaunchZygoteHelper));
+  }
   ZygoteHandle generic_zygote =
       CreateGenericZygote(base::BindOnce(LaunchZygoteHelper));
 
@@ -435,6 +400,61 @@ void PreSandboxInit() {
 
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
+mojo::ScopedMessagePipeHandle MaybeAcceptMojoInvitation() {
+  const auto& command_line = *base::CommandLine::ForCurrentProcess();
+  if (!mojo::PlatformChannel::CommandLineHasPassedEndpoint(command_line))
+    return {};
+
+  mojo::PlatformChannelEndpoint endpoint =
+      mojo::PlatformChannel::RecoverPassedEndpointFromCommandLine(command_line);
+  auto invitation = mojo::IncomingInvitation::Accept(std::move(endpoint));
+  return invitation.ExtractMessagePipe(0);
+}
+
+#if defined(OS_WIN)
+void HandleConsoleControlEventOnBrowserUiThread(DWORD control_type) {
+  GetContentClient()->browser()->SessionEnding();
+}
+
+// A console control event handler for browser processes that initiates end
+// session handling on the main thread and hangs the control thread.
+BOOL WINAPI BrowserConsoleControlHandler(DWORD control_type) {
+  BrowserTaskExecutor::GetUIThreadTaskRunner(
+      {base::TaskPriority::USER_BLOCKING})
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(&HandleConsoleControlEventOnBrowserUiThread,
+                                control_type));
+
+  // Block the control thread while waiting for SessionEnding to be handled.
+  base::PlatformThread::Sleep(base::TimeDelta::FromHours(1));
+
+  // This should never be hit. The process will be terminated either by
+  // ContentBrowserClient::SessionEnding or by Windows, if the former takes too
+  // long.
+  return TRUE;  // Handled.
+}
+
+// A console control event handler for non-browser processes that hangs the
+// control thread. The event will be handled by the browser process.
+BOOL WINAPI OtherConsoleControlHandler(DWORD control_type) {
+  // Block the control thread while waiting for the browser process.
+  base::PlatformThread::Sleep(base::TimeDelta::FromHours(1));
+
+  // This should never be hit. The process will be terminated by the browser
+  // process or by Windows, if the former takes too long.
+  return TRUE;  // Handled.
+}
+
+void InstallConsoleControlHandler(bool is_browser_process) {
+  if (!::SetConsoleCtrlHandler(is_browser_process
+                                   ? &BrowserConsoleControlHandler
+                                   : &OtherConsoleControlHandler,
+                               /*Add=*/TRUE)) {
+    DPLOG(ERROR) << "Failed to set console hook function";
+  }
+}
+#endif  // defined(OS_WIN)
+
 }  // namespace
 
 class ContentClientCreator {
@@ -513,9 +533,10 @@ int RunZygote(ContentMainDelegate* delegate) {
       *base::CommandLine::ForCurrentProcess();
   std::string process_type =
       command_line.GetSwitchValueASCII(switches::kProcessType);
-  // Must run as early as possible. See the definition comment.
-  ConfigurePartitionRefCountSupportIfNeeded(process_type !=
-                                            switches::kRendererProcess);
+
+  internal::PartitionAllocSupport::Get()->ReconfigureAfterZygoteFork(
+      process_type);
+
   ContentClientInitializer::Set(process_type, delegate);
 
   MainFunctionParams main_params(command_line);
@@ -523,11 +544,11 @@ int RunZygote(ContentMainDelegate* delegate) {
 
   InitializeFieldTrialAndFeatureList();
   delegate->PostFieldTrialInitialization();
-  mojo::core::InitFeatures();
 
-  // After feature list has been initialized, enable pcscan on malloc
-  // partitions.
-  EnablePCScanForMallocPartitionsIfNeeded();
+  internal::PartitionAllocSupport::Get()->ReconfigureAfterFeatureListInit(
+      process_type);
+
+  mojo::core::InitFeatures();
 
   for (size_t i = 0; i < base::size(kMainFunctions); ++i) {
     if (process_type == kMainFunctions[i].name)
@@ -550,10 +571,13 @@ static void RegisterMainThreadFactories() {
 // Returns the exit code for this process.
 int RunBrowserProcessMain(const MainFunctionParams& main_function_params,
                           ContentMainDelegate* delegate) {
+#if defined(OS_WIN)
+  if (delegate->ShouldHandleConsoleControlEvents())
+    InstallConsoleControlHandler(/*is_browser_process=*/true);
+#endif
   int exit_code = delegate->RunProcess("", main_function_params);
   if (exit_code >= 0)
     return exit_code;
-  EnablePCScanForMallocPartitionsInBrowserProcessIfNeeded();
   return BrowserMain(main_function_params);
 }
 
@@ -562,6 +586,10 @@ int RunBrowserProcessMain(const MainFunctionParams& main_function_params,
 int RunOtherNamedProcessTypeMain(const std::string& process_type,
                                  const MainFunctionParams& main_function_params,
                                  ContentMainDelegate* delegate) {
+#if defined(OS_WIN)
+  if (delegate->ShouldHandleConsoleControlEvents())
+    InstallConsoleControlHandler(/*is_browser_process=*/false);
+#endif
   static const MainFunction kMainFunctions[] = {
 #if BUILDFLAG(ENABLE_PLUGINS)
     {switches::kPpapiPluginProcess, PpapiPluginMain},
@@ -571,12 +599,6 @@ int RunOtherNamedProcessTypeMain(const std::string& process_type,
     {switches::kGpuProcess, GpuMain},
   };
 
-  if (process_type != switches::kZygoteProcess) {
-    // Must run as early as possible. See the definition comment.
-    ConfigurePartitionRefCountSupportIfNeeded(process_type !=
-                                              switches::kRendererProcess);
-  }
-
   for (size_t i = 0; i < base::size(kMainFunctions); ++i) {
     if (process_type == kMainFunctions[i].name) {
       int exit_code = delegate->RunProcess(process_type, main_function_params);
@@ -584,11 +606,6 @@ int RunOtherNamedProcessTypeMain(const std::string& process_type,
         return exit_code;
       return kMainFunctions[i].function(main_function_params);
     }
-  }
-
-  if (process_type != switches::kZygoteProcess) {
-    // Zygote processes are handled in RunZygote.
-    EnablePCScanForMallocPartitionsIfNeeded();
   }
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
@@ -692,6 +709,8 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
   std::string process_type =
       command_line.GetSwitchValueASCII(switches::kProcessType);
 
+  internal::PartitionAllocSupport::Get()->ReconfigureEarlyish(process_type);
+
 #if defined(OS_WIN)
   if (command_line.HasSwitch(switches::kDeviceScaleFactor)) {
     std::string scale_factor_string =
@@ -738,9 +757,6 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
   // overriding logic is working correctly. If not causes a hard crash, as its
   // unexpected absence has security implications.
   CHECK(base::allocator::IsAllocatorInitialized());
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-  base::allocator::EnablePartitionAllocMemoryReclaimer();
-#endif
 
 #if defined(OS_POSIX) || defined(OS_FUCHSIA)
   if (!process_type.empty()) {
@@ -894,9 +910,9 @@ int ContentMainRunnerImpl::Run(bool start_minimal_browser) {
       InitializeFieldTrialAndFeatureList();
       delegate_->PostFieldTrialInitialization();
 
-      // After feature list has been initialized, enable pcscan on malloc
-      // partitions.
-      EnablePCScanForMallocPartitionsIfNeeded();
+      internal::PartitionAllocSupport::Get()->ReconfigureAfterFeatureListInit(
+          process_type);
+
       mojo::core::InitFeatures();
     }
 
@@ -924,13 +940,6 @@ int ContentMainRunnerImpl::Run(bool start_minimal_browser) {
 
   RegisterMainThreadFactories();
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(OS_ANDROID)
-  // The thread cache consumes more memory, especially as long as periodic purge
-  // above is disabled. Don't use one on low-memory devices.
-  if (base::SysInfo::IsLowEndDevice())
-    base::DisablePartitionAllocThreadCacheForProcess();
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(OS_ANDROID)
-
   if (process_type.empty())
     return RunBrowser(main_params, start_minimal_browser);
 
@@ -943,9 +952,6 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
                        TRACE_EVENT_SCOPE_THREAD);
   if (is_browser_main_loop_started_)
     return -1;
-
-  // Must run as early as possible. See the definition comment.
-  ConfigurePartitionRefCountSupportIfNeeded(/* enable_ref_count = */ true);
 
   bool should_start_minimal_browser = start_minimal_browser;
   if (!mojo_ipc_support_) {
@@ -960,11 +966,10 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
       mojo::core::InitFeatures();
     }
 
-    if (GetContentClient()->browser()->ShouldCreateThreadPool()) {
-      // Create and start the ThreadPool early to allow upcoming code to use
-      // the post_task.h API.
-      base::ThreadPoolInstance::Create("Browser");
-    }
+    // Create and start the ThreadPool early to allow upcoming code to use
+    // the post_task.h API.
+    const bool has_thread_pool =
+        GetContentClient()->browser()->CreateThreadPool("Browser");
 
     delegate_->PreCreateMainMessageLoop();
 #if defined(OS_WIN)
@@ -992,7 +997,7 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
       ANNOTATE_LEAKING_OBJECT_PTR(hang_watcher_);
     }
 
-    if (GetContentClient()->browser()->ShouldCreateThreadPool()) {
+    if (has_thread_pool) {
       // The FeatureList needs to create before starting the ThreadPool.
       StartBrowserThreadPool();
     }
@@ -1020,19 +1025,14 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
     base::PowerMonitor::Initialize(
         std::make_unique<base::PowerMonitorDeviceSource>());
 
+    // Requires base::PowerMonitor to be initialized first.
+    power_scheduler::PowerModeArbiter::GetInstance()->OnThreadPoolAvailable();
+
     mojo_ipc_support_ =
         std::make_unique<MojoIpcSupport>(BrowserTaskExecutor::CreateIOThread());
 
-    const base::CommandLine& command_line =
-        *base::CommandLine::ForCurrentProcess();
-    if (mojo::PlatformChannel::CommandLineHasPassedEndpoint(command_line)) {
-      mojo::PlatformChannelEndpoint endpoint =
-          mojo::PlatformChannel::RecoverPassedEndpointFromCommandLine(
-              command_line);
-      auto invitation = mojo::IncomingInvitation::Accept(std::move(endpoint));
-      GetContentClient()->browser()->BindBrowserControlInterface(
-          invitation.ExtractMessagePipe(0));
-    }
+    GetContentClient()->browser()->BindBrowserControlInterface(
+        MaybeAcceptMojoInvitation());
 
     download::SetIOTaskRunner(mojo_ipc_support_->io_thread()->task_runner());
 
@@ -1046,15 +1046,9 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams& main_params,
 #endif
   }
 
-  // Enable PCScan once we are certain that FeatureList was initialized.
-  EnablePCScanForMallocPartitionsIfNeeded();
-
-  // This is only relevant for PartitionAlloc-Everywhere builds. Temporarily
-  // disabled for non-DCHECK() builds, due to possibly related crashes
-  // (crbug.com/1155905).
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && DCHECK_IS_ON()
-  base::internal::ThreadCacheRegistry::Instance().StartPeriodicPurge();
-#endif
+  // No specified process type means this is the Browser process.
+  internal::PartitionAllocSupport::Get()->ReconfigureAfterFeatureListInit("");
+  internal::PartitionAllocSupport::Get()->ReconfigureAfterThreadPoolInit("");
 
   if (should_start_minimal_browser) {
     DVLOG(0) << "Chrome is running in minimal browser mode.";

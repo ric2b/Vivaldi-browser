@@ -29,6 +29,7 @@
 #include "cc/layers/layer.h"
 #include "components/viz/test/test_context_provider.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_content_type.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/memory_dump_provider_proxy.h"
@@ -53,6 +54,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/platform/media/webmediaplayer_delegate.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
@@ -156,7 +158,11 @@ class MockWebMediaPlayerClient : public blink::WebMediaPlayerClient {
   MOCK_CONST_METHOD0(CouldPlayIfEnoughData, bool());
   MOCK_METHOD0(ResumePlayback, void());
   MOCK_METHOD0(PausePlayback, void());
+  MOCK_METHOD0(DidPlayerStartPlaying, void());
+  MOCK_METHOD1(DidPlayerPaused, void(bool));
   MOCK_METHOD1(DidPlayerMutedStatusChange, void(bool));
+  MOCK_METHOD3(DidMediaMetadataChange,
+               void(bool, bool, media::MediaContentType));
   MOCK_METHOD3(DidPlayerMediaPositionStateChange,
                void(double, base::TimeDelta, base::TimeDelta position));
   MOCK_METHOD0(DidDisableAudioOutputSinkChanges, void());
@@ -235,12 +241,6 @@ class MockWebMediaPlayerDelegate : public blink::WebMediaPlayerDelegate {
     return is_stale_;
   }
 
-  void SetIsEffectivelyFullscreen(
-      int player_id,
-      blink::WebFullscreenVideoStatus fullscreen_video_status) override {
-    DCHECK_EQ(player_id_, player_id);
-  }
-
   bool IsFrameHidden() override { return is_hidden_; }
 
   bool IsFrameClosed() override { return is_closed_; }
@@ -267,8 +267,6 @@ class MockWebMediaPlayerDelegate : public blink::WebMediaPlayerDelegate {
   void SetFrameClosedForTesting(bool is_closed) { is_closed_ = is_closed; }
 
   int player_id() { return player_id_; }
-
-  MOCK_METHOD2(DidAudioOutputSinkChange, void(int, const std::string&));
 
  private:
   Observer* observer_ = nullptr;
@@ -329,12 +327,12 @@ class WebMediaPlayerImplTest
                                          /*opener=*/nullptr,
                                          mojo::NullAssociatedReceiver(),
                                          *agent_group_scheduler)),
-        web_local_frame_(blink::WebLocalFrame::CreateMainFrame(
-            web_view_,
-            &web_frame_client_,
-            nullptr,
-            base::UnguessableToken::Create(),
-            nullptr)),
+        web_local_frame_(
+            blink::WebLocalFrame::CreateMainFrame(web_view_,
+                                                  &web_frame_client_,
+                                                  nullptr,
+                                                  blink::LocalFrameToken(),
+                                                  nullptr)),
         context_provider_(viz::TestContextProvider::Create()),
         audio_parameters_(TestAudioParameters::Normal()),
         memory_dump_manager_(
@@ -423,7 +421,8 @@ class WebMediaPlayerImplTest
     // Initialize provider since none of the tests below actually go through the
     // full loading/pipeline initialize phase. If this ever changes the provider
     // will start DCHECK failing.
-    provider->Initialize(false, mojom::MediaURLScheme::kHttp);
+    provider->Initialize(false, mojom::MediaURLScheme::kHttp,
+                         mojom::MediaStreamType::kNone);
 
     audio_sink_ = base::WrapRefCounted(new NiceMock<MockAudioRendererSink>());
 
@@ -636,7 +635,7 @@ class WebMediaPlayerImplTest
   bool IsVideoTrackDisabled() const { return wmpi_->video_track_disabled_; }
 
   bool IsDisableVideoTrackPending() const {
-    return !wmpi_->update_background_status_cb_.IsCancelled();
+    return !wmpi_->is_background_status_change_cancelled_;
   }
 
   gfx::Size GetNaturalSize() const {
@@ -1709,6 +1708,7 @@ ACTION(ReportHaveEnough) {
                                BUFFERING_CHANGE_REASON_UNKNOWN);
 }
 
+#if defined(OS_WIN)
 TEST_F(WebMediaPlayerImplTest, FallbackToMediaFoundationRenderer) {
   InitializeWebMediaPlayerImpl();
   // To avoid PreloadMetadataLazyLoad.
@@ -1748,6 +1748,7 @@ TEST_F(WebMediaPlayerImplTest, FallbackToMediaFoundationRenderer) {
   LoadAndWaitForReadyState(kEncryptedVideoOnlyTestFile,
                            blink::WebMediaPlayer::kReadyStateHaveCurrentData);
 }
+#endif  // defined(OS_WIN)
 
 TEST_F(WebMediaPlayerImplTest, VideoConfigChange) {
   InitializeWebMediaPlayerImpl();
@@ -2301,7 +2302,8 @@ TEST_P(WebMediaPlayerImplBackgroundBehaviorTest, VideoOnly) {
   EXPECT_EQ(should_pause, ShouldPausePlaybackWhenHidden());
 }
 
-TEST_P(WebMediaPlayerImplBackgroundBehaviorTest, AudioVideo) {
+// TODO(crbug.com/1177112) Re-enable test
+TEST_P(WebMediaPlayerImplBackgroundBehaviorTest, DISABLED_AudioVideo) {
   SetMetadata(true, true);
 
   // Optimization requirements are the same for all platforms.

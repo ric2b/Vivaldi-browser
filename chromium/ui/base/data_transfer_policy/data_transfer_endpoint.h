@@ -54,6 +54,9 @@ class COMPONENT_EXPORT(UI_BASE_DATA_TRANSFER_POLICY) DataTransferEndpoint {
   DataTransferEndpoint& operator=(DataTransferEndpoint&& other);
 
   bool operator==(const DataTransferEndpoint& other) const;
+  bool operator!=(const DataTransferEndpoint& other) const {
+    return !(*this == other);
+  }
 
   ~DataTransferEndpoint();
 
@@ -64,6 +67,10 @@ class COMPONENT_EXPORT(UI_BASE_DATA_TRANSFER_POLICY) DataTransferEndpoint {
   EndpointType type() const { return type_; }
 
   bool notify_if_restricted() const { return notify_if_restricted_; }
+
+  // Returns true if both of the endpoints have the same origin_ and type_ ==
+  // kUrl.
+  bool IsSameOriginWith(const DataTransferEndpoint& other) const;
 
  private:
   // This variable should always have a value representing the object type.

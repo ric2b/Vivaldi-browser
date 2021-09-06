@@ -14,6 +14,7 @@ import unittest
 # //.vpython
 import mock  # pylint: disable=import-error
 from parameterized import parameterized  # pylint: disable=import-error
+import six
 
 import test_runner
 
@@ -37,6 +38,19 @@ class TestRunnerTest(unittest.TestCase):
   def tearDown(self):
     shutil.rmtree(self._tmp_dir, ignore_errors=True)
     self.mock_rdb.stop()
+
+  def safeAssertItemsEqual(self, list1, list2):
+    """A Py3 safe version of assertItemsEqual.
+
+    See https://bugs.python.org/issue17866.
+    """
+    if six.PY3:
+      self.assertSetEqual(set(list1), set(list2))
+    else:
+      self.assertItemsEqual(list1, list2)
+
+
+class TastTests(TestRunnerTest):
 
   def get_common_tast_args(self, use_vm):
     return [
@@ -80,6 +94,128 @@ class TestRunnerTest(unittest.TestCase):
       ]
     return expectation
 
+  def test_tast_gtest_filter(self):
+    """Tests running tast tests with a gtest-style filter."""
+    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
+      json.dump(_TAST_TEST_RESULTS_JSON, f)
+
+    args = self.get_common_tast_args(False) + [
+        '--attr-expr=( "group:mainline" && "dep:chrome" && !informational)',
+        '--gtest_filter=ui.ChromeLogin:ui.WindowControl',
+    ]
+    with mock.patch.object(sys, 'argv', args),\
+         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
+      mock_popen.return_value.returncode = 0
+
+      test_runner.main()
+      # The gtest filter should cause the Tast expr to be replaced with a list
+      # of the tests in the filter.
+      expected_cmd = self.get_common_tast_expectations(False) + [
+          '--tast=("name:ui.ChromeLogin" || "name:ui.WindowControl")'
+      ]
+
+      self.safeAssertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
+
+  @parameterized.expand([
+      [True],
+      [False],
+  ])
+  def test_tast_attr_expr(self, use_vm):
+    """Tests running a tast tests specified by an attribute expression."""
+    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
+      json.dump(_TAST_TEST_RESULTS_JSON, f)
+
+    args = self.get_common_tast_args(use_vm) + [
+        '--attr-expr=( "group:mainline" && "dep:chrome" && !informational)',
+    ]
+    with mock.patch.object(sys, 'argv', args),\
+         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
+      mock_popen.return_value.returncode = 0
+
+      test_runner.main()
+      expected_cmd = self.get_common_tast_expectations(use_vm) + [
+          '--tast=( "group:mainline" && "dep:chrome" && !informational)',
+      ]
+
+      self.safeAssertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
+
+  @parameterized.expand([
+      [True],
+      [False],
+  ])
+  def test_tast_lacros(self, use_vm):
+    """Tests running a tast tests for Lacros."""
+    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
+      json.dump(_TAST_TEST_RESULTS_JSON, f)
+
+    args = self.get_common_tast_args(use_vm) + [
+        '-t=lacros.Basic',
+        '--deploy-lacros',
+    ]
+
+    with mock.patch.object(sys, 'argv', args),\
+         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
+      mock_popen.return_value.returncode = 0
+
+      test_runner.main()
+      expected_cmd = self.get_common_tast_expectations(
+          use_vm, is_lacros=True) + [
+              '--tast',
+              'lacros.Basic',
+              '--deploy-lacros',
+          ]
+
+      self.safeAssertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
+
+  @parameterized.expand([
+      [True],
+      [False],
+  ])
+  def test_tast_with_vars(self, use_vm):
+    """Tests running a tast tests with runtime variables."""
+    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
+      json.dump(_TAST_TEST_RESULTS_JSON, f)
+
+    args = self.get_common_tast_args(use_vm) + [
+        '-t=ui.ChromeLogin',
+        '--tast-var=key=value',
+    ]
+    with mock.patch.object(sys, 'argv', args),\
+         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
+      mock_popen.return_value.returncode = 0
+      test_runner.main()
+      expected_cmd = self.get_common_tast_expectations(use_vm) + [
+          '--tast', 'ui.ChromeLogin', '--tast-var', 'key=value'
+      ]
+
+      self.safeAssertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
+
+  @parameterized.expand([
+      [True],
+      [False],
+  ])
+  def test_tast(self, use_vm):
+    """Tests running a tast tests."""
+    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
+      json.dump(_TAST_TEST_RESULTS_JSON, f)
+
+    args = self.get_common_tast_args(use_vm) + [
+        '-t=ui.ChromeLogin',
+    ]
+    with mock.patch.object(sys, 'argv', args),\
+         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
+      mock_popen.return_value.returncode = 0
+
+      test_runner.main()
+      expected_cmd = self.get_common_tast_expectations(use_vm) + [
+          '--tast', 'ui.ChromeLogin'
+      ]
+
+      self.safeAssertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
+
+
+class GTestTest(TestRunnerTest):
+
   @parameterized.expand([
       [True],
       [False],
@@ -116,7 +252,7 @@ class TestRunnerTest(unittest.TestCase):
       expected_cmd.extend(['--start', '--copy-on-write']
                           if use_vm else ['--device', 'localhost:2222'])
       expected_cmd.extend(['--', './device_script.sh'])
-      self.assertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
+      self.safeAssertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
 
       fd_mock().write.assert_called_once_with(
           '#!/bin/sh\nexport HOME=/usr/local/tmp\n'
@@ -125,102 +261,30 @@ class TestRunnerTest(unittest.TestCase):
           '--test-launcher-shard-index=0 --test-launcher-total-shards=1\n')
       mock_remove.assert_called_once_with('out_eve/Release/device_script.sh')
 
-  @parameterized.expand([
-      [True],
-      [False],
-  ])
-  def test_tast(self, use_vm):
-    """Tests running a tast tests."""
-    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
-      json.dump(_TAST_TEST_RESULTS_JSON, f)
+  def test_gtest_with_vpython(self):
+    """Tests building a gtest with --vpython-dir."""
+    args = mock.MagicMock()
+    args.test_exe = 'base_unittests'
+    args.test_launcher_summary_output = None
+    args.trace_dir = None
+    args.runtime_deps_path = None
+    args.path_to_outdir = self._tmp_dir
+    args.vpython_dir = self._tmp_dir
 
-    args = self.get_common_tast_args(use_vm) + [
-        '-t=ui.ChromeLogin',
-    ]
-    with mock.patch.object(sys, 'argv', args),\
-         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
-      mock_popen.return_value.returncode = 0
+    # With vpython_dir initially empty, the test_runner should error out
+    # due to missing vpython binaries.
+    gtest = test_runner.GTestTest(args, None)
+    with self.assertRaises(test_runner.TestFormatError):
+      gtest.build_test_command()
 
-      test_runner.main()
-      expected_cmd = self.get_common_tast_expectations(use_vm) + [
-          '--tast', 'ui.ChromeLogin'
-      ]
-
-      self.assertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
-
-  @parameterized.expand([
-      [True],
-      [False],
-  ])
-  def test_tast_attr_expr(self, use_vm):
-    """Tests running a tast tests specified by an attribute expression."""
-    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
-      json.dump(_TAST_TEST_RESULTS_JSON, f)
-
-    args = self.get_common_tast_args(use_vm) + [
-        '--attr-expr=( "group:mainline" && "dep:chrome" && !informational)',
-    ]
-    with mock.patch.object(sys, 'argv', args),\
-         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
-      mock_popen.return_value.returncode = 0
-
-      test_runner.main()
-      expected_cmd = self.get_common_tast_expectations(use_vm) + [
-          '--tast=( "group:mainline" && "dep:chrome" && !informational)',
-      ]
-
-      self.assertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
-
-  @parameterized.expand([
-      [True],
-      [False],
-  ])
-  def test_tast_lacros(self, use_vm):
-    """Tests running a tast tests for Lacros."""
-    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
-      json.dump(_TAST_TEST_RESULTS_JSON, f)
-
-    args = self.get_common_tast_args(use_vm) + [
-        '-t=lacros.Basic',
-        '--deploy-lacros',
-    ]
-
-    with mock.patch.object(sys, 'argv', args),\
-         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
-      mock_popen.return_value.returncode = 0
-
-      test_runner.main()
-      expected_cmd = self.get_common_tast_expectations(
-          use_vm, is_lacros=True) + [
-              '--tast',
-              'lacros.Basic',
-              '--deploy-lacros',
-          ]
-
-      self.assertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
-
-  @parameterized.expand([
-      [True],
-      [False],
-  ])
-  def test_tast_with_vars(self, use_vm):
-    """Tests running a tast tests with runtime variables."""
-    with open(os.path.join(self._tmp_dir, 'streamed_results.jsonl'), 'w') as f:
-      json.dump(_TAST_TEST_RESULTS_JSON, f)
-
-    args = self.get_common_tast_args(use_vm) + [
-        '-t=ui.ChromeLogin',
-        '--tast-var=key=value',
-    ]
-    with mock.patch.object(sys, 'argv', args),\
-         mock.patch.object(test_runner.subprocess, 'Popen') as mock_popen:
-      mock_popen.return_value.returncode = 0
-      test_runner.main()
-      expected_cmd = self.get_common_tast_expectations(use_vm) + [
-          '--tast', 'ui.ChromeLogin', '--tast-var', 'key=value'
-      ]
-
-      self.assertItemsEqual(expected_cmd, mock_popen.call_args[0][0])
+    # Create the two expected tools, and the test should be ready to run.
+    with open(os.path.join(args.vpython_dir, 'vpython'), 'w'):
+      pass  # Just touch the file.
+    os.mkdir(os.path.join(args.vpython_dir, 'bin'))
+    with open(os.path.join(args.vpython_dir, 'bin', 'python'), 'w'):
+      pass
+    gtest = test_runner.GTestTest(args, None)
+    gtest.build_test_command()
 
 
 if __name__ == '__main__':

@@ -19,6 +19,7 @@ import "services/network/public/mojom/mutable_network_traffic_annotation_tag.moj
 import "services/network/public/mojom/net_log.mojom";
 import "services/network/public/mojom/network_change_manager.mojom";
 import "services/network/public/mojom/network_context.mojom";
+import "services/network/public/mojom/ip_address_space.mojom";
 import "services/network/public/mojom/network_interface.mojom";
 import "services/network/public/mojom/network_param.mojom";
 import "services/network/public/mojom/network_quality_estimator_manager.mojom";
@@ -79,7 +80,23 @@ interface NetworkServiceClient {
     string devtool_request_id,
     array<CookieAndLineWithAccessResult> cookies_with_access_result,
     array<HttpRawHeaderPair> headers,
-    string? raw_response_headers);
+    string? raw_response_headers,
+    IPAddressSpace resource_address_space);
+
+  // Called to send information about a private network request that was blocked
+  // (then |is_warning| is false), or will be blocked in the future (then
+  // |is_warning| is true). It is possible to share sensitive information with
+  // DevTools as this is handled in the browser process. Called even when
+  // |devtool_request_id| is not available to the URLLoader to ensure the
+  // information can be recorded even when DevTools is closed.
+  OnPrivateNetworkRequest(
+    int32 process_id,
+    int32 routing_id,
+    string? devtool_request_id,
+    url.mojom.Url url,
+    bool is_warning,
+    IPAddressSpace resource_address_space,
+    ClientSecurityState client_security_state);
 
   // Called to send the CORS preflight request information. Only called when
   // |devtool_request_id| is available on the original request.
@@ -338,11 +355,6 @@ interface NetworkService {
   // Contexts created by the Network Service, including those created after
   // this call, will use the same CRLSet.
   UpdateCRLSet(mojo_base.mojom.ReadOnlyBuffer crl_set) => ();
-
-  // Updates the configuration used for determining if a site should have legacy
-  // TLS warnings suppressed. Configs that cannot be parsed as a
-  // LegacyTLSExperimentConfig (protobuf) will be ignored.
-  UpdateLegacyTLSConfig(mojo_base.mojom.ReadOnlyBuffer config) => ();
 
   // Notification that the certificate database has been modified.
   OnCertDBChanged();

@@ -1,0 +1,47 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
+
+#ifndef EXTENSIONS_VIVALDI_STANDARD_MANAGEMENT_POLICY_PROVIDER_H_
+#define EXTENSIONS_VIVALDI_STANDARD_MANAGEMENT_POLICY_PROVIDER_H_
+
+#include <string>
+
+#include "base/strings/string16.h"
+#include "chrome/browser/extensions/standard_management_policy_provider.h"
+
+namespace extensions {
+
+class Extension;
+class ExtensionManagement;
+
+// Override standard extension management policies for Vivaldi's extension id
+class VivaldiStandardManagementPolicyProvider : public StandardManagementPolicyProvider {
+ public:
+  explicit VivaldiStandardManagementPolicyProvider(
+      const ExtensionManagement* settings);
+
+  ~VivaldiStandardManagementPolicyProvider() override;
+
+  // ManagementPolicy::Provider implementation.
+  bool UserMayLoad(const Extension* extension,
+                   base::string16* error) const override;
+  bool UserMayInstall(const Extension* extension,
+                      base::string16* error) const override;
+  bool UserMayModifySettings(const Extension* extension,
+                             base::string16* error) const override;
+  bool ExtensionMayModifySettings(const Extension* source_extension,
+                                  const Extension* extension,
+                                  base::string16* error) const override;
+  bool MustRemainEnabled(const Extension* extension,
+                         base::string16* error) const override;
+  bool MustRemainDisabled(const Extension* extension,
+                          disable_reason::DisableReason* reason,
+                          base::string16* error) const override;
+  bool MustRemainInstalled(const Extension* extension,
+                           base::string16* error) const override;
+  bool ShouldForceUninstall(const Extension* extension,
+                            base::string16* error) const override;
+};
+
+}  // namespace extensions
+
+#endif  // CHROME_BROWSER_EXTENSIONS_STANDARD_MANAGEMENT_POLICY_PROVIDER_H_

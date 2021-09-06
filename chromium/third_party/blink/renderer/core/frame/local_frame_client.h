@@ -169,7 +169,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
           initiator_csp,
       network::mojom::IPAddressSpace,
       mojo::PendingRemote<mojom::blink::NavigationInitiator>,
-      const base::UnguessableToken* initiator_frame_token) = 0;
+      const LocalFrameToken* initiator_frame_token,
+      mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
+          initiator_policy_container_handle) = 0;
 
   virtual void DispatchWillSendSubmitEvent(HTMLFormElement*) = 0;
 
@@ -205,6 +207,11 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // Reports that visible elements in the frame shifted (bit.ly/lsm-explainer).
   virtual void DidObserveLayoutShift(double score, bool after_input_or_scroll) {
   }
+
+  // Reports input timestamps for segmenting layout shifts by users inputs to
+  // create Session window.
+  virtual void DidObserveInputForLayoutShiftTracking(
+      base::TimeTicks timestamp) {}
 
   // Reports the number of LayoutBlock creation, and LayoutObject::UpdateLayout
   // calls. All values are deltas since the last calls of this function.
@@ -283,7 +290,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) = 0;
 
-  virtual void DidCreateInitialEmptyDocument() = 0;
   virtual void DidCommitDocumentReplacementNavigation(DocumentLoader*) = 0;
   virtual void DispatchDidClearWindowObjectInMainWorld() = 0;
   virtual void DocumentElementAvailable() = 0;
@@ -354,8 +360,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void DidChangeContents() {}
 
   virtual Frame* FindFrame(const AtomicString& name) const = 0;
-
-  virtual void FrameRectsChanged(const IntRect&) {}
 
   virtual void OnOverlayPopupAdDetected() {}
 

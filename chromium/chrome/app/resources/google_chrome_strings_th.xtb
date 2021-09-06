@@ -8,6 +8,7 @@
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> ใช้ Chrome อยู่ก่อนหน้านี้</translation>
 <translation id="1097330777386562916">ล้างคุกกี้และข้อมูลเว็บไซต์เมื่อปิด Chrome</translation>
 <translation id="110877069173485804">นี่คือ Chrome ของคุณ</translation>
+<translation id="1125124144982679672">ใครกำลังใช้ Chrome อยู่</translation>
 <translation id="1142745911746664600">อัปเดต Chrome ไม่ได้</translation>
 <translation id="1154147086299354128">เ&amp;ปิดใน Chrome</translation>
 <translation id="123620459398936149">Chrome OS ไม่สามารถซิงค์ข้อมูลของคุณ โปรดอัปเดตข้อความรหัสผ่านสำหรับการซิงค์</translation>
@@ -17,7 +18,9 @@
 <translation id="1399397803214730675">คอมพิวเตอร์เครื่องนี้มี Google Chrome รุ่นใหม่กว่าแล้ว หากซอฟต์แวร์ไม่ทำงาน โปรดถอนการติดตั้ง Google Chrome แล้วลองใหม่อีกครั้ง</translation>
 <translation id="1434626383986940139">แอป Chrome Canary</translation>
 <translation id="147727933880789532">Chrome ขอแนะนำให้ปิดใช้ส่วนขยายนี้เนื่องจากยังไม่เป็นไปตามมาตรฐานของ Google Safe Browsing เวอร์ชันปรับปรุง</translation>
+<translation id="1516530951338665275">Google Chrome ต้องการสิทธิ์เข้าถึงบลูทูธเพื่อจับคู่ต่อ <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">อัปเดต Chrome</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" /> ลงชื่อเข้าใช้โปรไฟล์ Chrome นี้แล้ว การดำเนินการนี้จะสร้างโปรไฟล์ Chrome ใหม่สำหรับ <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="1587223624401073077">Google Chrome ใช้กล้องของคุณอยู่</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> เป็นอันตราย Chromium จึงบล็อกไว้</translation>
 <translation id="1597911401261118146"><ph name="BEGIN_LINK" />ลงชื่อเข้าใช้ Chrome<ph name="END_LINK" /> เพื่อตรวจสอบว่ารหัสผ่านของคุณไม่ได้รับผลกระทบจากการละเมิดข้อมูลและปัญหาด้านความปลอดภัยอื่นๆ</translation>
@@ -85,6 +88,7 @@
 <translation id="3065168410429928842">แท็บ Chrome</translation>
 <translation id="3080151273017101988">เรียกใช้แอปพลิเคชันเบื้องหลังต่อไปเมื่อ Google Chrome ถูกปิดลง</translation>
 <translation id="3089968997497233615">Google Chrome มีรุ่นใหม่ที่ปลอดภัยกว่าให้ใช้งานแล้ว</translation>
+<translation id="3100998948628680988">ตั้งชื่อโปรไฟล์ Chrome ของคุณ</translation>
 <translation id="3114643501466072395"><ph name="BEGIN_LINK" />ลงชื่อเข้าใช้ Chrome<ph name="END_LINK" /> เพื่อตรวจสอบว่ารหัสผ่านรายการอื่นไม่ได้รับผลกระทบจากการละเมิดข้อมูลและปัญหาด้านความปลอดภัยอื่นๆ</translation>
 <translation id="3127818369811890733">Chrome OS ซิงค์ข้อมูลของคุณไม่ได้</translation>
 <translation id="3140883423282498090">การเปลี่ยนแปลงของคุณจะมีผลในครั้งถัดไปที่คุณเปิด Google Chrome</translation>
@@ -109,6 +113,7 @@
 <translation id="3735758079232443276">ส่วนขยาย "<ph name="EXTENSION_NAME" />" ได้เปลี่ยนหน้าที่จะแสดงเมื่อคุณเริ่มต้น Chrome</translation>
 <translation id="3779473566290487688">คุณจะต้องใช้ OS X 10.11 ขึ้นไปเพื่อรับการอัปเดตของ Google Chrome ในอนาคต คอมพิวเตอร์เครื่องนี้ใช้ OS X 10.10</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">การดำเนินการนี้จะสร้างโปรไฟล์ Chrome ใหม่สำหรับ <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="386202838227397562">โปรดปิดหน้าต่าง Google Chrome ทั้งหมดและลองใหม่อีกครั้ง</translation>
 <translation id="3865754807470779944">ติดตั้ง Chrome เวอร์ชัน <ph name="PRODUCT_VERSION" /> ไว้แล้ว</translation>
 <translation id="3873044882194371212">เปิดลิงก์ในหน้าต่างที่ไม่ระบุตัวตนของ Chrome</translation>
@@ -116,7 +121,6 @@
 <translation id="4050175100176540509">การปรับปรุงด้านความปลอดภัยที่สำคัญและฟีเจอร์ใหม่ๆ พร้อมให้บริการในเวอร์ชันล่าสุด</translation>
 <translation id="4053720452172726777">กำหนดค่าและควบคุม Google Chrome</translation>
 <translation id="4110895483821904099">ตั้งค่าโปรไฟล์ Chrome ใหม่</translation>
-<translation id="4143243756087420366">ชื่อและภาพโปรไฟล์ Chrome</translation>
 <translation id="4147555960264124640">คุณกำลังลงชื่อเข้าใช้ด้วยบัญชีที่จัดการ และให้การควบคุมระดับผู้ดูแลระบบของบัญชีดังกล่าวเหนือโปรไฟล์ Google Chrome ของคุณ ข้อมูล Chrome เช่น แอป บุ๊กมาร์ก ประวัติการเข้าชม รหัสผ่าน และการตั้งค่าอื่นๆ จะเชื่อมโยงอย่างถาวรกับ <ph name="USER_NAME" /> คุณจะสามารถลบข้อมูลนี้ผ่านทางแผงควบคุมบัญชี Google แต่คุณจะไม่สามารถเชื่อมโยงข้อมูลนี้กับบัญชีอื่น <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">โปรแกรมติดตั้งยกเลิกการบีบอัดการเก็บข้อมูลไม่ได้ โปรดดาวน์โหลด Google Chrome อีกครั้ง</translation>
 <translation id="4191857738314598978">{0,plural, =1{เปิด Chrome ขึ้นมาใหม่ภายใน 1 วัน}other{เปิด Chrome ขึ้นมาใหม่ภายใน # วัน}}</translation>
@@ -145,7 +149,6 @@
 <translation id="4633000520311261472">เพื่อให้ Chrome ปลอดภัยขึ้น เราปิดส่วนขยายบางรายการที่ไม่ได้ระบุไว้ใน <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> และอาจถูกเพิ่มเข้ามาโดยที่คุณไม่รู้ตัว</translation>
 <translation id="4666328473657283332">หากต้องการเข้าถึงข้อมูล Chrome ในอุปกรณ์ทั้งหมด ให้ลงชื่อเข้าใช้เพื่อเปิดการซิงค์</translation>
 <translation id="4728575227883772061">การติดตั้งล้มเหลวเนื่องจากมีข้อผิดพลาดที่ไม่ได้ระบุ หาก Google Chrome ทำงานอยู่ในขณะนี้ โปรดปิดและลองอีกครั้ง</translation>
-<translation id="4750550185319565338">รีสตาร์ท Chrome เพื่อเปิดใช้ <ph name="PLUGIN_NAME" /></translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">ไฟล์นี้อาจเป็นอันตราย Chrome จึงบล็อกไว้</translation>
 <translation id="479167709087336770">การดำเนินการนี้จะใช้โปรแกรมตรวจตัวสะกดแบบเดียวกับใน Google Search ข้อความที่คุณพิมพ์ในเบราว์เซอร์จะส่งไปยัง Google คุณปรับเปลี่ยนลักษณะการทำงานนี้ได้ทุกเมื่อในการตั้งค่า</translation>
@@ -167,10 +170,9 @@
 <translation id="5386244825306882791">อีกทั้งยังควบคุมหน้าที่จะแสดงเมื่อคุณเปิด Chrome หรือทำการค้นหาจากแถบอเนกประสงค์ด้วย</translation>
 <translation id="5394833366792865639">แชร์แท็บ Chrome</translation>
 <translation id="5430073640787465221">ไฟล์ค่ากำหนดของคุณขัดข้องหรือไม่ถูกต้อง Google Chrome ไม่สามารถกู้คืนการตั้งค่าของคุณได้</translation>
+<translation id="5434383153637353914">หน้านี้ช่วยให้คุณจัดการบัญชี Google ที่ลงชื่อเข้าใช้ได้ บัญชีเหล่านี้จะใช้งานได้ในเบราว์เซอร์ Chrome และแอปจาก Play Store รวมถึงบริการต่างๆ เช่น Gmail, ไดรฟ์ และ YouTube <ph name="LINK_BEGIN" />ดูข้อมูลเพิ่มเติม<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">Google Chrome กำลังพยายามแสดงรหัสผ่าน</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">คุณจัดการบัญชี Google บัญชีนี้และบัญชี Google อื่นๆ ที่เพิ่มไว้สำหรับ <ph name="USER_NAME" /> ได้จากที่เดียวใน<ph name="LINK_BEGIN" />การตั้งค่า<ph name="LINK_END" />
-          สิทธิ์ที่คุณให้กับเว็บไซต์ในเบราว์เซอร์ Chrome และแอปจาก Google Play อาจมีผลกับทุกบัญชี</translation>
 <translation id="5657226924540934362">หากการตั้งค่าไม่แสดงในหน้านี้ โปรดดูที่<ph name="LINK_BEGIN" />การตั้งค่า Chrome OS<ph name="LINK_END" /></translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> อาจเป็นอันตราย Chrome จึงบล็อกไว้</translation>
 <translation id="5678190148303298925">{COUNT,plural, =0{ผู้ดูแลระบบขอให้คุณเปิด Chrome ขึ้นมาใหม่เพื่อใช้การอัปเดตนี้}=1{ผู้ดูแลระบบขอให้คุณเปิด Chrome ขึ้นมาใหม่เพื่อใช้การอัปเดตนี้ หน้าต่างที่ไม่ระบุตัวตนจะไม่เปิดให้อีก}other{ผู้ดูแลระบบขอให้คุณเปิด Chrome ขึ้นมาใหม่เพื่อใช้การอัปเดตนี้ หน้าต่างที่ไม่ระบุตัวตนจำนวน # หน้าต่างจะไม่เปิดให้อีก}}</translation>
@@ -178,6 +180,7 @@
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{Google Chrome จะรีสตาร์ทใน 1 วินาที}other{Google Chrome จะรีสตาร์ทใน # วินาที}}</translation>
 <translation id="573759479754913123">เกี่ยวกับ Chrome OS</translation>
+<translation id="5756509061973259733">มีโปรไฟล์ Chrome ที่ใช้บัญชีนี้ในอุปกรณ์นี้อยู่แล้ว</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> - Google Chrome Canary</translation>
 <translation id="5804318322022881572">เปิด Chrome ไม่ได้ โปรดลองอีกครั้ง</translation>
 <translation id="5867197326698922595">Google Chrome กำลังพยายามแก้ไขรหัสผ่าน</translation>
@@ -250,7 +253,6 @@
 <translation id="7930071585467473040">Google Chrome กำลังพยายามคัดลอกรหัสผ่าน</translation>
 <translation id="7962410387636238736">คอมพิวเตอร์เครื่องนี้จะไม่ได้รับการอัปเดต Google Chrome อีกต่อไปเพราะระบบไม่รองรับ Windows XP และ Windows Vista แล้ว</translation>
 <translation id="8008534537613507642">ติดตั้ง Chrome ใหม่</translation>
-<translation id="8009904340233602924">ใช้ Chrome โดยไม่มีบัญชี</translation>
 <translation id="8013993649590906847">หากรูปภาพไม่มีคำอธิบายที่เป็นประโยชน์ Chrome จะพยายามใส่คำอธิบายให้คุณ รูปภาพจะส่งมายัง Google เพื่อสร้างคำอธิบาย</translation>
 <translation id="8129812357326543296">เกี่ยวกับ &amp;Google Chrome</translation>
 <translation id="8255190535488645436">Google Chrome ใช้กล้องและไมโครโฟนของคุณอยู่</translation>
@@ -291,6 +293,5 @@
 <translation id="9138603949443464873">เปิด Chrome ขึ้นมาใหม่เพื่อให้การเปลี่ยนแปลงมีผล</translation>
 <translation id="919706545465235479">อัปเดต Chrome เพื่อเริ่มการซิงค์</translation>
 <translation id="940313311831216333">หากต้องการเข้าถึงข้อมูล Chrome ในอุปกรณ์ทั้งหมด ให้ลงชื่อเข้าใช้แล้วเปิดการซิงค์</translation>
-<translation id="94743460404517794">หากคุณมีบัญชี Google หลายบัญชีก็เพิ่มลงใน <ph name="DEVICE_TYPE" /> ได้ บัญชีเหล่านั้นจะใช้งานได้ในเบราว์เซอร์ Chrome และ Play Store รวมถึงบริการต่างๆ เช่น Gmail, ไดรฟ์ และ YouTube <ph name="LINK_BEGIN" />ดูข้อมูลเพิ่มเติม<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">Google Chrome เป็นเบราว์เซอร์เริ่มต้นของคุณ</translation>
 </translationbundle>

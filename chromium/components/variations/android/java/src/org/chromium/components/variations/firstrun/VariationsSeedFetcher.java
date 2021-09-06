@@ -42,8 +42,9 @@ public class VariationsSeedFetcher {
         int ANDROID_WEBVIEW = 1;
     }
 
+    // Vivaldi - fake URL that will not return anything.
     private static final String VARIATIONS_SERVER_URL =
-            "https://clientservices.googleapis.com/chrome-variations/seed?osname=";
+            "https://bifrost.vivaldi.com/chrome-variations/seed?osname=";
 
     private static final int READ_TIMEOUT = 3000; // time in ms
     private static final int REQUEST_TIMEOUT = 1000; // time in ms

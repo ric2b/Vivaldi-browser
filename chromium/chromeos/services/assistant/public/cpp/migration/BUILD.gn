@@ -13,14 +13,17 @@ component("migration") {
   sources = [
     "assistant_manager_service_delegate.h",
     "audio_input_host.h",
-    "cros_platform_api.h",
     "libassistant_v1_api.cc",
     "libassistant_v1_api.h",
   ]
 
   public_deps = [ "//libassistant/shared/public" ]
 
-  deps = [ "//base" ]
+  deps = [
+    "//base",
+    "//chromeos/services/libassistant/public/mojom",
+    "//mojo/public/cpp/bindings",
+  ]
 }
 
 component("test_support") {
@@ -32,8 +35,8 @@ component("test_support") {
   sources = [
     "fake_assistant_manager_service_delegate.cc",
     "fake_assistant_manager_service_delegate.h",
-    "fake_platform_api.cc",
-    "fake_platform_api.h",
+    "fake_platform_delegate.cc",
+    "fake_platform_delegate.h",
   ]
 
   deps = [
@@ -41,6 +44,7 @@ component("test_support") {
     "//base",
     "//chromeos/assistant/internal:test_support",
     "//chromeos/assistant/internal/proto/google3",
+    "//chromeos/services/libassistant/public/mojom",
     "//libassistant/shared/public",
   ]
 }

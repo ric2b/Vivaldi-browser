@@ -219,6 +219,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     SkColor arrow_color;
     SkColor background_color;
     int classic_state;  // Used on Windows when uxtheme is not available.
+    float zoom;
   };
 
   struct MenuBackgroundExtraParams {
@@ -232,6 +233,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     int value_rect_y;
     int value_rect_width;
     int value_rect_height;
+    float zoom;
   };
 
   struct ScrollbarArrowExtraParams {
@@ -298,6 +300,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     int classic_state;  // Used on Windows when uxtheme is not available.
     bool has_border;
     bool auto_complete_active;
+    float zoom;
   };
 
   struct TrackbarExtraParams {
@@ -337,8 +340,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   virtual float GetBorderRadiusForPart(Part part,
                                        float width,
-                                       float height,
-                                       float zoom) const;
+                                       float height) const;
 
   // Paint the part to the canvas.
   virtual void Paint(
@@ -424,7 +426,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
   void RemoveObserver(NativeThemeObserver* observer);
 
   // Notify observers of native theme changes.
-  void NotifyObservers();
+  virtual void NotifyObservers();
 
   // Returns whether the user has an explicit contrast preference, i.e. whether
   // we are in forced colors mode or PreferredContrast is set.

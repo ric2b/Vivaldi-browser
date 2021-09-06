@@ -22,6 +22,8 @@
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/scoped_profile_keep_alive.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -52,6 +54,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_content_tab_helper.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -124,9 +127,12 @@ void ChromeAppDelegate::RelinquishKeepAliveAfterTimeout(
   // Resetting the ScopedKeepAlive may cause nested destruction of the
   // ChromeAppDelegate which also resets the ScopedKeepAlive. To avoid this,
   // move the ScopedKeepAlive out to here and let it fall out of scope.
-  if (chrome_app_delegate.get() && chrome_app_delegate->is_hidden_)
-    std::unique_ptr<ScopedKeepAlive>(
-        std::move(chrome_app_delegate->keep_alive_));
+  if (chrome_app_delegate.get() && chrome_app_delegate->is_hidden_) {
+    std::unique_ptr<ScopedKeepAlive> keep_alive =
+        std::move(chrome_app_delegate->keep_alive_);
+    std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive =
+        std::move(chrome_app_delegate->profile_keep_alive_);
+  }
 }
 
 class ChromeAppDelegate::NewWindowContentsDelegate
@@ -184,14 +190,17 @@ ChromeAppDelegate::NewWindowContentsDelegate::OpenURLFromTab(
   return nullptr;
 }
 
-ChromeAppDelegate::ChromeAppDelegate(bool keep_alive)
+ChromeAppDelegate::ChromeAppDelegate(Profile* profile, bool keep_alive)
     : has_been_shown_(false),
       is_hidden_(true),
       for_lock_screen_app_(false),
+      profile_(profile),
       new_window_contents_delegate_(new NewWindowContentsDelegate()) {
   if (keep_alive) {
     keep_alive_ = std::make_unique<ScopedKeepAlive>(
         KeepAliveOrigin::CHROME_APP_DELEGATE, KeepAliveRestartOption::DISABLED);
+    profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
+        profile_, ProfileKeepAliveOrigin::kAppWindow);
   }
   registrar_.Add(this,
                  chrome::NOTIFICATION_APP_TERMINATING,
@@ -218,11 +227,15 @@ void ChromeAppDelegate::InitWebContents(content::WebContents* web_contents) {
 
   apps::AudioFocusWebContentsObserver::CreateForWebContents(web_contents);
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  policy::DlpContentTabHelper::CreateForWebContents(web_contents);
+#endif
+
   zoom::ZoomController::CreateForWebContents(web_contents);
 }
 
-void ChromeAppDelegate::RenderViewCreated(
-    content::RenderViewHost* render_view_host) {
+void ChromeAppDelegate::RenderFrameCreated(
+    content::RenderFrameHost* frame_host) {
   if (!chrome::IsRunningInForcedAppMode()) {
     // Due to a bug in the way apps reacted to default zoom changes, some apps
     // can incorrectly have host level zoom settings. These aren't wanted as
@@ -230,16 +243,19 @@ void ChromeAppDelegate::RenderViewCreated(
     // can be made to zoom again.
     // See http://crbug.com/446759 for more details.
     content::WebContents* web_contents =
-        content::WebContents::FromRenderViewHost(render_view_host);
+        content::WebContents::FromRenderFrameHost(frame_host);
     DCHECK(web_contents);
-    content::HostZoomMap* zoom_map =
-        content::HostZoomMap::GetForWebContents(web_contents);
-    DCHECK(zoom_map);
 
-    // NOTE(pettern@vivaldi.com): Do not reset the zoom level for app
-    // windows we open. See VB-61528.
-    if (!vivaldi::IsVivaldiApp(web_contents->GetURL().host())) {
-    zoom_map->SetZoomLevelForHost(web_contents->GetURL().host(), 0);
+    // Only do this for the initial main frame.
+    if (frame_host == web_contents->GetMainFrame()) {
+      content::HostZoomMap* zoom_map =
+          content::HostZoomMap::GetForWebContents(web_contents);
+      DCHECK(zoom_map);
+      // NOTE(pettern@vivaldi.com): Do not reset the zoom level for app
+      // windows we open. See VB-61528.
+      if (!vivaldi::IsVivaldiApp(web_contents->GetURL().host())) {
+      zoom_map->SetZoomLevelForHost(web_contents->GetURL().host(), 0);
+      }
     }
   }
 }
@@ -354,6 +370,7 @@ void ChromeAppDelegate::OnHide() {
   is_hidden_ = true;
   if (has_been_shown_) {
     keep_alive_.reset();
+    profile_keep_alive_.reset();
     return;
   }
 
@@ -371,6 +388,8 @@ void ChromeAppDelegate::OnShow() {
   is_hidden_ = false;
   keep_alive_ = std::make_unique<ScopedKeepAlive>(
       KeepAliveOrigin::CHROME_APP_DELEGATE, KeepAliveRestartOption::DISABLED);
+  profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
+      profile_, ProfileKeepAliveOrigin::kAppWindow);
 }
 
 bool ChromeAppDelegate::TakeFocus(content::WebContents* web_contents,

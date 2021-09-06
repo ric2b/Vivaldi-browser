@@ -2,63 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import logging
 import py_utils
-from telemetry.page import page
+from page_sets.desktop_ui.js_utils import MEASURE_JS_MEMORY
+from page_sets.desktop_ui.multitab_story import MultiTabStory
+from page_sets.desktop_ui.url_list import TOP_URL
 from telemetry.internal.actions.action_runner import ActionRunner
-
-TOP_URL = [
-    'google.com',
-    'youtube.com',
-    'amazon.com',
-    'facebook.com',
-    'zoom.us',
-    'yahoo.com',
-    'reddit.com',
-    'wikipedia.org',
-    'myshopify.com',
-    'ebay.com',
-    'instructure.com',
-    'office.com',
-    'netflix.com',
-    'bing.com',
-    'live.com',
-    'microsoft.com',
-    'espn.com',
-    'www.indeed.com',
-    'blogger.com',
-    'instagram.com',
-    'mozilla.org',
-    'cnn.com',
-    'apple.com',
-    'zillow.com',
-    'etsy.com',
-    'chase.com',
-    'nytimes.com',
-    'linkedin.com',
-    'dropbox.com',
-    'adobe.com',
-    'okta.com',
-    'craigslist.org',
-    'twitter.com',
-    'walmart.com',
-    'aliexpress.com',
-    'github.com',
-    'vimeo.com',
-    'quizlet.com',
-    'cnbc.com',
-    'imgur.com',
-    'wellsfargo.com',
-    'hulu.com',
-    'imdb.com',
-    'salesforce.com',
-    'homedepot.com',
-    'indeed.com',
-    'foxnews.com',
-    'msn.com',
-    'spotify.com',
-    'whatsapp.com',
-]
 
 TAB_SEARCH_BENCHMARK_UMA = [
     'Tabs.TabSearch.CloseAction',
@@ -77,33 +25,11 @@ TAB_SEARCH_BENCHMARK_UMA = [
     'Tabs.TabSearch.WindowTimeToShowUncachedWebView',
 ]
 
-TAB_SEARCH_URL = 'chrome://tab-search/'
+TAB_SEARCH_URL = 'chrome://tab-search.top-chrome/'
 
 
-class TabSearchStory(page.Page):
+class TabSearchStory(MultiTabStory):
   """Base class for tab search stories"""
-
-  def __init__(self, story_set, extra_browser_args=None):
-    super(TabSearchStory, self).__init__(url=self.URL,
-                                         name=self.NAME,
-                                         page_set=story_set,
-                                         extra_browser_args=extra_browser_args)
-
-  def RunNavigateSteps(self, action_runner):
-    url_list = self.URL_LIST
-    tabs = action_runner.tab.browser.tabs
-    if len(url_list) > 0:
-      tabs[0].Navigate('https://' + url_list[0])
-    for url in url_list[1:]:
-      new_tab = tabs.New()
-      new_tab.Navigate('https://' + url)
-    if self.WAIT_FOR_NETWORK_QUIESCENCE:
-      for i, url in enumerate(url_list):
-        try:
-          tabs[i].action_runner.WaitForNetworkQuiescence()
-        except py_utils.TimeoutException:
-          logging.warning('WaitForNetworkQuiescence() timeout, url[%d]: %s' %
-                          (i, url))
 
   def RunPageInteractions(self, action_runner):
     tabs = action_runner.tab.browser.tabs
@@ -173,7 +99,7 @@ class TabSearchStory(page.Page):
     tabs = action_runner.tab.browser.tabs
     i = 0
     for url in self.URL_LIST2:
-      tabs[i].Navigate('https://' + url)
+      tabs[i].Navigate(url)
       i = i + 1
     action_runner.tab.browser.ExecuteBrowserCommand('openTabSearch')
     action_runner.Wait(5)
@@ -192,68 +118,57 @@ class TabSearchStory(page.Page):
     self.StopMeasuringFrameTime(action_runner)
     action_runner.Wait(1)
 
-  def StartMeasuringFrameTime(self, action_runner, name):
-    action_runner.ExecuteJavaScript(MEASURE_FRAME_TIME_SCRIPT)
-    action_runner.ExecuteJavaScript(START_MEASURING_FRAME_TIME % name)
-
-  def StopMeasuringFrameTime(self, action_runner):
-    action_runner.ExecuteJavaScript(STOP_MEASURING_FRAME_TIME)
-
   def WillStartTracing(self, chrome_trace_config):
+    super(TabSearchStory, self).WillStartTracing(chrome_trace_config)
     chrome_trace_config.EnableUMAHistograms(*TAB_SEARCH_BENCHMARK_UMA)
-    chrome_trace_config.category_filter.AddIncludedCategory('browser')
-    chrome_trace_config.category_filter.AddIncludedCategory('blink.user_timing')
-
-  def GetExtraTracingMetrics(self):
-    return ['webuiMetric']
 
 
 class TabSearchStoryTop10(TabSearchStory):
   NAME = 'tab_search:top10:2020'
   URL_LIST = TOP_URL[:10]
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = True
 
 
 class TabSearchStoryTop50(TabSearchStory):
   NAME = 'tab_search:top50:2020'
   URL_LIST = TOP_URL[:50]
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = True
 
 
 class TabSearchStoryTop100(TabSearchStory):
   NAME = 'tab_search:top100:2020'
   URL_LIST = TOP_URL[:50] * 2
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = True
 
 
 class TabSearchStoryTop10Loading(TabSearchStory):
   NAME = 'tab_search:top10:loading:2020'
   URL_LIST = TOP_URL[:10]
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = False
 
 
 class TabSearchStoryTop50Loading(TabSearchStory):
   NAME = 'tab_search:top50:loading:2020'
   URL_LIST = TOP_URL[:50]
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = False
 
 
 class TabSearchStoryTop100Loading(TabSearchStory):
   NAME = 'tab_search:top100:loading:2020'
   URL_LIST = TOP_URL[:50] * 2
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = False
 
 
 class TabSearchStoryCloseAndOpen(TabSearchStory):
   NAME = 'tab_search:close_and_open:2020'
   URL_LIST = TOP_URL[:10]
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = True
 
   def InteractWithPage(self, action_runner):
@@ -264,7 +179,7 @@ class TabSearchStoryCloseAndOpenLoading(TabSearchStory):
   NAME = 'tab_search:close_and_open:loading:2020'
   URL_LIST = TOP_URL[:10]
   URL_LIST2 = TOP_URL[10:20]
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = False
 
   def InteractWithPage(self, action_runner):
@@ -274,7 +189,7 @@ class TabSearchStoryCloseAndOpenLoading(TabSearchStory):
 class TabSearchStoryScrollUpAndDown(TabSearchStory):
   NAME = 'tab_search:scroll_up_and_down:2020'
   URL_LIST = TOP_URL[:50] * 2
-  URL = 'https://' + URL_LIST[0]
+  URL = URL_LIST[0]
   WAIT_FOR_NETWORK_QUIESCENCE = False
 
   def InteractWithPage(self, action_runner):
@@ -305,7 +220,8 @@ class TabSearchStoryMeasureMemory(TabSearchStory):
         'disabled-by-default-memory-infra')
 
   def GetExtraTracingMetrics(self):
-    return ['memoryMetric']
+    return super(TabSearchStoryMeasureMemory,
+                 self).GetExtraTracingMetrics() + ['memoryMetric']
 
 
 class TabSearchStoryMeasureMemoryBefore(TabSearchStoryMeasureMemory):
@@ -327,50 +243,49 @@ class TabSearchStoryMeasureMemoryAfter(TabSearchStoryMeasureMemory):
     action_runner.MeasureMemory(deterministic_mode=True)
 
 
+class TabSearchStoryMeasureMemoryMultiwindow(TabSearchStoryMeasureMemory):
+  NAME = 'tab_search:measure_memory:multiwindow'
+
+  def InteractWithPage(self, action_runner):
+    action_runner.Wait(2)
+    tabs = action_runner.tab.browser.tabs
+    new_tab = tabs.New(in_new_window=True)
+    new_tab.browser.ExecuteBrowserCommand('openTabSearch')
+    action_runner.Wait(2)
+    action_runner.MeasureMemory(deterministic_mode=True)
+
+
+class TabSearchStoryMeasureMemory2TabSearch(TabSearchStoryMeasureMemory):
+  NAME = 'tab_search:measure_memory:2tab_search'
+
+  def RunNavigateSteps(self, action_runner):
+    tabs = action_runner.tab.browser.tabs
+    new_tab = tabs.New()
+    new_tab.Navigate(TAB_SEARCH_URL)
+    new_tab.WaitForDocumentReadyStateToBeComplete()
+    new_tab.action_runner.ExecuteJavaScript(MEASURE_JS_MEMORY %
+                                            'used_js_heap_size2')
+
+  def InteractWithPage(self, action_runner):
+    action_runner.MeasureMemory(deterministic_mode=True)
+
+
+class TabSearchStoryMeasureMemory3TabSearch(TabSearchStoryMeasureMemory):
+  NAME = 'tab_search:measure_memory:3tab_search'
+
+  def RunNavigateSteps(self, action_runner):
+    tabs = action_runner.tab.browser.tabs
+    for i in range(2):
+      new_tab = tabs.New()
+      new_tab.Navigate(TAB_SEARCH_URL)
+      new_tab.WaitForDocumentReadyStateToBeComplete()
+      new_tab.action_runner.ExecuteJavaScript(
+          MEASURE_JS_MEMORY % ('used_js_heap_size' + str(i + 2)))
+
+  def InteractWithPage(self, action_runner):
+    action_runner.MeasureMemory(deterministic_mode=True)
+
+
 SCROLL_ELEMENT_FUNCTION = '''
 document.querySelector('tab-search-app').shadowRoot.getElementById('tabsList')
-'''
-
-MEASURE_FRAME_TIME_SCRIPT = '''
-window.__webui_startMeasuringFrameTime = function(name) {
-  if (window.__webui_onRequestAnimationFrame) {
-    window.__webui_stopMeasuringFrameTime();
-  }
-  window.__webui_onRequestAnimationFrame = function() {
-    const now = performance.now();
-    if (window.__webui_lastAnimationFrameTime) {
-      performance.mark(
-          `${name}:${now - window.__webui_lastAnimationFrameTime}:benchmark_value`);
-    }
-    window.__webui_lastAnimationFrameTime = now;
-    if (window.__webui_onRequestAnimationFrame) {
-      window.__webui_lastRequestId = requestAnimationFrame(
-          window.__webui_onRequestAnimationFrame);
-    }
-  }
-  window.__webui_lastRequestId = requestAnimationFrame(
-      window.__webui_onRequestAnimationFrame);
-}
-
-window.__webui_stopMeasuringFrameTime = function() {
-  if (window.__webui_lastRequestId) {
-    cancelAnimationFrame(window.__webui_lastRequestId);
-  }
-  window.__webui_lastRequestId = null;
-  window.__webui_onRequestAnimationFrame = null;
-  window.__webui_lastAnimationFrameTime = null;
-}
-'''
-
-START_MEASURING_FRAME_TIME = '''
-window.__webui_startMeasuringFrameTime('%s')
-'''
-
-STOP_MEASURING_FRAME_TIME = '''
-window.__webui_stopMeasuringFrameTime()
-'''
-
-MEASURE_JS_MEMORY = '''
-performance.mark(
-    `%s:${performance.memory.usedJSHeapSize}:benchmark_value`);
 '''

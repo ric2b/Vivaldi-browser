@@ -73,8 +73,6 @@
 #include "chrome/browser/metrics/thread_watcher.h"
 #include "chrome/browser/nacl_host/nacl_browser_delegate_impl.h"
 #include "chrome/browser/net/system_network_context_manager.h"
-#include "chrome/browser/performance_monitor/process_monitor.h"
-#include "chrome/browser/performance_monitor/system_monitor.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
@@ -112,6 +110,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/profiler/thread_profiler.h"
 #include "chrome/common/profiler/thread_profiler_configuration.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/device_event_log/device_event_log.h"
@@ -136,7 +135,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_value_store.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "components/site_isolation/site_isolation_policy.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
@@ -165,6 +163,7 @@
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/profiling.h"
 #include "extensions/buildflags/buildflags.h"
+#include "media/audio/audio_manager.h"
 #include "media/base/localized_strings.h"
 #include "media/media_buildflags.h"
 #include "net/base/net_module.h"
@@ -176,6 +175,7 @@
 #include "rlz/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "third_party/blink/public/common/experiments/memory_ablation_experiment.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -192,7 +192,6 @@
 #include "chrome/browser/ui/uma_browsing_activity_observer.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/usb/web_usb_detector.h"
-#include "ui/base/l10n/l10n_util.h"
 #endif  // defined(OS_ANDROID)
 
 #if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -201,10 +200,10 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_switches.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/ash/settings/stats_reporting_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/stats_reporting_controller.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/arc/metrics/stability_metrics_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -350,7 +349,7 @@ Profile* CreatePrimaryProfile(const content::MainFunctionParams& parameters,
                               const base::FilePath& user_data_dir,
                               const base::FilePath& cur_dir,
                               const base::CommandLine& parsed_command_line) {
-  TRACE_EVENT0("startup", "ChromeBrowserMainParts::CreateProfile")
+  TRACE_EVENT0("startup", "ChromeBrowserMainParts::CreateProfile");
   base::Time start = base::Time::Now();
 
   bool last_used_profile_set = false;
@@ -734,8 +733,6 @@ void ChromeBrowserMainParts::PostMainMessageLoopStart() {
 
   ThreadProfiler::SetMainThreadTaskRunner(base::ThreadTaskRunnerHandle::Get());
 
-  system_monitor_ = performance_monitor::SystemMonitor::Create();
-
   // TODO(sebmarchand): Allow this to be created earlier if startup tracing is
   // enabled.
   trace_event_system_stats_monitor_ =
@@ -859,7 +856,7 @@ int ChromeBrowserMainParts::ApplyFirstRunPrefs() {
 }
 
 int ChromeBrowserMainParts::PreCreateThreadsImpl() {
-  TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreCreateThreadsImpl")
+  TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreCreateThreadsImpl");
   run_message_loop_ = false;
 
   if (browser_process_->GetApplicationLocale().empty()) {
@@ -1063,6 +1060,9 @@ void ChromeBrowserMainParts::PreMainMessageLoopRun() {
 
 void ChromeBrowserMainParts::PreProfileInit() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreProfileInit");
+
+  media::AudioManager::SetGlobalAppName(
+      l10n_util::GetStringUTF8(IDS_SHORT_PRODUCT_NAME));
 
   for (size_t i = 0; i < chrome_extra_parts_.size(); ++i)
     chrome_extra_parts_[i]->PreProfileInit();
@@ -1547,8 +1547,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 #endif
 
   HandleTestParameters(parsed_command_line());
-  browser_process_->metrics_service()->RecordBreakpadHasDebugger(
-      base::debug::BeingDebugged());
 
   language::LanguageUsageMetrics::RecordAcceptLanguages(
       profile_->GetPrefs()->GetString(language::prefs::kAcceptLanguages));
@@ -1611,8 +1609,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   PreBrowserStart();
 
   if (!parsed_command_line().HasSwitch(switches::kDisableComponentUpdate)) {
-    component_updater::RegisterComponentsForUpdate(profile_->IsOffTheRecord(),
-                                                   profile_->GetPrefs());
+    component_updater::RegisterComponentsForUpdate(
+        profile_->IsOffTheRecord(), profile_->GetPrefs(), profile_->GetPath());
   }
 
   variations::VariationsService* variations_service =
@@ -1738,8 +1736,6 @@ bool ChromeBrowserMainParts::MainMessageLoopRun(int* result_code) {
   RecordBrowserStartupTime();
 
   DCHECK(base::CurrentUIThread::IsSet());
-
-  performance_monitor::ProcessMonitor::GetInstance()->StartGatherCycle();
 
   g_run_loop->Run();
 

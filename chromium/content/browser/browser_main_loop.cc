@@ -183,7 +183,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/constants/chromeos_switches.h"
+#include "ash/constants/ash_switches.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #endif
@@ -490,10 +490,6 @@ BrowserMainLoop::BrowserMainLoop(
   if (base::HangWatcher::IsUIThreadHangWatchingEnabled()) {
     unregister_thread_closure_ = base::HangWatcher::RegisterThread(
         base::HangWatcher::ThreadType::kUIThread);
-  }
-
-  if (GetContentClient()->browser()->ShouldCreateThreadPool()) {
-    DCHECK(base::ThreadPoolInstance::Get());
   }
 }
 

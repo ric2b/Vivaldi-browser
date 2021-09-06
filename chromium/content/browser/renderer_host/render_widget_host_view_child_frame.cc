@@ -161,8 +161,8 @@ void RenderWidgetHostViewChildFrame::SetFrameConnector(
     SetParentFrameSinkId(parent_view->GetFrameSinkId());
   }
 
-  current_device_scale_factor_ =
-      frame_connector_->screen_info().device_scale_factor;
+  set_current_device_scale_factor(
+      frame_connector_->screen_info().device_scale_factor);
 
   auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
   if (root_view) {
@@ -379,6 +379,17 @@ void RenderWidgetHostViewChildFrame::UpdateCursor(const WebCursor& cursor) {
     frame_connector_->UpdateCursor(cursor);
 }
 
+void RenderWidgetHostViewChildFrame::SendInitialPropertiesIfNeeded() {
+  if (initial_properties_sent_ || !frame_connector_)
+    return;
+  UpdateViewportIntersection(frame_connector_->intersection_state(),
+                             base::nullopt);
+  SetIsInert();
+  UpdateInheritedEffectiveTouchAction();
+  UpdateRenderThrottlingStatus();
+  initial_properties_sent_ = true;
+}
+
 void RenderWidgetHostViewChildFrame::SetIsLoading(bool is_loading) {
   // It is valid for an inner WebContents's SetIsLoading() to end up here.
   // This is because an inner WebContents's main frame's RenderWidgetHostView
@@ -459,7 +470,8 @@ void RenderWidgetHostViewChildFrame::UnregisterFrameSinkId() {
 }
 
 void RenderWidgetHostViewChildFrame::UpdateViewportIntersection(
-    const blink::mojom::ViewportIntersectionState& intersection_state) {
+    const blink::mojom::ViewportIntersectionState& intersection_state,
+    const base::Optional<blink::VisualProperties>& visual_properties) {
   if (host()) {
     host()->SetIntersectsViewport(
         !intersection_state.viewport_intersection.IsEmpty());
@@ -467,7 +479,7 @@ void RenderWidgetHostViewChildFrame::UpdateViewportIntersection(
     // Do not send viewport intersection to main frames.
     if (!host()->owner_delegate()) {
       host()->GetAssociatedFrameWidget()->SetViewportIntersection(
-          intersection_state.Clone());
+          intersection_state.Clone(), visual_properties);
     }
   }
 }
@@ -803,23 +815,6 @@ bool RenderWidgetHostViewChildFrame::IsRenderWidgetHostViewChildFrame() {
   return true;
 }
 
-void RenderWidgetHostViewChildFrame::WillSendScreenRects() {
-  // TODO(kenrb): These represent post-initialization state updates that are
-  // needed by the renderer. During normal OOPIF setup these are unnecessary,
-  // as the parent renderer will send the information and it will be
-  // immediately propagated to the OOPIF. However when an OOPIF navigates from
-  // one process to another, the parent doesn't know that, and certain
-  // browser-side state needs to be sent again. There is probably a less
-  // spammy way to do this, but triggering on SendScreenRects() is reasonable
-  // until somebody figures that out. RWHVCF::Init() is too early.
-  if (frame_connector_) {
-    UpdateViewportIntersection(frame_connector_->intersection_state());
-    SetIsInert();
-    UpdateInheritedEffectiveTouchAction();
-    UpdateRenderThrottlingStatus();
-  }
-}
-
 #if defined(OS_MAC)
 void RenderWidgetHostViewChildFrame::SetActive(bool active) {}
 
@@ -885,8 +880,10 @@ void RenderWidgetHostViewChildFrame::CopyFromSurface(
 void RenderWidgetHostViewChildFrame::OnFirstSurfaceActivation(
     const viz::SurfaceInfo& surface_info) {}
 
-void RenderWidgetHostViewChildFrame::OnFrameTokenChanged(uint32_t frame_token) {
-  OnFrameTokenChangedForView(frame_token);
+void RenderWidgetHostViewChildFrame::OnFrameTokenChanged(
+    uint32_t frame_token,
+    base::TimeTicks activation_time) {
+  OnFrameTokenChangedForView(frame_token, activation_time);
 }
 
 TouchSelectionControllerClientManager*
@@ -902,12 +899,13 @@ RenderWidgetHostViewChildFrame::GetTouchSelectionControllerClientManager() {
 }
 
 void RenderWidgetHostViewChildFrame::
-    OnRenderFrameMetadataChangedAfterActivation() {
+    OnRenderFrameMetadataChangedAfterActivation(
+        base::TimeTicks activation_time) {
   if (selection_controller_client_) {
     const cc::RenderFrameMetadata& metadata =
         host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
     selection_controller_client_->UpdateSelectionBoundsIfNeeded(
-        metadata.selection, current_device_scale_factor_);
+        metadata.selection, current_device_scale_factor());
   }
 }
 

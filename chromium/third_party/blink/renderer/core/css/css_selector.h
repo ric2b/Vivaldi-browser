@@ -280,6 +280,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoListBox,
     kPseudoMultiSelectFocus,
     kPseudoHostHasAppearance,
+    kPseudoPopupOpen,
     kPseudoSlotted,
     kPseudoVideoPersistent,
     kPseudoVideoPersistentAncestor,
@@ -292,6 +293,7 @@ class CORE_EXPORT CSSSelector {
   enum class AttributeMatchType {
     kCaseSensitive,
     kCaseInsensitive,
+    kCaseSensitiveAlways,
   };
 
   PseudoType GetPseudoType() const {

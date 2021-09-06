@@ -50,8 +50,8 @@
 #include "prefs/vivaldi_browser_prefs.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/settings/owner_flags_storage.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/settings/owner_flags_storage.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -138,10 +138,10 @@ void ChromeFeatureListCreator::CreatePrefService() {
     // language the user selected when downloading the installer. This
     // becomes our default language in the prefs.
     // Other platforms obey the system locale.
-    base::string16 install_lang;
+    std::wstring install_lang;
     if (GoogleUpdateSettings::GetLanguage(&install_lang)) {
       local_state_->SetString(language::prefs::kApplicationLocale,
-                              base::UTF16ToASCII(install_lang));
+                              base::WideToASCII(install_lang));
     }
   }
 #endif  // defined(OS_WIN)

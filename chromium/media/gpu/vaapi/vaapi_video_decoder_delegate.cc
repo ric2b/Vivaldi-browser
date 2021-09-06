@@ -34,7 +34,7 @@ void ctr128_inc64(uint8_t* counter) {
 }
 
 }  // namespace
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace media {
 
@@ -58,7 +58,7 @@ VaapiVideoDecoderDelegate::VaapiVideoDecoderDelegate(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (cdm_context)
     chromeos_cdm_context_ = cdm_context->GetChromeOsCdmContext();
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   memset(&src_region_, 0, sizeof(src_region_));
   memset(&dst_region_, 0, sizeof(dst_region_));
 }
@@ -110,6 +110,7 @@ bool VaapiVideoDecoderDelegate::SetDecryptConfig(
   return true;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 VaapiVideoDecoderDelegate::ProtectedSessionState
 VaapiVideoDecoderDelegate::SetupDecryptDecode(
     bool full_sample,
@@ -118,7 +119,6 @@ VaapiVideoDecoderDelegate::SetupDecryptDecode(
     std::vector<VAEncryptionSegmentInfo>* segments,
     const std::vector<SubsampleEntry>& subsamples) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   DCHECK(crypto_params);
   DCHECK(segments);
   if (protected_session_state_ == ProtectedSessionState::kInProcess ||
@@ -143,11 +143,13 @@ VaapiVideoDecoderDelegate::SetupDecryptDecode(
   DCHECK_EQ(protected_session_state_, ProtectedSessionState::kCreated);
 
   if (encryption_scheme_ == EncryptionScheme::kCenc) {
-    crypto_params->encryption_type =
-        full_sample ? VA_ENCRYPTION_TYPE_CENC_CTR : VA_ENCRYPTION_TYPE_CTR_128;
+    crypto_params->encryption_type = full_sample
+                                         ? VA_ENCRYPTION_TYPE_FULLSAMPLE_CTR
+                                         : VA_ENCRYPTION_TYPE_SUBSAMPLE_CTR;
   } else {
-    crypto_params->encryption_type =
-        full_sample ? VA_ENCRYPTION_TYPE_CENC_CBC : VA_ENCRYPTION_TYPE_CBC;
+    crypto_params->encryption_type = full_sample
+                                         ? VA_ENCRYPTION_TYPE_FULLSAMPLE_CBC
+                                         : VA_ENCRYPTION_TYPE_SUBSAMPLE_CBC;
   }
 
   // For multi-slice we may already have segment information in here, so
@@ -163,6 +165,11 @@ VaapiVideoDecoderDelegate::SetupDecryptDecode(
     VAEncryptionSegmentInfo segment_info = {};
     segment_info.segment_start_offset = offset;
     segment_info.segment_length = segment_info.init_byte_length = size;
+    if (decrypt_config_) {
+      // We need to specify the IV even if the segment is clear.
+      memcpy(segment_info.aes_cbc_iv_or_ctr, decrypt_config_->iv().data(),
+             DecryptConfig::kDecryptionKeySize);
+    }
     segments->emplace_back(std::move(segment_info));
     crypto_params->num_segments++;
     crypto_params->segment_info = &segments->front();
@@ -236,14 +243,17 @@ VaapiVideoDecoderDelegate::SetupDecryptDecode(
       segment_info.partial_aes_block_size = partial_block_size;
       memcpy(segment_info.aes_cbc_iv_or_ctr, iv.data(),
              DecryptConfig::kDecryptionKeySize);
-      // If we are finishing a block, increment the counter.
-      if (partial_block_size && entry.cypher_bytes > partial_block_size)
-        ctr128_inc64(iv.data());
-      // Increment the counter for every complete block we are adding.
-      for (size_t block = 0; block < (entry.cypher_bytes - partial_block_size) /
-                                         DecryptConfig::kDecryptionKeySize;
-           ++block)
-        ctr128_inc64(iv.data());
+      if (entry.cypher_bytes > partial_block_size) {
+        // If we are finishing a block, increment the counter.
+        if (partial_block_size)
+          ctr128_inc64(iv.data());
+        // Increment the counter for every complete block we are adding.
+        for (size_t block = 0;
+             block < (entry.cypher_bytes - partial_block_size) /
+                         DecryptConfig::kDecryptionKeySize;
+             ++block)
+          ctr128_inc64(iv.data());
+      }
       total_cypher_size += entry.cypher_bytes;
       segment_info.init_byte_length = entry.clear_bytes;
       offset += entry.clear_bytes + entry.cypher_bytes;
@@ -253,12 +263,11 @@ VaapiVideoDecoderDelegate::SetupDecryptDecode(
   memcpy(crypto_params->wrapped_decrypt_blob,
          hw_key_data_map_[decrypt_config_->key_id()].data(),
          DecryptConfig::kDecryptionKeySize);
+  crypto_params->key_blob_size = DecryptConfig::kDecryptionKeySize;
   crypto_params->segment_info = &segments->front();
-#else  // if BUILDFLAG(IS_CHROMEOS_ASH)
-  protected_session_state_ = ProtectedSessionState::kFailed;
-#endif
   return protected_session_state_;
 }
+#endif  // if BUILDFLAG(IS_CHROMEOS_ASH)
 
 bool VaapiVideoDecoderDelegate::NeedsProtectedSessionRecovery() {
   if (!IsEncryptedSession() || !vaapi_wrapper_->IsProtectedSessionDead() ||

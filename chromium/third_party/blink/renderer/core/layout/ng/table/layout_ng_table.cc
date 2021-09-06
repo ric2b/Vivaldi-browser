@@ -92,6 +92,7 @@ void LayoutNGTable::GridBordersChanged() {
 
 void LayoutNGTable::TableGridStructureChanged() {
   NOT_DESTROYED();
+  // Callers must ensure table layout gets invalidated.
   InvalidateCachedTableBorders();
 }
 
@@ -125,6 +126,10 @@ void LayoutNGTable::UpdateBlockLayout(bool relayout_children) {
 void LayoutNGTable::AddChild(LayoutObject* child, LayoutObject* before_child) {
   NOT_DESTROYED();
   TableGridStructureChanged();
+  // Only TablesNG table parts are allowed.
+  DCHECK(child->IsLayoutNGObject() ||
+         (!child->IsTableCaption() && !child->IsLayoutTableCol() &&
+          !child->IsTableSection()));
   bool wrap_in_anonymous_section = !child->IsTableCaption() &&
                                    !child->IsLayoutTableCol() &&
                                    !child->IsTableSection();
@@ -366,6 +371,28 @@ LayoutRectOutsets LayoutNGTable::BorderBoxOutsets() const {
   }
   NOTREACHED();
   return LayoutRectOutsets();
+}
+
+// Effective column index is index of columns with mergeable
+// columns skipped. Used in a11y.
+unsigned LayoutNGTable::AbsoluteColumnToEffectiveColumn(
+    unsigned absolute_column_index) const {
+  NOT_DESTROYED();
+  if (!cached_table_columns_) {
+    NOTREACHED();
+    return absolute_column_index;
+  }
+  unsigned effective_column_index = 0;
+  unsigned column_count = cached_table_columns_.get()->data.size();
+  for (unsigned current_column_index = 0; current_column_index < column_count;
+       ++current_column_index) {
+    if (current_column_index != 0 &&
+        !cached_table_columns_.get()->data[current_column_index].is_mergeable)
+      ++effective_column_index;
+    if (current_column_index == absolute_column_index)
+      return effective_column_index;
+  }
+  return effective_column_index;
 }
 
 bool LayoutNGTable::IsFirstCell(const LayoutNGTableCellInterface& cell) const {

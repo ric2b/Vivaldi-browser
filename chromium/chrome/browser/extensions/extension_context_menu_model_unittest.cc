@@ -61,7 +61,7 @@
 #include "ui/gfx/image/image.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #endif
 
 namespace extensions {
@@ -410,10 +410,10 @@ void ExtensionContextMenuModelTest::TearDown() {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // The KioskAppManager, if initialized, needs to be cleaned up.
+  // The ash::KioskAppManager, if initialized, needs to be cleaned up.
   // TODO(devlin): This should probably go somewhere more central, like
   // chromeos::ScopedCrosSettingsTestHelper.
-  chromeos::KioskAppManager::Shutdown();
+  ash::KioskAppManager::Shutdown();
 #endif
 
   ExtensionServiceTestBase::TearDown();

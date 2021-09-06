@@ -6,6 +6,7 @@
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
+#include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -53,14 +54,10 @@ class VivaldiSubresourceFilterClient
   // SubresourceFilterClient:
   void ShowNotification() override;
 
-  void OnAdsViolationTriggered(
-      content::RenderFrameHost* rfh,
-      subresource_filter::mojom::AdsViolation triggered_violation) override;
   const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
   GetSafeBrowsingDatabaseManager() override;
   subresource_filter::ProfileInteractionManager* GetProfileInteractionManager()
       override;
-  void OnReloadRequested() override;
 
   void SetAdblockList(AdverseAdFilterListService* list) {
     adblock_list_ = list;

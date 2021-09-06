@@ -302,12 +302,30 @@ suite('InternetDetailPage', function() {
   });
 
   suite('DetailsPageCellular', function() {
-    test('Connect button disabled when not connectable', function() {
+    // Regression test for https://crbug.com/1182884.
+    test('Connect button enabled when not connectable', function() {
       const mojom = chromeos.networkConfig.mojom;
       mojoApi_.setNetworkTypeEnabledState(mojom.NetworkType.kCellular, true);
       const cellularNetwork =
           getManagedProperties(mojom.NetworkType.kCellular, 'cellular');
       cellularNetwork.connectable = false;
+      mojoApi_.setManagedPropertiesForTest(cellularNetwork);
+
+      internetDetailPage.init('cellular_guid', 'Cellular', 'cellular');
+      return flushAsync().then(() => {
+        const connectButton = getButton('connectDisconnect');
+        assertFalse(connectButton.hasAttribute('hidden'));
+        assertFalse(connectButton.hasAttribute('disabled'));
+      });
+    });
+
+    test('Connect button disabled when not connectable and locked', function() {
+      const mojom = chromeos.networkConfig.mojom;
+      mojoApi_.setNetworkTypeEnabledState(mojom.NetworkType.kCellular, true);
+      const cellularNetwork =
+          getManagedProperties(mojom.NetworkType.kCellular, 'cellular');
+      cellularNetwork.connectable = false;
+      cellularNetwork.typeProperties.cellular.simLocked = true;
       mojoApi_.setManagedPropertiesForTest(cellularNetwork);
 
       internetDetailPage.init('cellular_guid', 'Cellular', 'cellular');

@@ -54,7 +54,7 @@ mojo::ScopedDataPipeConsumerHandle CreateStream(const std::string& contents) {
   options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
   options.element_num_bytes = 1;
   options.capacity_num_bytes = 16;
-  mojo::CreateDataPipe(&options, &producer_handle, &consumer_handle);
+  mojo::CreateDataPipe(&options, producer_handle, consumer_handle);
   CHECK(producer_handle.is_valid());
   auto producer =
       std::make_unique<mojo::DataPipeProducer>(std::move(producer_handle));
@@ -113,7 +113,7 @@ class TempFileSystem {
 
     ASSERT_TRUE(
         storage::ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
-            name_, storage::kFileSystemTypeNativeLocal,
+            name_, storage::kFileSystemTypeLocal,
             storage::FileSystemMountOption(), temp_dir_.GetPath()));
 
     GetFileSystemContext(profile_)
@@ -131,7 +131,7 @@ class TempFileSystem {
   // Returns a file system URL for the specified path relative to `temp_dir_`.
   storage::FileSystemURL CreateFileSystemURL(const std::string& path) {
     return GetFileSystemContext(profile_)->CreateCrackedFileSystemURL(
-        origin_, storage::kFileSystemTypeNativeLocal,
+        origin_, storage::kFileSystemTypeLocal,
         temp_dir_.GetPath().Append(base::FilePath::FromUTF8Unsafe(path)));
   }
 

@@ -4,11 +4,30 @@
 
 module drive.mojom;
 
-// TODO(crbug/1163760): Create struct to model Drive data response.
+// The types of documents available within Google Drive.
+// TODO(crbug/1176927): Verify prioritized types from
+// Item Suggest.
+enum FileType {
+  kDoc,
+  kSlide,
+  kSheet,
+  kOther,
+};
+
+// A Google Drive File.
+struct File {
+  // The ID of the Drive Item.
+  string id;
+  // Information on why the Drive Item was returned.
+  string justification_text;
+  // The name of the Drive Item.
+  string title;
+  // The type of the Drive Item.
+  FileType type;
+};
 
 // Browser-side handler for requests from NTP Module UI.
 interface DriveHandler {
-  // TODO(crbug/1163760): Replace GetTestString method with
-  // method to retrieve file info from recent drive files.
-  GetTestString() => (string test_string);
+  // Fetches document suggestions from ItemSuggest API.
+  GetFiles() => (array<File> files);
 };

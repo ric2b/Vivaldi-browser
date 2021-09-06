@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image_skia.h"
 
 namespace ash {
 
@@ -33,8 +34,12 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   // Gets the current video size being captured by the fake service.
   gfx::Size GetCurrentVideoSize() const;
 
+  // Sets the thumbnail image that will be used by the fake service to provide
+  // it to the client.
+  void SetVideoThumbnail(const gfx::ImageSkia& thumbnail);
+
   // CaptureModeDelegate:
-  base::FilePath GetActiveUserDownloadsDir() const override;
+  base::FilePath GetScreenCaptureDir() const override;
   void ShowScreenCaptureItemInFolder(const base::FilePath& file_path) override;
   void OpenScreenshotInImageEditor(const base::FilePath& file_path) override;
   bool Uses24HourFormat() const override;

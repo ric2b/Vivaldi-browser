@@ -18,6 +18,7 @@
 #include "chrome/browser/permissions/abusive_origin_permission_revocation_request.h"
 #include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/permissions/contextual_notification_permission_ui_selector.h"
+#include "chrome/browser/permissions/permission_actions_history.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/permissions/prediction_based_permission_ui_selector.h"
@@ -55,8 +56,8 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_data.h"
-#include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_data.h"
+#include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #endif
@@ -223,11 +224,14 @@ void ChromePermissionsClient::OnPromptResolved(
     permissions::PermissionAction action,
     const GURL& origin,
     base::Optional<QuietUiReason> quiet_ui_reason) {
-  if (request_type == permissions::RequestType::kNotifications) {
-    Profile* profile = Profile::FromBrowserContext(browser_context);
+  Profile* profile = Profile::FromBrowserContext(browser_context);
 
+  PermissionActionsHistory::GetForProfile(profile)->RecordAction(action,
+                                                                 request_type);
+
+  if (request_type == permissions::RequestType::kNotifications) {
     AdaptiveQuietNotificationPermissionUiEnabler::GetForProfile(profile)
-        ->RecordPermissionPromptOutcome(action);
+        ->PermissionPromptResolved();
 
     if (action == permissions::PermissionAction::GRANTED &&
         quiet_ui_reason.has_value() &&
@@ -273,9 +277,9 @@ base::Optional<url::Origin> ChromePermissionsClient::GetAutoApprovalOrigin() {
       user_manager::UserManager::Get()->IsLoggedInAsWebKioskApp()) {
     const AccountId& account_id =
         user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId();
-    DCHECK(chromeos::WebKioskAppManager::IsInitialized());
-    const chromeos::WebKioskAppData* app_data =
-        chromeos::WebKioskAppManager::Get()->GetAppByAccountId(account_id);
+    DCHECK(ash::WebKioskAppManager::IsInitialized());
+    const ash::WebKioskAppData* app_data =
+        ash::WebKioskAppManager::Get()->GetAppByAccountId(account_id);
     DCHECK(app_data);
     return url::Origin::Create(app_data->install_url());
   }

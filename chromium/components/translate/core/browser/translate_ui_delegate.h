@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/translate/core/browser/translate_metrics_logger.h"
 #include "components/translate/core/common/translate_errors.h"
 
@@ -24,6 +25,17 @@ class LanguageState;
 class TranslateDriver;
 class TranslateManager;
 class TranslatePrefs;
+
+// Wrapper for language information: code, name and native name.
+struct LanguageNameTriple {
+  LanguageNameTriple();
+  ~LanguageNameTriple();
+  LanguageNameTriple(const LanguageNameTriple& other);
+
+  std::string code;
+  base::string16 name;
+  base::string16 native_name;
+};
 
 // The TranslateUIDelegate is a generic delegate for UI which offers Translate
 // feature to the user.
@@ -80,6 +92,14 @@ class TranslateUIDelegate {
 
   // Returns the displayable name for the language at |index|.
   base::string16 GetLanguageNameAt(size_t index) const;
+
+  // Translatable content languages.
+  void GetContentLanguagesNames(
+      std::vector<base::string16>* content_languages) const;
+  void GetContentLanguagesNativeNames(
+      std::vector<base::string16>* native_content_languages) const;
+  void GetContentLanguagesCodes(
+      std::vector<std::string>* content_languages_codes) const;
 
   // Starts translating the current page.
   void Translate();
@@ -145,8 +165,13 @@ class TranslateUIDelegate {
   // Records a high level UI interaction.
   void ReportUIInteraction(UIInteraction ui_interaction);
 
+  // If kContentLanguagesinLanguagePicker is on, build a vector of content
+  // languages data.
+  void MaybeSetContentLanguages();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TranslateUIDelegateTest, GetPageHost);
+  FRIEND_TEST_ALL_PREFIXES(TranslateUIDelegateTest, MaybeSetContentLanguages);
 
   // Gets the host of the page being translated, or an empty string if no URL is
   // associated with the current page.
@@ -161,6 +186,10 @@ class TranslateUIDelegate {
   // The list supported languages for translation.
   // The languages are sorted alphabetically based on the displayable name.
   std::vector<LanguageNamePair> languages_;
+
+  // The list of translatable user's setting languages.
+  // The languages are in order defined by the user.
+  std::vector<LanguageNameTriple> translatable_content_languages_;
 
   // The index for language the page is originally in.
   size_t original_language_index_;
@@ -177,6 +206,9 @@ class TranslateUIDelegate {
 
   // The translation related preferences.
   std::unique_ptr<TranslatePrefs> prefs_;
+
+  // Listens to accept languages changes.
+  PrefChangeRegistrar pref_change_registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(TranslateUIDelegate);
 };

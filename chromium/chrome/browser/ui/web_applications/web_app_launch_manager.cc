@@ -15,7 +15,6 @@
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
-#include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -41,6 +40,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/site_engagement/content/site_engagement_service.h"
+#include "components/webapps/browser/banners/app_banner_settings_helper.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
@@ -105,7 +105,9 @@ GURL GetLaunchUrl(WebAppProvider& provider,
 Browser* CreateWebApplicationWindow(Profile* profile,
                                     const std::string& app_id,
                                     WindowOpenDisposition disposition,
-                                    int32_t restore_id) {
+                                    int32_t restore_id,
+                                    bool can_resize,
+                                    bool can_maximize) {
   std::string app_name = GenerateApplicationNameFromAppId(app_id);
   gfx::Rect initial_bounds;
   Browser::CreateParams browser_params =
@@ -120,6 +122,8 @@ Browser* CreateWebApplicationWindow(Profile* profile,
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   browser_params.restore_id = restore_id;
 #endif
+  browser_params.can_resize = can_resize;
+  browser_params.can_maximize = can_maximize;
   return Browser::Create(browser_params);
 }
 
@@ -166,7 +170,7 @@ content::WebContents* WebAppLaunchManager::OpenApplication(
       GetSystemWebAppTypeForAppId(profile_, params.app_id);
   if (system_app_type) {
     Browser* browser =
-        LaunchSystemWebApp(profile_, *system_app_type, url, std::move(params));
+        LaunchSystemWebAppImpl(profile_, *system_app_type, url, params);
     return browser->tab_strip_model()->GetActiveWebContents();
   }
 

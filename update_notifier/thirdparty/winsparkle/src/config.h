@@ -20,7 +20,7 @@ struct Config {
   Config& operator=(Config&&) = default;
   DISALLOW_COPY_AND_ASSIGN(Config);
 
-  std::string locale;
+  std::string language;
   GURL appcast_url;
   std::wstring registry_path;
   std::wstring app_name;
@@ -39,6 +39,16 @@ const Config& GetConfig();
 void InitConfig(Config config);
 
 extern vivaldi::InstallType g_install_type;
+
+// True if using a network installer mode.
+extern bool g_install_mode;
+
+// True when running a manual update check. The flag must be accessed only from
+// the main thread as it can change if the user requested a manual check when
+// the automated check already runs.
+extern bool g_manual_check;
+
+// True in the silent update mode.
 extern bool g_silent_update;
 
 }  // namespace winsparkle

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/containers/fixed_flat_map.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
@@ -24,11 +25,16 @@
 namespace adblock_filter {
 namespace {
 #if defined(OS_ANDROID)
-const base::FilePath::CharType kResourcesFilePath[] =
-    FILE_PATH_LITERAL("assets/ublock_resources/resources.json");
+const base::FilePath::CharType kRedirectableResourcesFilePath[] =
+    FILE_PATH_LITERAL("assets/adblocker_resources/redirectable_resources.json");
+const base::FilePath::CharType kInjectableResourcesFilePath[] =
+    FILE_PATH_LITERAL("assets/adblocker_resources/injectable_resources.json");
 #else
-const base::FilePath::CharType kResourcesFilePath[] =
-    FILE_PATH_LITERAL("vivaldi/ublock_resources/resources.json");
+const base::FilePath::CharType kRedirectableResourcesFilePath[] =
+    FILE_PATH_LITERAL(
+        "vivaldi/adblocker_resources/redirectable_resources.json");
+const base::FilePath::CharType kInjectableResourcesFilePath[] =
+    FILE_PATH_LITERAL("vivaldi/adblocker_resources/injectable_resources.json");
 #endif
 
 constexpr auto kAliasMap =
@@ -116,54 +122,84 @@ constexpr auto kMimeTypeForExtension =
         {".xml", "text/xml,"},
     });
 
-void LoadResources(
-    base::OnceCallback<void(std::unique_ptr<base::Value>)> callback) {
+// uBlock technically allows to inject any of those scripts, even if it doesn't
+// make sense for all of them.
+constexpr auto kInjectableRedirectables =
+    base::MakeFixedFlatSet<base::StringPiece>(
+        {"amazon_ads.js", "doubleclick_instream_ad_status.js",
+         "google-analytics_analytics.js", "google-analytics_cx_api.js",
+         "google-analytics_ga.js", "googlesyndication_adsbygoogle.js",
+         "googletagmanager_gtm.js", "googletagservices_gpt.js", "noeval.js",
+         "noeval-silent.js", "nobab.js", "nofab.js", "noop.js", "popads.js",
+         "popads-dummy.js", "window.open-defuser.js"});
+
+std::unique_ptr<base::Value> LoadResources(
+    const base::FilePath::CharType* resource_file) {
 #if defined(OS_ANDROID)
   base::MemoryMappedFile::Region region;
   base::MemoryMappedFile mapped_file;
-  int json_fd = base::android::OpenApkAsset(kResourcesFilePath, &region);
+  int json_fd = base::android::OpenApkAsset(resource_file, &region);
   if (json_fd < 0) {
     LOG(ERROR) << "Adblock resources not found in APK assest.";
-    std::move(callback).Run(nullptr);
+    return nullptr;
   } else {
     if (!mapped_file.Initialize(base::File(json_fd), region)) {
-      LOG(ERROR) << "failed to initialize memory mapping for "
-                 << kResourcesFilePath;
-      std::move(callback).Run(nullptr);
+      LOG(ERROR) << "failed to initialize memory mapping for " << resource_file;
+      return nullptr;
     }
     base::StringPiece json_text(reinterpret_cast<char*>(mapped_file.data()),
                                 mapped_file.length());
     JSONStringValueDeserializer deserializer(json_text);
-    std::move(callback).Run(deserializer.Deserialize(nullptr, nullptr));
+    return deserializer.Deserialize(nullptr, nullptr);
   }
 #else
   base::FilePath path;
   base::PathService::Get(chrome::DIR_RESOURCES, &path);
-  path = path.Append(kResourcesFilePath);
+  path = path.Append(resource_file);
   JSONFileValueDeserializer deserializer(path);
-  std::move(callback).Run(deserializer.Deserialize(nullptr, nullptr));
+  return deserializer.Deserialize(nullptr, nullptr);
 #endif
 }
 }  // namespace
 
 Resources::Resources(scoped_refptr<base::SequencedTaskRunner> task_runner)
-    : task_runner_(task_runner), weak_factory_(this) {
-  task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&LoadResources,
-                                base::BindOnce(&Resources::OnLoadFinished,
-                                               weak_factory_.GetWeakPtr())));
+    : weak_factory_(this) {
+  task_runner->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&LoadResources, kRedirectableResourcesFilePath),
+      base::BindOnce(&Resources::OnLoadFinished, weak_factory_.GetWeakPtr(),
+                     &redirectable_resources_));
+  task_runner->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&LoadResources, kInjectableResourcesFilePath),
+      base::BindOnce(&Resources::OnLoadFinished, weak_factory_.GetWeakPtr(),
+                     &injectable_resources_));
 }
 Resources::~Resources() = default;
 
-void Resources::OnLoadFinished(std::unique_ptr<base::Value> resources) {
-  resources_.swap(resources);
+void Resources::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
 }
 
-base::Optional<std::string> Resources::Get(
+void Resources::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+void Resources::OnLoadFinished(base::Value* destination,
+                               std::unique_ptr<base::Value> resources) {
+  if (resources && resources->is_dict())
+    *destination = std::move(*resources);
+
+  if (loaded()) {
+    for (Observer& observer : observers_)
+      observer.OnResourcesLoaded();
+  }
+}
+
+base::Optional<std::string> Resources::GetRedirect(
     const std::string& name,
     flat::ResourceType resource_type) const {
   // If resources aren't yet loaded, then we'll just block the request.
-  if (!resources_ || resource_type == flat::ResourceType_WEBSOCKET ||
+  if (!redirectable_resources_.is_dict() ||
+      resource_type == flat::ResourceType_WEBSOCKET ||
       resource_type == flat::ResourceType_WEBRTC ||
       resource_type == flat::ResourceType_PING)
     return base::nullopt;
@@ -180,7 +216,8 @@ base::Optional<std::string> Resources::Get(
     return std::string("data:") + mimetype_it->second.as_string();
   }
 
-  std::string* resource = resources_->FindStringKey(actual_name);
+  const std::string* resource =
+      redirectable_resources_.FindStringKey(actual_name);
   if (!resource)
     return base::nullopt;
 
@@ -195,6 +232,24 @@ base::Optional<std::string> Resources::Get(
 
   return std::string("data:") + mimetype_it->second.as_string() +
          net::EscapeUrlEncodedData(*resource, false);
+}
+
+std::map<std::string, base::StringPiece> Resources::GetInjections() {
+  DCHECK(loaded());
+
+  std::map<std::string, base::StringPiece> result;
+
+  for (auto resource : injectable_resources_.DictItems()) {
+    result[resource.first] = base::StringPiece(resource.second.GetString());
+  }
+
+  for (auto resource : redirectable_resources_.DictItems()) {
+    if (kInjectableRedirectables.count(resource.first)) {
+      result[resource.first] = base::StringPiece(resource.second.GetString());
+    }
+  }
+
+  return result;
 }
 
 }  // namespace adblock_filter

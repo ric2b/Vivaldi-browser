@@ -425,11 +425,10 @@ void GetBookmarksMatchingProperties(BookmarkModel* model,
 std::vector<base::string16> ParseBookmarkQuery(
     const bookmarks::QueryFields& query) {
   std::vector<base::string16> query_words;
-  query_parser::QueryParser parser;
   if (query.word_phrase_query) {
-    parser.ParseQueryWords(base::i18n::ToLower(*query.word_phrase_query),
-                           query_parser::MatchingAlgorithm::DEFAULT,
-                           &query_words);
+    query_parser::QueryParser::ParseQueryWords(
+        base::i18n::ToLower(*query.word_phrase_query),
+        query_parser::MatchingAlgorithm::DEFAULT, &query_words);
   }
   return query_words;
 }
@@ -456,6 +455,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(
       prefs::kShowAppsShortcutInBookmarkBar,
       true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kShowReadingListInBookmarkBar, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
       prefs::kShowManagedBookmarksInBookmarkBar,

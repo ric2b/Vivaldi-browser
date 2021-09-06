@@ -60,7 +60,7 @@ export function sourceSelectTest() {
     const secondSource =
         createScannerSource(SourceType.FLATBED, 'platen', pageSizes);
     const sourceArr = [firstSource, secondSource];
-    sourceSelect.sources = sourceArr;
+    sourceSelect.options = sourceArr;
     flush();
 
     // Verify that adding sources results in the dropdown displaying the correct
@@ -73,6 +73,7 @@ export function sourceSelectTest() {
     assertEquals(
         getSourceTypeString(secondSource.type),
         select.options[1].textContent.trim());
+    assertTrue(select.options[2].hidden);
     assertEquals(secondSource.name, select.value);
   });
 
@@ -83,10 +84,10 @@ export function sourceSelectTest() {
       createScannerSource(SourceType.FLATBED, 'D', pageSizes),
       createScannerSource(SourceType.ADF_DUPLEX, 'A', pageSizes),
     ];
-    sourceSelect.sources = sources;
+    sourceSelect.options = sources;
     flush();
     assertOrderedAlphabetically(
-        sourceSelect.sources, (source) => getSourceTypeString(source.type));
+        sourceSelect.options, (source) => getSourceTypeString(source.type));
   });
 
   test('flatbedSelectedByDefaultIfProvided', () => {
@@ -95,11 +96,11 @@ export function sourceSelectTest() {
       createScannerSource(SourceType.ADF_SIMPLEX, 'B', pageSizes),
       createScannerSource(SourceType.ADF_DUPLEX, 'A', pageSizes),
     ];
-    sourceSelect.sources = sources;
+    sourceSelect.options = sources;
     flush();
     const flatbedSource =
-        sourceSelect.sources.find(source => source.type === SourceType.FLATBED);
-    assertEquals(sourceSelect.selectedSource, flatbedSource.name);
+        sourceSelect.options.find(source => source.type === SourceType.FLATBED);
+    assertEquals(sourceSelect.selectedOption, flatbedSource.name);
   });
 
   test('firstSourceUsedWhenFlatbedNotProvided', () => {
@@ -107,8 +108,8 @@ export function sourceSelectTest() {
       createScannerSource(SourceType.ADF_SIMPLEX, 'C', pageSizes),
       createScannerSource(SourceType.ADF_DUPLEX, 'B', pageSizes),
     ];
-    sourceSelect.sources = sources;
+    sourceSelect.options = sources;
     flush();
-    assertEquals(sourceSelect.selectedSource, sourceSelect.sources[0].name);
+    assertEquals(sourceSelect.selectedOption, sourceSelect.options[0].name);
   });
 }

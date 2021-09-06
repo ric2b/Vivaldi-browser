@@ -22,7 +22,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="Session.Background.TotalDuration" units="ms"
-    expires_after="2021-06-13">
+    expires_after="2021-08-15">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -36,7 +36,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Session.ClosedTabCounts" units="operations"
-    expires_after="2021-04-19">
+    expires_after="2021-07-18">
   <owner>rohitrao@chromium.org</owner>
   <owner>marq@chromium.org</owner>
   <summary>
@@ -60,7 +60,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Session.OpenedTabCounts" units="operations"
-    expires_after="2021-04-19">
+    expires_after="2021-07-18">
   <owner>rohitrao@chromium.org</owner>
   <owner>marq@chromium.org</owner>
   <summary>
@@ -411,7 +411,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Session.WebStates.AllSerializedCertPolicyCachesSize"
     units="KB" expires_after="2021-06-10">
-  <owner>eugenebut@chromium.org</owner>
+  <owner>djean@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
     The size of all cert policy caches for all open tabs. Recorded when
@@ -426,7 +426,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed 10/2020.
   </obsolete>
   <owner>ajuma@chromium.org</owner>
-  <owner>eugenebut@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
     Number of forward navigation items when navigation was committed/finished.
@@ -443,7 +442,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed 10/2020.
   </obsolete>
   <owner>ajuma@chromium.org</owner>
-  <owner>eugenebut@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
     True if navigation manager has forward navigation items when navigation was
@@ -457,7 +455,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram base="true" name="Session.WebStates.NavigationItem" units="KB"
     expires_after="2021-07-04">
-  <owner>eugenebut@chromium.org</owner>
+  <owner>djean@chromium.org</owner>
   <owner>sdefresne@chromium.org</owner>
   <summary>
     Recorded when CRWNavigationItemStorage encodes the data, which happens on
@@ -467,7 +465,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Session.WebStates.ReadFromFileTime" units="ms"
-    expires_after="2021-06-10">
+    expires_after="2021-08-09">
   <owner>justincohen@chromium.org</owner>
   <owner>rohitrao@chromium.org</owner>
   <summary>
@@ -478,7 +476,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Session.WebStates.SerializedCertPolicyCacheSize" units="KB"
     expires_after="2021-06-10">
-  <owner>eugenebut@chromium.org</owner>
+  <owner>djean@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
     The size of a single cert policy cache for one tab. Recorded when
@@ -488,7 +486,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Session.WebStates.SerializedSize" units="KB"
-    expires_after="2021-06-10">
+    expires_after="2021-08-09">
   <owner>justincohen@chromium.org</owner>
   <owner>rohitrao@chromium.org</owner>
   <summary>
@@ -574,6 +572,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     remains inactive in a subsequent browsing session the time continues to
     accrue. Visible tabs report a value of 0 for this. This is recorded at the
     moment the tab is restored during a session restore.
+  </summary>
+</histogram>
+
+<histogram name="SessionRestore.UnrecoverableWriteErrorCount"
+    units="operations" expires_after="M93">
+  <owner>sky@chromium.org</owner>
+  <owner>davidbienvenu@chromium.org</owner>
+  <summary>
+    Recorded when SessionService is shutdown (which generally corresponds to
+    when chrome is shutdown). The count is the number of times a write error
+    happened at a time when it could not immediately be handled.
   </summary>
 </histogram>
 

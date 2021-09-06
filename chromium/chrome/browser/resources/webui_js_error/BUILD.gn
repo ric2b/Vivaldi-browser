@@ -18,7 +18,10 @@ if (optimize_webui) {
   optimize_webui("build") {
     host = "webui_js_error"
     input = rebase_path("$target_gen_dir/$preprocess_folder", root_build_dir)
-    deps = [ ":preprocess" ]
+    deps = [
+      ":preprocess",
+      "../../../../ui/webui/resources/js:preprocess",
+    ]
     js_module_in_files = [ "webui_js_error.js" ]
     js_out_files = [ "webui_js_error.rollup.js" ]
     out_manifest = "$target_gen_dir/$build_manifest"
@@ -47,7 +50,7 @@ generate_grd("build_grd") {
   out_grd = "$target_gen_dir/${grd_prefix}_resources.grd"
 }
 
-grit("webui_js_error_resources") {
+grit("resources") {
   defines = chrome_grit_defines
 
   # These arguments are needed since the grd is generated at build time.
@@ -69,8 +72,5 @@ js_type_check("closure_compile") {
 }
 
 js_library("webui_js_error") {
-  deps = [
-    "//ui/webui/resources/js:assert",
-    "//ui/webui/resources/js:util",
-  ]
+  deps = [ "//ui/webui/resources/js:util.m" ]
 }

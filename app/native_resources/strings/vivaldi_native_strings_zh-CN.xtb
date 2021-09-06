@@ -22,6 +22,7 @@
 <translation id="1921101374471252440">重新加载图片</translation>
 <translation id="1924750141060565109">风景 15</translation>
 <translation id="19598411548897379">普通</translation>
+<translation id="1985669426322966465">软件更新</translation>
 <translation id="2079036669923635404">点击此处更新Vivaldi到版本 <ph name="VERSION" />。</translation>
 <translation id="2141974047387702305">下载更新文件时出现一个错误。请检查您的互联网连接并重试。</translation>
 <translation id="2339641773402824483">检查更新...</translation>
@@ -29,6 +30,9 @@
 <translation id="2444387452209867610">插入笔记</translation>
 <translation id="2486841023299517366">动物 4</translation>
 <translation id="2612127540243995147">准备安装。Vivaldi 将被关闭，随后重新打开。</translation>
+<translation id="2613387515621326337">显示更新网站</translation>
+<translation id="2647368062414805334">遗憾，无法在Edge浏览器运行期间导入它的设置。请保存当前工作并关闭所有Edge窗口，然后点击“继续”。</translation>
+<translation id="2721334646575696520">Edge浏览器</translation>
 <translation id="2848085334714181751">动物 3</translation>
 <translation id="2873951654529031587">回收站</translation>
 <translation id="292258461174562431">怪兽 4</translation>
@@ -43,6 +47,8 @@
 <translation id="3259769196742189631">校验</translation>
 <translation id="3302905971452834934">怪兽 1</translation>
 <translation id="3334610655141903168">（无标题）</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> 为当前最新版。</translation>
+<translation id="3383198080133834965">当前已是最新版！</translation>
 <translation id="3402602684546832928">选择 Opera 书签文件</translation>
 <translation id="3451317331714872347">风景 8</translation>
 <translation id="3457498675806041407">确认退出</translation>
@@ -57,10 +63,12 @@
 <translation id="3732157130969736834">保存链接为书签</translation>
 <translation id="3732388226447288666">动物 2</translation>
 <translation id="3732439195215136813">动物 5</translation>
+<translation id="3795800845758778870">遗憾，无法在Brave浏览器运行期间导入它的设置。请保存当前工作并关闭所有Brave窗口，然后点击“继续”。</translation>
 <translation id="3832132597516774400">风景 5</translation>
 <translation id="3914946330804881301">从 Opera 导入</translation>
 <translation id="3921292902397893431">怪兽 8</translation>
 <translation id="3943857333388298514">粘贴</translation>
+<translation id="4005270918754737597">跳过此版本</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">不再显示(&amp;D)</translation>
 <translation id="4074744496918018786">在隐身窗口中打开图片</translation>
@@ -93,6 +101,7 @@
 <translation id="5648110075441906505">在新窗口中打开图片</translation>
 <translation id="5656371807944747581">更新出错！</translation>
 <translation id="5716238312826274098">关闭通知</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> 版更新已可用 (当前版本为 <ph name="OLD_VERSION" />)。现在下载吗？</translation>
 <translation id="5770433027661640693">风景 10</translation>
 <translation id="5857090052475505287">新建文件夹</translation>
 <translation id="588258955323874662">全屏</translation>
@@ -109,6 +118,8 @@
 <translation id="6551219277044048123">添加为搜索引擎(&amp;G)...</translation>
 <translation id="6630781781151951863">风景 18</translation>
 <translation id="6635049669875534328">发行注记：</translation>
+<translation id="6693585104974197539">选择Edge的配置文件夹以导入其配置</translation>
+<translation id="6726279523566323394">选择Brave的配置文件夹以导入其配置</translation>
 <translation id="6804831687363620480">很遗憾，你的 Opera 15+ 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Opera 15+ 窗口然后点击继续。</translation>
 <translation id="6892812721183419409">以<ph name="USER" />身份打开链接</translation>
 <translation id="6896758677409633944">复制</translation>
@@ -120,6 +131,7 @@
 <translation id="7658239707568436148">取消</translation>
 <translation id="7715497554424665066">忽略更新(&amp;I)</translation>
 <translation id="7724603315864178912">剪切</translation>
+<translation id="7727481996062361502">校验更新...</translation>
 <translation id="7793738202466490491">添加到日历事件</translation>
 <translation id="7848222781052558334">下载文件的数字签名校验失败。</translation>
 <translation id="7865983598101744945">确认退出</translation>
@@ -144,6 +156,7 @@
 <translation id="867544375504146191">Yandex 浏览器</translation>
 <translation id="8768970203213061953">风景 14</translation>
 <translation id="8773635261052182196">你将不会再收到通知，你可以在 vivaldi 设置中重新打开。</translation>
+<translation id="8813277370772331957">稍后提醒我</translation>
 <translation id="8894900864683381599">添加链接到网页面板</translation>
 <translation id="8912720443398351457">确认退出Vivaldi吗？</translation>
 <translation id="8947109330183116400">选择 HTML 书签文件</translation>
@@ -152,5 +165,6 @@
 <translation id="912022491595344261">以<ph name="USER" />身份打开图像</translation>
 <translation id="9157539936604258187">打开链接</translation>
 <translation id="9169060351863393881">Opera 12.x 浏览器</translation>
+<translation id="939305735877869636">Brave浏览器</translation>
 <translation id="970294721402795299">风景 16</translation>
 </translationbundle>

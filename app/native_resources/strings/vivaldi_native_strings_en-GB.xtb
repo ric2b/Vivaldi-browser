@@ -4,13 +4,16 @@
 <translation id="1033008476608128425">Landscape 3</translation>
 <translation id="1118377629180821201">Landscape 12</translation>
 <translation id="1158503667684816647">Do not show confirmation again</translation>
+<translation id="1222195720020481779">Launching the installer...</translation>
 <translation id="1276145862619442150">Speed Dials</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Send Link by Mail</translation>
 <translation id="1454726940098520109">Do Not Show Confirmation Again</translation>
 <translation id="1462666970065907900">Do you really want to close this window?</translation>
+<translation id="1526344461589023948">An error occurred while trying to save a downloaded update. Please check that the computer has enough disk space and try again later.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">New Private Window</translation>
+<translation id="1702758681952953055">If the error persists, please report it and include the following details:</translation>
 <translation id="1728549374069268714">Paste and go</translation>
 <translation id="1756026472674246267">Open Link in New Tab</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -19,10 +22,17 @@
 <translation id="1921101374471252440">&amp;Reload Image</translation>
 <translation id="1924750141060565109">Landscape 15</translation>
 <translation id="19598411548897379">Generic</translation>
+<translation id="1985669426322966465">Software Update</translation>
 <translation id="2079036669923635404">Click here to update Vivaldi to version <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">An error occurred while downloading update files. Please check your internet connection and try again later.</translation>
+<translation id="2339641773402824483">Checking for updates...</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Insert Note</translation>
 <translation id="2486841023299517366">Animal 4</translation>
+<translation id="2612127540243995147">Ready to install. Vivaldi will be closed and relaunched.</translation>
+<translation id="2613387515621326337">Show update website</translation>
+<translation id="2647368062414805334">Sadly, your Edge settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Edge windows. Then click Continue.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
 <translation id="2873951654529031587">Deleted</translation>
 <translation id="292258461174562431">Monster 4</translation>
@@ -33,9 +43,12 @@
 <translation id="3084011186245865060">Landscape 6</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">New Bookmark</translation>
+<translation id="3255747772218936245">Install update</translation>
 <translation id="3259769196742189631">Validate</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(no title)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is currently the newest version available.</translation>
+<translation id="3383198080133834965">You’re up to date!</translation>
 <translation id="3402602684546832928">Select Opera bookmark file</translation>
 <translation id="3451317331714872347">Landscape 8</translation>
 <translation id="3457498675806041407">Confirm Exit</translation>
@@ -45,13 +58,17 @@
 <translation id="3542768452570884558">Open Link in New Window</translation>
 <translation id="3588820906588687999">Open Image in New Tab</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3680031241659195730">A new version of Vivaldi is available!</translation>
+<translation id="3708982624815781692">The download was cancelled.</translation>
 <translation id="3732157130969736834">Bookmark Link</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
+<translation id="3795800845758778870">Sadly, your Brave settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Brave windows. Then click Continue.</translation>
 <translation id="3832132597516774400">Landscape 5</translation>
 <translation id="3914946330804881301">Imported From Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Paste</translation>
+<translation id="4005270918754737597">Skip this version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Don’t show again</translation>
 <translation id="4074744496918018786">Open Image in Private Window</translation>
@@ -68,6 +85,7 @@
 <translation id="4677434526832593569">Animal 8</translation>
 <translation id="474217410105706308">Mute Tab</translation>
 <translation id="4881695831933465202">Open</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> of <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Imported Speed Dial</translation>
 <translation id="5092656712000637858">Add Page to Web Panel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -81,11 +99,14 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera version 15+ (Beta)</translation>
 <translation id="5648110075441906505">Open Image in New Window</translation>
+<translation id="5656371807944747581">Update Error!</translation>
 <translation id="5716238312826274098">Disabling notifications</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> is now available (you have <ph name="OLD_VERSION" />). Would you like to download it now?</translation>
 <translation id="5770433027661640693">Landscape 10</translation>
 <translation id="5857090052475505287">New Folder</translation>
 <translation id="588258955323874662">Fullscreen</translation>
 <translation id="5916080360077521750">Sadly, your Chrome settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Chrome windows. Then click Continue.</translation>
+<translation id="6040143037577758943">Close</translation>
 <translation id="6229528619562190452">Click here to update Vivaldi.</translation>
 <translation id="6234173136417926046">Use Image as Start Page Background</translation>
 <translation id="630690498669249215">Opera Bookmarks File</translation>
@@ -96,15 +117,23 @@
 <translation id="6538338088414940408">Open link in background tab</translation>
 <translation id="6551219277044048123">Add as Search En&amp;gine...</translation>
 <translation id="6630781781151951863">Landscape 18</translation>
+<translation id="6635049669875534328">Release notes:</translation>
+<translation id="6693585104974197539">Select Edge profile folder for import</translation>
+<translation id="6726279523566323394">Select Brave profile folder for import</translation>
 <translation id="6804831687363620480">Sadly, your Opera 15+ settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera 15+ windows. Then click Continue.</translation>
+<translation id="6892812721183419409">Open Link as <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copy</translation>
 <translation id="7086554968911045110">Landscape 7</translation>
 <translation id="7111492742514999492">Landscape 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi is made possible by the <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source project and other <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Failed to launch the update installer. Please check that the computer has enough memory or disc space and try again later.</translation>
+<translation id="7658239707568436148">Cancel</translation>
 <translation id="7715497554424665066">&amp;Ignore Update</translation>
 <translation id="7724603315864178912">Cut</translation>
+<translation id="7727481996062361502">Verifying update...</translation>
 <translation id="7793738202466490491">Add as Calendar Event</translation>
+<translation id="7848222781052558334">Failed to verify the digital signature of the downloaded files.</translation>
 <translation id="7865983598101744945">Confirm exit</translation>
 <translation id="7957213167373139414">My Calendar</translation>
 <translation id="8027581147000338959">Open in New Window</translation>
@@ -113,9 +142,13 @@
 <translation id="8261506727792406068">Delete</translation>
 <translation id="8331671104904436324">Open in Background Tab</translation>
 <translation id="8373293945112511707">Landscape 1</translation>
+<translation id="8388552048012645975">Downloading update...</translation>
 <translation id="8427094907586191051">Landscape 17</translation>
+<translation id="8439034818057146672">A new version of Vivaldi is ready to install.</translation>
 <translation id="8446668873108041390">Executing JavaScript through AppleScript is turned off. Under Settings &gt; Privacy &gt; Apple Events, there is a setting to allow JavaScript from Apple Events.</translation>
 <translation id="8539196077526389150">Landscape 13</translation>
+<translation id="8562339533180097902">Close Vivaldi and install now</translation>
+<translation id="8567452685425968223">Extracting update...</translation>
 <translation id="8624587806981488221">&amp;Reload image</translation>
 <translation id="864444594187862076">Opera version 15+ (Developer)</translation>
 <translation id="8651348004684669199">Add Active Tab</translation>
@@ -123,12 +156,15 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Landscape 14</translation>
 <translation id="8773635261052182196">You will no longer see these notifications. You can enable them again from the Vivaldi settings.</translation>
+<translation id="8813277370772331957">Remind me later</translation>
 <translation id="8894900864683381599">Add Link to Web Panel</translation>
 <translation id="8912720443398351457">Do You Really Want To Exit Vivaldi?</translation>
 <translation id="8947109330183116400">Select HTML bookmark file</translation>
 <translation id="9017566390391482291">Select Vivaldi profile folder for import</translation>
 <translation id="9065203028668620118">Edit</translation>
+<translation id="912022491595344261">Open Image as <ph name="USER" /></translation>
 <translation id="9157539936604258187">Open Link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landscape 16</translation>
 </translationbundle>

@@ -58,7 +58,7 @@ cros::mojom::CameraMetadataEntryPtr* GetMetadataEntry(
   }
 
   auto* entry_ptr = &(camera_metadata->entries.value()[(*iter)->index]);
-  if (!(*entry_ptr)->data.data()) {
+  if ((*entry_ptr)->data.empty()) {
     // Metadata tag found with no valid data.
     LOG(WARNING) << "Found tag " << static_cast<int>(tag)
                  << " but with invalid data";
@@ -127,6 +127,7 @@ void MergeMetadata(cros::mojom::CameraMetadataPtr* to,
   }
   for (const auto& entry : from->entries.value()) {
     if (tags.find(entry->tag) != tags.end()) {
+      (*to)->entry_count -= 1;
       LOG(ERROR) << "Found duplicated entries for tag " << entry->tag;
       continue;
     }

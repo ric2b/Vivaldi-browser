@@ -219,6 +219,11 @@ void HoldingSpaceBrowserTestBase::RemoveItem(const HoldingSpaceItem* item) {
   HoldingSpaceController::Get()->model()->RemoveItem(item->id());
 }
 
+base::FilePath HoldingSpaceBrowserTestBase::CreateFile(
+    const base::Optional<std::string>& extension) {
+  return ::ash::CreateFile(GetProfile(), extension.value_or("txt"));
+}
+
 std::vector<views::View*> HoldingSpaceBrowserTestBase::GetDownloadChips() {
   return test_api_->GetDownloadChips();
 }
@@ -231,12 +236,24 @@ std::vector<views::View*> HoldingSpaceBrowserTestBase::GetScreenCaptureViews() {
   return test_api_->GetScreenCaptureViews();
 }
 
+views::View* HoldingSpaceBrowserTestBase::GetTray() {
+  return test_api_->GetTray();
+}
+
+views::View* HoldingSpaceBrowserTestBase::GetTrayDropTargetOverlay() {
+  return test_api_->GetTrayDropTargetOverlay();
+}
+
 views::View* HoldingSpaceBrowserTestBase::GetDefaultTrayIcon() {
   return test_api_->GetDefaultTrayIcon();
 }
 
 views::View* HoldingSpaceBrowserTestBase::GetPreviewsTrayIcon() {
   return test_api_->GetPreviewsTrayIcon();
+}
+
+bool HoldingSpaceBrowserTestBase::RecentFilesBubbleShown() const {
+  return test_api_->RecentFilesBubbleShown();
 }
 
 void HoldingSpaceBrowserTestBase::RequestAndAwaitLockScreen() {

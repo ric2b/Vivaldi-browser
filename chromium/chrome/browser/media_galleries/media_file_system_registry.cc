@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -333,7 +334,7 @@ class ExtensionGalleriesHost
         device_ids,
         base::BindOnce(&ExtensionGalleriesHost::RegisterAttachedMediaFileSystem,
                        this, base::Owned(device_ids), gallery,
-                       base::Passed(&callback)));
+                       std::move(callback)));
   }
 
   // Revoke the file system for |id| if this extension has created one for |id|.
@@ -699,7 +700,7 @@ class MediaFileSystemRegistry::MediaFileSystemContextImpl
     CHECK(!path.ReferencesParent());
 
     return ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
-        fs_name, storage::kFileSystemTypeNativeMedia,
+        fs_name, storage::kFileSystemTypeLocalMedia,
         storage::FileSystemMountOption(), path);
   }
 

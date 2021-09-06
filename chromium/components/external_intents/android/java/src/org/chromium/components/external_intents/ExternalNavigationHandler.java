@@ -32,6 +32,7 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
@@ -54,14 +55,13 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.network.mojom.ReferrerPolicy;
-import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.PermissionCallback;
+import org.chromium.url.GURL;
 import org.chromium.url.URI;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -222,7 +222,7 @@ public class ExternalNavigationHandler {
 
         int NUM_ENTRIES = 3;
     }
-  
+
     /**
      * Packages information about the result of a check of whether we should override URL loading.
      */
@@ -456,7 +456,8 @@ public class ExternalNavigationHandler {
 
     /** http://crbug.com/464669 : Disallow firing external intent from background tab. */
     private boolean blockExternalNavFromBackgroundTab(ExternalNavigationParams params) {
-        if (params.isBackgroundTabNavigation()) {
+        if (params.isBackgroundTabNavigation()
+                && !params.areIntentLaunchesAllowedInBackgroundTabs()) {
             if (DEBUG) Log.i(TAG, "Navigation in background tab");
             return true;
         }
@@ -948,9 +949,9 @@ public class ExternalNavigationHandler {
 
         // TODO(https://crbug.com/1009539): Replace this host parsing with a UrlUtilities or GURL
         //   function call.
-        String lastCommittedUrl = getLastCommittedUrl();
+        GURL lastCommittedUrl = getLastCommittedUrl();
         String previousUriString =
-                lastCommittedUrl != null ? lastCommittedUrl : params.getReferrerUrl();
+                lastCommittedUrl != null ? lastCommittedUrl.getSpec() : params.getReferrerUrl();
         if (previousUriString == null || (!isLink && !isFormSubmit)) return false;
 
         URI currentUri;
@@ -1080,7 +1081,7 @@ public class ExternalNavigationHandler {
         Context context = mDelegate.getContext();
         if (ContextUtils.activityFromContext(context) == null) return false;
 
-        new UiUtils.CompatibleAlertDialogBuilder(context, R.style.Theme_Chromium_AlertDialog)
+        new AlertDialog.Builder(context, R.style.Theme_Chromium_AlertDialog)
                 .setTitle(R.string.external_app_leave_incognito_warning_title)
                 .setMessage(R.string.external_app_leave_incognito_warning)
                 .setPositiveButton(R.string.external_app_leave_incognito_leave,
@@ -1459,7 +1460,7 @@ public class ExternalNavigationHandler {
         Intent intent;
         try {
             intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
-        } catch (URISyntaxException ex) {
+        } catch (Exception ex) {
             // Ignore the error.
             Log.w(TAG, "Bad URI %s", url, ex);
             return false;
@@ -1803,7 +1804,7 @@ public class ExternalNavigationHandler {
      * @return The last committed URL from the WebContents.
      */
     @VisibleForTesting
-    protected String getLastCommittedUrl() {
+    protected GURL getLastCommittedUrl() {
         if (mDelegate.getWebContents() == null) return null;
         return mDelegate.getWebContents().getLastCommittedUrl();
     }

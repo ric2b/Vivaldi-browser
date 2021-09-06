@@ -249,13 +249,14 @@ bool RuleParser::ParseCosmeticRule(base::StringPiece body,
 bool RuleParser::ParseScriptletInjectionRule(
     base::StringPiece body,
     ContentInjectionRuleCore rule_core) {
+  ScriptletInjectionRule rule;
+  rule.core = std::move(rule_core);
+  // Use this name to signal an abp snippet filter.
+  rule.scriptlet_name = kAbpSnippetsScriptletName;
+  base::Value arguments_list(base::Value::Type::LIST);
+
   for (base::StringPiece injection : base::SplitStringPiece(
            body, ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
-    ScriptletInjectionRule rule;
-    rule.core = rule_core.Clone();
-    // Use this name to signal an abp snippet filter.
-    rule.scriptlet_name = kAbpSnippetsScriptletName;
-
     bool escaped = false;
     bool in_quotes = false;
     bool after_quotes = false;
@@ -297,7 +298,7 @@ bool RuleParser::ParseScriptletInjectionRule(
       } else if (c == '\'') {
         in_quotes = !in_quotes;
         after_quotes = !in_quotes;
-      } else if (in_quotes || base::IsAsciiWhitespace(c)) {
+      } else if (in_quotes || !base::IsAsciiWhitespace(c)) {
         argument += c;
       } else if (!argument.empty() || after_quotes) {
         arguments.Append(std::move(argument));
@@ -315,12 +316,13 @@ bool RuleParser::ParseScriptletInjectionRule(
     if (arguments.GetList().size() == 0)
       continue;
 
-    std::string serialized_arguments;
-    JSONStringValueSerializer(&serialized_arguments).Serialize(arguments);
-    rule.arguments.push_back(std::move(serialized_arguments));
-    parse_result_->scriptlet_injection_rules.push_back(std::move(rule));
+    arguments_list.Append(std::move(arguments));
   }
 
+  std::string serialized_arguments;
+  JSONStringValueSerializer(&serialized_arguments).Serialize(arguments_list);
+  rule.arguments.push_back(std::move(serialized_arguments));
+  parse_result_->scriptlet_injection_rules.push_back(std::move(rule));
   return true;
 }
 

@@ -13,6 +13,8 @@
 #include "chrome/install_static/install_modes.h"
 #include "chrome/install_static/install_util.h"
 
+#include "installer/util/vivaldi_static_install_helpers.h"
+
 namespace install_static {
 
 namespace {
@@ -124,7 +126,11 @@ std::unique_ptr<PrimaryInstallDetails> MakeProductDetails(
 
   const InstallConstants* mode = FindInstallMode(GetInstallSuffix(exe_path));
   const bool system_level =
+#if defined(VIVALDI_BUILD)
+      vivaldi::IsSystemInstallExecutable(exe_path);
+#else
       mode->supports_system_level && PathIsInProgramFiles(exe_path);
+#endif
 
   details->set_mode(mode);
   details->set_system_level(system_level);

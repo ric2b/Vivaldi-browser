@@ -17,6 +17,7 @@
 #include "ui/base/page_transition_types.h"
 #include "weblayer/browser/navigation_entry_data.h"
 #include "weblayer/browser/navigation_ui_data_impl.h"
+#include "weblayer/browser/page_impl.h"
 #include "weblayer/browser/tab_impl.h"
 #include "weblayer/public/navigation_observer.h"
 
@@ -188,6 +189,11 @@ void NavigationControllerImpl::OnLargestContentfulPaint(
   for (auto& observer : observers_)
     observer.OnLargestContentfulPaint(navigation_start,
                                       largest_contentful_paint);
+}
+
+void NavigationControllerImpl::OnPageDestroyed(Page* page) {
+  for (auto& observer : observers_)
+    observer.OnPageDestroyed(page);
 }
 
 #if defined(OS_ANDROID)
@@ -446,12 +452,12 @@ void NavigationControllerImpl::DidRedirectNavigation(
 
 void NavigationControllerImpl::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
+#if defined(OS_ANDROID)
   if (!navigation_handle->IsInMainFrame())
     return;
 
   DCHECK(navigation_map_.find(navigation_handle) != navigation_map_.end());
   auto* navigation = navigation_map_[navigation_handle].get();
-#if defined(OS_ANDROID)
   if (java_controller_) {
     TRACE_EVENT0("weblayer",
                  "Java_NavigationControllerImpl_readyToCommitNavigation");
@@ -459,8 +465,6 @@ void NavigationControllerImpl::ReadyToCommitNavigation(
         AttachCurrentThread(), java_controller_, navigation->java_navigation());
   }
 #endif
-  for (auto& observer : observers_)
-    observer.ReadyToCommitNavigation(navigation);
 }
 
 void NavigationControllerImpl::DidFinishNavigation(
@@ -471,6 +475,8 @@ void NavigationControllerImpl::DidFinishNavigation(
   DelayDeletionHelper deletion_helper(this);
   DCHECK(navigation_map_.find(navigation_handle) != navigation_map_.end());
   auto* navigation = navigation_map_[navigation_handle].get();
+
+  navigation->set_safe_to_get_page();
 
   if (navigation_handle->HasCommitted()) {
     // Set state on NavigationEntry user data if a per-navigation user agent was
@@ -484,6 +490,10 @@ void NavigationControllerImpl::DidFinishNavigation(
           entry_data->set_per_navigation_user_agent_override(true);
       }
     }
+
+    auto* rfh = navigation_handle->GetRenderFrameHost();
+    if (rfh)
+      PageImpl::GetOrCreateForCurrentDocument(rfh);
   }
 
   if (navigation_handle->GetNetErrorCode() == net::OK &&

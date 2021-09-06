@@ -16,14 +16,16 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "components/services/storage/public/mojom/cache_storage_control.mojom.h"
+#include "components/services/storage/public/mojom/quota_client.mojom.h"
+#include "components/services/storage/public/mojom/storage_usage_info.mojom.h"
+#include "content/browser/cache_storage/blob_storage_context_wrapper.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/browser/cache_storage/legacy/legacy_cache_storage.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/cache_storage_context.h"
-#include "content/public/browser/storage_usage_info.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 #include "storage/browser/quota/quota_client.h"
 #include "url/origin.h"
 
@@ -46,7 +48,7 @@ class CONTENT_EXPORT LegacyCacheStorageManager : public CacheStorageManager {
       scoped_refptr<base::SequencedTaskRunner> cache_task_runner,
       scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      scoped_refptr<CacheStorageContextImpl::ObserverList> observers);
+      scoped_refptr<BlobStorageContextWrapper> blob_storage_context);
 
   // Create a new manager using the underlying configuration of the given
   // manager, but with its own list of storage objects.  This is only used
@@ -68,27 +70,27 @@ class CONTENT_EXPORT LegacyCacheStorageManager : public CacheStorageManager {
 
   void GetAllOriginsUsage(
       storage::mojom::CacheStorageOwner owner,
-      CacheStorageContext::GetUsageInfoCallback callback) override;
+      storage::mojom::CacheStorageControl::GetAllOriginsInfoCallback callback)
+      override;
   void GetOriginUsage(
       const url::Origin& origin_url,
       storage::mojom::CacheStorageOwner owner,
-      storage::QuotaClient::GetOriginUsageCallback callback) override;
+      storage::mojom::QuotaClient::GetOriginUsageCallback callback) override;
   void GetOrigins(
       storage::mojom::CacheStorageOwner owner,
-      storage::QuotaClient::GetOriginsForTypeCallback callback) override;
+      storage::mojom::QuotaClient::GetOriginsForTypeCallback callback) override;
   void GetOriginsForHost(
       const std::string& host,
       storage::mojom::CacheStorageOwner owner,
-      storage::QuotaClient::GetOriginsForHostCallback callback) override;
+      storage::mojom::QuotaClient::GetOriginsForHostCallback callback) override;
   void DeleteOriginData(
       const url::Origin& origin,
       storage::mojom::CacheStorageOwner owner,
-      storage::QuotaClient::DeleteOriginDataCallback callback) override;
+      storage::mojom::QuotaClient::DeleteOriginDataCallback callback) override;
   void DeleteOriginData(const url::Origin& origin,
                         storage::mojom::CacheStorageOwner owner) override;
-
-  void SetBlobParametersForCache(
-      scoped_refptr<BlobStorageContextWrapper> blob_storage_context) override;
+  void AddObserver(mojo::PendingRemote<storage::mojom::CacheStorageObserver>
+                       observer) override;
 
   void NotifyCacheListChanged(const url::Origin& origin);
   void NotifyCacheContentChanged(const url::Origin& origin,
@@ -115,18 +117,18 @@ class CONTENT_EXPORT LegacyCacheStorageManager : public CacheStorageManager {
       scoped_refptr<base::SequencedTaskRunner> cache_task_runner,
       scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      scoped_refptr<CacheStorageContextImpl::ObserverList> observers);
+      scoped_refptr<BlobStorageContextWrapper> blob_storage_context);
 
   ~LegacyCacheStorageManager() override;
 
   void GetAllOriginsUsageGetSizes(
-      std::unique_ptr<std::vector<StorageUsageInfo>> usage_info,
-      CacheStorageContext::GetUsageInfoCallback callback);
+      storage::mojom::CacheStorageControl::GetAllOriginsInfoCallback callback,
+      std::vector<storage::mojom::StorageUsageInfoPtr> usage_info);
 
   void DeleteOriginDidClose(
       const url::Origin& origin,
       storage::mojom::CacheStorageOwner owner,
-      storage::QuotaClient::DeleteOriginDataCallback callback,
+      storage::mojom::QuotaClient::DeleteOriginDataCallback callback,
       std::unique_ptr<LegacyCacheStorage> cache_storage,
       int64_t origin_size);
 
@@ -154,7 +156,7 @@ class CONTENT_EXPORT LegacyCacheStorageManager : public CacheStorageManager {
   // |cache_task_runner_|.
   CacheStorageMap cache_storage_map_;
 
-  scoped_refptr<CacheStorageContextImpl::ObserverList> observers_;
+  mojo::RemoteSet<storage::mojom::CacheStorageObserver> observers_;
 
   scoped_refptr<BlobStorageContextWrapper> blob_storage_context_;
 

@@ -39,14 +39,15 @@
 #include "chrome/browser/page_load_metrics/observers/tab_restore_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/third_party_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/translate_page_load_metrics_observer.h"
-#include "chrome/browser/prefetch/no_state_prefetch/chrome_prerender_contents_delegate.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_memory_tracker_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
-#include "components/no_state_prefetch/browser/prerender_contents.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_embedder_base.h"
+#include "components/page_load_metrics/browser/page_load_metrics_memory_tracker.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
 #include "url/gurl.h"
@@ -75,6 +76,9 @@ class PageLoadMetricsEmbedder
   bool IsNewTabPageUrl(const GURL& url) override;
   bool IsPrerender(content::WebContents* web_contents) override;
   bool IsExtensionUrl(const GURL& url) override;
+  page_load_metrics::PageLoadMetricsMemoryTracker*
+  GetMemoryTrackerForBrowserContext(
+      content::BrowserContext* browser_context) override;
 
  protected:
   // page_load_metrics::PageLoadMetricsEmbedderBase:
@@ -171,7 +175,7 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
 }
 
 bool PageLoadMetricsEmbedder::IsPrerendering() const {
-  return prerender::ChromePrerenderContentsDelegate::FromWebContents(
+  return prerender::ChromeNoStatePrefetchContentsDelegate::FromWebContents(
              web_contents()) != nullptr;
 }
 
@@ -184,7 +188,7 @@ bool PageLoadMetricsEmbedder::IsNewTabPageUrl(const GURL& url) {
 }
 
 bool PageLoadMetricsEmbedder::IsPrerender(content::WebContents* web_contents) {
-  return prerender::ChromePrerenderContentsDelegate::FromWebContents(
+  return prerender::ChromeNoStatePrefetchContentsDelegate::FromWebContents(
       web_contents);
 }
 
@@ -194,6 +198,16 @@ bool PageLoadMetricsEmbedder::IsExtensionUrl(const GURL& url) {
 #else
   return false;
 #endif
+}
+
+page_load_metrics::PageLoadMetricsMemoryTracker*
+PageLoadMetricsEmbedder::GetMemoryTrackerForBrowserContext(
+    content::BrowserContext* browser_context) {
+  if (!base::FeatureList::IsEnabled(features::kV8PerFrameMemoryMonitoring))
+    return nullptr;
+
+  return page_load_metrics::PageLoadMetricsMemoryTrackerFactory::
+      GetForBrowserContext(browser_context);
 }
 
 }  // namespace

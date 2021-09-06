@@ -24,6 +24,7 @@ class EntitySpecifics;
 }  // namespace sync_pb
 
 namespace syncer {
+class ClientTagHash;
 struct EntityData;
 }  // namespace syncer
 
@@ -36,13 +37,9 @@ std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title);
 // Used to decide if entity needs to be reuploaded for each remote change.
 bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data);
 
-// TODO(crbug.com/978430): Remove argument |include_guid| once the client tag
-// hash is required to be populated during sync metadata validation upon
-// startup in SyncedNotesTracker::NotesModelMatchesMetadata().
 sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* mode,
-    bool include_guid);
+    vivaldi::NotesModel* mode);
 
 // Creates a note node under the given parent node from the given specifics.
 // Returns the newly created node. Callers must verify that
@@ -79,9 +76,8 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
 // Checks if note specifics contain a GUID that matches the value that would
 // be inferred from other redundant fields. |specifics| must be valid as per
 // IsValidNotesSpecifics().
-// TODO(crbug.com/1032052): Replace this with an analogous function that
-// verifies that the note's client tag hash matches the GUID.
 bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
+                         const syncer::ClientTagHash& client_tag_hash,
                          const std::string& originator_cache_guid,
                          const std::string& originator_client_item_id);
 

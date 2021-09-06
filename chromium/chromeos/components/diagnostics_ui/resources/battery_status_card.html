@@ -1,12 +1,19 @@
-<style include="diagnostics-shared diagnostics-fonts"></style>
+<style include="diagnostics-shared diagnostics-fonts">
+  .remove-stroke {
+    --iron-icon-stroke-color: none;
+  }
+</style>
 
 <diagnostics-card>
-  <div id="cardTitle" slot="title">[[i18n('batteryTitle')]]</div>
-  <div id="batteryStatusChipInfo" slot="chip" class="diagnostics-chip">
+  <div id="cardTitle" slot="title" aria-describedby="batteryStatusChipInfo">
+    [[i18n('batteryTitle')]]
+  </div>
+  <div id="batteryStatusChipInfo" slot="chip" class="diagnostics-chip"
+      aria-hidden="true">
     [[getDesignedFullCharge_(batteryHealth_.chargeFullDesignMilliampHours)]]
   </div>
-  <!-- TODO(michaelcheco): Replace placeholder icon. -->
-  <iron-icon slot="icon" icon="cr:add"></iron-icon>
+  <iron-icon slot="icon" icon="[[batteryIcon]]" class$="[[iconClass]]">
+  </iron-icon>
   <percent-bar-chart slot="left-panel" header="[[powerTimeString_]]"
     value="[[batteryChargeStatus_.chargeNowMilliampHours]]"
     max="[[batteryHealth_.chargeFullNowMilliampHours]]">
@@ -30,10 +37,15 @@
   </data-point>
 
   <routine-section slot="routines" routines="[[routines_]]"
+    routine-runtime="{{getEstimateRuntimeInMinutes_(routines_)}}"
     is-test-running="{{isTestRunning}}"
     is-power-routine="true"
     run-tests-button-text="[[getRunTestsButtonText_(
       batteryChargeStatus_.powerAdapterStatus
-    )]]">
+    )]]"
+    additional-message="[[getRunTestsAdditionalMessage(
+      batteryChargeStatus_.chargeNowMilliampHours,
+      batteryHealth_.chargeFullNowMilliampHours)]]"
+    learn-more-link-section="battery">
   </routine-section>
 </diagnostics-card>

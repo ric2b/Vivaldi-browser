@@ -11,6 +11,7 @@
 #include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_content_browser_client.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info_values.h"
@@ -619,7 +620,8 @@ void StatsReporterImpl::Worker::Run(
       installation_year_and_week.second,
       earliest_installation_year_and_week.first,
       earliest_installation_year_and_week.second,
-      net::EscapeUrlEncodedData(GetUserAgent(), true).c_str());
+      net::EscapeUrlEncodedData(embedder_support::GetUserAgent(), true)
+          .c_str());
 
   url_loader_ = CreateURLLoader(GURL(request_url), body);
 

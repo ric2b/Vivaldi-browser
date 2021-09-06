@@ -4,6 +4,8 @@
 
 #include "components/webapps/browser/installable/installable_manager.h"
 
+#include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "base/bind.h"
@@ -39,6 +41,15 @@
 namespace webapps {
 
 namespace {
+
+// Minimum dimension size in pixels for screenshots.
+const int kMinimumScreenshotSizeInPx = 320;
+
+// Maximum dimension size in pixels for screenshots.
+const int kMaximumScreenshotSizeInPx = 3840;
+
+// Maximum dimension size in pixels for icons.
+const int kMaximumIconSizeInPx = std::numeric_limits<int>::max();
 
 // This constant is the icon size on Android (48dp) multiplied by the scale
 // factor of a Nexus 5 device (3x). It is the currently advertised minimum icon
@@ -346,10 +357,6 @@ void InstallableManager::SetIconFetched(const IconUsage usage) {
   icons_[usage].fetched = true;
 }
 
-bool InstallableManager::IsScreenshotsFetchComplete() const {
-  return manifest().screenshots.size() == screenshots_.size();
-}
-
 std::vector<InstallableStatusCode> InstallableManager::GetErrors(
     const InstallableParams& params) {
   std::vector<InstallableStatusCode> errors;
@@ -455,8 +462,10 @@ void InstallableManager::Reset(base::Optional<InstallableStatusCode> error) {
   // Prevent any outstanding callbacks to or from this object from being called.
   weak_factory_.InvalidateWeakPtrs();
   icons_.clear();
+  downloaded_screenshots_.clear();
   screenshots_.clear();
   screenshots_downloading_ = 0;
+  is_screenshots_fetch_complete_ = false;
 
   // If we have paused tasks, we are waiting for a service worker.
   if (error)
@@ -510,7 +519,7 @@ void InstallableManager::RunCallback(
   InstallableData data = {
       std::move(errors),
       manifest_url(),
-      &manifest(),
+      manifest(),
       primary_icon->url,
       primary_icon->icon.get(),
       has_maskable_primary_icon,
@@ -561,7 +570,7 @@ void InstallableManager::WorkOnTask() {
                           IconUsage::kPrimary);
   } else if (params.valid_manifest && !valid_manifest_->fetched) {
     CheckManifestValid(params.check_webapp_manifest_display);
-  } else if (params.fetch_screenshots && !IsScreenshotsFetchComplete()) {
+  } else if (params.fetch_screenshots && !is_screenshots_fetch_complete_) {
     CheckAndFetchScreenshots();
   } else if (params.has_worker && !worker_->fetched) {
     CheckServiceWorker();
@@ -813,7 +822,7 @@ void InstallableManager::CheckAndFetchBestIcon(int ideal_icon_size_in_px,
   } else {
     bool can_download_icon = content::ManifestIconDownloader::Download(
         GetWebContents(), icon_url, ideal_icon_size_in_px,
-        minimum_icon_size_in_px,
+        minimum_icon_size_in_px, kMaximumIconSizeInPx,
         base::BindOnce(&InstallableManager::OnIconFetched,
                        weak_factory_.GetWeakPtr(), icon_url, usage));
     if (can_download_icon)
@@ -843,17 +852,21 @@ void InstallableManager::OnIconFetched(const GURL icon_url,
 
 void InstallableManager::CheckAndFetchScreenshots() {
   DCHECK(!manifest().IsEmpty());
+  DCHECK(!is_screenshots_fetch_complete_);
 
   screenshots_downloading_ = 0;
 
   for (const auto& url : manifest().screenshots) {
     // A screenshot URL that's in the map is already taken care of.
-    if (screenshots_.count(url.src) > 0)
+    if (downloaded_screenshots_.count(url.src) > 0)
       continue;
 
+    int ideal_size_in_px = url.sizes.empty() ? kMinimumScreenshotSizeInPx
+                                             : std::max(url.sizes[0].width(),
+                                                        url.sizes[0].height());
     bool can_download = content::ManifestIconDownloader::Download(
-        GetWebContents(), url.src, /*ideal_splash_image_size_in_px*/ 320,
-        /* minimum_splash_image_size_in_px */ 320,
+        GetWebContents(), url.src, ideal_size_in_px, kMinimumScreenshotSizeInPx,
+        kMaximumScreenshotSizeInPx,
         base::BindOnce(&InstallableManager::OnScreenshotFetched,
                        weak_factory_.GetWeakPtr(), url.src),
         /*square_only=*/false);
@@ -861,8 +874,10 @@ void InstallableManager::CheckAndFetchScreenshots() {
       ++screenshots_downloading_;
   }
 
-  if (!screenshots_downloading_)
+  if (!screenshots_downloading_) {
+    is_screenshots_fetch_complete_ = true;
     WorkOnTask();
+  }
 }
 
 void InstallableManager::OnScreenshotFetched(const GURL screenshot_url,
@@ -872,9 +887,46 @@ void InstallableManager::OnScreenshotFetched(const GURL screenshot_url,
   if (!GetWebContents())
     return;
 
-  screenshots_[screenshot_url] = bitmap;
-  if (--screenshots_downloading_ == 0)
+  if (!bitmap.drawsNothing())
+    downloaded_screenshots_[screenshot_url] = bitmap;
+
+  if (--screenshots_downloading_ == 0) {
+    // Now that all images have finished downloading, populate screenshots in
+    // the order they are declared in the manifest.
+    for (const auto& url : manifest().screenshots) {
+      auto iter = downloaded_screenshots_.find(url.src);
+      if (iter == downloaded_screenshots_.end())
+        continue;
+
+      auto screenshot = iter->second;
+      if (screenshot.dimensions().width() > kMaximumScreenshotSizeInPx ||
+          screenshot.dimensions().height() > kMaximumScreenshotSizeInPx) {
+        continue;
+      }
+
+      // TODO(crbug.com/1146450): Filter out screenshots by platform.
+      // Screenshots must have the same aspect ratio. Cross-multiplying
+      // dimensions checks portrait vs landscape mode (1:2 vs 2:1 for instance).
+      if (screenshots_.size() &&
+          screenshot.dimensions().width() *
+                  screenshots_[0].dimensions().height() !=
+              screenshot.dimensions().height() *
+                  screenshots_[0].dimensions().width()) {
+        continue;
+      }
+
+      // Max dimension can't be twice larger than min dimension.
+      auto dimensions = std::minmax(screenshot.width(), screenshot.height());
+      if (dimensions.second > dimensions.first * 2)
+        continue;
+
+      screenshots_.push_back(screenshot);
+    }
+    downloaded_screenshots_.clear();
+    is_screenshots_fetch_complete_ = true;
+
     WorkOnTask();
+  }
 }
 
 void InstallableManager::OnRegistrationCompleted(const GURL& pattern) {

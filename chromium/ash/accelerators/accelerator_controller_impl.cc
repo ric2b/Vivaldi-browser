@@ -19,6 +19,9 @@
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/clipboard/clipboard_history_controller_impl.h"
+#include "ash/components/audio/cras_audio_handler.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/devicetype.h"
 #include "ash/debug.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_move_window_util.h"
@@ -93,8 +96,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "chromeos/audio/cras_audio_handler.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/user_manager/user_type.h"
@@ -102,6 +103,7 @@
 #include "ui/aura/env.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
+#include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/chromeos/events/keyboard_layout_util.h"
@@ -567,6 +569,11 @@ void HandleSwitchToNextIme(const ui::Accelerator& accelerator) {
   Shell::Get()->ime_controller()->SwitchToNextIme();
 }
 
+void HandleDiagnostics() {
+  base::RecordAction(UserMetricsAction("Accel_Open_Diagnostics"));
+  NewWindowDelegate::GetInstance()->OpenDiagnostics();
+}
+
 void HandleOpenFeedbackPage() {
   base::RecordAction(UserMetricsAction("Accel_Open_Feedback_Page"));
   NewWindowDelegate::GetInstance()->OpenFeedbackPage();
@@ -749,11 +756,11 @@ void HandleShowKeyboardShortcutViewer() {
   NewWindowDelegate::GetInstance()->ShowKeyboardShortcutViewer();
 }
 
-bool CanHandleScreenshot() {
+bool CanHandleScreenshot(AcceleratorAction action) {
   // The old screenshot code will handle the different sessions in its own code.
-  if (!features::IsCaptureModeEnabled())
+  // |TAKE_SCREENSHOT| is allowed when user session is blocked.
+  if (!features::IsCaptureModeEnabled() || action == TAKE_SCREENSHOT)
     return true;
-
   return !Shell::Get()->session_controller()->IsUserSessionBlocked();
 }
 
@@ -801,9 +808,11 @@ void HandleTakeScreenshot(ui::KeyboardCode key_code) {
     return;
   }
 
-  // If it is the snip key, toggle capture mode.
+  // If it is the snip key, toggle capture mode unless the session is blocked,
+  // in which case, it behaves like a fullscreen screenshot.
   auto* capture_mode_controller = CaptureModeController::Get();
-  if (key_code == ui::VKEY_SNAPSHOT) {
+  if (key_code == ui::VKEY_SNAPSHOT &&
+      !Shell::Get()->session_controller()->IsUserSessionBlocked()) {
     if (capture_mode_controller->IsActive())
       capture_mode_controller->Stop();
     else
@@ -992,6 +1001,11 @@ void HandleTopWindowMinimizeOnBack() {
   WindowState::Get(window_util::GetTopWindow())->Minimize();
 }
 
+void HandleShowEmojiPicker() {
+  base::RecordAction(UserMetricsAction("Accel_Show_Emoji_Picker"));
+  ui::ShowEmojiPanel();
+}
+
 void HandleShowImeMenuBubble() {
   base::RecordAction(UserMetricsAction("Accel_Show_Ime_Menu_Bubble"));
 
@@ -1078,8 +1092,14 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
         base::UserMetricsAction("VoiceInteraction.Started.Search_Space"));
   } else if (accelerator.IsCmdDown() && accelerator.key_code() == ui::VKEY_A) {
     // Search+A shortcut is disabled on device with an assistant key.
-    if (ui::DeviceKeyboardHasAssistantKey())
+    // Currently only Google branded device has the key. Some external keyboard
+    // may report it has the key but actually not.  This would cause keyboard
+    // shortcut stops working.  So we only check the key on these branded
+    // devices.
+    if (chromeos::IsGoogleBrandedDevice() &&
+        ui::DeviceKeyboardHasAssistantKey()) {
       return;
+    }
 
     base::RecordAction(
         base::UserMetricsAction("VoiceInteraction.Started.Search_A"));
@@ -1123,10 +1143,6 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_DISABLED_IN_PUBLIC_SESSION_MESSAGE));
-      return;
-    case AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER:
-      // supervised user is deprecated, wait for the code clean up.
-      NOTREACHED();
       return;
     case AssistantAllowedState::DISALLOWED_BY_INCOGNITO:
       ShowToast(kAssistantErrorToastId,
@@ -1552,7 +1568,7 @@ const double kStepPercentage = 4.0;
 void HandleVolumeDown() {
   base::RecordAction(UserMetricsAction("Accel_VolumeDown_F9"));
 
-  chromeos::CrasAudioHandler* audio_handler = chromeos::CrasAudioHandler::Get();
+  auto* audio_handler = CrasAudioHandler::Get();
   if (audio_handler->IsOutputMuted()) {
     audio_handler->SetOutputVolumePercent(0);
   } else {
@@ -1568,13 +1584,13 @@ void HandleVolumeMute(const ui::Accelerator& accelerator) {
   if (accelerator.key_code() == ui::VKEY_VOLUME_MUTE)
     base::RecordAction(UserMetricsAction("Accel_VolumeMute_F8"));
 
-  chromeos::CrasAudioHandler::Get()->SetOutputMute(true);
+  CrasAudioHandler::Get()->SetOutputMute(true);
 }
 
 void HandleVolumeUp() {
   base::RecordAction(UserMetricsAction("Accel_VolumeUp_F10"));
 
-  chromeos::CrasAudioHandler* audio_handler = chromeos::CrasAudioHandler::Get();
+  auto* audio_handler = CrasAudioHandler::Get();
   bool play_sound = false;
   if (audio_handler->IsOutputMuted()) {
     audio_handler->SetOutputMute(false);
@@ -1721,8 +1737,7 @@ void AcceleratorControllerImpl::UnregisterAll(ui::AcceleratorTarget* target) {
 
 bool AcceleratorControllerImpl::IsActionForAcceleratorEnabled(
     const ui::Accelerator& accelerator) const {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator it =
-      accelerators_.find(accelerator);
+  auto it = accelerators_.find(accelerator);
   return it != accelerators_.end() && CanPerformAction(it->second, accelerator);
 }
 
@@ -1768,8 +1783,7 @@ ui::AcceleratorHistory* AcceleratorControllerImpl::GetAcceleratorHistory() {
 
 bool AcceleratorControllerImpl::IsPreferred(
     const ui::Accelerator& accelerator) const {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator iter =
-      accelerators_.find(accelerator);
+  auto iter = accelerators_.find(accelerator);
   if (iter == accelerators_.end())
     return false;  // not an accelerator.
 
@@ -1778,8 +1792,7 @@ bool AcceleratorControllerImpl::IsPreferred(
 
 bool AcceleratorControllerImpl::IsReserved(
     const ui::Accelerator& accelerator) const {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator iter =
-      accelerators_.find(accelerator);
+  auto iter = accelerators_.find(accelerator);
   if (iter == accelerators_.end())
     return false;  // not an accelerator.
 
@@ -1796,8 +1809,7 @@ AcceleratorControllerImpl::GetCurrentAcceleratorRestriction() {
 
 bool AcceleratorControllerImpl::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
-  std::map<ui::Accelerator, AcceleratorAction>::const_iterator it =
-      accelerators_.find(accelerator);
+  auto it = accelerators_.find(accelerator);
   DCHECK(it != accelerators_.end());
   AcceleratorAction action = it->second;
   if (!CanPerformAction(action, accelerator))
@@ -2037,7 +2049,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
-      return CanHandleScreenshot();
+      return CanHandleScreenshot(action);
 
     // The following are always enabled.
     case BRIGHTNESS_DOWN:
@@ -2070,6 +2082,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case NEW_TAB:
     case NEW_WINDOW:
     case OPEN_CROSH:
+    case OPEN_DIAGNOSTICS:
     case OPEN_FEEDBACK_PAGE:
     case OPEN_FILE_MANAGER:
     case OPEN_GET_HELP:
@@ -2078,6 +2091,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case PRINT_UI_HIERARCHIES:
     case RESTORE_TAB:
     case ROTATE_WINDOW:
+    case SHOW_EMOJI_PICKER:
     case SHOW_IME_MENU_BUBBLE:
     case SHOW_SHORTCUT_VIEWER:
     case SHOW_TASK_MANAGER:
@@ -2291,6 +2305,9 @@ void AcceleratorControllerImpl::PerformAction(
     case OPEN_CROSH:
       HandleCrosh();
       break;
+    case OPEN_DIAGNOSTICS:
+      HandleDiagnostics();
+      break;
     case OPEN_FEEDBACK_PAGE:
       HandleOpenFeedbackPage();
       break;
@@ -2336,6 +2353,9 @@ void AcceleratorControllerImpl::PerformAction(
       break;
     case SCALE_UI_UP:
       accelerators::ZoomDisplay(true /* up */);
+      break;
+    case SHOW_EMOJI_PICKER:
+      HandleShowEmojiPicker();
       break;
     case SHOW_IME_MENU_BUBBLE:
       HandleShowImeMenuBubble();
@@ -2666,8 +2686,7 @@ bool AcceleratorControllerImpl::ShouldSwapSideVolumeButtons(
 }
 
 void AcceleratorControllerImpl::UpdateTabletModeVolumeAdjustHistogram() {
-  const int volume_percent =
-      chromeos::CrasAudioHandler::Get()->GetOutputVolumePercent();
+  const int volume_percent = CrasAudioHandler::Get()->GetOutputVolumePercent();
   const bool swapped = features::IsSwapSideVolumeButtonsForOrientationEnabled();
   if ((volume_adjust_starts_with_up_ &&
        volume_percent >= initial_volume_percent_) ||
@@ -2688,8 +2707,7 @@ void AcceleratorControllerImpl::StartTabletModeVolumeAdjustTimer(
     AcceleratorAction action) {
   if (!tablet_mode_volume_adjust_timer_.IsRunning()) {
     volume_adjust_starts_with_up_ = action == VOLUME_UP;
-    initial_volume_percent_ =
-        chromeos::CrasAudioHandler::Get()->GetOutputVolumePercent();
+    initial_volume_percent_ = CrasAudioHandler::Get()->GetOutputVolumePercent();
   }
   tablet_mode_volume_adjust_timer_.Start(
       FROM_HERE, kVolumeAdjustTimeout, this,

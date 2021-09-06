@@ -22,6 +22,7 @@
 #include "chrome/common/chrome_features.h"
 #include "components/webapps/browser/installable/installable_manager.h"
 #include "content/public/common/content_features.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/gfx/skia_util.h"
 
 namespace web_app {
@@ -132,9 +133,9 @@ void ManifestUpdateTask::OnDidGetInstallableData(
     return;
   }
 
-  DCHECK(data.manifest);
   web_application_info_.emplace();
-  UpdateWebAppInfoFromManifest(*data.manifest, &web_application_info_.value());
+  UpdateWebAppInfoFromManifest(data.manifest, data.manifest_url,
+                               &web_application_info_.value());
 
   // We cannot allow the app ID to change via the manifest changing. We rely on
   // fixed app IDs to determine whether web apps installed in the user sync
@@ -198,6 +199,14 @@ bool ManifestUpdateTask::IsUpdateNeededForManifest() const {
     return true;
   }
 
+  if (base::FeatureList::IsEnabled(
+          blink::features::kWebAppEnableLinkCapturing) &&
+      web_application_info_->capture_links !=
+          registrar_.GetAppCaptureLinks(app_id_)) {
+    return true;
+  }
+
+  // TODO(crbug.com/1072058): Check the manifest URL.
   // TODO(crbug.com/926083): Check more manifest fields.
   return false;
 }

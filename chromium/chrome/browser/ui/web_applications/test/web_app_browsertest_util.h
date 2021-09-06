@@ -69,10 +69,17 @@ AppMenuCommandState GetAppMenuCommandState(int command_id, Browser* browser);
 
 void CloseAndWait(Browser* browser);
 
+void WaitForBrowserToBeClosed(Browser* browser);
+
 bool IsBrowserOpen(const Browser* test_browser);
 
 // Launches the app for |app| in |profile|.
 void UninstallWebApp(Profile* profile, const AppId& app_id);
+
+using UninstallWebAppCallback = base::OnceCallback<void(bool uninstalled)>;
+void UninstallWebAppWithCallback(Profile* profile,
+                                 const AppId& app_id,
+                                 UninstallWebAppCallback callback);
 
 // Synchronous read of an app icon pixel.
 SkColor ReadAppIconPixel(Profile* profile,

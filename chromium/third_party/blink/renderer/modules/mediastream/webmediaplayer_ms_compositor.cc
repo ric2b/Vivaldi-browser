@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind_post_task.h"
 #include "base/hash/hash.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
@@ -56,12 +57,8 @@ scoped_refptr<media::VideoFrame> CopyFrame(
            frame->format() == media::PIXEL_FORMAT_XRGB ||
            frame->format() == media::PIXEL_FORMAT_I420 ||
            frame->format() == media::PIXEL_FORMAT_NV12);
-    new_frame = media::VideoFrame::CreateFrame(
-        media::PIXEL_FORMAT_I420, frame->coded_size(), frame->visible_rect(),
-        frame->natural_size(), frame->timestamp());
-
     auto provider = Platform::Current()->SharedMainThreadContextProvider();
-    if (!new_frame || !provider) {
+    if (!provider) {
       // Return a black frame (yuv = {0, 0x80, 0x80}).
       return media::VideoFrame::CreateColorFrame(
           frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
@@ -75,27 +72,14 @@ scoped_refptr<media::VideoFrame> CopyFrame(
     DCHECK(provider->RasterInterface());
     video_renderer->Copy(frame.get(), &paint_canvas, provider.get());
 
-    SkPixmap pixmap;
-    const bool result = bitmap.peekPixels(&pixmap);
-    DCHECK(result) << "Error trying to access SkBitmap's pixels";
-
-#if SK_PMCOLOR_BYTE_ORDER(R, G, B, A)
-    const uint32_t source_pixel_format = libyuv::FOURCC_ABGR;
-#else
-    const uint32_t source_pixel_format = libyuv::FOURCC_ARGB;
-#endif
-    libyuv::ConvertToI420(static_cast<const uint8_t*>(pixmap.addr(0, 0)),
-                          pixmap.computeByteSize(),
-                          new_frame->visible_data(media::VideoFrame::kYPlane),
-                          new_frame->stride(media::VideoFrame::kYPlane),
-                          new_frame->visible_data(media::VideoFrame::kUPlane),
-                          new_frame->stride(media::VideoFrame::kUPlane),
-                          new_frame->visible_data(media::VideoFrame::kVPlane),
-                          new_frame->stride(media::VideoFrame::kVPlane),
-                          0 /* crop_x */, 0 /* crop_y */, pixmap.width(),
-                          pixmap.height(), new_frame->visible_rect().width(),
-                          new_frame->visible_rect().height(), libyuv::kRotate0,
-                          source_pixel_format);
+    bitmap.setImmutable();
+    new_frame =
+        media::CreateFromSkImage(bitmap.asImage(), frame->visible_rect(),
+                                 frame->natural_size(), frame->timestamp());
+    if (!new_frame) {
+      return media::VideoFrame::CreateColorFrame(
+          frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
+    }
   } else {
     DCHECK(frame->IsMappable());
     DCHECK(frame->format() == media::PIXEL_FORMAT_I420A ||
@@ -187,7 +171,7 @@ WebMediaPlayerMSCompositor::WebMediaPlayerMSCompositor(
         *video_frame_compositor_task_runner_, FROM_HERE,
         CrossThreadBindOnce(&WebMediaPlayerMSCompositor::InitializeSubmitter,
                             weak_ptr_factory_.GetWeakPtr()));
-    update_submission_state_callback_ = media::BindToLoop(
+    update_submission_state_callback_ = base::BindPostTask(
         video_frame_compositor_task_runner_,
         ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
             &WebMediaPlayerMSCompositor::SetIsSurfaceVisible,
@@ -625,8 +609,9 @@ void WebMediaPlayerMSCompositor::SetCurrentFrame(
   bool is_first_frame = true;
   bool has_frame_size_changed = false;
 
-  base::Optional<media::VideoRotation> new_rotation =
-      frame->metadata().rotation.value_or(media::VIDEO_ROTATION_0);
+  base::Optional<media::VideoRotation> new_rotation = media::VIDEO_ROTATION_0;
+  if (frame->metadata().transformation)
+    new_rotation = frame->metadata().transformation->rotation;
 
   base::Optional<bool> new_opacity;
   new_opacity = media::IsOpaque(frame->format());
@@ -635,17 +620,19 @@ void WebMediaPlayerMSCompositor::SetCurrentFrame(
     // We have a current frame, so determine what has changed.
     is_first_frame = false;
 
-    media::VideoRotation current_video_rotation =
-        current_frame_->metadata().rotation.value_or(media::VIDEO_ROTATION_0);
+    auto current_video_rotation = media::VIDEO_ROTATION_0;
+    if (current_frame_->metadata().transformation) {
+      current_video_rotation =
+          current_frame_->metadata().transformation->rotation;
+    }
 
     has_frame_size_changed =
         RotationAdjustedSize(*new_rotation, frame->natural_size()) !=
         RotationAdjustedSize(current_video_rotation,
                              current_frame_->natural_size());
 
-    if (current_video_rotation == *new_rotation) {
+    if (current_video_rotation == *new_rotation)
       new_rotation.reset();
-    }
 
     if (*new_opacity == media::IsOpaque(current_frame_->format()))
       new_opacity.reset();

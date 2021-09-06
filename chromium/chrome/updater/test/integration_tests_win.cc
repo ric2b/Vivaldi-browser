@@ -4,6 +4,7 @@
 
 #include <wrl/client.h>
 #include <string>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -21,6 +22,7 @@
 #include "chrome/updater/app/server/win/updater_internal_idl.h"
 #include "chrome/updater/app/server/win/updater_legacy_idl.h"
 #include "chrome/updater/constants.h"
+#include "chrome/updater/external_constants_builder.h"
 #include "chrome/updater/test/integration_tests.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_version.h"
@@ -33,7 +35,7 @@ namespace updater {
 namespace test {
 namespace {
 
-constexpr base::char16 kDidRun[] = L"dr";
+constexpr wchar_t kDidRun[] = L"dr";
 
 base::FilePath GetInstallerPath() {
   base::FilePath test_executable;
@@ -51,8 +53,8 @@ base::FilePath GetProductPath() {
       .AppendASCII(UPDATER_VERSION_STRING);
 }
 
-base::string16 GetAppClientStateKey(const std::string& id) {
-  return base::ASCIIToUTF16(base::StrCat({CLIENT_STATE_KEY, id}));
+std::wstring GetAppClientStateKey(const std::string& id) {
+  return base::ASCIIToWide(base::StrCat({CLIENT_STATE_KEY, id}));
 }
 
 }  // namespace
@@ -75,8 +77,6 @@ base::FilePath GetDataDirPath() {
 
 void Clean() {
   // TODO(crbug.com/1062288): Delete the Client / ClientState registry keys.
-  base::win::RegKey(HKEY_CURRENT_USER, L"", KEY_SET_VALUE)
-      .DeleteKey(UPDATE_DEV_KEY);
   // TODO(crbug.com/1062288): Delete the COM server items.
   // TODO(crbug.com/1062288): Delete the COM service items.
   // TODO(crbug.com/1062288): Delete the COM interfaces.
@@ -100,19 +100,11 @@ void ExpectClean() {
 }
 
 void EnterTestMode(const GURL& url) {
-  base::win::RegKey key(HKEY_CURRENT_USER, L"", KEY_SET_VALUE);
-  ASSERT_EQ(key.Create(HKEY_CURRENT_USER, UPDATE_DEV_KEY, KEY_WRITE),
-            ERROR_SUCCESS);
-  ASSERT_EQ(key.WriteValue(base::UTF8ToUTF16(kDevOverrideKeyUrl).c_str(),
-                           base::UTF8ToUTF16(url.spec()).c_str()),
-            ERROR_SUCCESS);
-  ASSERT_EQ(key.WriteValue(base::UTF8ToUTF16(kDevOverrideKeyUseCUP).c_str(),
-                           DWORD{0}),
-            ERROR_SUCCESS);
-  ASSERT_EQ(
-      key.WriteValue(base::UTF8ToUTF16(kDevOverrideKeyInitialDelay).c_str(),
-                     DWORD{0}),
-      ERROR_SUCCESS);
+  ASSERT_TRUE(ExternalConstantsBuilder()
+                  .SetUpdateURL(std::vector<std::string>{url.spec()})
+                  .SetUseCUP(false)
+                  .SetInitialDelay(0.1)
+                  .Overwrite());
 }
 
 void ExpectInstalled() {
@@ -191,7 +183,7 @@ void ExpectActive(const std::string& id) {
   ASSERT_EQ(key.Open(HKEY_CURRENT_USER, GetAppClientStateKey(id).c_str(),
                      KEY_READ | KEY_WOW64_32KEY),
             ERROR_SUCCESS);
-  base::string16 value;
+  std::wstring value;
   ASSERT_EQ(key.ReadValue(kDidRun, &value), ERROR_SUCCESS);
   EXPECT_EQ(value, L"1");
 }
@@ -201,7 +193,7 @@ void ExpectNotActive(const std::string& id) {
   base::win::RegKey key;
   if (key.Open(HKEY_CURRENT_USER, GetAppClientStateKey(id).c_str(),
                KEY_READ | KEY_WOW64_32KEY) == ERROR_SUCCESS) {
-    base::string16 value;
+    std::wstring value;
     if (key.ReadValue(kDidRun, &value) == ERROR_SUCCESS)
       EXPECT_EQ(value, L"0");
   }

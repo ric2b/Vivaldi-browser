@@ -21,7 +21,7 @@
 #include "chrome/browser/previews/previews_service_factory.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
-#include "components/optimization_guide/content/optimization_guide_decider.h"
+#include "components/optimization_guide/content/browser/optimization_guide_decider.h"
 #include "components/optimization_guide/core/bloom_filter.h"
 #include "components/optimization_guide/core/hints_component_util.h"
 #include "components/optimization_guide/core/hints_fetcher.h"
@@ -469,7 +469,9 @@ TEST_F(OptimizationGuideHintsManagerTest,
 
   // The below histogram should not be recorded since hints weren't coming
   // directly from the component.
-  histogram_tester.ExpectTotalCount("OptimizationGuide.ProcessHintsResult", 0);
+  histogram_tester.ExpectUniqueSample(
+      "OptimizationGuide.ProcessHintsResult",
+      optimization_guide::ProcessHintsComponentResult::kSuccess, 1);
   // However, we still expect the local histogram for the hints being updated to
   // be recorded.
   histogram_tester.ExpectUniqueSample(
@@ -531,12 +533,9 @@ TEST_F(OptimizationGuideHintsManagerTest,
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         optimization_guide::switches::kHintsProtoOverride, encoded_config);
     CreateHintsManager(/*top_host_provider=*/nullptr);
-    // The below histogram should not be recorded since hints weren't coming
-    // directly from the component.
-    histogram_tester.ExpectTotalCount("OptimizationGuide.ProcessHintsResult",
-                                      0);
-    // However, we still expect the local histogram for the hints being updated
-    // to be recorded.
+    histogram_tester.ExpectUniqueSample(
+        "OptimizationGuide.ProcessHintsResult",
+        optimization_guide::ProcessHintsComponentResult::kSuccess, 1);
     histogram_tester.ExpectUniqueSample(
         "OptimizationGuide.UpdateComponentHints.Result", true, 1);
   }
@@ -2003,6 +2002,39 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
       BuildTestHintsFetcherFactory(
           {HintsFetcherEndState::kFetchSuccessWithHostHints}));
   InitializeWithDefaultConfig("1.0.0");
+
+  // Force timer to expire and schedule a hints fetch but the fetch is not made.
+  MoveClockForwardBy(base::TimeDelta::FromSeconds(kTestFetchRetryDelaySecs));
+  EXPECT_EQ(0, top_host_provider->get_num_top_hosts_called());
+  // Hints fetcher should not be created.
+  EXPECT_FALSE(batch_update_hints_fetcher());
+}
+
+TEST_F(OptimizationGuideHintsManagerFetchingTest,
+       OnlyFilterTypesRegisteredHintsFetchNotAttempted) {
+  optimization_guide::proto::Configuration config;
+  optimization_guide::BloomFilter allowlist_bloom_filter(
+      kDefaultHostBloomFilterNumHashFunctions, kDefaultHostBloomFilterNumBits);
+  PopulateBloomFilterWithDefaultHost(&allowlist_bloom_filter);
+  AddBloomFilterToConfig(
+      optimization_guide::proto::LITE_PAGE_REDIRECT, allowlist_bloom_filter,
+      kDefaultHostBloomFilterNumHashFunctions, kDefaultHostBloomFilterNumBits,
+      /*is_allowlist=*/true, &config);
+
+  std::unique_ptr<FakeTopHostProvider> top_host_provider =
+      std::make_unique<FakeTopHostProvider>(
+          std::vector<std::string>({"example1.com", "example2.com"}));
+
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      optimization_guide::switches::kDisableCheckingUserPermissionsForTesting);
+  CreateHintsManager(top_host_provider.get());
+  ProcessHints(config, "1.0.0.0");
+
+  hints_manager()->RegisterOptimizationTypes(
+      {optimization_guide::proto::LITE_PAGE_REDIRECT});
+  hints_manager()->SetHintsFetcherFactoryForTesting(
+      BuildTestHintsFetcherFactory(
+          {HintsFetcherEndState::kFetchSuccessWithHostHints}));
 
   // Force timer to expire and schedule a hints fetch but the fetch is not made.
   MoveClockForwardBy(base::TimeDelta::FromSeconds(kTestFetchRetryDelaySecs));

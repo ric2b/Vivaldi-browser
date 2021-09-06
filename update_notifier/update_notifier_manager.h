@@ -9,9 +9,9 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
 #include "base/win/scoped_handle.h"
@@ -20,6 +20,7 @@
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
 #include "update_notifier/thirdparty/winsparkle/src/ui.h"
 #include "update_notifier/thirdparty/winsparkle/src/updatedownloader.h"
+#include "update_notifier/update_notifier_switches.h"
 
 namespace base {
 class MessageLoop;
@@ -34,9 +35,11 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   UpdateNotifierManager();
   ~UpdateNotifierManager() override;
 
-  bool RunNotifier();
+  static UpdateNotifierManager& GetInstance();
 
-  void StartUpdateCheck(bool with_ui);
+  ExitCode RunNotifier(base::FilePath exe_dir);
+
+  void StartUpdateCheck();
   static bool IsSilentDownload();
   static void OnNotificationAcceptance();
 
@@ -49,13 +52,10 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   // See comments for download_job_id_.
   using JobId = unsigned;
 
-  void InitEvents();
-  bool SendCheckUpdatesEvent();
-  void OnEventTriggered(base::WaitableEvent* waitable_event);
+  void InitEvents(bool& already_runs);
+  void OnCheckForUpdatesEvent(base::WaitableEvent* waitable_event);
+  void OnQuitEvent(base::WaitableEvent* waitable_event);
 
-  bool IsNotifierAlreadyRunning();
-
-  void CheckForUpdatesPeriodically(bool force_check);
   void OnUpdateCheckResult(std::unique_ptr<winsparkle::Appcast> appcast,
                            winsparkle::Error error);
   void StartDownload();
@@ -68,6 +68,8 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   void LaunchInstaller();
   void FinishCheck();
 
+  void ShowUpdateNotification(const std::string& version);
+
   // winsparkle::UIDelegate implementation.
 
   void WinsparkleStartDownload() override;
@@ -79,21 +81,20 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   // debugging.
   base::FilePath exe_dir_;
 
-  base::win::ScopedHandle uniqueness_check_event_;
-
   std::unique_ptr<UpdateNotifierWindow> update_notifier_window_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner_;
   base::RunLoop run_loop_;
 
-  std::unique_ptr<base::WaitableEvent> global_quit_event_;
-  base::WaitableEventWatcher global_quit_event_watch_;
-
-  std::unique_ptr<base::WaitableEvent> quit_event_;
-  base::WaitableEventWatcher quit_event_watch_;
-
-  std::unique_ptr<base::WaitableEvent> check_for_updates_event_;
+  base::Optional<base::WaitableEvent> check_for_updates_event_;
   base::WaitableEventWatcher check_for_updates_event_watch_;
 
+  base::Optional<base::WaitableEvent> quit_event_;
+  base::WaitableEventWatcher quit_event_watch_;
+
+  base::Optional<base::WaitableEvent> global_quit_event_;
+  base::WaitableEventWatcher global_quit_event_watch_;
+
+  base::Time check_start_time_;
   bool active_winsparkle_ui_ = false;
   bool active_version_check_ = false;
   bool active_download_ = false;

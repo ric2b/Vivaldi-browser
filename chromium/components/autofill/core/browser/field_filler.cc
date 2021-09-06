@@ -261,7 +261,6 @@ bool FillStateSelectControl(const base::string16& value,
         AlternativeStateNameMap::GetInstance()->GetEntry(
             AlternativeStateNameMap::CountryCode(country_code),
             AlternativeStateNameMap::StateName(value));
-    full_names.push_back(value);
     if (state_entry) {
       for (const auto& abbr : state_entry->abbreviations())
         abbreviations.push_back(base::UTF8ToUTF16(abbr));
@@ -269,19 +268,21 @@ bool FillStateSelectControl(const base::string16& value,
         full_names.push_back(base::UTF8ToUTF16(state_entry->canonical_name()));
       for (const auto& alternative_name : state_entry->alternative_names())
         full_names.push_back(base::UTF8ToUTF16(alternative_name));
+    } else {
+      full_names.push_back(value);
     }
-  } else {
-    base::string16 full;
-    base::string16 abbreviation;
-    // |abbreviation| will be empty for non-US countries.
-    state_names::GetNameAndAbbreviation(value, &full, &abbreviation);
-
-    if (!full.empty())
-      full_names.push_back(std::move(full));
-
-    if (!abbreviation.empty())
-      abbreviations.push_back(std::move(abbreviation));
   }
+
+  base::string16 full;
+  base::string16 abbreviation;
+  // |abbreviation| will be empty for non-US countries.
+  state_names::GetNameAndAbbreviation(value, &full, &abbreviation);
+
+  if (!full.empty())
+    full_names.push_back(std::move(full));
+
+  if (!abbreviation.empty())
+    abbreviations.push_back(std::move(abbreviation));
 
   // Try an exact match of the abbreviation first.
   for (const auto& abbreviation : abbreviations) {
@@ -653,7 +654,7 @@ bool FillStateText(const base::string16& value,
       // Fill with the abbreviation if possible.
       for (const auto& abbr : state->abbreviations()) {
         if (!abbr.empty() && field->max_length >= abbr.size()) {
-          field->value = base::UTF8ToUTF16(abbr);
+          field->value = base::i18n::ToUpper(base::UTF8ToUTF16(abbr));
           return true;
         }
       }
@@ -851,7 +852,7 @@ bool FieldFiller::FillFormField(
     return false;
   }
 
-  if (type.group() == PHONE_HOME) {
+  if (type.group() == FieldTypeGroup::kPhoneHome) {
     // If the |field_data| is a selection box and having the type
     // |PHONE_HOME_COUNTRY_CODE|, call |FillPhoneCountryCodeSelectControl|.
     if (base::FeatureList::IsEnabled(

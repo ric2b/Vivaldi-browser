@@ -138,6 +138,9 @@ enum OptimizationType {
   // increased to reduce the number of non-shopping page predictions for
   // shopping pages.
   SHOPPING_PAGE_PREDICTOR = 15;
+  // This optimization provides information about hosts that are identified as
+  // commonly logged-in.
+  LOGIN_DETECTION = 16;
 }
 
 // Presents semantics for how page load URLs should be matched.
@@ -323,12 +326,4 @@ message Version {
   optional Timestamp generation_timestamp = 1;
   // The source from which the hint was served from.
   optional HintSource hint_source = 3;
-}
-
-message Any {
-  // A URL/resource name that uniquely identifies the type of the serialized
-  // protocol buffer message.
-  optional string type_url = 1;
-  // Must be a valid serialized protocol buffer of the above specified type.
-  optional bytes value = 2;
 }

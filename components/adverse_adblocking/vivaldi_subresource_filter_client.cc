@@ -118,10 +118,6 @@ void VivaldiSubresourceFilterClient::ShowNotification() {
   chrome_subresource_filter_client_->ShowNotification();
 }
 
-void VivaldiSubresourceFilterClient::OnReloadRequested() {
-  chrome_subresource_filter_client_->OnReloadRequested();
-}
-
 const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
 VivaldiSubresourceFilterClient::GetSafeBrowsingDatabaseManager() {
   safe_browsing::SafeBrowsingService* safe_browsing_service =
@@ -132,12 +128,5 @@ VivaldiSubresourceFilterClient::GetSafeBrowsingDatabaseManager() {
 
 subresource_filter::ProfileInteractionManager*
 VivaldiSubresourceFilterClient::GetProfileInteractionManager() {
-  return nullptr;
-}
-
-void VivaldiSubresourceFilterClient::OnAdsViolationTriggered(
-    content::RenderFrameHost* rfh,
-    subresource_filter::mojom::AdsViolation triggered_violation) {
-  chrome_subresource_filter_client_->OnAdsViolationTriggered(
-      rfh, triggered_violation);
+  return chrome_subresource_filter_client_->GetProfileInteractionManager();
 }

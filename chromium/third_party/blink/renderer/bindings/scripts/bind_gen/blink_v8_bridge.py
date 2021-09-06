@@ -249,14 +249,15 @@ def blink_type_info(idl_type, use_new_union=False):
     assert False, "Unknown type: {}".format(idl_type.syntactic_form)
 
 
-def native_value_tag(idl_type, argument=None):
+def native_value_tag(idl_type, argument=None, apply_optional_to_last_arg=True):
     """Returns the tag type of NativeValueTraits."""
     assert isinstance(idl_type, web_idl.IdlType)
     assert argument is None or isinstance(argument, web_idl.Argument)
 
     if (idl_type.is_optional and argument
-            and not (idl_type.is_nullable or argument.default_value
-                     or argument == argument.owner.arguments[-1])):
+            and not (idl_type.is_nullable or argument.default_value)
+            and (apply_optional_to_last_arg
+                 or argument != argument.owner.arguments[-1])):
         return "IDLOptional<{}>".format(_native_value_tag_impl(idl_type))
 
     return _native_value_tag_impl(idl_type)
@@ -327,35 +328,42 @@ def _native_value_tag_impl(idl_type):
     assert False, "Unknown type: {}".format(idl_type.syntactic_form)
 
 
-def make_blink_to_v8_value(v8_var_name, blink_value_expr, idl_type,
-                           v8_creation_context):
+def make_blink_to_v8_value(
+        v8_var_name,
+        blink_value_expr,
+        idl_type,
+        argument=None,
+        error_exit_return_statement="return v8::MaybeLocal<v8::Value>();",
+        creation_context_script_state="${script_state}"):
     """
     Returns a SymbolNode whose definition converts a Blink value to a v8::Value.
     """
     assert isinstance(v8_var_name, str)
     assert isinstance(blink_value_expr, str)
     assert isinstance(idl_type, web_idl.IdlType)
-    assert isinstance(v8_creation_context, str)
+    assert argument is None or isinstance(argument, web_idl.Argument)
+    assert isinstance(error_exit_return_statement, str)
+    assert isinstance(creation_context_script_state, str)
+
+    T = TextNode
+    F = lambda *args, **kwargs: T(_format(*args, **kwargs))
 
     def create_definition(symbol_node):
-        if (idl_type.unwrap(typedef=True).is_nullable
-                and idl_type.unwrap().is_string):
-            pattern = ("v8::Local<v8::Value> {v8_var_name} = "
-                       "{blink_value_expr}.IsNull() "
-                       "? v8::Null(${isolate}).As<v8::Value>() "
-                       ": ToV8("
-                       "{blink_value_expr}, {v8_creation_context}, ${isolate})"
-                       ".As<v8::Value>();")
-        else:
-            pattern = (
-                "auto&& {v8_var_name} = ToV8("
-                "{blink_value_expr}, {v8_creation_context}, ${isolate});")
-        node = TextNode(
-            _format(pattern,
-                    v8_var_name=v8_var_name,
-                    blink_value_expr=blink_value_expr,
-                    v8_creation_context=v8_creation_context))
-        return SymbolDefinitionNode(symbol_node, [node])
+        binds = {
+            "blink_value_expr": blink_value_expr,
+            "creation_context_script_state": creation_context_script_state,
+            "native_value_tag": native_value_tag(idl_type, argument=argument),
+            "v8_var_name": v8_var_name,
+        }
+        pattern = ("!ToV8Traits<{native_value_tag}>::ToV8("
+                   "{creation_context_script_state}, {blink_value_expr})"
+                   ".ToLocal(&{v8_var_name})")
+        nodes = [
+            F("v8::Local<v8::Value> {v8_var_name};", **binds),
+            CxxUnlikelyIfNode(cond=F(pattern, **binds),
+                              body=T(error_exit_return_statement)),
+        ]
+        return SymbolDefinitionNode(symbol_node, nodes)
 
     return SymbolNode(v8_var_name, definition_constructor=create_definition)
 
@@ -396,7 +404,7 @@ def make_default_value_expr(idl_type, default_value):
             or isinstance(default_value, web_idl.LiteralConstant))
     assert default_value.is_type_compatible_with(idl_type)
 
-    class DefaultValueExpr:
+    class DefaultValueExpr(object):
         _ALLOWED_SYMBOLS_IN_DEPS = ("isolate")
 
         def __init__(self, initializer_expr, initializer_deps,
@@ -546,6 +554,7 @@ def make_v8_to_blink_value(blink_var_name,
                            v8_value_expr,
                            idl_type,
                            argument=None,
+                           error_exit_return_statement="return;",
                            cg_context=None):
     """
     Returns a SymbolNode whose definition converts a v8::Value to a Blink value.
@@ -554,6 +563,7 @@ def make_v8_to_blink_value(blink_var_name,
     assert isinstance(v8_value_expr, str)
     assert isinstance(idl_type, web_idl.IdlType)
     assert argument is None or isinstance(argument, web_idl.Argument)
+    assert isinstance(error_exit_return_statement, str)
 
     T = TextNode
     F = lambda *args, **kwargs: T(_format(*args, **kwargs))
@@ -601,7 +611,10 @@ def make_v8_to_blink_value(blink_var_name,
         if "StringContext" in idl_type.effective_annotations:
             arguments.append("${execution_context_of_document_tree}")
         blink_value_expr = _format("NativeValueTraits<{_1}>::{_2}({_3})",
-                                   _1=native_value_tag(idl_type, argument),
+                                   _1=native_value_tag(
+                                       idl_type,
+                                       argument=argument,
+                                       apply_optional_to_last_arg=False),
                                    _2=func_name,
                                    _3=", ".join(arguments))
         if argument and argument.default_value:
@@ -610,7 +623,8 @@ def make_v8_to_blink_value(blink_var_name,
         else:
             default_expr = None
         exception_exit_node = CxxUnlikelyIfNode(
-            cond="${exception_state}.HadException()", body=T("return;"))
+            cond="${exception_state}.HadException()",
+            body=T(error_exit_return_statement))
 
         if not (default_expr or fast_path_cond):
             return SymbolDefinitionNode(symbol_node, [
@@ -623,7 +637,9 @@ def make_v8_to_blink_value(blink_var_name,
             "std::declval<v8::Isolate*>(), "
             "std::declval<v8::Local<v8::Value>>(), "
             "std::declval<ExceptionState&>()))",
-            native_value_tag(idl_type, argument))
+            native_value_tag(idl_type,
+                             argument=argument,
+                             apply_optional_to_last_arg=False))
         if default_expr and default_expr.is_initialization_lightweight:
             pattern = "{} ${{{}}}{{{}}};"
             args = [
@@ -674,7 +690,7 @@ def make_v8_to_blink_value_variadic(blink_var_name, v8_array,
     """
     assert isinstance(blink_var_name, str)
     assert isinstance(v8_array, str)
-    assert isinstance(v8_array_start_index, (int, long))
+    assert isinstance(v8_array_start_index, int)
     assert isinstance(idl_type, web_idl.IdlType)
 
     pattern = ("auto&& ${{{_1}}} = "

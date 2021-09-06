@@ -27,7 +27,6 @@
 #include "base/bind.h"
 #include "chromeos/components/phonehub/phone_hub_manager.h"
 #include "chromeos/components/phonehub/phone_model.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/insets.h"
@@ -48,7 +47,7 @@ constexpr gfx::Insets kBubblePadding(0, 0, kBubbleBottomPaddingDip, 0);
 
 PhoneHubTray::PhoneHubTray(Shelf* shelf)
     : TrayBackgroundView(shelf), ui_controller_(new PhoneHubUiController()) {
-  observed_phone_hub_ui_controller_.Add(ui_controller_.get());
+  observed_phone_hub_ui_controller_.Observe(ui_controller_.get());
 
   auto icon = std::make_unique<views::ImageView>();
   icon->SetTooltipText(
@@ -117,8 +116,11 @@ void PhoneHubTray::OnPhoneHubUiStateChanged() {
     return;
   }
 
-  if (content_view_)
+  if (content_view_) {
     bubble_view->RemoveChildView(content_view_);
+    delete content_view_;
+  }
+
   content_view_ = content_view.get();
   bubble_view->AddChildView(std::move(content_view));
 

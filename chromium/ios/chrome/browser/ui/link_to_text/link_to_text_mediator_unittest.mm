@@ -147,6 +147,10 @@ class LinkToTextMediatorTest : public PlatformTest {
     return response_value;
   }
 
+  void SetCanonicalUrl(base::Value* value, const std::string& canonical_url) {
+    value->SetStringKey("canonicalUrl", canonical_url);
+  }
+
   std::unique_ptr<base::Value> CreateErrorResponse(
       LinkGenerationOutcome outcome) {
     std::unique_ptr<base::Value> response_value =
@@ -195,8 +199,13 @@ class LinkToTextMediatorTest : public PlatformTest {
 // Tests that the mediator should offer link to text to HTML pages that can
 // call JavaScript functions.
 TEST_F(LinkToTextMediatorTest, ShouldOfferLinkToText) {
-  // By default, all fake instances return the right values.
-  EXPECT_TRUE([mediator_ shouldOfferLinkToText]);
+  // In the single-threaded test environment, the JS callback can't fire until
+  // after the dispatched timeout, so this returns false. However, JS execution
+  // is the last step, so we can verify that the right method was invoked, and
+  // infer from this that all the other browser-side checks passed as well.
+  [mediator_ shouldOfferLinkToText];
+  EXPECT_EQ(main_frame_->GetLastJavaScriptCall(),
+            "__gCrWeb.linkToText.checkPreconditions();");
 }
 
 // Tests that the mediator should not offer link to text to pages that are not
@@ -204,6 +213,8 @@ TEST_F(LinkToTextMediatorTest, ShouldOfferLinkToText) {
 TEST_F(LinkToTextMediatorTest, ShouldNotOfferLinkToTextNotHTML) {
   web_state_->SetContentIsHTML(false);
   EXPECT_FALSE([mediator_ shouldOfferLinkToText]);
+  // JavaScript shouldn't be invoked for non-HTML pages.
+  EXPECT_EQ(main_frame_->GetLastJavaScriptCall(), "");
 }
 
 // Tests that the mediator should not offer link to text when, for some reason,
@@ -212,6 +223,7 @@ TEST_F(LinkToTextMediatorTest,
        ShouldNotOfferLinkToTextCannotExecuteJavaScript) {
   main_frame_->set_can_call_function(false);
   EXPECT_FALSE([mediator_ shouldOfferLinkToText]);
+  EXPECT_EQ(main_frame_->GetLastJavaScriptCall(), "");
 }
 
 // Tests that the shareHighlight command is triggered with the right parameters
@@ -513,4 +525,76 @@ TEST_F(LinkToTextMediatorTest, LinkGenerationTimeout) {
   ValidateLinkGeneratedErrorUkm(error);
   histogram_tester.ExpectTotalCount(
       "SharedHighlights.LinkGenerated.Error.TimeToGenerate", 1);
+}
+
+// Tests that a canonical URL is being used as base for the generated link when
+// the current page is HTTPS.
+TEST_F(LinkToTextMediatorTest, WithHttpsAndCanonicalUrl) {
+  CGFloat zoom = 1;
+  CGRect selection_rect = CGRectMake(100, 150, 250, 250);
+
+  std::unique_ptr<base::Value> fake_response =
+      CreateSuccessResponse(kTestQuote, selection_rect);
+  std::string canonical_url = "https://www.example.com/";
+  SetCanonicalUrl(fake_response.get(), canonical_url);
+  SetLinkToTextResponse(std::move(fake_response), zoom);
+
+  __block BOOL callback_invoked = NO;
+
+  [[mocked_consumer_ expect]
+      generatedPayload:[OCMArg checkWithBlock:^BOOL(
+                                   LinkToTextPayload* payload) {
+        // Validate that the generated URL is based on the canonical URL.
+        EXPECT_TRUE(payload.URL.is_valid());
+        EXPECT_TRUE(GURL(canonical_url).EqualsIgnoringRef(payload.URL));
+        callback_invoked = YES;
+        return YES;
+      }]];
+
+  [mediator_ handleLinkToTextSelection];
+
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^BOOL {
+    base::RunLoop().RunUntilIdle();
+    return callback_invoked;
+  }));
+
+  [mocked_consumer_ verify];
+}
+
+// Tests that a canonical URL is not being used as base for the generated link
+// when the current page is not HTTPS.
+TEST_F(LinkToTextMediatorTest, NotHttpsAndCanonicalUrl) {
+  CGFloat zoom = 1;
+  CGRect selection_rect = CGRectMake(100, 150, 250, 250);
+
+  // Set WebState's URL to something not HTTPS.
+  GURL new_base_url("http://chromium.org");
+  web_state_->SetCurrentURL(new_base_url);
+
+  std::unique_ptr<base::Value> fake_response =
+      CreateSuccessResponse(kTestQuote, selection_rect);
+  std::string canonical_url = "https://www.example.com/";
+  SetCanonicalUrl(fake_response.get(), canonical_url);
+  SetLinkToTextResponse(std::move(fake_response), zoom);
+
+  __block BOOL callback_invoked = NO;
+
+  [[mocked_consumer_ expect]
+      generatedPayload:[OCMArg checkWithBlock:^BOOL(
+                                   LinkToTextPayload* payload) {
+        // Validate that the generated URL is not based on the canonical URL.
+        EXPECT_TRUE(payload.URL.is_valid());
+        EXPECT_TRUE(new_base_url.EqualsIgnoringRef(payload.URL));
+        callback_invoked = YES;
+        return YES;
+      }]];
+
+  [mediator_ handleLinkToTextSelection];
+
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^BOOL {
+    base::RunLoop().RunUntilIdle();
+    return callback_invoked;
+  }));
+
+  [mocked_consumer_ verify];
 }

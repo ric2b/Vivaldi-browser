@@ -162,10 +162,6 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 
 - (void)interruptWithAction:(SigninCoordinatorInterruptAction)action
                  completion:(ProceduralBlock)completion {
-  // Chrome should never start before the first run is fully finished. Therefore
-  // we do not expect the sign-in to be interrupted for first run.
-  DCHECK(self.signinIntent != UserSigninIntentFirstRun);
-
   if (self.mediator.isAuthenticationInProgress) {
     [self.logger
         logSigninCompletedWithResult:SigninCoordinatorResultInterrupted
@@ -549,6 +545,8 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
       break;
     }
     case SigninCoordinatorInterruptActionDismissWithAnimation: {
+      // The first run is in charge to dismiss the sign-in view controller.
+      DCHECK_NE(UserSigninIntentFirstRun, self.signinIntent);
       [self.mediator cancelAndDismissAuthenticationFlowAnimated:YES];
       [self.viewController.presentingViewController
           dismissViewControllerAnimated:YES
@@ -556,6 +554,8 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
       break;
     }
     case SigninCoordinatorInterruptActionDismissWithoutAnimation: {
+      // The first run is in charge to dismiss the sign-in view controller.
+      DCHECK_NE(UserSigninIntentFirstRun, self.signinIntent);
       [self.mediator cancelAndDismissAuthenticationFlowAnimated:NO];
       [self.viewController.presentingViewController
           dismissViewControllerAnimated:NO

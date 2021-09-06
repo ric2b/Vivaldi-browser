@@ -253,9 +253,6 @@ void WebOTPService::NavigationEntryCommitted(
       RecordDestroyedReason(
           WebOTPServiceDestroyedReason::kNavigateExistingPage);
       break;
-    case NavigationType::NAVIGATION_TYPE_SAME_ENTRY:
-      RecordDestroyedReason(WebOTPServiceDestroyedReason::kNavigateSamePage);
-      break;
     default:
       // Ignore cases we don't care about.
       break;
@@ -265,7 +262,6 @@ void WebOTPService::NavigationEntryCommitted(
 void WebOTPService::CompleteRequest(blink::mojom::SmsStatus status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  RecordMetrics(status);
   base::Optional<std::string> code = base::nullopt;
   if (status == SmsStatus::kSuccess) {
     DCHECK(one_time_code_);
@@ -273,6 +269,7 @@ void WebOTPService::CompleteRequest(blink::mojom::SmsStatus status) {
   }
 
   if (callback_) {
+    RecordMetrics(status);
     std::move(callback_).Run(status, code);
   }
 
@@ -305,12 +302,8 @@ UserConsentHandler* WebOTPService::CreateConsentHandler(
     return consent_handler_for_test_;
 
   if (consent_requirement == UserConsent::kNotObtained) {
-    // If WebOTP is used in a cross-origin iframe then the first origin in the
-    // list is the one who calls the WebOTP API. We show it to users in the
-    // prompt to make sure that they are aware of which frame / origin they are
-    // granting OTP access.
     consent_handler_ = std::make_unique<PromptBasedUserConsentHandler>(
-        render_frame_host(), origin_list_[0]);
+        render_frame_host(), origin_list_);
   } else {
     consent_handler_ = std::make_unique<NoopUserConsentHandler>();
   }

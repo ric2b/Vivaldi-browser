@@ -217,6 +217,7 @@ void MimeHandlerViewGuest::CreateWebContents(
 }
 
 void MimeHandlerViewGuest::DidAttachToEmbedder() {
+  DCHECK(stream_->handler_url().SchemeIs(extensions::kExtensionScheme));
   web_contents()->GetController().LoadURL(
       stream_->handler_url(), content::Referrer(),
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
@@ -338,11 +339,12 @@ bool MimeHandlerViewGuest::GuestSaveFrame(
 }
 
 bool MimeHandlerViewGuest::SaveFrame(const GURL& url,
-                                     const content::Referrer& referrer) {
+                                     const content::Referrer& referrer,
+                                     content::RenderFrameHost* rfh) {
   if (!attached())
     return false;
 
-  embedder_web_contents()->SaveFrame(stream_->original_url(), referrer);
+  embedder_web_contents()->SaveFrame(stream_->original_url(), referrer, rfh);
   return true;
 }
 
@@ -442,6 +444,22 @@ void MimeHandlerViewGuest::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
   navigation_handle->RegisterSubresourceOverride(
       stream_->TakeTransferrableURLLoader());
+}
+
+void MimeHandlerViewGuest::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  guest_view::GuestView<MimeHandlerViewGuest>::DidFinishNavigation(
+      navigation_handle);
+
+  if (navigation_handle->IsInMainFrame()) {
+    // We should not navigate the guest away from the handling extension.
+    const url::Origin handler_origin =
+        url::Origin::Create(stream_->handler_url());
+    const GURL& new_url = navigation_handle->GetURL();
+    const url::Origin new_origin = url::Origin::Create(new_url);
+    CHECK(new_origin.IsSameOriginWith(handler_origin) ||
+          new_url.IsAboutBlank());
+  }
 }
 
 void MimeHandlerViewGuest::FuseBeforeUnloadControl(

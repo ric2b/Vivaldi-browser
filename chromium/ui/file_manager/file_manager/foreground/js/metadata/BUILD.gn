@@ -21,7 +21,6 @@ group("closure_compile") {
 }
 
 js_type_check("closure_compile_jsmodules") {
-  uses_js_modules = true
   deps = [
     ":byte_reader.m",
     ":content_metadata_provider.m",
@@ -50,6 +49,7 @@ js_type_check("closure_compile_jsmodules") {
 }
 
 js_type_check("closure_compile_module") {
+  uses_legacy_modules = true
   deps = [
     ":byte_reader",
     ":content_metadata_provider",
@@ -157,7 +157,6 @@ js_unittest("exif_parser_unittest.m") {
     "//chrome/test/data/webui:chai_assert",
     "//ui/file_manager/externs:exif_entry.m",
     "//ui/file_manager/externs:metadata_worker_window.m",
-    "//ui/file_manager/gallery/js/image_editor:exif_encoder.m",
   ]
 }
 

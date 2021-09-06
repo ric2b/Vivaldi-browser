@@ -12,7 +12,7 @@
 
 #include "base/macros.h"
 #include "base/observer_list_types.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/arc/input_method_manager/arc_input_method_manager_bridge.h"
 #include "chrome/browser/chromeos/arc/input_method_manager/arc_input_method_state.h"
 #include "chrome/browser/chromeos/arc/input_method_manager/input_connection_impl.h"
@@ -94,7 +94,7 @@ class ArcInputMethodManagerService
   // Called when a11y keyboard option changed and disables ARC IME while a11y
   // keyboard option is enabled.
   void OnAccessibilityStatusChanged(
-      const chromeos::AccessibilityStatusEventDetails& event_details);
+      const ash::AccessibilityStatusEventDetails& event_details);
 
   void OnArcInputMethodBoundsChanged(const gfx::Rect& bounds);
 

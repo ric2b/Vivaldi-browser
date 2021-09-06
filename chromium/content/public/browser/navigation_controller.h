@@ -30,6 +30,7 @@
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/blink/public/common/navigation/impression.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -136,7 +137,7 @@ class NavigationController {
     // was not associated with a frame, or if the initiating frame did not exist
     // by the time navigation started. This parameter is defined if and only if
     // |initiator_process_id| below is.
-    base::Optional<base::UnguessableToken> initiator_frame_token;
+    base::Optional<blink::LocalFrameToken> initiator_frame_token;
 
     // ID of the renderer process of the frame host that initiated the
     // navigation. This is defined if and only if |initiator_frame_token| above
@@ -182,10 +183,6 @@ class NavigationController {
     // True for renderer-initiated navigations. This is
     // important for tracking whether to display pending URLs.
     bool is_renderer_initiated;
-
-    // Prerender2:
-    // True for prerendering navigations.
-    bool is_prerendering = false;
 
     // Whether a navigation in a new window has the opener suppressed. False if
     // the navigation is not in a new window. Can only be true when

@@ -155,28 +155,6 @@
       valid_type: "bool",
     },
 
-    // - computed_value_comparable
-    //
-    // If true, a CSSProperty::ComputedValuesEqual function is generated.
-    computed_value_comparable: {
-      default: false,
-      valid_type: "bool",
-    },
-
-    // - computed_value_compare_fields
-    //
-    // If present, the ComputedStyle fields listed will be used in the
-    // generated ComputedvaluesEqual function. This is useful if the value
-    // of a property is stored in multiple fields. For example, for
-    // vertical-align:
-    //
-    // computed_value_compare_fields: ['VerticalAlign', 'GetVerticalAlignLength']
-    //
-    // Has no effect unless computed_value_comparable is true.
-    computed_value_compare_fields: {
-      default: [],
-    },
-
     // - runtime_flag
     // The name of the flag on RuntimeEnabledFeatures
     // (e.g. "CSSOverscrollBehavior") that conditionally enables the
@@ -309,13 +287,7 @@
     // - font
     // The default property handlers call into the FontBuilder instead of
     // setting values directly onto the ComputedStyle
-    // - svg
-    // The default property handlers access the SVGComputedStyle
     font: {
-      default: false,
-      valid_type: "bool",
-    },
-    svg: {
       default: false,
       valid_type: "bool",
     },
@@ -325,8 +297,8 @@
     // For example, setting this to BlendMode will make us use a setter of
     // setBlendMode
     // - initial
-    // The static function to invoke on ComputedStyleInitialValues,
-    // SVGComputedStyle, or FontBuilder to retrieve the initial value.
+    // The static function to invoke on ComputedStyleInitialValues
+    // or FontBuilder to retrieve the initial value.
     // Defaults to e.g. InitialBorderBottomLeft.
     // - getter
     // The ComputedStyle getter, defaults to e.g. BorderBottomLeft
@@ -379,7 +351,7 @@
       name: {
         valid_type: "str",
         valid_values: ["border", "border-color", "border-radius",
-                       "border-style", "border-width", "inset", 
+                       "border-style", "border-width", "inset",
                        "margin", "max-size", "min-size", "overflow", "padding",
                        "scroll-margin", "scroll-padding", "size",
                        "visited-border-color"],
@@ -742,7 +714,6 @@
       style_builder_custom_functions: ["value"],
       priority: "High",
       valid_for_marker: true,
-      computed_value_comparable: true,
     },
     {
       name: "font-family",
@@ -1039,7 +1010,6 @@
       type_name: "WritingMode",
       style_builder_custom_functions: ["initial", "inherit", "value"],
       priority: "High",
-      computed_value_comparable: true,
     },
     {
       name: "-webkit-writing-mode",
@@ -1049,7 +1019,6 @@
       style_builder_custom_functions: ["initial", "inherit", "value"],
       priority: "High",
       surrogate_for: "writing-mode",
-      computed_value_comparable: true,
     },
     {
       name: "text-rendering",
@@ -1081,7 +1050,6 @@
       default_value: "StyleContentAlignmentData(ContentPosition::kNormal, ContentDistributionType::kDefault, OverflowAlignment::kDefault)",
       type_name: "StyleContentAlignmentData",
       converter: "ConvertContentAlignmentData",
-      computed_value_comparable: true,
     },
     {
       name: "align-items",
@@ -1092,14 +1060,17 @@
       default_value: "StyleSelfAlignmentData(ItemPosition::kNormal, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
-      computed_value_comparable: true,
     },
     {
       name: "alignment-baseline",
       property_methods: ["CSSValueFromComputedStyleInternal"],
-      svg: true,
-      keywords: ["baseline", "alphabetic", "ideographic", "middle", "central", "mathematical"],
-      typedom_types: ["Keyword"]
+      field_group: "svg",
+      field_template: "keyword",
+      keywords: ["auto", "baseline", "alphabetic", "ideographic", "middle",
+                 "central", "mathematical", "before-edge", "text-before-edge",
+                 "after-edge", "text-after-edge", "hanging"],
+      typedom_types: ["Keyword"],
+      default_value: "auto",
     },
     {
       name: "align-self",
@@ -1110,12 +1081,11 @@
       default_value: "StyleSelfAlignmentData(ItemPosition::kAuto, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
-      computed_value_comparable: true,
     },
     {
       name: "aspect-ratio",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
-      interpolable: false,
+      interpolable: true,
       field_group: "box",
       field_template: "external",
       keywords: ["auto"],
@@ -1310,9 +1280,12 @@
       name: "baseline-shift",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->misc",
+      field_template: "external",
+      type_name: "Length",
+      default_value: "Length::Fixed()",
       style_builder_custom_functions: ["inherit", "value"],
-      keywords: ["sub", "super"],
+      keywords: ["baseline", "sub", "super"],
       typedom_types: ["Keyword", "Percentage", "Length"]
     },
     {
@@ -1331,7 +1304,6 @@
       style_builder_template: "color",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-color",
         resolver: "bottom",
@@ -1350,7 +1322,6 @@
       typedom_types: ["Length", "Percentage"],
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-radius",
         resolver: "bottom-left",
@@ -1369,7 +1340,6 @@
       typedom_types: ["Length", "Percentage"],
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-radius",
         resolver: "bottom-right",
@@ -1389,7 +1359,6 @@
       type_name: "EBorderStyle",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-style",
         resolver: "bottom",
@@ -1410,7 +1379,6 @@
       converter: "ConvertBorderWidth",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-width",
         resolver: "bottom",
@@ -1501,7 +1469,6 @@
       style_builder_template: "color",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-color",
         resolver: "left",
@@ -1521,7 +1488,6 @@
       type_name: "EBorderStyle",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-style",
         resolver: "left",
@@ -1542,7 +1508,6 @@
       converter: "ConvertBorderWidth",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-width",
         resolver: "left",
@@ -1564,7 +1529,6 @@
       style_builder_template: "color",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-color",
         resolver: "right",
@@ -1584,7 +1548,6 @@
       type_name: "EBorderStyle",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-style",
         resolver: "right",
@@ -1605,7 +1568,6 @@
       converter: "ConvertBorderWidth",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-width",
         resolver: "right",
@@ -1627,7 +1589,6 @@
       style_builder_template: "color",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-color",
         resolver: "top",
@@ -1646,7 +1607,6 @@
       typedom_types: ["Length", "Percentage"],
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-radius",
         resolver: "top-left",
@@ -1665,7 +1625,6 @@
       typedom_types: ["Length", "Percentage"],
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-radius",
         resolver: "top-right",
@@ -1685,7 +1644,6 @@
       type_name: "EBorderStyle",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-style",
         resolver: "top",
@@ -1706,7 +1664,6 @@
       converter: "ConvertBorderWidth",
       valid_for_first_letter: true,
       is_border: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "border-width",
         resolver: "top",
@@ -1723,7 +1680,6 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthOrAuto",
-      computed_value_comparable: true,
       logical_property_group: {
         name: "inset",
         resolver: "bottom",
@@ -1794,7 +1750,10 @@
     {
       name: "buffered-rendering",
       property_methods: ["CSSValueFromComputedStyleInternal"],
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
+      keywords: ["auto", "dynamic", "static"],
+      default_value: "auto",
     },
     {
       name: "caption-side",
@@ -1851,11 +1810,12 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
-      field_template: "pointer",
+      field_template: "external",
       include_paths: ["third_party/blink/renderer/core/style/clip_path_operation.h"],
       wrapper_pointer_name: "scoped_refptr",
       default_value: "nullptr",
       type_name: "ClipPathOperation",
+      computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertClipPath",
       keywords: ["none"],
       typedom_types: ["Keyword"]
@@ -1864,32 +1824,46 @@
       name: "clip-rule",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      // TODO(fs): Convert this to a keyword (requires enum massage).
+      field_template: "primitive",
+      field_size: 1,
+      include_paths: ["third_party/blink/renderer/platform/graphics/graphics_types.h"],
       type_name: "WindRule",
       keywords: ["nonzero", "evenodd"],
+      default_value: "RULE_NONZERO",
       typedom_types: ["Keyword"]
     },
     {
       name: "color-interpolation",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
+      type_name: "EColorInterpolation",
       keywords: ["auto", "srgb", "linearrgb"],
+      default_value: "srgb",
       typedom_types: ["Keyword"],
     },
     {
       name: "color-interpolation-filters",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
       type_name: "EColorInterpolation",
+      keywords: ["auto", "srgb", "linearrgb"],
+      default_value: "linearrgb",
+      typedom_types: ["Keyword"],
     },
     {
       name: "color-rendering",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
       keywords: ["auto", "optimizespeed", "optimizequality"],
+      default_value: "auto",
       typedom_types: ["Keyword"],
     },
     {
@@ -1918,13 +1892,13 @@
       name: "contain",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
-      field_size: 4,
+      field_size: 5,
       field_template: "primitive",
       default_value: "kContainsNone",
       name_for_methods: "Contain",
       type_name: "unsigned",
       converter: "ConvertFlags<Containment>",
-      keywords: ["none", "strict", "content", "size", "layout", "style", "paint"],
+      keywords: ["none", "strict", "content", "size", "layout", "style", "paint", "inline-size", "block-size"],
       typedom_types: ["Keyword"],
     },
     {
@@ -2007,7 +1981,9 @@
       name: "cx",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "<length>",
+      default_value: "Length::Fixed()",
       typedom_types: ["Length", "Percentage"],
       converter: "ConvertLength",
     },
@@ -2015,7 +1991,9 @@
       name: "cy",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "<length>",
+      default_value: "Length::Fixed()",
       typedom_types: ["Length", "Percentage"],
       converter: "ConvertLength",
     },
@@ -2023,7 +2001,12 @@
       name: "d",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "pointer",
+      include_paths: ["third_party/blink/renderer/core/style/style_path.h"],
+      wrapper_pointer_name: "scoped_refptr",
+      type_name: "StylePath",
+      default_value: "nullptr",
       converter: "ConvertPathOrNone",
       keywords: ["none"],
       typedom_types: ["Keyword"],
@@ -2045,8 +2028,11 @@
       name: "dominant-baseline",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
-      keywords: ["auto", "alphabetic", "ideographic", "middle", "central", "mathematical", "hanging"],
+      field_group: "svg",
+      field_template: "keyword",
+      keywords: ["auto", "alphabetic", "ideographic", "middle", "central", "mathematical", "hanging",
+                 "use-script", "no-change", "reset-size", "text-after-edge", "text-before-edge"],
+      default_value: "auto",
       typedom_types: ["Keyword"]
     },
     {
@@ -2064,11 +2050,17 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       inherited: true,
-      svg: true,
-      initial: "InitialFillPaint",
-      setter: "SetFillPaint",
-      getter: "FillPaint",
+      field_group: "svg->fill",
+      field_template: "external",
+      type_name: "SVGPaint",
+      include_paths: ["third_party/blink/renderer/core/style/svg_paint.h"],
+      default_value: "SVGPaint(Color::kBlack)",
+      name_for_methods: "FillPaint",
       converter: "ConvertSVGPaint",
+      style_builder_template: "color",
+      style_builder_template_args: {
+        initial_color: "ComputedStyleInitialValues::InitialFillPaint",
+      },
       valid_for_highlight: true,
     },
     {
@@ -2076,7 +2068,10 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
-      svg: true,
+      field_group: "svg->fill",
+      field_template: "primitive",
+      type_name: "float",
+      default_value: "1",
       converter: "ConvertAlpha",
       typedom_types: ["Number"],
     },
@@ -2084,9 +2079,14 @@
       name: "fill-rule",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      // TODO(fs): Convert this to a keyword (requires enum massage).
+      field_template: "primitive",
+      field_size: 1,
+      include_paths: ["third_party/blink/renderer/platform/graphics/graphics_types.h"],
       type_name: "WindRule",
       keywords: ["nonzero", "evenodd"],
+      default_value: "RULE_NONZERO",
       typedom_types: ["Keyword"]
     },
     {
@@ -2115,7 +2115,6 @@
       converter: "ConvertLengthOrAuto",
       typedom_types: ["Keyword", "Length", "Percentage"],
       keywords: ["auto"],
-      computed_value_comparable: true,
     },
     {
       name: "flex-direction",
@@ -2125,7 +2124,6 @@
       typedom_types: ["Keyword"],
       keywords: ["row", "row-reverse", "column", "column-reverse"],
       default_value: "row",
-      computed_value_comparable: true,
     },
     {
       name: "flex-grow",
@@ -2136,7 +2134,6 @@
       default_value: "0.0f",
       type_name: "float",
       typedom_types: ["Number"],
-      computed_value_comparable: true,
     },
     {
       name: "flex-shrink",
@@ -2147,7 +2144,6 @@
       default_value: "1.0f",
       type_name: "float",
       typedom_types: ["Number"],
-      computed_value_comparable: true,
     },
     {
       name: "flex-wrap",
@@ -2157,7 +2153,6 @@
       typedom_types: ["Keyword"],
       keywords: ["nowrap", "wrap", "wrap-reverse"],
       default_value: "nowrap",
-      computed_value_comparable: true,
     },
     {
       name: "float",
@@ -2175,7 +2170,15 @@
       name: "flood-color",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->misc",
+      field_template: "external",
+      include_paths: ["third_party/blink/renderer/core/css/style_color.h"],
+      default_value: "StyleColor(Color::kBlack)",
+      type_name: "StyleColor",
+      style_builder_template: "color",
+      style_builder_template_args: {
+        initial_color: "ComputedStyleInitialValues::InitialFloodColor",
+      },
       converter: "ConvertStyleColor",
       keywords: ["currentcolor"],
       typedom_types: ["Keyword"],
@@ -2184,7 +2187,10 @@
       name: "flood-opacity",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->misc",
+      field_template: "primitive",
+      type_name: "float",
+      default_value: "1",
       converter: "ConvertAlpha",
       typedom_types: ["Number"]
     },
@@ -2326,7 +2332,6 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthSizing",
-      computed_value_comparable: true,
       logical_property_group: {
         name: "size",
         resolver: "vertical",
@@ -2361,7 +2366,6 @@
       name: "image-orientation",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
-      runtime_flag: "ImageOrientation",
       field_group: "*",
       field_template: "primitive",
       default_value: "true",
@@ -2387,7 +2391,6 @@
       default_value: "StyleContentAlignmentData(ContentPosition::kNormal, ContentDistributionType::kDefault, OverflowAlignment::kDefault)",
       type_name: "StyleContentAlignmentData",
       converter: "ConvertContentAlignmentData",
-      computed_value_comparable: true,
     },
     {
       name: "justify-items",
@@ -2398,7 +2401,6 @@
       default_value: "StyleSelfAlignmentData(ItemPosition::kLegacy, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
-      computed_value_comparable: true,
     },
     {
       name: "justify-self",
@@ -2409,7 +2411,6 @@
       default_value: "StyleSelfAlignmentData(ItemPosition::kAuto, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
-      computed_value_comparable: true,
     },
     {
       name: "left",
@@ -2422,7 +2423,6 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthOrAuto",
-      computed_value_comparable: true,
       logical_property_group: {
         name: "inset",
         resolver: "left",
@@ -2443,7 +2443,15 @@
       name: "lighting-color",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->misc",
+      field_template: "external",
+      include_paths: ["third_party/blink/renderer/core/css/style_color.h"],
+      default_value: "StyleColor(Color::kWhite)",
+      type_name: "StyleColor",
+      style_builder_template: "color",
+      style_builder_template_args: {
+        initial_color: "ComputedStyleInitialValues::InitialLightingColor",
+      },
       converter: "ConvertStyleColor",
       keywords: ["currentcolor"],
       typedom_types: ["Keyword"],
@@ -2546,7 +2554,6 @@
       keywords: ["auto"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "margin",
         resolver: "bottom",
@@ -2565,7 +2572,6 @@
       keywords: ["auto"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "margin",
         resolver: "left",
@@ -2584,7 +2590,6 @@
       keywords: ["auto"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "margin",
         resolver: "right",
@@ -2603,7 +2608,6 @@
       keywords: ["auto"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "margin",
         resolver: "top",
@@ -2613,7 +2617,11 @@
       name: "marker-end",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg->inherited_resources",
+      field_template: "pointer",
+      type_name: "StyleSVGResource",
+      wrapper_pointer_name: "scoped_refptr",
+      default_value: "nullptr",
       name_for_methods: "MarkerEndResource",
       converter: "ConvertElementReference",
       keywords: ["none"],
@@ -2623,7 +2631,11 @@
       name: "marker-mid",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg->inherited_resources",
+      field_template: "pointer",
+      type_name: "StyleSVGResource",
+      wrapper_pointer_name: "scoped_refptr",
+      default_value: "nullptr",
       name_for_methods: "MarkerMidResource",
       converter: "ConvertElementReference",
       keywords: ["none"],
@@ -2633,7 +2645,11 @@
       name: "marker-start",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg->inherited_resources",
+      field_template: "pointer",
+      type_name: "StyleSVGResource",
+      wrapper_pointer_name: "scoped_refptr",
+      default_value: "nullptr",
       name_for_methods: "MarkerStartResource",
       converter: "ConvertElementReference",
       keywords: ["none"],
@@ -2642,16 +2658,23 @@
     {
       name: "mask",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
-      svg: true,
+      field_group: "svg",
+      field_template: "pointer",
+      type_name: "StyleSVGResource",
+      include_paths: ["third_party/blink/renderer/core/style/style_svg_resource.h"],
+      wrapper_pointer_name: "scoped_refptr",
+      default_value: "nullptr",
       name_for_methods: "MaskerResource",
       converter: "ConvertElementReference",
     },
     {
       name: "mask-type",
       property_methods: ["CSSValueFromComputedStyleInternal"],
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
       keywords: ["luminance", "alpha"],
-      typedom_types: ["Keyword"]
+      typedom_types: ["Keyword"],
+      default_value: "luminance",
     },
     {
       name: "math-shift",
@@ -2684,7 +2707,6 @@
       converter: "ConvertLengthMaxSizing",
       keywords: ["none"],
       typedom_types: ["Keyword", "Length", "Percentage"],
-      computed_value_comparable: true,
       logical_property_group: {
         name: "max-size",
         resolver: "vertical",
@@ -2701,7 +2723,6 @@
       converter: "ConvertLengthMaxSizing",
       keywords: ["none"],
       typedom_types: ["Keyword", "Length", "Percentage"],
-      computed_value_comparable: true,
       logical_property_group: {
         name: "max-size",
         resolver: "horizontal",
@@ -2717,7 +2738,6 @@
       default_value: "Length()",
       converter: "ConvertLengthSizing",
       typedom_types: ["Length", "Percentage"],
-      computed_value_comparable: true,
       logical_property_group: {
         name: "min-size",
         resolver: "vertical",
@@ -2733,7 +2753,6 @@
       default_value: "Length()",
       converter: "ConvertLengthSizing",
       typedom_types: ["Length", "Percentage"],
-      computed_value_comparable: true,
       logical_property_group: {
         name: "min-size",
         resolver: "horizontal",
@@ -3080,7 +3099,6 @@
       computed_style_custom_functions: ["setter"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "padding",
         resolver: "bottom",
@@ -3098,7 +3116,6 @@
       computed_style_custom_functions: ["setter"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "padding",
         resolver: "left",
@@ -3116,7 +3133,6 @@
       computed_style_custom_functions: ["setter"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "padding",
         resolver: "right",
@@ -3134,7 +3150,6 @@
       computed_style_custom_functions: ["setter"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
       logical_property_group: {
         name: "padding",
         resolver: "top",
@@ -3167,7 +3182,11 @@
       name: "paint-order",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      field_template: "primitive",
+      field_size: 3,
+      type_name: "EPaintOrder",
+      default_value: "kPaintOrderNormal",
       converter: "ConvertPaintOrder",
       keywords: ["normal", "fill", "stroke", "markers"],
       typedom_types: ["Keyword"]
@@ -3267,7 +3286,6 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthOrAuto",
-      computed_value_comparable: true,
       logical_property_group: {
         name: "inset",
         resolver: "right",
@@ -3277,7 +3295,9 @@
       name: "r",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "<length>",
+      default_value: "Length::Fixed()",
       typedom_types: ["Length", "Percentage"],
       converter: "ConvertLength",
     },
@@ -3285,7 +3305,9 @@
       name: "rx",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "<length>",
+      default_value: "Length::Auto()",
       keywords: ["auto"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthOrAuto",
@@ -3294,7 +3316,9 @@
       name: "ry",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "<length>",
+      default_value: "Length::Auto()",
       keywords: ["auto"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthOrAuto",
@@ -3624,8 +3648,10 @@
       name: "shape-rendering",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
       keywords: ["auto", "optimizespeed", "crispedges", "geometricprecision"],
+      default_value: "auto",
       typedom_types: ["Keyword"],
     },
     {
@@ -3649,7 +3675,16 @@
       name: "stop-color",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->stop",
+      field_template: "external",
+      include_paths: ["third_party/blink/renderer/core/css/style_color.h"],
+      default_value: "StyleColor(Color::kBlack)",
+      type_name: "StyleColor",
+      computed_style_custom_functions: ["getter"],
+      style_builder_template: "color",
+      style_builder_template_args: {
+        initial_color: "ComputedStyleInitialValues::InitialStopColor",
+      },
       converter: "ConvertStyleColor",
       keywords: ["currentcolor"],
       typedom_types: ["Keyword"],
@@ -3658,7 +3693,10 @@
       name: "stop-opacity",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->stop",
+      field_template: "primitive",
+      type_name: "float",
+      default_value: "1",
       converter: "ConvertAlpha",
       typedom_types: ["Number"]
     },
@@ -3667,11 +3705,17 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       inherited: true,
-      svg: true,
-      initial: "InitialStrokePaint",
-      setter: "SetStrokePaint",
-      getter: "StrokePaint",
+      field_group: "svg->stroke",
+      field_template: "external",
+      type_name: "SVGPaint",
+      include_paths: ["third_party/blink/renderer/core/style/svg_paint.h"],
+      default_value: "SVGPaint()",
+      name_for_methods: "StrokePaint",
       converter: "ConvertSVGPaint",
+      style_builder_template: "color",
+      style_builder_template_args: {
+        initial_color: "ComputedStyleInitialValues::InitialStrokePaint",
+      },
       valid_for_highlight: true,
     },
     {
@@ -3679,7 +3723,12 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
-      svg: true,
+      field_group: "svg->stroke",
+      field_template: "pointer",
+      type_name: "SVGDashArray",
+      include_paths: ["third_party/blink/renderer/core/style/svg_dash_array.h"],
+      wrapper_pointer_name: "scoped_refptr",
+      default_value: "EmptyDashArray()",
       name_for_methods: "StrokeDashArray",
       converter: "ConvertStrokeDasharray",
       keywords: ["none"],
@@ -3690,7 +3739,10 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
-      svg: true,
+      field_group: "svg->stroke",
+      field_template: "external",
+      type_name: "Length",
+      default_value: "Length::Fixed()",
       name_for_methods: "StrokeDashOffset",
       converter: "ConvertLength",
       typedom_types: ["Length", "Percentage"]
@@ -3699,9 +3751,12 @@
       name: "stroke-linecap",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
-      name_for_methods: "CapStyle",
+      field_group: "svg->stroke",
+      field_template: "primitive",
+      field_size: 2,
       type_name: "LineCap",
+      default_value: "kButtCap",
+      name_for_methods: "CapStyle",
       keywords: ["butt", "round", "square"],
       typedom_types: ["Keyword"]
     },
@@ -3709,9 +3764,12 @@
       name: "stroke-linejoin",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
-      name_for_methods: "JoinStyle",
+      field_group: "svg->stroke",
+      field_template: "primitive",
+      field_size: 2,
       type_name: "LineJoin",
+      default_value: "kMiterJoin",
+      name_for_methods: "JoinStyle",
       keywords: ["miter", "bevel", "round"],
       typedom_types: ["Keyword"]
     },
@@ -3720,9 +3778,11 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
-      svg: true,
-      name_for_methods: "StrokeMiterLimit",
+      field_group: "svg->stroke",
+      field_template: "primitive",
       type_name: "float",
+      default_value: "4",
+      name_for_methods: "StrokeMiterLimit",
       typedom_types: ["Number"]
     },
     {
@@ -3730,7 +3790,10 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
-      svg: true,
+      field_group: "svg->stroke",
+      field_template: "primitive",
+      type_name: "float",
+      default_value: "1",
       converter: "ConvertAlpha",
       typedom_types: ["Number"]
     },
@@ -3739,7 +3802,11 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
-      svg: true,
+      field_group: "svg->stroke",
+      field_template: "external",
+      type_name: "UnzoomedLength",
+      include_paths: ["third_party/blink/renderer/core/style/unzoomed_length.h"],
+      default_value: "UnzoomedLength(Length::Fixed(1))",
       converter: "ConvertUnzoomedLength",
       typedom_types: ["Length", "Percentage"],
       valid_for_highlight: true,
@@ -3799,9 +3866,11 @@
       name: "text-anchor",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
       keywords: ["start", "middle", "end"],
-      typedom_types: ["Keyword"]
+      default_value: "start",
+      typedom_types: ["Keyword"],
     },
     {
       name: "text-combine-upright",
@@ -3832,7 +3901,6 @@
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_highlight: true,
-      computed_value_comparable: true,
     },
     {
       name: "text-decoration-line",
@@ -3848,7 +3916,6 @@
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_highlight: true,
-      computed_value_comparable: true,
     },
     {
       name: "text-decoration-skip-ink",
@@ -3863,7 +3930,6 @@
       valid_for_cue: true,
       valid_for_marker: true,
       valid_for_highlight: true,
-      computed_value_comparable: true,
     },
     {
       name: "text-decoration-style",
@@ -3876,7 +3942,6 @@
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_highlight: true,
-      computed_value_comparable: true,
     },
     {
       name: "text-decoration-thickness",
@@ -3893,7 +3958,6 @@
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
       valid_for_highlight: true,
-      computed_value_comparable: true,
     },
     {
       name: "text-indent",
@@ -4016,7 +4080,6 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthOrAuto",
-      computed_value_comparable: true,
       logical_property_group: {
         name: "inset",
         resolver: "top",
@@ -4142,9 +4205,11 @@
     {
       name: "vector-effect",
       property_methods: ["CSSValueFromComputedStyleInternal"],
-      svg: true,
+      field_group: "svg",
+      field_template: "keyword",
       keywords: ["none", "non-scaling-stroke"],
-      typedom_types: ["Keyword"]
+      typedom_types: ["Keyword"],
+      default_value: "none",
     },
     {
       name: "vertical-align",
@@ -4154,8 +4219,6 @@
       typedom_types: ["Keyword", "Length", "Percentage"],
       keywords: ["baseline", "sub", "super", "text-top", "text-bottom", "middle"],
       valid_for_first_letter: true,
-      computed_value_comparable: true,
-      computed_value_compare_fields: ['VerticalAlign', 'GetVerticalAlignLength']
     },
     {
       name: "visibility",
@@ -4174,7 +4237,9 @@
       name: "x",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "<length>",
+      default_value: "Length::Fixed()",
       typedom_types: ["Length", "Percentage"],
       converter: "ConvertLength",
     },
@@ -4182,7 +4247,9 @@
       name: "y",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
-      svg: true,
+      field_group: "svg->geometry",
+      field_template: "<length>",
+      default_value: "Length::Fixed()",
       typedom_types: ["Length", "Percentage"],
       converter: "ConvertLength",
     },
@@ -4819,7 +4886,6 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthSizing",
-      computed_value_comparable: true,
       logical_property_group: {
         name: "size",
         resolver: "horizontal",
@@ -5432,12 +5498,6 @@
       runtime_flag: "CSSFontFaceAdvanceOverride",
     },
     {
-      name: "advance-proportional-override",
-      is_descriptor: true,
-      is_property: false,
-      runtime_flag: "CSSFontFaceAdvanceProportionalOverride",
-    },
-    {
       name: "line-gap-override",
       is_descriptor: true,
       is_property: false,
@@ -5869,7 +5929,6 @@
       name: "marker",
       longhands: ["marker-start", "marker-mid", "marker-end"],
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
-      svg: true,
     },
     {
       name: "offset",
@@ -6241,11 +6300,17 @@
       visited_property_for: "fill",
       property_methods: ["ParseSingleValue", "ColorIncludingFallback"],
       inherited: true,
-      svg: true,
-      initial: "InitialFillPaint",
-      setter: "SetInternalVisitedFillPaint",
-      getter: "FillPaint",
+      field_group: "svg->fill",
+      field_template: "external",
+      type_name: "SVGPaint",
+      include_paths: ["third_party/blink/renderer/core/style/svg_paint.h"],
+      default_value: "SVGPaint(Color::kBlack)",
+      name_for_methods: "InternalVisitedFillPaint",
       converter: "ConvertSVGPaint",
+      style_builder_template: "visited_color",
+      style_builder_template_args: {
+        initial_color: "ComputedStyleInitialValues::InitialFillPaint",
+      },
       valid_for_highlight: true,
     },
     {
@@ -6267,11 +6332,17 @@
       visited_property_for: "stroke",
       property_methods: ["ParseSingleValue", "ColorIncludingFallback"],
       inherited: true,
-      svg: true,
-      initial: "InitialStrokePaint",
-      setter: "SetInternalVisitedStrokePaint",
-      getter: "StrokePaint",
+      field_group: "svg->stroke",
+      field_template: "external",
+      type_name: "SVGPaint",
+      include_paths: ["third_party/blink/renderer/core/style/svg_paint.h"],
+      default_value: "SVGPaint()",
+      name_for_methods: "InternalVisitedStrokePaint",
       converter: "ConvertSVGPaint",
+      style_builder_template: "visited_color",
+      style_builder_template_args: {
+        initial_color: "ComputedStyleInitialValues::InitialStrokePaint",
+      },
       valid_for_highlight: true,
     },
     {

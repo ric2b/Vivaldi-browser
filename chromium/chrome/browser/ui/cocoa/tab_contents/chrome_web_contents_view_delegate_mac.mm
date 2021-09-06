@@ -134,7 +134,7 @@ ChromeWebContentsViewDelegateMac::CreateRenderViewContextMenu(
 
   if (::vivaldi::IsVivaldiRunning() &&
       ::vivaldi::VivaldiRenderViewContextMenu::Supports(params)) {
-    return vivaldi::VivaldiRenderViewContextMenu::Create(focused_frame, params);
+    return vivaldi::VivaldiRenderViewContextMenu::Create(focused_frame, params, parent_view);
   } else {
   return new RenderViewContextMenuMacCocoa(focused_frame, params,
                                            parent_view.GetNativeNSView());

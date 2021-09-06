@@ -120,7 +120,8 @@ PlayerCompositorDelegateAndroid::PlayerCompositorDelegateAndroid(
 
 void PlayerCompositorDelegateAndroid::OnCompositorReady(
     CompositorStatus compositor_status,
-    mojom::PaintPreviewBeginCompositeResponsePtr composite_response) {
+    mojom::PaintPreviewBeginCompositeResponsePtr composite_response,
+    std::unique_ptr<ui::AXTreeUpdate> ax_tree) {
   bool compositor_started = CompositorStatus::OK == compositor_status;
   base::UmaHistogramBoolean(
       "Browser.PaintPreview.Player.CompositorProcessStartedCorrectly",
@@ -177,7 +178,8 @@ void PlayerCompositorDelegateAndroid::OnCompositorReady(
 
   Java_PlayerCompositorDelegateImpl_onCompositorReady(
       env, java_ref_, j_root_frame_guid, j_all_guids, j_scroll_extents,
-      j_scroll_offsets, j_subframe_count, j_subframe_ids, j_subframe_rects);
+      j_scroll_offsets, j_subframe_count, j_subframe_ids, j_subframe_rects,
+      reinterpret_cast<intptr_t>(ax_tree.release()));
 }
 
 void PlayerCompositorDelegateAndroid::OnMemoryPressure(
@@ -283,7 +285,8 @@ void PlayerCompositorDelegateAndroid::OnBitmapCallback(
       sk_bitmap.computeByteSize());
 
   if (status != mojom::PaintPreviewCompositor::BitmapStatus::kSuccess ||
-      sk_bitmap.isNull()) {
+      sk_bitmap.isNull() || sk_bitmap.info().width() <= 0 ||
+      sk_bitmap.info().height() <= 0) {
     base::android::RunRunnableAndroid(j_error_callback);
     return;
   }

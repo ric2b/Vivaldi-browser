@@ -83,8 +83,7 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
 
       case IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP:
         if (platform_app && platform_app->is_platform_app()) {
-          extensions::DevtoolsConnectorAPI::CloseAllDevtools(
-              browser_->profile());
+          extensions::DevtoolsConnectorAPI::CloseAllDevtools();
           chrome::AttemptRestart();
         }
         return true;

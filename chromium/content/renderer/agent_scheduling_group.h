@@ -9,6 +9,7 @@
 #include "content/common/agent_scheduling_group.mojom.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_export.h"
+#include "content/common/frame_replication_state.mojom-forward.h"
 #include "content/public/common/content_features.h"
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_listener.h"
@@ -17,7 +18,9 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/associated_interfaces/associated_interfaces.mojom.h"
+#include "third_party/blink/public/mojom/browser_interface_broker.mojom.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 
 namespace IPC {
@@ -26,7 +29,6 @@ class SyncChannel;
 }  // namespace IPC
 
 namespace content {
-
 class RenderThread;
 
 // Renderer-side representation of AgentSchedulingGroup, used for communication
@@ -42,10 +44,12 @@ class CONTENT_EXPORT AgentSchedulingGroup
  public:
   AgentSchedulingGroup(
       RenderThread& render_thread,
-      mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap);
+      mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap,
+      mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> broker_remote);
   AgentSchedulingGroup(
       RenderThread& render_thread,
-      mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup> receiver);
+      mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup> receiver,
+      mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> broker_remote);
   ~AgentSchedulingGroup() override;
 
   AgentSchedulingGroup(const AgentSchedulingGroup&) = delete;
@@ -53,8 +57,11 @@ class CONTENT_EXPORT AgentSchedulingGroup
 
   bool Send(IPC::Message* message);
   void AddRoute(int32_t routing_id, IPC::Listener* listener);
+  void AddFrameRoute(int32_t routing_id,
+                     IPC::Listener* listener,
+                     scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   void RemoveRoute(int32_t routing_id);
-  void DidUnloadRenderFrame(const base::UnguessableToken& frame_token);
+  void DidUnloadRenderFrame(const blink::LocalFrameToken& frame_token);
 
   mojom::RouteProvider* GetRemoteRouteProvider();
 
@@ -84,12 +91,12 @@ class CONTENT_EXPORT AgentSchedulingGroup
   void DestroyView(int32_t view_id, DestroyViewCallback callback) override;
   void CreateFrame(mojom::CreateFrameParamsPtr params) override;
   void CreateFrameProxy(
+      const blink::RemoteFrameToken& token,
       int32_t routing_id,
-      int32_t render_view_routing_id,
-      const base::Optional<base::UnguessableToken>& opener_frame_token,
+      const base::Optional<blink::FrameToken>& opener_frame_token,
+      int32_t view_routing_id,
       int32_t parent_routing_id,
-      const FrameReplicationState& replicated_state,
-      const base::UnguessableToken& frame_token,
+      mojom::FrameReplicationStatePtr replicated_state,
       const base::UnguessableToken& devtools_frame_token) override;
 
   // mojom::RouteProvider

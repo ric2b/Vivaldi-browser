@@ -44,6 +44,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom-forward.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
@@ -98,11 +99,13 @@ namespace web_pref {
 struct WebPreferences;
 }  // namespace web_pref
 class AssociatedInterfaceRegistry;
+struct NavigationDownloadPolicy;
 struct RendererPreferences;
 class URLLoaderThrottle;
 }  // namespace blink
 
 namespace device {
+class GeolocationSystemPermissionManager;
 class LocationProvider;
 }  // namespace device
 
@@ -210,7 +213,6 @@ class QuotaPermissionContext;
 class ReceiverPresentationServiceDelegate;
 class RenderFrameHost;
 class RenderProcessHost;
-class RenderViewHost;
 class SerialDelegate;
 class SiteInstance;
 class SpeechRecognitionManagerDelegate;
@@ -225,7 +227,6 @@ class XrIntegrationClient;
 struct GlobalFrameRoutingId;
 struct GlobalRequestID;
 struct MainFunctionParams;
-struct NavigationDownloadPolicy;
 struct OpenURLParams;
 struct PepperPluginInfo;
 struct Referrer;
@@ -438,10 +439,10 @@ class CONTENT_EXPORT ContentBrowserClient {
       bool is_for_isolated_world,
       network::mojom::URLLoaderFactoryParams* factory_params);
 
-  // Returns a list additional WebUI schemes, if any.  These additional schemes
-  // act as aliases to the chrome: scheme.  The additional schemes may or may
-  // not serve specific WebUI pages depending on the particular URLDataSource
-  // and its override of URLDataSource::ShouldServiceRequest.
+  // Returns a list of additional WebUI schemes, if any.  These additional
+  // schemes act as aliases to the chrome: scheme.  The additional schemes may
+  // or may not serve specific WebUI pages depending on the particular
+  // URLDataSource and its override of URLDataSource::ShouldServiceRequest.
   virtual void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) {}
 
@@ -449,6 +450,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   // the list of WebUI schemes returned by GetAdditionalWebUISchemes.
   virtual void GetAdditionalViewSourceSchemes(
       std::vector<std::string>* additional_schemes);
+
+  // Returns a list of additional schemes that the content layer should
+  // interpret as having a local address space for the purpose of blocking
+  // insecure private network requests.
+  // See https://wicg.github.io/private-network-access/ for details.
+  virtual void GetAdditionalLocalAddressSpaceSchemes(
+      std::vector<std::string>* additional_schemes) {}
 
   // Called when WebUI objects are created to get aggregate usage data (i.e. is
   // chrome://downloads used more than chrome://bookmarks?). Only internal (e.g.
@@ -808,6 +816,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // * Default implementation returns empty string, meaning send no API key.
   virtual std::string GetGeolocationApiKey();
 
+  virtual device::GeolocationSystemPermissionManager*
+  GetLocationPermissionManager();
+
 #if defined(OS_ANDROID)
   // Allows an embedder to decide whether to use the GmsCoreLocationProvider.
   virtual bool ShouldUseGmsCoreGeolocationProvider();
@@ -925,7 +936,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Called by WebContents to override the WebKit preferences that are used by
   // the renderer. The content layer will add its own settings, and then it's up
   // to the embedder to update it if it wants.
-  virtual void OverrideWebkitPrefs(RenderViewHost* render_view_host,
+  virtual void OverrideWebkitPrefs(WebContents* web_contents,
                                    blink::web_pref::WebPreferences* prefs) {}
 
   // Similar to OverrideWebkitPrefs, but is only called after navigations. Some
@@ -1195,27 +1206,37 @@ class CONTENT_EXPORT ContentBrowserClient {
 #endif  // defined(OS_POSIX) && !defined(OS_MAC) || defined(OS_FUCHSIA)
 
 #if defined(OS_WIN)
-  // Defines flags that can be passed to PreSpawnRenderer.
-  enum RendererSpawnFlags {
+  // Defines flags that can be passed to PreSpawnChild.
+  enum ChildSpawnFlags {
     NONE = 0,
     RENDERER_CODE_INTEGRITY = 1 << 0,
   };
 
-  // This is called on the PROCESS_LAUNCHER thread before the renderer process
-  // is launched. It gives the embedder a chance to add loosen the sandbox
-  // policy.
-  virtual bool PreSpawnRenderer(sandbox::TargetPolicy* policy,
-                                RendererSpawnFlags flags);
+  // This may be called on the PROCESS_LAUNCHER thread before the child process
+  // is launched. It gives the embedder a chance to add modify the sandbox
+  // policy. Returns false if child should not spawn.
+  // Only use this for embedder-specific policies, since the bulk of sandbox
+  // policies should go inside the relevant SandboxedProcessLauncherDelegate.
+  virtual bool PreSpawnChild(sandbox::TargetPolicy* policy,
+                             sandbox::policy::SandboxType sandbox_type,
+                             ChildSpawnFlags flags);
 
   // Returns the AppContainer SID for the specified sandboxed process type, or
   // empty string if this sandboxed process type does not support living inside
   // an AppContainer. Called on PROCESS_LAUNCHER thread.
-  virtual base::string16 GetAppContainerSidForSandboxType(
+  virtual std::wstring GetAppContainerSidForSandboxType(
       sandbox::policy::SandboxType sandbox_type);
 
   // Returns whether renderer code integrity is enabled.
   // This is called on the UI thread.
   virtual bool IsRendererCodeIntegrityEnabled();
+
+  // Performs a fast and orderly shutdown of the browser.
+  virtual void SessionEnding() {}
+
+  // Returns true if the audio process should run with high priority. false
+  // otherwise.
+  virtual bool ShouldEnableAudioProcessHighPriority();
 #endif
 
   // Binds a new media remoter service to |receiver|, if supported by the
@@ -1427,7 +1448,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       const GURL& /* url */,
       std::vector<network::mojom::HttpHeaderPtr> /* additional_headers */,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>,
-      mojo::PendingRemote<network::mojom::AuthenticationHandler>,
+      mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>,
       mojo::PendingRemote<network::mojom::TrustedHeaderClient>)>;
 
   // Allows the embedder to intercept a WebSocket connection. This is called
@@ -1549,7 +1570,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       bool in_memory,
       const base::FilePath& relative_partition_path,
       network::mojom::NetworkContextParams* network_context_params,
-      network::mojom::CertVerifierCreationParams*
+      cert_verifier::mojom::CertVerifierCreationParams*
           cert_verifier_creation_params);
 
   // Returns the parent paths that contain all the network service's
@@ -1632,13 +1653,13 @@ class CONTENT_EXPORT ContentBrowserClient {
                               int /* render_process_id */,
                               int /* render_frame_id */)> callback);
 
-  // Returns whether a base::ThreadPoolInstance should be created when
-  // BrowserMainLoop starts.
-  // If false, a thread pool has been created by the embedder, and
-  // BrowserMainLoop should skip creating a second one.
+  // Called when starting BrowserMainLoop to create a base::ThreadPoolInstance.
+  // The embedder may choose to not create a thread pool; in that case
+  // ThreadPoolInstance::Get() will be null. Returns true if the
+  // ThreadPoolInstance was created.
   // Note: the embedder should *not* start the ThreadPoolInstance for
   // BrowserMainLoop, BrowserMainLoop itself is responsible for that.
-  virtual bool ShouldCreateThreadPool();
+  virtual bool CreateThreadPool(base::StringPiece name);
 
   // Returns an AuthenticatorRequestClientDelegate subclass instance to provide
   // embedder-specific configuration for a single Web Authentication API request
@@ -1836,7 +1857,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       WebContents* web_contents,
       RenderFrameHost* frame_host,
       bool user_gesture,
-      NavigationDownloadPolicy* download_policy);
+      blink::NavigationDownloadPolicy* download_policy);
 
   // Returns the interest cohort associated with the browser context of
   // |web_contents|.
@@ -1947,24 +1968,24 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
       const GURL& url);
 
-  // Returns whether a context whose URL is |url| should be allowed to make
+  // Returns whether a context with the given |origin| should be allowed to make
   // insecure private network requests.
   //
   // See the CORS-RFC1918 spec for more details:
   // https://wicg.github.io/cors-rfc1918.
   //
   // |browser_context| must not be nullptr. Caller retains ownership.
-  // |url| is the URL of a navigation ready to commit.
+  // |origin| is the origin of a navigation ready to commit.
   virtual bool ShouldAllowInsecurePrivateNetworkRequests(
       BrowserContext* browser_context,
-      const GURL& url);
+      const url::Origin& origin);
 
   // Returns the URL-Keyed Metrics service for chrome:ukm.
   virtual ukm::UkmService* GetUkmService();
 
   // Called when a keepalive request
   // (https://fetch.spec.whatwg.org/#request-keepalive-flag) is requested.
-  virtual void OnKeepaliveRequestStarted();
+  virtual void OnKeepaliveRequestStarted(BrowserContext* browser_context);
 
   // Called when a keepalive request finishes either successfully or
   // unsuccessfully.
@@ -1989,6 +2010,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Creates a modal window that intermediates the exchange of ID tokens.
   virtual std::unique_ptr<IdentityRequestDialogController>
   CreateIdentityRequestDialogController();
+
+  // Returns true if JS dialogs from an iframe with different origin from the
+  // main frame should be disallowed.
+  virtual bool SuppressDifferentOriginSubframeJSDialogs(
+      BrowserContext* browser_context);
 };
 
 }  // namespace content

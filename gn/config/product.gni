@@ -1,6 +1,7 @@
 declare_args() {
   build_branch = "master"
   force_sopranos_build = false
+  is_oem_automotive_build = is_vivaldi_polestar
 }
 
 _vivaldi_version_py_path = "//build/util/version.py"
@@ -29,7 +30,12 @@ if (release_kind == "final") {
     "vivaldi_release_final",
   ]
   VIVALDI_RELEASE_KIND = "vivaldi_final"
-  android_vivaldi_manifest_package = "com.vivaldi.browser"
+  if (is_oem_automotive_build) {
+    # Vivaldi/Polestar
+    android_vivaldi_manifest_package = "com.polestar.vivaldi.production.android"
+  } else {
+    android_vivaldi_manifest_package = "com.vivaldi.browser"
+  }
 } else if (is_official_build && !force_sopranos_build) {
   extra_grit_defines = [
     "-D",

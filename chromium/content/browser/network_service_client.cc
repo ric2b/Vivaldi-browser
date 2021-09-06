@@ -225,10 +225,24 @@ void NetworkServiceClient::OnRawResponse(
     const std::string& devtools_request_id,
     const net::CookieAndLineAccessResultList& cookies_with_access_result,
     std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
-    const base::Optional<std::string>& raw_response_headers) {
+    const base::Optional<std::string>& raw_response_headers,
+    network::mojom::IPAddressSpace resource_address_space) {
   devtools_instrumentation::OnResponseReceivedExtraInfo(
       process_id, routing_id, devtools_request_id, cookies_with_access_result,
-      headers, raw_response_headers);
+      headers, raw_response_headers, resource_address_space);
+}
+
+void NetworkServiceClient::OnPrivateNetworkRequest(
+    int32_t process_id,
+    int32_t routing_id,
+    const base::Optional<std::string>& devtools_request_id,
+    const GURL& url,
+    bool is_warning,
+    network::mojom::IPAddressSpace resource_address_space,
+    network::mojom::ClientSecurityStatePtr client_security_state) {
+  devtools_instrumentation::OnPrivateNetworkRequest(
+      process_id, routing_id, devtools_request_id, url, is_warning,
+      resource_address_space, std::move(client_security_state));
 }
 
 void NetworkServiceClient::OnCorsPreflightRequest(

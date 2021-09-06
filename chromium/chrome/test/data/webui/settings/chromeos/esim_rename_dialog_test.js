@@ -129,4 +129,15 @@ suite('EsimRenameDialog', function() {
           'new profile nickname');
     });
   });
+
+  test('Warning message visibility', function() {
+    const warningMessage = esimRenameDialog.$$('#warningMessage');
+    assertTrue(!!warningMessage);
+
+    esimRenameDialog.showCellularDisconnectWarning = false;
+    assertTrue(warningMessage.hidden);
+
+    esimRenameDialog.showCellularDisconnectWarning = true;
+    assertFalse(warningMessage.hidden);
+  });
 });

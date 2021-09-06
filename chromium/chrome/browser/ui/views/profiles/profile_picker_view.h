@@ -10,13 +10,14 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "chrome/browser/ui/profile_picker.h"
-#include "chrome/browser/ui/views/profiles/user_manager_profile_dialog_host.h"
+#include "chrome/browser/ui/views/profiles/profile_picker_force_signin_dialog_host.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -40,15 +41,25 @@ class ProfilePickerView : public views::WidgetDelegateView,
                           public ChromeWebModalDialogManagerDelegate,
                           public web_modal::WebContentsModalDialogHost {
  public:
+  METADATA_HEADER(ProfilePickerView);
+
   using BrowserOpenedCallback = base::OnceCallback<void(Browser*)>;
 
+  ProfilePickerView(const ProfilePickerView&) = delete;
+  ProfilePickerView& operator=(const ProfilePickerView&) = delete;
+
   const ui::ThemeProvider* GetThemeProviderForProfileBeingCreated() const;
+
+  // Displays sign in error message that is created by Chrome but not GAIA
+  // without browser window. If the dialog is not currently shown, this does
+  // nothing.
+  void DisplayErrorMessage();
 
  private:
   friend class ProfilePicker;
 
   // To display the Profile picker, use ProfilePicker::Show().
-  ProfilePickerView();
+  explicit ProfilePickerView(const GURL& on_select_profile_target_url);
   ~ProfilePickerView() override;
 
   enum State {
@@ -58,25 +69,58 @@ class ProfilePickerView : public views::WidgetDelegateView,
     kFinalizing = 3
   };
 
+  // Struct holding the data related to the sign-in profile creation flow. These
+  // variables are grouped together to simplify reasoning about state.
+  struct SignInFlow {
+    explicit SignInFlow(ProfilePickerView* observer,
+                        Profile* profile,
+                        SkColor profile_color);
+    ~SignInFlow();
+
+    // The web contents backed by `profile`. This is used for displaying the
+    // sign-in flow.
+    std::unique_ptr<content::WebContents> contents;
+
+    Profile* profile = nullptr;
+
+    // Set for the profile at the very end to avoid coloring the simple toolbar
+    // for GAIA sign-in (that uses the ThemeProvider of the current profile).
+    SkColor profile_color;
+
+    base::string16 name_for_signed_in_profile;
+    base::OnceClosure on_profile_name_available;
+
+    base::CancelableOnceClosure extended_account_info_timeout_closure;
+
+    base::ScopedObservation<signin::IdentityManager,
+                            signin::IdentityManager::Observer>
+        identity_manager_observation;
+  };
+
   // Displays the profile picker.
   void Display(ProfilePicker::EntryPoint entry_point);
   // Hides the profile picker.
   void Clear();
 
   // On system profile creation success, it initializes the view.
-  void OnSystemProfileCreated(ProfilePicker::EntryPoint entry_point,
-                              Profile* system_profile,
+  void OnSystemProfileCreated(Profile* system_profile,
                               Profile::CreateStatus status);
 
   // Creates and shows the dialog.
-  void Init(ProfilePicker::EntryPoint entry_point, Profile* system_profile);
+  void Init(Profile* system_profile);
 
   // Switches the layout to the sign-in flow (and creates a new profile)
   void SwitchToSignIn(SkColor profile_color,
                       base::OnceCallback<void(bool)> switch_finished_callback);
+  // Cancel the sign-in flow and returns back to the main picker screen (if the
+  // original EntryPoint was to open the picker).
+  void CancelSignIn();
   // On creation success for the sign-in profile, it rebuilds the view.
-  void OnProfileForSigninCreated(Profile* new_profile,
-                                 Profile::CreateStatus status);
+  void OnProfileForSigninCreated(
+      SkColor profile_color,
+      base::RepeatingCallback<void(bool)> switch_finished_callback,
+      Profile* new_profile,
+      Profile::CreateStatus status);
   // Switches the layout to the sync confirmation screen.
   void SwitchToSyncConfirmation();
 
@@ -140,7 +184,7 @@ class ProfilePickerView : public views::WidgetDelegateView,
   void NavigateBack();
 
   // Checks whether the sign-in flow is in progress.
-  bool IsSigningIn() const;
+  bool GetSigningIn() const;
 
   // Helper functions to deal with the lack of extended account info.
   void SetExtendedAccountInfoTimeoutForTesting(base::TimeDelta timeout);
@@ -177,16 +221,17 @@ class ProfilePickerView : public views::WidgetDelegateView,
   // Hides the dialog if it is showing.
   void HideDialog();
 
-  // Displays sign in error message that is created by Chrome but not GAIA
-  // without browser window. If the dialog is not currently shown, this does
-  // nothing.
-  void DisplayErrorMessage();
-
   // Getter of the path of profile which is selected in profile picker for force
   // signin.
-  base::FilePath GetForceSigninProfilePath();
+  base::FilePath GetForceSigninProfilePath() const;
+
+  // Getter of the target page  url. If not empty and is valid, it opens on
+  // profile selection instead of the new tab page.
+  GURL GetOnSelectProfileTargetUrl() const;
 
   ScopedKeepAlive keep_alive_;
+  ProfilePicker::EntryPoint entry_point_ =
+      ProfilePicker::EntryPoint::kOnStartup;
   State state_ = State::kNotStarted;
 
   // A mapping between accelerators and command IDs.
@@ -204,39 +249,23 @@ class ProfilePickerView : public views::WidgetDelegateView,
   // the WebUI pages.
   std::unique_ptr<content::WebContents> system_profile_contents_;
 
-  // Assigned a value at the beginning of a signed-in profile creation flow,
-  // until the end of the flow (i.e. for the rest of the lifetime of this view).
-  Profile* signed_in_profile_being_created_ = nullptr;
-  // The web contents backed by `signed_in_profile_being_created_`, with the
-  // same lifetime. This is used for displaying the sign-in flow.
-  std::unique_ptr<content::WebContents> new_profile_contents_;
+  std::unique_ptr<SignInFlow> sign_in_;
 
-  // Assigned a value at the beginning of a signed-in profile creation, set for
-  // the profile at the very end to avoid coloring the simple toolbar for GAIA
-  // sign-in (that uses the ThemeProvider of the current profile).
-  SkColor profile_color_;
-
-  base::string16 name_for_signed_in_profile_;
-  base::OnceClosure on_profile_name_available_;
+  // Delay used for a timeout, may be overridden by tests.
   base::TimeDelta extended_account_info_timeout_;
-  base::CancelableOnceClosure extended_account_info_timeout_closure_;
-
-  // Not null iff switching to sign-in is in progress.
-  base::OnceCallback<void(bool)> switch_finished_callback_;
-  base::ScopedObservation<signin::IdentityManager,
-                          signin::IdentityManager::Observer>
-      identity_manager_observation_{this};
 
   // Creation time of the picker, to measure performance on startup. Only set
   // when the picker is shown on startup.
   base::TimeTicks creation_time_on_startup_;
 
   // Hosts dialog displayed when a locked profile is selected in ProfilePicker.
-  UserManagerProfileDialogHost dialog_host_;
+  ProfilePickerForceSigninDialogHost dialog_host_;
+
+  // A target page  url that opens on profile selection instead of the new tab
+  // page.
+  GURL on_select_profile_target_url_;
 
   base::WeakPtrFactory<ProfilePickerView> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ProfilePickerView);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_PICKER_VIEW_H_

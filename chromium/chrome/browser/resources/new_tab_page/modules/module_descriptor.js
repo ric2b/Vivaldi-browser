@@ -18,12 +18,15 @@ let InitializeModuleCallback;
 export class ModuleDescriptor {
   /**
    * @param {string} id
+   * @param {string} name
    * @param {number} heightPx
    * @param {!InitializeModuleCallback} initializeCallback
    */
-  constructor(id, heightPx, initializeCallback) {
+  constructor(id, name, heightPx, initializeCallback) {
     /** @private {string} */
     this.id_ = id;
+    /** @private {string} */
+    this.name_ = name;
     /** @private {number} */
     this.heightPx_ = heightPx;
     /** @private {HTMLElement} */
@@ -35,6 +38,11 @@ export class ModuleDescriptor {
   /** @return {string} */
   get id() {
     return this.id_;
+  }
+
+  /** @return {string} */
+  get name() {
+    return this.name_;
   }
 
   /** @return {number} */
@@ -66,8 +74,11 @@ export class ModuleDescriptor {
     if (!this.element_) {
       return;
     }
+    if (this.element_.height !== undefined) {
+      this.heightPx_ = this.element_.height;
+    }
     const loadEndTime = BrowserProxy.getInstance().now();
     BrowserProxy.getInstance().handler.onModuleLoaded(
-        this.id_, loadEndTime, mojoTimeDelta(loadEndTime - loadStartTime));
+        this.id_, mojoTimeDelta(loadEndTime - loadStartTime), loadEndTime);
   }
 }

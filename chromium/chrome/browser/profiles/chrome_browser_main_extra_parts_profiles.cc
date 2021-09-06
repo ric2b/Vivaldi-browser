@@ -50,6 +50,7 @@
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
 #include "chrome/browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_service_factory.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_memory_tracker_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/permissions/last_tab_standing_tracker_factory.h"
@@ -61,8 +62,8 @@
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/predictor_database_factory.h"
-#include "chrome/browser/prefetch/no_state_prefetch/prerender_link_manager_factory.h"
-#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/no_state_prefetch_link_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/prefs/pref_metrics_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/profiles/gaia_info_update_service_factory.h"
@@ -119,6 +120,7 @@
 #include "chrome/browser/android/reading_list/reading_list_notification_service_factory.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/thin_webview/chrome_thin_webview_initializer.h"
+#include "chrome/browser/commerce/subscriptions/commerce_subscription_db_content.pb.h"
 #include "chrome/browser/media/android/cdm/media_drm_origin_id_manager_factory.h"
 #else
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -237,8 +239,8 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
 
   AboutSigninInternalsFactory::GetInstance();
-#if !defined(OS_ANDROID)
   AccessContextAuditServiceFactory::GetInstance();
+#if !defined(OS_ANDROID)
   GuestSigninObserverFactory::GetInstance();
 #endif
   AccountConsistencyModeManagerFactory::GetInstance();
@@ -263,6 +265,12 @@ void ChromeBrowserMainExtraPartsProfiles::
   BrowsingDataHistoryObserverService::Factory::GetInstance();
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   CaptivePortalServiceFactory::GetInstance();
+#endif
+#if !defined(OS_ANDROID)
+  CartServiceFactory::GetInstance();
+#endif
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  CertDbInitializerFactory::GetInstance();
 #endif
   CertificateReportingServiceFactory::GetInstance();
 #if !defined(OS_ANDROID)
@@ -348,6 +356,7 @@ void ChromeBrowserMainExtraPartsProfiles::
 #if !defined(OS_ANDROID)
   NTPResourceCacheFactory::GetInstance();
 #endif
+  page_load_metrics::PageLoadMetricsMemoryTrackerFactory::GetInstance();
   PasswordStoreFactory::GetInstance();
   PermissionAuditingServiceFactory::GetInstance();
   ProfileProtoDBFactory<
@@ -360,6 +369,13 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
   PrefMetricsService::Factory::GetInstance();
   PrefsTabHelper::GetServiceInstance();
+#if !defined(OS_ANDROID)
+  ProfileProtoDBFactory<cart_db::ChromeCartContentProto>::GetInstance();
+#endif
+#if defined(OS_ANDROID)
+  ProfileProtoDBFactory<commerce_subscription_db::
+                            CommerceSubscriptionContentProto>::GetInstance();
+#endif
   policy::UserCloudPolicyInvalidatorFactory::GetInstance();
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   policy::UserPolicySigninServiceFactory::GetInstance();
@@ -367,8 +383,8 @@ void ChromeBrowserMainExtraPartsProfiles::
   predictors::AutocompleteActionPredictorFactory::GetInstance();
   predictors::LoadingPredictorFactory::GetInstance();
   predictors::PredictorDatabaseFactory::GetInstance();
-  prerender::PrerenderLinkManagerFactory::GetInstance();
-  prerender::PrerenderManagerFactory::GetInstance();
+  prerender::NoStatePrefetchLinkManagerFactory::GetInstance();
+  prerender::NoStatePrefetchManagerFactory::GetInstance();
   PrivacySandboxSettingsFactory::GetInstance();
   ProfileNetworkContextServiceFactory::GetInstance();
   ProfileSyncServiceFactory::GetInstance();
@@ -446,14 +462,6 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
   WebDataServiceFactory::GetInstance();
   webrtc_event_logging::WebRtcEventLogManagerKeyedServiceFactory::GetInstance();
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  CertDbInitializerFactory::GetInstance();
-#endif
-#if !defined(OS_ANDROID)
-  CartServiceFactory::GetInstance();
-  ProfileProtoDBFactory<cart_db::ChromeCartContentProto>::GetInstance();
-#endif
 }
 
 void ChromeBrowserMainExtraPartsProfiles::PreProfileInit() {

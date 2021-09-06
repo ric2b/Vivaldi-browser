@@ -44,6 +44,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
@@ -65,6 +66,7 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/fake_web_plugin.h"
+#include "third_party/blink/renderer/core/testing/mock_policy_container_host.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
@@ -159,8 +161,10 @@ void LoadFrameDontWait(WebLocalFrame* frame, const WebURL& url) {
     params->navigation_timings.navigation_start = base::TimeTicks::Now();
     params->navigation_timings.fetch_start = base::TimeTicks::Now();
     params->is_browser_initiated = true;
+    MockPolicyContainerHost mock_policy_container_host;
     params->policy_container = std::make_unique<WebPolicyContainer>(
-        WebPolicyContainerDocumentPolicies(), mojo::NullAssociatedRemote());
+        WebPolicyContainerPolicies(),
+        mock_policy_container_host.BindNewEndpointAndPassDedicatedRemote());
     FillNavigationParamsResponse(params.get());
     impl->CommitNavigation(std::move(params), nullptr /* extra_data */);
   }
@@ -177,7 +181,7 @@ void LoadHTMLString(WebLocalFrame* frame,
                     const base::TickClock* clock) {
   auto* impl = To<WebLocalFrameImpl>(frame);
   std::unique_ptr<WebNavigationParams> navigation_params =
-      WebNavigationParams::CreateWithHTMLString(html, base_url);
+      WebNavigationParams::CreateWithHTMLStringForTesting(html, base_url);
   navigation_params->tick_clock = clock;
   impl->CommitNavigation(std::move(navigation_params),
                          nullptr /* extra_data */);
@@ -241,13 +245,18 @@ WebMouseEvent CreateMouseEvent(WebInputEvent::Type type,
   return result;
 }
 
-WebLocalFrameImpl* CreateLocalChild(WebLocalFrame& parent,
-                                    mojom::blink::TreeScopeType scope,
-                                    TestWebFrameClient* client) {
+WebLocalFrameImpl* CreateLocalChild(
+    WebLocalFrame& parent,
+    mojom::blink::TreeScopeType scope,
+    TestWebFrameClient* client,
+    WebPolicyContainerBindParams policy_container_bind_params) {
+  MockPolicyContainerHost mock_policy_container_host;
+  mock_policy_container_host.BindWithNewEndpoint(
+      std::move(policy_container_bind_params.receiver));
   std::unique_ptr<TestWebFrameClient> owned_client;
   client = CreateDefaultClientIfNeeded(client, owned_client);
-  auto* frame = To<WebLocalFrameImpl>(parent.CreateLocalChild(
-      scope, client, nullptr, base::UnguessableToken::Create()));
+  auto* frame = To<WebLocalFrameImpl>(
+      parent.CreateLocalChild(scope, client, nullptr, LocalFrameToken()));
   client->Bind(frame, std::move(owned_client));
   return frame;
 }
@@ -255,11 +264,15 @@ WebLocalFrameImpl* CreateLocalChild(WebLocalFrame& parent,
 WebLocalFrameImpl* CreateLocalChild(
     WebLocalFrame& parent,
     mojom::blink::TreeScopeType scope,
-    std::unique_ptr<TestWebFrameClient> self_owned) {
+    std::unique_ptr<TestWebFrameClient> self_owned,
+    WebPolicyContainerBindParams policy_container_bind_params) {
+  MockPolicyContainerHost mock_policy_container_host;
+  mock_policy_container_host.BindWithNewEndpoint(
+      std::move(policy_container_bind_params.receiver));
   DCHECK(self_owned);
   TestWebFrameClient* client = self_owned.get();
-  auto* frame = To<WebLocalFrameImpl>(parent.CreateLocalChild(
-      scope, client, nullptr, base::UnguessableToken::Create()));
+  auto* frame = To<WebLocalFrameImpl>(
+      parent.CreateLocalChild(scope, client, nullptr, LocalFrameToken()));
   client->Bind(frame, std::move(self_owned));
   return frame;
 }
@@ -270,8 +283,7 @@ WebRemoteFrameImpl* CreateRemote(TestWebRemoteFrameClient* client) {
   auto* frame = MakeGarbageCollected<WebRemoteFrameImpl>(
       mojom::blink::TreeScopeType::kDocument, client,
       InterfaceRegistry::GetEmptyInterfaceRegistry(),
-      client->GetRemoteAssociatedInterfaces(),
-      base::UnguessableToken::Create());
+      client->GetRemoteAssociatedInterfaces(), RemoteFrameToken());
   client->Bind(frame, std::move(owned_client));
   return frame;
 }
@@ -287,8 +299,7 @@ WebRemoteFrameImpl* CreateRemoteChild(
       mojom::blink::TreeScopeType::kDocument, name, FramePolicy(),
       mojom::blink::FrameOwnerElementType::kIframe, client,
       InterfaceRegistry::GetEmptyInterfaceRegistry(),
-      client->GetRemoteAssociatedInterfaces(), base::UnguessableToken::Create(),
-      nullptr));
+      client->GetRemoteAssociatedInterfaces(), RemoteFrameToken(), nullptr));
   client->Bind(frame, std::move(owned_client));
   if (!security_origin)
     security_origin = SecurityOrigin::CreateUniqueOpaque();
@@ -353,10 +364,12 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   std::unique_ptr<TestWebFrameClient> owned_web_frame_client;
   web_frame_client =
       CreateDefaultClientIfNeeded(web_frame_client, owned_web_frame_client);
+  MockPolicyContainerHost mock_policy_container_host;
   WebLocalFrame* frame = WebLocalFrame::CreateMainFrame(
-      web_view_, web_frame_client, nullptr, base::UnguessableToken::Create(),
-      std::make_unique<WebPolicyContainer>(WebPolicyContainerDocumentPolicies(),
-                                           mojo::NullAssociatedRemote()),
+      web_view_, web_frame_client, nullptr, LocalFrameToken(),
+      std::make_unique<WebPolicyContainer>(
+          WebPolicyContainerPolicies(),
+          mock_policy_container_host.BindNewEndpointAndPassDedicatedRemote()),
       opener);
   web_frame_client->Bind(frame, std::move(owned_web_frame_client));
 
@@ -423,7 +436,7 @@ WebViewImpl* WebViewHelper::InitializeRemoteWithOpener(
       web_view_, web_remote_frame_client,
       InterfaceRegistry::GetEmptyInterfaceRegistry(),
       web_remote_frame_client->GetRemoteAssociatedInterfaces(),
-      base::UnguessableToken::Create(), opener);
+      RemoteFrameToken(), opener);
   web_remote_frame_client->Bind(frame,
                                 std::move(owned_web_remote_frame_client));
   if (!security_origin)
@@ -452,9 +465,8 @@ WebLocalFrameImpl* WebViewHelper::CreateLocalChild(
   auto* frame = To<WebLocalFrameImpl>(parent.CreateLocalChild(
       mojom::blink::TreeScopeType::kDocument, name, FramePolicy(), client,
       nullptr, previous_sibling, properties,
-      mojom::blink::FrameOwnerElementType::kIframe,
-      base::UnguessableToken::Create(), nullptr,
-      std::make_unique<WebPolicyContainer>(WebPolicyContainerDocumentPolicies(),
+      mojom::blink::FrameOwnerElementType::kIframe, LocalFrameToken(), nullptr,
+      std::make_unique<WebPolicyContainer>(WebPolicyContainerPolicies(),
                                            mojo::NullAssociatedRemote())));
   client->Bind(frame, std::move(owned_client));
 
@@ -472,8 +484,8 @@ WebLocalFrameImpl* WebViewHelper::CreateProvisional(
   std::unique_ptr<TestWebFrameClient> owned_client;
   client = CreateDefaultClientIfNeeded(client, owned_client);
   auto* frame = To<WebLocalFrameImpl>(WebLocalFrame::CreateProvisional(
-      client, nullptr, base::UnguessableToken::Create(), &old_frame,
-      FramePolicy(), WebFrame::ToCoreFrame(old_frame)->Tree().GetName()));
+      client, nullptr, LocalFrameToken(), &old_frame, FramePolicy(),
+      WebFrame::ToCoreFrame(old_frame)->Tree().GetName()));
   client->Bind(frame, std::move(owned_client));
 
   // Create a widget, if necessary.
@@ -526,7 +538,7 @@ TestWebFrameWidget* WebViewHelper::CreateFrameWidgetAndInitializeCompositing(
   cc::LayerTreeSettings layer_tree_settings =
       GetSynchronousSingleThreadLayerTreeSettings();
   frame_widget->InitializeCompositing(
-      frame_widget->main_thread_scheduler(), frame_widget->task_graph_runner(),
+      frame_widget->GetAgentGroupScheduler(), frame_widget->task_graph_runner(),
       frame_widget->GetInitialScreenInfo(),
       std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings);
   frame_widget->SetCompositorVisible(true);
@@ -638,10 +650,9 @@ WebLocalFrame* TestWebFrameClient::CreateChildFrame(
     const FramePolicy&,
     const WebFrameOwnerProperties& frame_owner_properties,
     mojom::blink::FrameOwnerElementType owner_type,
-    blink::CrossVariantMojoAssociatedReceiver<
-        mojom::PolicyContainerHostInterfaceBase>
-        policy_container_host_receiver) {
-  return CreateLocalChild(*frame_, scope);
+    WebPolicyContainerBindParams policy_container_bind_params) {
+  return CreateLocalChild(*frame_, scope, /*test_web_frame_client=*/nullptr,
+                          std::move(policy_container_bind_params));
 }
 
 void TestWebFrameClient::InitializeAsChildFrame(WebLocalFrame* parent) {}
@@ -750,15 +761,6 @@ void TestWebRemoteFrameClient::Bind(
 void TestWebRemoteFrameClient::FrameDetached(DetachType type) {
   frame_->Close();
   self_owned_.reset();
-}
-
-viz::FrameSinkId TestWebRemoteFrameClient::GetFrameSinkId() const {
-  return viz::FrameSinkId();
-}
-
-const viz::LocalSurfaceId& TestWebRemoteFrameClient::GetLocalSurfaceId() const {
-  DEFINE_STATIC_LOCAL(viz::LocalSurfaceId, dummy_local_surface_id, ());
-  return dummy_local_surface_id;
 }
 
 TestWidgetInputHandlerHost* TestWebFrameWidget::GetInputHandlerHost() {

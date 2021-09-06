@@ -57,6 +57,9 @@ class WebState;
 // Called when a snapshot of the content will be taken.
 - (void)willUpdateSnapshot;
 
+// Stop any scrolling in the scroll view.
+- (void)stopScrolling;
+
 // The content inset and offset of the scroll view.
 - (UIEdgeInsets)contentInset;
 - (CGPoint)contentOffset;
@@ -75,9 +78,6 @@ class WebState;
 
 // Constrains the named layout guide for the Discover header menu button.
 - (void)constrainDiscoverHeaderMenuButtonNamedGuide;
-
-// YES if the Discover feed is currently visible.
-- (BOOL)isDiscoverFeedVisible;
 
 @end
 

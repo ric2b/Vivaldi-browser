@@ -6,16 +6,17 @@
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
-#include "chrome/browser/chromeos/app_mode/fake_cws.h"
-#include "chrome/browser/chromeos/login/app_mode/kiosk_launch_controller.h"
+#include "chrome/browser/ash/app_mode/fake_cws.h"
+#include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
+#include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
-#include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/test/device_state_mixin.h"
 #include "chrome/browser/chromeos/login/test/dialog_window_waiter.h"
 #include "chrome/browser/chromeos/login/test/embedded_test_server_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/chromeos/login/test/oobe_screens_utils.h"
 #include "chrome/browser/chromeos/login/wizard_context.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
@@ -51,6 +52,9 @@ constexpr char kTestKioskAccountId[] = "enterprise-kiosk-app@localhost";
 constexpr char kWifiServiceName[] = "stub_wifi";
 constexpr char kWifiNetworkName[] = "wifi-test-network";
 
+const test::UIPath kErrorMessageGuestSigninLink = {"error-message",
+                                                   "error-guest-signin-link"};
+
 ErrorScreen* GetScreen() {
   return static_cast<ErrorScreen*>(
       WizardController::default_controller()->GetScreen(
@@ -83,6 +87,10 @@ class NetworkErrorScreenTest : public InProcessBrowserTest {
     GetScreen()->Show(wizard_context_.get());
 
     // Wait until network list adds the wifi test network.
+    OobeScreenWaiter(ErrorScreenView::kScreenId).Wait();
+
+    EXPECT_TRUE(test::IsScanningRequestedOnErrorScreen());
+
     test::OobeJS()
         .CreateWaiter(WifiElementSelector(kWifiNetworkName) + " != null")
         ->Wait();
@@ -95,10 +103,9 @@ class NetworkErrorScreenTest : public InProcessBrowserTest {
 
  protected:
   std::string WifiElementSelector(const std::string& wifi_network_name) {
-    return base::StrCat(
-        {"$('offline-network-control').$$('#networkSelect')"
-         ".getNetworkListItemByNameForTest('",
-         wifi_network_name, "')"});
+    return test::GetOobeElementPath(
+               {"error-message", "offline-network-control", "networkSelect"}) +
+           ".getNetworkListItemByNameForTest('" + wifi_network_name + "')";
   }
 
   void ClickOnWifiNetwork(const std::string& wifi_network_name) {
@@ -230,13 +237,13 @@ IN_PROC_BROWSER_TEST_F(GuestErrorScreenTest, PRE_GuestLogin) {
   GetScreen()->Show(wizard_context_.get());
 
   OobeScreenWaiter(ErrorScreenView::kScreenId).Wait();
-  test::OobeJS().ExpectVisiblePath({"error-guest-signin-link"});
+  test::OobeJS().ExpectVisiblePath(kErrorMessageGuestSigninLink);
 
   base::RunLoop restart_job_waiter;
   FakeSessionManagerClient::Get()->set_restart_job_callback(
       restart_job_waiter.QuitClosure());
 
-  test::OobeJS().ClickOnPath({"error-guest-signin-link"});
+  test::OobeJS().ClickOnPath(kErrorMessageGuestSigninLink);
   restart_job_waiter.Run();
 }
 
@@ -338,7 +345,10 @@ IN_PROC_BROWSER_TEST_F(KioskErrorScreenTest, OpenCertificateConfig) {
   DialogWindowWaiter waiter(
       l10n_util::GetStringUTF16(IDS_CERTIFICATE_MANAGER_TITLE));
 
-  test::OobeJS().TapOnPath({"error-message-md-configure-certs-button"});
+  const test::UIPath kCertsButton = {"error-message", "configureCertsButton"};
+  test::OobeJS().CreateVisibilityWaiter(true, kCertsButton)->Wait();
+  test::OobeJS().ClickOnPath(kCertsButton);
+
   waiter.Wait();
 }
 

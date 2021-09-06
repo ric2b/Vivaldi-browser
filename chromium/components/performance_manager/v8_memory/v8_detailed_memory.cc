@@ -250,6 +250,10 @@ class NodeAttachedProcessData
     return process_measurement_requests_;
   }
 
+  static V8DetailedMemoryProcessData* GetOrCreateForTesting(  // IN-TEST
+      base::PassKey<V8DetailedMemoryProcessData>,
+      const ProcessNode* process_node);
+
  private:
   void StartMeasurement(MeasurementMode mode);
   void ScheduleUpgradeToBoundedMeasurement();
@@ -469,6 +473,7 @@ void NodeAttachedProcessData::OnV8MemoryUsage(
   // existing frame is likewise accrued to detached bytes.
   uint64_t detached_v8_bytes_used = 0;
   uint64_t shared_v8_bytes_used = 0;
+  uint64_t blink_bytes_used = 0;
 
   // Create a mapping from token to execution context usage for the merge below.
   std::vector<std::pair<blink::ExecutionContextToken,
@@ -480,6 +485,7 @@ void NodeAttachedProcessData::OnV8MemoryUsage(
     }
     detached_v8_bytes_used += isolate->detached_bytes_used;
     shared_v8_bytes_used += isolate->shared_bytes_used;
+    blink_bytes_used += isolate->blink_bytes_used;
   }
 
   size_t found_frame_count = tmp.size();
@@ -513,6 +519,7 @@ void NodeAttachedProcessData::OnV8MemoryUsage(
 
       ec_data->data_available_ = true;
       ec_data->data_.set_v8_bytes_used(it->second->bytes_used);
+      ec_data->data_.set_url(std::move(it->second->url));
       // Zero out this datum as its usage has been consumed.
       // We avoid erase() here because it may take O(n) time.
       it->second.reset();
@@ -531,6 +538,7 @@ void NodeAttachedProcessData::OnV8MemoryUsage(
   data_available_ = true;
   data_.set_detached_v8_bytes_used(detached_v8_bytes_used);
   data_.set_shared_v8_bytes_used(shared_v8_bytes_used);
+  data_.set_blink_bytes_used(blink_bytes_used);
 
   // Schedule another measurement for this process node unless one is already
   // scheduled.
@@ -564,6 +572,15 @@ void NodeAttachedProcessData::EnsureRemote() {
         base::BindOnce(&BindReceiverOnUIThread, std::move(pending_receiver),
                        std::move(proxy)));
   }
+}
+
+V8DetailedMemoryProcessData* NodeAttachedProcessData::GetOrCreateForTesting(
+    base::PassKey<V8DetailedMemoryProcessData>,
+    const ProcessNode* process_node) {
+  auto* node_data = NodeAttachedProcessData::GetOrCreate(process_node);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(node_data->sequence_checker_);
+  node_data->data_available_ = true;
+  return &node_data->data_;
 }
 
 }  // namespace
@@ -884,6 +901,22 @@ void V8DetailedMemoryRequestOneShot::OnOwnerUnregistered() {
 ////////////////////////////////////////////////////////////////////////////////
 // V8DetailedMemoryExecutionContextData
 
+V8DetailedMemoryExecutionContextData::V8DetailedMemoryExecutionContextData() =
+    default;
+V8DetailedMemoryExecutionContextData::~V8DetailedMemoryExecutionContextData() =
+    default;
+
+V8DetailedMemoryExecutionContextData::V8DetailedMemoryExecutionContextData(
+    const V8DetailedMemoryExecutionContextData&) = default;
+V8DetailedMemoryExecutionContextData::V8DetailedMemoryExecutionContextData(
+    V8DetailedMemoryExecutionContextData&&) = default;
+V8DetailedMemoryExecutionContextData&
+V8DetailedMemoryExecutionContextData::operator=(
+    const V8DetailedMemoryExecutionContextData&) = default;
+V8DetailedMemoryExecutionContextData&
+V8DetailedMemoryExecutionContextData::operator=(
+    V8DetailedMemoryExecutionContextData&&) = default;
+
 // static
 const V8DetailedMemoryExecutionContextData*
 V8DetailedMemoryExecutionContextData::ForFrameNode(const FrameNode* node) {
@@ -929,6 +962,12 @@ const V8DetailedMemoryProcessData* V8DetailedMemoryProcessData::ForProcessNode(
     const ProcessNode* node) {
   auto* node_data = NodeAttachedProcessData::Get(node);
   return node_data ? node_data->data() : nullptr;
+}
+
+V8DetailedMemoryProcessData* V8DetailedMemoryProcessData::GetOrCreateForTesting(
+    const ProcessNode* process_node) {
+  return NodeAttachedProcessData::GetOrCreateForTesting(
+      base::PassKey<V8DetailedMemoryProcessData>(), process_node);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

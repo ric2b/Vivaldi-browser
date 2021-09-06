@@ -304,8 +304,7 @@ TEST(PaymentRequestTest, CannotShowAfterAborted) {
 }
 
 TEST(PaymentRequestTest, CannotShowWithoutUserActivation) {
-  RuntimeEnabledFeatures::SetPaymentRequestShowConsumesUserActivationEnabled(
-      true);
+  RuntimeEnabledFeatures::SetCapabilityDelegationPaymentRequestEnabled(true);
   PaymentRequestV8TestingScope scope;
   MockFunctionScope funcs(scope.GetScriptState());
   PaymentRequest* request = PaymentRequest::Create(
@@ -318,8 +317,7 @@ TEST(PaymentRequestTest, CannotShowWithoutUserActivation) {
 }
 
 TEST(PaymentRequestTest, ShowConsumesUserActivation) {
-  RuntimeEnabledFeatures::SetPaymentRequestShowConsumesUserActivationEnabled(
-      true);
+  RuntimeEnabledFeatures::SetCapabilityDelegationPaymentRequestEnabled(true);
   PaymentRequestV8TestingScope scope;
   MockFunctionScope funcs(scope.GetScriptState());
   PaymentRequest* request = PaymentRequest::Create(
@@ -330,6 +328,7 @@ TEST(PaymentRequestTest, ShowConsumesUserActivation) {
       &(scope.GetFrame()), mojom::UserActivationNotificationType::kTest);
   request->show(scope.GetScriptState(), ASSERT_NO_EXCEPTION)
       .Then(funcs.ExpectNoCall(), funcs.ExpectNoCall());
+  EXPECT_FALSE(LocalFrame::HasTransientUserActivation(&(scope.GetFrame())));
 }
 
 TEST(PaymentRequestTest, RejectShowPromiseOnErrorPaymentMethodNotSupported) {

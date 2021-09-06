@@ -11,7 +11,7 @@ if(vivaldi_build_tests) {
   }
 }
 
-update_target("//components/sync:rest_of_sync") {
+update_target("//components/sync/engine:engine") {
   sources += [
     "//vivaldi/sync/notes/note_update_preprocessing.cc",
     "//vivaldi/sync/notes/note_update_preprocessing.h",

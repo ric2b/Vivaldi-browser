@@ -164,7 +164,10 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
 
 /*static*/
 void RequestFilterManager::ProxiedProxyWebSocket(
-    content::RenderFrameHost* frame,
+    content::BrowserContext* context,
+    int process_id,
+    int frame_id,
+    const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
     const GURL& site_for_cookies,
     const base::Optional<std::string>& user_agent,
@@ -172,20 +175,22 @@ void RequestFilterManager::ProxiedProxyWebSocket(
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
         handshake_client,
-    mojo::PendingRemote<network::mojom::AuthenticationHandler>
+    mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
         authentication_handler,
     mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client) {
   auto* request_filter_manager =
-      vivaldi::RequestFilterManagerFactory::GetForBrowserContext(
-          frame->GetProcess()->GetBrowserContext());
+      vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context);
   request_filter_manager->ProxyWebSocket(
-      frame, std::move(factory), site_for_cookies, user_agent, url,
-      std::move(additional_headers), std::move(handshake_client),
-      std::move(authentication_handler), std::move(header_client));
+      process_id, frame_id, frame_origin, std::move(factory), site_for_cookies,
+      user_agent, url, std::move(additional_headers),
+      std::move(handshake_client), std::move(authentication_handler),
+      std::move(header_client));
 }
 
 void RequestFilterManager::ProxyWebSocket(
-    content::RenderFrameHost* frame,
+    int process_id,
+    int frame_id,
+    const url::Origin& frame_origin,
     content::ContentBrowserClient::WebSocketFactory factory,
     const GURL& site_for_cookies,
     const base::Optional<std::string>& user_agent,
@@ -193,7 +198,7 @@ void RequestFilterManager::ProxyWebSocket(
     std::vector<network::mojom::HttpHeaderPtr> additional_headers,
     mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
         handshake_client,
-    mojo::PendingRemote<network::mojom::AuthenticationHandler>
+    mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
         authentication_handler,
     mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -205,10 +210,8 @@ void RequestFilterManager::ProxyWebSocket(
       std::move(factory), site_for_cookies, user_agent, url,
       std::move(additional_headers), std::move(handshake_client),
       std::move(authentication_handler), std::move(header_client),
-      has_extra_headers, frame->GetProcess()->GetID(), frame->GetRoutingID(),
-      &request_id_generator_, &request_handler_,
-      frame->GetLastCommittedOrigin(), frame->GetProcess()->GetBrowserContext(),
-      proxies_.get());
+      has_extra_headers, process_id, frame_id, &request_id_generator_,
+      &request_handler_, frame_origin, browser_context_, proxies_.get());
 }
 
 struct RequestFilterManager::RequestHandler::PendingRequest {

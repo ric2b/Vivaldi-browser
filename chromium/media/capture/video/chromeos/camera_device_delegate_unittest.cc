@@ -103,6 +103,15 @@ class MockCameraDevice : public cros::mojom::Camera3DeviceOps {
   void Close(CloseCallback callback) override { DoClose(callback); }
   MOCK_METHOD1(DoClose, void(CloseCallback& callback));
 
+  void ConfigureStreamsAndGetAllocatedBuffers(
+      cros::mojom::Camera3StreamConfigurationPtr config,
+      ConfigureStreamsAndGetAllocatedBuffersCallback callback) override {
+    DoConfigureStreamsAndGetAllocatedBuffers(config, callback);
+  }
+  MOCK_METHOD2(DoConfigureStreamsAndGetAllocatedBuffers,
+               void(cros::mojom::Camera3StreamConfigurationPtr& config,
+                    ConfigureStreamsAndGetAllocatedBuffersCallback& callback));
+
  private:
   DISALLOW_COPY_AND_ASSIGN(MockCameraDevice);
 };
@@ -164,7 +173,7 @@ class CameraDeviceDelegateTest : public ::testing::Test {
 
     camera_device_delegate_ = std::make_unique<CameraDeviceDelegate>(
         devices_info[0].descriptor, camera_hal_delegate_,
-        device_delegate_thread_.task_runner(), nullptr);
+        device_delegate_thread_.task_runner());
   }
 
   void GetNumberOfFakeCameras(

@@ -13,7 +13,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -28,6 +27,7 @@
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/sync_helper.h"
 #include "components/variations/variations_associated_data.h"
+#include "components/webapps/browser/banners/app_banner_manager.h"
 #include "content/public/browser/site_instance.h"
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
@@ -47,8 +47,8 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #endif
 
 namespace extensions {

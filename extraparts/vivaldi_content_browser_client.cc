@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2019-2020 Vivaldi Technologies AS. All rights reserved
 
 #include "extraparts/vivaldi_content_browser_client.h"
 
@@ -8,12 +8,17 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
+#include "components/translate/content/common/translate.mojom.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "extraparts/media_renderer_host_message_filter.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
+
+#if !defined(OS_ANDROID)
+#include "browser/translate/vivaldi_translate_frame_binder.h"
+#endif
 
 VivaldiContentBrowserClient::VivaldiContentBrowserClient()
     : ChromeContentBrowserClient() {}
@@ -97,4 +102,19 @@ std::string VivaldiContentBrowserClient::GetStoragePartitionIdForSite(
 
   return ChromeContentBrowserClient::GetStoragePartitionIdForSite(
       browser_context, site);
+}
+
+void VivaldiContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+    content::RenderFrameHost* render_frame_host,
+    mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
+
+  ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+      render_frame_host, map);
+
+#if !defined(OS_ANDROID)
+  // Register Vivaldi bindings after Chromium bindings, so we can
+  // replace them with our own, if needed.
+  map->Add<translate::mojom::ContentTranslateDriver>(
+      base::BindRepeating(&vivaldi::BindVivaldiContentTranslateDriver));
+#endif
 }

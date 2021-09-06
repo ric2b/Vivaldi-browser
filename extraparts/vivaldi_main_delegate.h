@@ -27,4 +27,16 @@ class VivaldiMainDelegate
   content::ContentBrowserClient* CreateContentBrowserClient() override;
 };
 
+#if !defined(OS_ANDROID)
+class VivaldiTestMainDelegate : public VivaldiMainDelegate {
+ public:
+  VivaldiTestMainDelegate() : VivaldiMainDelegate() {}
+  explicit VivaldiTestMainDelegate(base::TimeTicks exe_entry_point_ticks)
+      : VivaldiMainDelegate(exe_entry_point_ticks) {}
+#if defined(OS_WIN)
+  bool ShouldHandleConsoleControlEvents() override;
+#endif
+};
+#endif
+
 #endif  // EXTRAPARTS_VIVALDI_MAIN_DELEGATE_H_

@@ -132,6 +132,12 @@ Polymer({
     cellularSetupDialogPageName_: String,
 
     /** @private {boolean} */
+    hasActivePSimNetwork_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private {boolean} */
     showESimProfileRenameDialog_: {
       type: Boolean,
       value: false,
@@ -211,6 +217,7 @@ Polymer({
       this.globalPolicy_ = response.result;
     });
     this.onVpnProvidersChanged();
+    this.onNetworkStateListChanged();
   },
 
   /**
@@ -251,9 +258,16 @@ Polymer({
       // e.g. chrome://settings/internet/networks?type=WiFi
       const queryParams = settings.Router.getInstance().getQueryParameters();
       const type = queryParams.get('type');
-      this.showCellularSetupDialog_ = !!queryParams.get('showCellularSetup');
       if (type) {
         this.subpageType_ = OncMojo.getNetworkTypeFromString(type);
+      }
+
+      this.showCellularSetupDialog_ =
+          queryParams.get('showCellularSetup') === 'true';
+      const showPSimFlow = queryParams.get('showPsimFlow') === 'true';
+      if (showPSimFlow && this.showCellularSetupDialog_) {
+        this.cellularSetupDialogPageName_ =
+            cellularSetup.CellularSetupPageName.PSIM_FLOW_UI;
       }
     } else if (route === settings.routes.KNOWN_NETWORKS) {
       // Handle direct navigation to the known networks page,
@@ -305,6 +319,12 @@ Polymer({
   },
 
   /** NetworkListenerBehavior override */
+  onNetworkStateListChanged() {
+    hasActivePSimNetwork().then((hasActive) => {
+      this.hasActivePSimNetwork_ = hasActive;
+    });
+  },
+
   onVpnProvidersChanged() {
     this.networkConfig_.getVpnProviders().then(response => {
       const providers = response.providers;
@@ -660,8 +680,9 @@ Polymer({
       return;
     }
 
-    const isMobile = OncMojo.networkTypeIsMobile(type);
-    if (!isMobile && (!networkState.connectable || !!networkState.errorState)) {
+    if (OncMojo.networkTypeHasConfigurationFlow(type) &&
+        (!OncMojo.isNetworkConnectable(networkState) ||
+         !!networkState.errorState)) {
       this.showConfig_(
           true /* configAndConnect */, type, networkState.guid, displayName);
       return;
@@ -677,7 +698,7 @@ Polymer({
           // TODO(stevenjb/khorimoto): Consider handling these cases.
           return;
         case mojom.StartConnectResult.kNotConfigured:
-          if (!isMobile) {
+          if (OncMojo.networkTypeHasConfigurationFlow(type)) {
             this.showConfig_(
                 true /* configAndConnect */, type, networkState.guid,
                 displayName);

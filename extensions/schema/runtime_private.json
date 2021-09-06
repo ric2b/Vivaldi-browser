@@ -113,6 +113,12 @@
         "parameters": []
       },
       {
+        "name": "restart",
+        "description": "Close all browsers and restart the application.",
+        "type": "function",
+        "parameters": []
+      },
+      {
         "name": "getAllFeatureFlags",
         "type": "function",
         "description": "Gets all the registered Vivaldi feature flags.",

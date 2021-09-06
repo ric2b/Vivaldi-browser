@@ -101,6 +101,7 @@ base::Optional<Gamepad> GetXrStandardGamepad(
 
 XrResult OpenXRInputHelper::CreateOpenXRInputHelper(
     XrInstance instance,
+    XrSystemId system,
     const OpenXrExtensionHelper& extension_helper,
     XrSession session,
     XrSpace local_space,
@@ -108,7 +109,8 @@ XrResult OpenXRInputHelper::CreateOpenXRInputHelper(
   std::unique_ptr<OpenXRInputHelper> new_helper =
       std::make_unique<OpenXRInputHelper>(session, local_space);
 
-  RETURN_IF_XR_FAILED(new_helper->Initialize(instance, extension_helper));
+  RETURN_IF_XR_FAILED(
+      new_helper->Initialize(instance, system, extension_helper));
   *helper = std::move(new_helper);
   return XR_SUCCESS;
 }
@@ -122,6 +124,7 @@ OpenXRInputHelper::~OpenXRInputHelper() = default;
 
 XrResult OpenXRInputHelper::Initialize(
     XrInstance instance,
+    XrSystemId system,
     const OpenXrExtensionHelper& extension_helper) {
   RETURN_IF_XR_FAILED(path_helper_->Initialize(instance));
 
@@ -163,6 +166,7 @@ XrResult OpenXRInputHelper::Initialize(
 }
 
 std::vector<mojom::XRInputSourceStatePtr> OpenXRInputHelper::GetInputState(
+    bool hand_input_enabled,
     XrTime predicted_display_time) {
   std::vector<mojom::XRInputSourceStatePtr> input_states;
   if (XR_FAILED(SyncActions(predicted_display_time))) {
@@ -204,23 +208,25 @@ std::vector<mojom::XRInputSourceStatePtr> OpenXRInputHelper::GetInputState(
         !state->primary_input_pressed;
     controller_states_[i].primary_button_pressed = state->primary_input_pressed;
     state->gamepad = GetWebXRGamepad(*controller);
+
+    // Return hand state if controller is a hand and the hand tracking feature
+    // was requested for the session
+    if (hand_input_enabled) {
+      state->hand_tracking_data =
+          controller->GetHandTrackingData(local_space_, predicted_display_time);
+    }
+
     input_states.push_back(std::move(state));
   }
 
   return input_states;
 }
 
-void OpenXRInputHelper::OnInteractionProfileChanged(XrResult* xr_result) {
+XrResult OpenXRInputHelper::OnInteractionProfileChanged() {
   for (OpenXrControllerState& controller_state : controller_states_) {
-    *xr_result = controller_state.controller.UpdateInteractionProfile();
-    if (XR_FAILED(*xr_result)) {
-      return;
-    }
+    RETURN_IF_XR_FAILED(controller_state.controller.UpdateInteractionProfile());
   }
-}
-
-base::WeakPtr<OpenXRInputHelper> OpenXRInputHelper::GetWeakPtr() {
-  return weak_ptr_factory_.GetWeakPtr();
+  return XR_SUCCESS;
 }
 
 base::Optional<Gamepad> OpenXRInputHelper ::GetWebXRGamepad(

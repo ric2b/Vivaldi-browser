@@ -6,8 +6,8 @@
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
-#include "chrome/android/chrome_jni_headers/TranslateBridge_jni.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/language/android/jni_headers/TranslateBridge_jni.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -22,6 +22,7 @@
 #include "components/strings/grit/components_locale_settings.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
+#include "components/translate/core/browser/translate_metrics_logger.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "content/public/browser/web_contents.h"
@@ -77,15 +78,29 @@ static void JNI_TranslateBridge_TranslateToLanguage(
       ConvertJavaStringToUTF8(env, j_target_language_code));
   const std::string& source_language_code =
       client->GetLanguageState().original_language();
-  // Only translate if the source language has been determined and both
-  // languages are supported.
-  if (!source_language_code.empty() &&
-      translate::TranslateManager::IsTranslatableLanguagePair(
-          source_language_code, target_language_code)) {
-    translate::TranslateManager* manager = client->GetTranslateManager();
-    DCHECK(manager);
+  if (source_language_code.empty()) {
+    // TODO(crbug.com/1181400): Add support for specifying a target language for
+    // ManualTranslateWhenReady().
+    return;
+  }
+
+  translate::TranslateManager* manager = client->GetTranslateManager();
+  DCHECK(manager);
+  if (!translate::TranslateDownloadManager::IsSupportedLanguage(
+          target_language_code)) {
+    // If the requested target language isn't supported, show the infobar but
+    // don't start translating. If the infobar is already visible, this will
+    // leave it in its current state.
+    manager->InitiateManualTranslation(/*auto_translate=*/false,
+                                       /*triggered_from_menu=*/false);
+  } else {
+    // We don't check for source_language_code support because TranslatePage
+    // handles that case already.
     manager->TranslatePage(source_language_code, target_language_code,
-                           /*triggered_from_menu=*/false);
+                           /*triggered_from_menu=*/false,
+                           /*translation_type=*/
+                           manager->GetActiveTranslateMetricsLogger()
+                               ->GetNextManualTranslationType());
   }
 }
 

@@ -8,7 +8,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_split.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -101,6 +101,9 @@ HttpResponseInfo::ConnectionInfo QuicHttpStream::ConnectionInfoFromQuicVersion(
     case quic::QUIC_VERSION_IETF_DRAFT_29:
       DCHECK(quic_version.UsesTls());
       return HttpResponseInfo::CONNECTION_INFO_QUIC_DRAFT_29;
+    case quic::QUIC_VERSION_IETF_RFC_V1:
+      DCHECK(quic_version.UsesTls());
+      return HttpResponseInfo::CONNECTION_INFO_QUIC_RFC_V1;
     case quic::QUIC_VERSION_RESERVED_FOR_NEGOTIATION:
       return HttpResponseInfo::CONNECTION_INFO_QUIC_999;
     case quic::QUIC_VERSION_51:
@@ -676,10 +679,14 @@ int QuicHttpStream::DoSendBodyComplete(int rv) {
 
 int QuicHttpStream::ProcessResponseHeaders(
     const spdy::Http2HeaderBlock& headers) {
-  if (!SpdyHeadersToHttpResponse(headers, response_info_)) {
+  const bool header_valid = SpdyHeadersToHttpResponse(headers, response_info_);
+  base::UmaHistogramBoolean("Net.QuicHttpStream.ProcessResponseHeaderSuccess",
+                            header_valid);
+  if (!header_valid) {
     DLOG(WARNING) << "Invalid headers";
     return ERR_QUIC_PROTOCOL_ERROR;
   }
+
   // Put the peer's IP address and port into the response.
   IPEndPoint address;
   int rv = quic_session()->GetPeerAddress(&address);
@@ -788,11 +795,9 @@ int QuicHttpStream::ComputeResponseStatus() const {
   if (!response_info_)
     return ERR_CONNECTION_CLOSED;
 
-  // Explicit stream error are always fatal.
-  if (stream_->stream_error() != quic::QUIC_STREAM_NO_ERROR &&
-      stream_->stream_error() != quic::QUIC_STREAM_CONNECTION_ERROR) {
-    return ERR_QUIC_PROTOCOL_ERROR;
-  }
+  base::UmaHistogramEnumeration("Net.QuicHttpStream.ResponseStatus",
+                                stream_->stream_error(),
+                                quic::QUIC_STREAM_LAST_ERROR);
 
   return ERR_QUIC_PROTOCOL_ERROR;
 }

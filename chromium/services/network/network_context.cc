@@ -88,7 +88,6 @@
 #include "services/network/proxy_config_service_mojo.h"
 #include "services/network/proxy_lookup_request.h"
 #include "services/network/proxy_resolving_socket_factory_mojo.h"
-#include "services/network/public/cpp/cert_verifier/cert_verifier_creation.h"
 #include "services/network/public/cpp/cert_verifier/mojo_cert_verifier.h"
 #include "services/network/public/cpp/content_security_policy/content_security_policy.h"
 #include "services/network/public/cpp/features.h"
@@ -1310,29 +1309,26 @@ void NetworkContext::CreateWebSocket(
     const net::IsolationInfo& isolation_info,
     std::vector<mojom::HttpHeaderPtr> additional_headers,
     int32_t process_id,
-    int32_t render_frame_id,
     const url::Origin& origin,
     uint32_t options,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
-    mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
+    mojo::PendingRemote<mojom::AuthenticationAndCertificateObserver>
+        auth_cert_observer,
+    mojo::PendingRemote<mojom::WebSocketAuthenticationHandler> auth_handler,
     mojo::PendingRemote<mojom::TrustedHeaderClient> header_client) {
 #if !defined(OS_IOS)
   if (!websocket_factory_)
     websocket_factory_ = std::make_unique<WebSocketFactory>(this);
 
   DCHECK_GE(process_id, 0);
-  if (process_id == mojom::kBrowserProcessId) {
-    DCHECK_EQ(render_frame_id, 0);
-  }
 
   websocket_factory_->CreateWebSocket(
       url, requested_protocols, site_for_cookies, isolation_info,
-      std::move(additional_headers), process_id, render_frame_id, origin,
-      options,
+      std::move(additional_headers), process_id, origin, options,
       static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
-      std::move(handshake_client), std::move(auth_handler),
-      std::move(header_client));
+      std::move(handshake_client), std::move(auth_cert_observer),
+      std::move(auth_handler), std::move(header_client));
 #endif  // !defined(OS_IOS)
 }
 
@@ -1869,46 +1865,22 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
 
-  DCHECK(
-      g_cert_verifier_for_testing ||
-      !base::FeatureList::IsEnabled(network::features::kCertVerifierService) ||
-      (params_->cert_verifier_params &&
-       params_->cert_verifier_params->is_remote_params()))
-      << "If cert verification service is on, the creator of the "
-         "NetworkContext should pass CertVerifierServiceRemoteParams.";
-
   std::unique_ptr<net::CertVerifier> cert_verifier;
   if (g_cert_verifier_for_testing) {
     cert_verifier = std::make_unique<WrappedTestingCertVerifier>();
   } else {
-    if (params_->cert_verifier_params &&
-        params_->cert_verifier_params->is_remote_params()) {
-      // base::Unretained() is safe below because |this| will own
-      // |cert_verifier|.
-      // TODO(https://crbug.com/1085233): this cert verifier should deal with
-      // disconnections if the CertVerifierService is run outside of the browser
-      // process.
-      cert_verifier = std::make_unique<cert_verifier::MojoCertVerifier>(
-          std::move(params_->cert_verifier_params->get_remote_params()
-                        ->cert_verifier_service),
-          std::move(url_loader_factory_for_cert_net_fetcher),
-          base::BindRepeating(
-              &NetworkContext::CreateURLLoaderFactoryForCertNetFetcher,
-              base::Unretained(this)));
-    } else {
-      mojom::CertVerifierCreationParams* creation_params = nullptr;
-      if (params_->cert_verifier_params &&
-          params_->cert_verifier_params->is_creation_params()) {
-        creation_params =
-            params_->cert_verifier_params->get_creation_params().get();
-      }
-
-      if (IsUsingCertNetFetcher())
-        cert_net_fetcher_ =
-            base::MakeRefCounted<net::CertNetFetcherURLRequest>();
-
-      cert_verifier = CreateCertVerifier(creation_params, cert_net_fetcher_);
-    }
+    DCHECK(params_->cert_verifier_params);
+    // base::Unretained() is safe below because |this| will own
+    // |cert_verifier|.
+    // TODO(https://crbug.com/1085233): this cert verifier should deal with
+    // disconnections if the CertVerifierService is run outside of the browser
+    // process.
+    cert_verifier = std::make_unique<cert_verifier::MojoCertVerifier>(
+        std::move(params_->cert_verifier_params->cert_verifier_service),
+        std::move(url_loader_factory_for_cert_net_fetcher),
+        base::BindRepeating(
+            &NetworkContext::CreateURLLoaderFactoryForCertNetFetcher,
+            base::Unretained(this)));
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
     std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs;
@@ -2090,8 +2062,7 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
       std::make_unique<SSLConfigServiceMojo>(
           std::move(params_->initial_ssl_config),
           std::move(params_->ssl_config_client_receiver),
-          network_service_->crl_set_distributor(),
-          network_service_->legacy_tls_config_distributor());
+          network_service_->crl_set_distributor());
   SSLConfigServiceMojo* ssl_config_service_raw = ssl_config_service.get();
   builder.set_ssl_config_service(std::move(ssl_config_service));
 

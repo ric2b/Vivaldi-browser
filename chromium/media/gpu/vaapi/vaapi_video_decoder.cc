@@ -15,15 +15,18 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/format_utils.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
+#include "media/gpu/av1_decoder.h"
 #include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "media/gpu/chromeos/platform_video_frame_utils.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/macros.h"
+#include "media/gpu/vaapi/av1_vaapi_video_decoder_delegate.h"
 #include "media/gpu/vaapi/h264_vaapi_video_decoder_delegate.h"
 #include "media/gpu/vaapi/va_surface.h"
 #include "media/gpu/vaapi/vaapi_utils.h"
@@ -38,8 +41,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/components/cdm_factory_daemon/chromeos_cdm_factory.h"
-#include "media/gpu/av1_decoder.h"
-#include "media/gpu/vaapi/av1_vaapi_video_decoder_delegate.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace media {
@@ -162,7 +163,8 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
   DVLOGF(2) << config.AsHumanReadableString();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(config.IsValidConfig());
-  DCHECK(state_ == State::kUninitialized || state_ == State::kWaitingForInput);
+  DCHECK(state_ == State::kError || state_ == State::kUninitialized ||
+         state_ == State::kWaitingForInput);
 
   // Reinitializing the decoder is allowed if there are no pending decodes.
   if (current_decode_task_ || !decode_task_queue_.empty()) {
@@ -171,43 +173,6 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
     std::move(init_cb).Run(StatusCode::kVaapiReinitializedDuringDecode);
     return;
   }
-
-  if (config.is_encrypted()) {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
-    std::move(init_cb).Run(StatusCode::kEncryptedContentUnsupported);
-    return;
-#else
-    if (!cdm_context || !cdm_context->GetChromeOsCdmContext()) {
-      LOG(ERROR) << "Cannot support encrypted stream w/out ChromeOsCdmContext";
-      std::move(init_cb).Run(StatusCode::kDecoderMissingCdmForEncryptedContent);
-      return;
-    }
-    if (config.codec() != kCodecH264 && config.codec() != kCodecVP9 &&
-        config.codec() != kCodecHEVC) {
-      VLOGF(1)
-          << "Vaapi decoder does not support this codec for encrypted content";
-      std::move(init_cb).Run(StatusCode::kEncryptedContentUnsupported);
-      return;
-    }
-    cdm_event_cb_registration_ = cdm_context->RegisterEventCB(
-        base::BindRepeating(&VaapiVideoDecoder::OnCdmContextEvent,
-                            weak_this_factory_.GetWeakPtr()));
-    cdm_context_ref_ = cdm_context->GetChromeOsCdmContext()->GetCdmContextRef();
-#endif
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-  } else if (config.codec() == kCodecHEVC &&
-             !base::CommandLine::ForCurrentProcess()->HasSwitch(
-                 switches::kEnableClearHevcForTesting)) {
-    DVLOG(1) << "Clear HEVC content is not supported";
-    std::move(init_cb).Run(StatusCode::kClearContentUnsupported);
-    return;
-#endif
-  }
-
-  // We expect the decoder to have released all output buffers (by the client
-  // triggering a flush or reset), even if the
-  // DecoderInterface API doesn't explicitly specify this.
-  DCHECK(output_frames_.empty());
 
   if (state_ != State::kUninitialized) {
     DVLOGF(3) << "Reinitializing decoder";
@@ -229,7 +194,61 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
     DCHECK(vaapi_wrapper_->HasOneRef());
     vaapi_wrapper_ = nullptr;
     decoder_delegate_ = nullptr;
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    // |cdm_context_ref_| is reset after |decoder_| because we passed
+    // |cdm_context_ref_->GetCdmContext()| when creating the |decoder_|, so we
+    // don't want |decoder_| to have a dangling pointer. We also destroy
+    // |cdm_event_cb_registration_| before |cdm_context_ref_| so that we have a
+    // CDM at the moment of destroying the callback registration.
+    cdm_event_cb_registration_ = nullptr;
+    cdm_context_ref_ = nullptr;
+#endif
+
     SetState(State::kUninitialized);
+  }
+  DCHECK(!current_decode_task_);
+  DCHECK(decode_task_queue_.empty());
+
+  // Destroying the |decoder_| during re-initialization should release all
+  // output buffers (and there should be no output buffers to begin with if the
+  // decoder was previously uninitialized).
+  DCHECK(output_frames_.empty());
+
+  if (config.is_encrypted()) {
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+    SetState(State::kError);
+    std::move(init_cb).Run(StatusCode::kEncryptedContentUnsupported);
+    return;
+#else
+    if (!cdm_context || !cdm_context->GetChromeOsCdmContext()) {
+      LOG(ERROR) << "Cannot support encrypted stream w/out ChromeOsCdmContext";
+      SetState(State::kError);
+      std::move(init_cb).Run(StatusCode::kDecoderMissingCdmForEncryptedContent);
+      return;
+    }
+    if (config.codec() != kCodecH264 && config.codec() != kCodecVP9 &&
+        config.codec() != kCodecHEVC) {
+      VLOGF(1)
+          << "Vaapi decoder does not support this codec for encrypted content";
+      SetState(State::kError);
+      std::move(init_cb).Run(StatusCode::kEncryptedContentUnsupported);
+      return;
+    }
+    cdm_event_cb_registration_ = cdm_context->RegisterEventCB(
+        base::BindRepeating(&VaapiVideoDecoder::OnCdmContextEvent,
+                            weak_this_factory_.GetWeakPtr()));
+    cdm_context_ref_ = cdm_context->GetChromeOsCdmContext()->GetCdmContextRef();
+#endif
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+  } else if (config.codec() == kCodecHEVC &&
+             !base::CommandLine::ForCurrentProcess()->HasSwitch(
+                 switches::kEnableClearHevcForTesting)) {
+    DVLOG(1) << "Clear HEVC content is not supported";
+    SetState(State::kError);
+    std::move(init_cb).Run(StatusCode::kClearContentUnsupported);
+    return;
+#endif
   }
 
   // Initialize VAAPI wrapper.
@@ -249,6 +268,7 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
   if (!vaapi_wrapper_.get()) {
     VLOGF(1) << "Failed initializing VAAPI for profile "
              << GetProfileName(profile);
+    SetState(State::kError);
     std::move(init_cb).Run(StatusCode::kDecoderUnsupportedProfile);
     return;
   }
@@ -258,6 +278,7 @@ void VaapiVideoDecoder::Initialize(const VideoDecoderConfig& config,
   encryption_scheme_ = config.encryption_scheme();
   auto accel_status = CreateAcceleratedVideoDecoder();
   if (!accel_status.is_ok()) {
+    SetState(State::kError);
     std::move(init_cb).Run(std::move(accel_status));
     return;
   }
@@ -960,7 +981,6 @@ Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
         new H265Decoder(std::move(accelerator), profile_, color_space_));
   }
 #endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   else if (profile_ >= AV1PROFILE_MIN && profile_ <= AV1PROFILE_MAX) {
     auto accelerator =
         std::make_unique<AV1VaapiVideoDecoderDelegate>(this, vaapi_wrapper_);
@@ -968,7 +988,6 @@ Status VaapiVideoDecoder::CreateAcceleratedVideoDecoder() {
 
     decoder_.reset(new AV1Decoder(std::move(accelerator), profile_));
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   else {
     return Status(StatusCode::kDecoderUnsupportedProfile)
         .WithData("profile", profile_);
@@ -995,7 +1014,7 @@ void VaapiVideoDecoder::SetState(State state) {
   // Check whether the state change is valid.
   switch (state) {
     case State::kUninitialized:
-      DCHECK_EQ(state_, State::kWaitingForInput);
+      DCHECK(state_ == State::kWaitingForInput || state_ == State::kError);
       break;
     case State::kWaitingForInput:
       DCHECK(decode_task_queue_.empty());

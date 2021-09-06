@@ -7,11 +7,12 @@
 
 #include "base/optional.h"
 #include "cc/paint/paint_canvas.h"
-#include "components/viz/common/surfaces/frame_sink_id.h"
-#include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
+#include "third_party/blink/public/mojom/frame/policy_container.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_impression.h"
@@ -36,23 +37,28 @@ class WebRemoteFrameClient {
   // A remote frame was asked to start a navigation.
   virtual void Navigate(
       const WebURLRequest& request,
-      blink::WebLocalFrame* initiator_frame,
       bool should_replace_current_entry,
       bool is_opener_navigation,
       bool initiator_frame_has_download_sandbox_flag,
       bool blocking_downloads_in_sandbox_enabled,
       bool initiator_frame_is_ad,
       CrossVariantMojoRemote<mojom::BlobURLTokenInterfaceBase> blob_url_token,
-      const base::Optional<WebImpression>& impression) {}
+      const base::Optional<WebImpression>& impression,
+      const LocalFrameToken* initiator_frame_token,
+      CrossVariantMojoRemote<
+          blink::mojom::PolicyContainerHostKeepAliveHandleInterfaceBase>
+          initiator_policy_container_keep_alive_handle) {}
 
   virtual void WillSynchronizeVisualProperties(
-      bool synchronized_props_changed,
       bool capture_sequence_number_changed,
+      const viz::SurfaceId& surface_id,
       const gfx::Size& compositor_viewport_size) {}
 
-  virtual const viz::LocalSurfaceId& GetLocalSurfaceId() const = 0;
-
   virtual bool RemoteProcessGone() const { return false; }
+
+  // This is a temporary workaround for https://crbug.com/1166729.
+  // TODO(https://crbug.com/1166722): Remove this once the migration is done.
+  virtual void DidSetFrameSinkId() {}
 
   // Returns an AssociatedInterfaceProvider the frame can use to request
   // associated interfaces from the browser.
@@ -64,14 +70,6 @@ class WebRemoteFrameClient {
   virtual base::UnguessableToken GetDevToolsFrameToken() {
     return base::UnguessableToken::Create();
   }
-
-  virtual viz::FrameSinkId GetFrameSinkId() const {
-    NOTREACHED();
-    return viz::FrameSinkId();
-  }
-
-  // Inform the widget that it was evicted.
-  virtual void WasEvicted() {}
 
  protected:
   virtual ~WebRemoteFrameClient() = default;

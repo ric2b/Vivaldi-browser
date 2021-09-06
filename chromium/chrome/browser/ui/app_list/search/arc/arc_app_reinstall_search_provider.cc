@@ -8,6 +8,8 @@
 #include <unordered_set>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/metrics/field_trial_params.h"
@@ -22,8 +24,6 @@
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/common/url_icon_source.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_pref_names.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -264,9 +264,6 @@ void ArcAppReinstallSearchProvider::Start(const base::string16& query) {
   PrefService* pref_service = profile_->GetPrefs();
   if (pref_service &&
       !pref_service->GetBoolean(chromeos::prefs::kSuggestedContentEnabled))
-    should_show_arc_app_reinstall_result = false;
-  if (!base::FeatureList::IsEnabled(
-          chromeos::features::kSuggestedContentToggle))
     should_show_arc_app_reinstall_result = false;
 
   if (!should_show_arc_app_reinstall_result) {

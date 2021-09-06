@@ -47,6 +47,7 @@ public class AutocompleteController {
     private boolean mUseCachedZeroSuggestResults;
     private boolean mEnableNativeVoiceSuggestProvider;
     private boolean mWaitingForSuggestionsToCache;
+    private Profile mProfile;
 
     /**
      * Listener for receiving OmniboxSuggestions.
@@ -71,7 +72,8 @@ public class AutocompleteController {
     }
 
     /**
-     * Resets the underlying autocomplete controller based on the specified profile.
+     * Resets the underlying autocomplete controller based on the specified profile. This function
+     * returns early if there are no profile changes.
      *
      * <p>This will implicitly stop the autocomplete suggestions, so
      * {@link #start(Profile, String, String, boolean)} must be called again to start them flowing
@@ -82,6 +84,13 @@ public class AutocompleteController {
      */
     public void setProfile(Profile profile) {
         assert mListener != null : "Ensure a listener is set prior to calling.";
+        if (mProfile == profile) {
+            mNativeAutocompleteControllerAndroid =
+                    AutocompleteControllerJni.get().init(AutocompleteController.this, profile);
+            return;
+        }
+
+        mProfile = profile;
         stop(true);
         if (profile == null) {
             mNativeAutocompleteControllerAndroid = 0;
@@ -127,8 +136,8 @@ public class AutocompleteController {
                 TextUtils.isEmpty(url));
         if (profile == null || TextUtils.isEmpty(url)) return;
 
-        mNativeAutocompleteControllerAndroid =
-                AutocompleteControllerJni.get().init(AutocompleteController.this, profile);
+        setProfile(profile);
+
         // Initializing the native counterpart might still fail.
         if (mNativeAutocompleteControllerAndroid != 0) {
             AutocompleteControllerJni.get().start(mNativeAutocompleteControllerAndroid,
@@ -194,8 +203,8 @@ public class AutocompleteController {
                             ChromeFeatureList.OMNIBOX_SPARE_RENDERER,
                             "omnibox_spare_renderer_delay_ms", 0));
         }
-        mNativeAutocompleteControllerAndroid =
-                AutocompleteControllerJni.get().init(AutocompleteController.this, profile);
+        setProfile(profile);
+
         if (mNativeAutocompleteControllerAndroid != 0) {
             if (mUseCachedZeroSuggestResults) mWaitingForSuggestionsToCache = true;
             AutocompleteControllerJni.get().onOmniboxFocused(mNativeAutocompleteControllerAndroid,
@@ -404,20 +413,6 @@ public class AutocompleteController {
                 mNativeAutocompleteControllerAndroid, AutocompleteController.this, url);
     }
 
-    /**
-     * Group native suggestions in specified range by Search vs URL.
-     *
-     * TODO(crbug.com/1138587): move this to AutocompleteResult when the class is ready to interface
-     * with native code.
-     *
-     * @param firstIndex Index of the first suggestion for grouping.
-     * @param lastIndex Index of the last suggestion for grouping.
-     */
-    public void groupSuggestionsBySearchVsURL(int firstIndex, int lastIndex) {
-        AutocompleteControllerJni.get().groupSuggestionsBySearchVsURL(
-                mNativeAutocompleteControllerAndroid, firstIndex, lastIndex);
-    }
-
     @NativeMethods
     interface Natives {
         long init(AutocompleteController caller, Profile profile);
@@ -447,8 +442,6 @@ public class AutocompleteController {
                 String newQueryText, String[] newQueryParams);
         Tab findMatchingTabWithUrl(
                 long nativeAutocompleteControllerAndroid, AutocompleteController caller, GURL url);
-        void groupSuggestionsBySearchVsURL(
-                long nativeAutocompleteControllerAndroid, int firstIndex, int lastIndex);
         void setVoiceMatches(long nativeAutocompleteControllerAndroid, String[] matches,
                 float[] confidenceScores);
         /**

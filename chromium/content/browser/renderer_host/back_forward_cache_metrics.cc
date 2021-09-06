@@ -7,6 +7,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/sparse_histogram.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/should_swap_browsing_instance.h"
@@ -99,7 +100,7 @@ BackForwardCacheMetrics::BackForwardCacheMetrics(
       page_store_result_(
           std::make_unique<BackForwardCacheCanStoreDocumentResult>()) {}
 
-BackForwardCacheMetrics::~BackForwardCacheMetrics() {}
+BackForwardCacheMetrics::~BackForwardCacheMetrics() = default;
 
 void BackForwardCacheMetrics::MainFrameDidStartNavigationToDocument() {
   if (!started_navigation_timestamp_)
@@ -232,10 +233,10 @@ void BackForwardCacheMetrics::MainFrameDidNavigateAwayFromDocument(
     //
     // [1]
     // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/security/origin-vs-url.md#avoid-converting-urls-to-origins
-    GURL previous_site = SiteInstanceImpl::GetSiteForOrigin(
+    GURL previous_site = SiteInfo::GetSiteForOrigin(
         url::Origin::Create(details->previous_main_frame_url));
-    GURL new_site = SiteInstanceImpl::GetSiteForOrigin(
-        url::Origin::Create(navigation->GetURL()));
+    GURL new_site =
+        SiteInfo::GetSiteForOrigin(url::Origin::Create(navigation->GetURL()));
     if (previous_site == new_site) {
       page_store_result_->No(
           NotRestoredReason::kRenderFrameHostReused_SameSite);

@@ -125,20 +125,15 @@ GPUBindGroupLayout* GPUBindGroupLayout::Create(
     dawn_desc.label = label.c_str();
   }
 
-  return MakeGarbageCollected<GPUBindGroupLayout>(
+  GPUBindGroupLayout* layout = MakeGarbageCollected<GPUBindGroupLayout>(
       device, device->GetProcs().deviceCreateBindGroupLayout(
                   device->GetHandle(), &dawn_desc));
+  layout->setLabel(webgpu_desc->label());
+  return layout;
 }
 
 GPUBindGroupLayout::GPUBindGroupLayout(GPUDevice* device,
                                        WGPUBindGroupLayout bind_group_layout)
     : DawnObject<WGPUBindGroupLayout>(device, bind_group_layout) {}
-
-GPUBindGroupLayout::~GPUBindGroupLayout() {
-  if (IsDawnControlClientDestroyed()) {
-    return;
-  }
-  GetProcs().bindGroupLayoutRelease(GetHandle());
-}
 
 }  // namespace blink

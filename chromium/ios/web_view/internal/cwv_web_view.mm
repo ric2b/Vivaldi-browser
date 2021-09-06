@@ -48,7 +48,6 @@
 #import "ios/web_view/internal/cwv_html_element_internal.h"
 #import "ios/web_view/internal/cwv_navigation_action_internal.h"
 #import "ios/web_view/internal/cwv_script_command_internal.h"
-#import "ios/web_view/internal/cwv_scroll_view_internal.h"
 #import "ios/web_view/internal/cwv_ssl_status_internal.h"
 #import "ios/web_view/internal/cwv_web_view_configuration_internal.h"
 #import "ios/web_view/internal/language/web_view_url_language_histogram_factory.h"
@@ -177,7 +176,6 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
 @synthesize title = _title;
 @synthesize translationController = _translationController;
 @synthesize UIDelegate = _UIDelegate;
-@synthesize legacyScrollView = _legacyScrollView;
 @synthesize visibleURL = _visibleURL;
 @synthesize visibleSSLStatus = _visibleSSLStatus;
 
@@ -243,7 +241,6 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
   if (self) {
     _configuration = configuration;
     [_configuration registerWebView:self];
-    _legacyScrollView = [[CWVScrollView alloc] init];
 
     [self resetWebStateWithSessionStorage:nil
                           WKConfiguration:wkConfiguration
@@ -359,9 +356,16 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
 - (void)webState:(web::WebState*)webState
     didStartNavigation:(web::NavigationContext*)navigation {
   [self updateNavigationAvailability];
-  SEL selector = @selector(webViewDidStartProvisionalNavigation:);
-  if ([_navigationDelegate respondsToSelector:selector]) {
-    [_navigationDelegate webViewDidStartProvisionalNavigation:self];
+
+  if (!navigation->IsSameDocument()) {
+    SEL oldSelector = @selector(webViewDidStartProvisionalNavigation:);
+    if ([_navigationDelegate respondsToSelector:oldSelector]) {
+      [_navigationDelegate webViewDidStartProvisionalNavigation:self];
+    }
+    SEL newSelector = @selector(webViewDidStartNavigation:);
+    if ([_navigationDelegate respondsToSelector:newSelector]) {
+      [_navigationDelegate webViewDidStartNavigation:self];
+    }
   }
 }
 
@@ -373,7 +377,7 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
   // TODO(crbug.com/898357): Remove this once crbug.com/898357 is fixed.
   [self updateVisibleSSLStatus];
 
-  if (navigation->HasCommitted() &&
+  if (navigation->HasCommitted() && !navigation->IsSameDocument() &&
       [_navigationDelegate
           respondsToSelector:@selector(webViewDidCommitNavigation:)]) {
     [_navigationDelegate webViewDidCommitNavigation:self];
@@ -819,8 +823,6 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
 
   _webState->GetWebViewProxy().allowsBackForwardNavigationGestures =
       allowsBackForwardNavigationGestures;
-
-  _legacyScrollView.proxy = _webState.get()->GetWebViewProxy().scrollViewProxy;
 
   if (_translationController) {
     id<CWVTranslationControllerDelegate> delegate =

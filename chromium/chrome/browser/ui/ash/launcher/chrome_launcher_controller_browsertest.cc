@@ -36,6 +36,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -44,10 +45,10 @@
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/accessibility/speech_monitor.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/speech_monitor.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_test_util.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
@@ -117,18 +118,20 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/types/event_type.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 
-using ash::Shelf;
-using content::WebContents;
-using extensions::AppWindow;
-using extensions::Extension;
-using web_app::WebAppProviderBase;
-
 namespace {
+
+using ::ash::AccessibilityManager;
+using ::ash::Shelf;
+using ::content::WebContents;
+using ::extensions::AppWindow;
+using ::extensions::Extension;
+using ::web_app::WebAppProviderBase;
 
 ash::ShelfAction SelectItem(
     const ash::ShelfID& id,
@@ -289,7 +292,8 @@ class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
     proxy->FlushMojoCallsForTesting();
     proxy->Launch(extension->id(), event_flags,
                   apps::mojom::LaunchSource::kFromTest,
-                  display::Screen::GetScreen()->GetPrimaryDisplay().id());
+                  apps::MakeWindowInfo(
+                      display::Screen::GetScreen()->GetPrimaryDisplay().id()));
     proxy->FlushMojoCallsForTesting();
     return extension;
   }
@@ -1618,7 +1622,8 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestNoDefaultBrowser,
                           WindowOpenDisposition::NEW_FOREGROUND_TAB,
                           true /* prefer_containner */),
       apps::mojom::LaunchSource::kFromTest,
-      display::Screen::GetScreen()->GetPrimaryDisplay().id());
+      apps::MakeWindowInfo(
+          display::Screen::GetScreen()->GetPrimaryDisplay().id()));
   proxy->FlushMojoCallsForTesting();
 
   // A new browser should get detected and one more should be running.
@@ -2211,7 +2216,8 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, DISABLED_V1AppNavigation) {
                           WindowOpenDisposition::NEW_FOREGROUND_TAB,
                           true /* prefer_containner */),
       apps::mojom::LaunchSource::kFromTest,
-      display::Screen::GetScreen()->GetPrimaryDisplay().id());
+      apps::MakeWindowInfo(
+          display::Screen::GetScreen()->GetPrimaryDisplay().id()));
   EXPECT_EQ(ash::STATUS_RUNNING, shelf_model()->ItemByID(id)->status);
 
   // Find the browser which holds our app.
@@ -2612,14 +2618,13 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest,
 
 // Verify that the in-app shelf should be shown when the app icon receives
 // the accessibility focus.
-IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, DISABLED_EnableChromeVox) {
+IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
   ash::Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-  chromeos::test::SpeechMonitor speech_monitor;
+  ash::test::SpeechMonitor speech_monitor;
 
   // Enable ChromeVox.
-  ASSERT_FALSE(
-      chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-  chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(true);
+  ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
 
   // Wait for ChromeVox to start reading anything.
   speech_monitor.ExpectSpeechPattern("*");
@@ -2633,13 +2638,33 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, DISABLED_EnableChromeVox) {
     content::ExecuteScriptAsync(host->host_contents(), script);
   });
 
+  ash::RootWindowController* controller =
+      ash::Shell::GetRootWindowControllerWithDisplayId(
+          display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  ui::test::EventGenerator event_generator(controller->GetRootWindow());
+  auto* generator_ptr = &event_generator;
+
+  base::SimpleTestTickClock clock;
+  auto* clock_ptr = &clock;
+  ui::SetEventTickClockForTesting(clock_ptr);
+
   views::View* home_button = ash::ShelfTestApi().GetHomeButton();
-  speech_monitor.Call([home_button]() {
-    // Send hover accessibility event - ChromeVox needs this event to properly
-    // recognize the home button as the node with accessibility focus during
-    // touch exploration. The event is generally sent on tap, but with a delay,
-    // so relying on tap event only may introduce test flakiness.
-    home_button->NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
+  speech_monitor.Call([clock_ptr, generator_ptr, home_button]() {
+    // Hover touch over the come button.
+    const gfx::Point home_button_center =
+        home_button->GetBoundsInScreen().CenterPoint();
+
+    ui::TouchEvent touch_press(
+        ui::ET_TOUCH_PRESSED, home_button_center, base::TimeTicks::Now(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    generator_ptr->Dispatch(&touch_press);
+
+    clock_ptr->Advance(base::TimeDelta::FromSeconds(1));
+
+    ui::TouchEvent touch_move(
+        ui::ET_TOUCH_MOVED, home_button_center, base::TimeTicks::Now(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    generator_ptr->Dispatch(&touch_move);
   });
 
   speech_monitor.ExpectSpeech("Launcher");
@@ -2648,17 +2673,11 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, DISABLED_EnableChromeVox) {
   speech_monitor.ExpectSpeech("Tool bar");
   speech_monitor.ExpectSpeech(", window");
 
-  ash::RootWindowController* controller =
-      ash::Shell::GetRootWindowControllerWithDisplayId(
-          display::Screen::GetScreen()->GetPrimaryDisplay().id());
   speech_monitor.Call([controller]() {
     // Hotseat is expected to be hidden (by default).
     ASSERT_EQ(ash::HotseatState::kHidden,
               controller->shelf()->shelf_layout_manager()->hotseat_state());
   });
-
-  ui::test::EventGenerator event_generator(controller->GetRootWindow());
-  auto* generator_ptr = &event_generator;
 
   speech_monitor.Call([generator_ptr]() {
     // Press the search + right. Expects that the browser icon receives the

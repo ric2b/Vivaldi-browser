@@ -8,6 +8,8 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
+#include "base/strings/strcat.h"
+#include "base/unguessable_token.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key.h"
 #include "chrome/browser/chromeos/platform_keys/extension_platform_keys_service.h"
 #include "chrome/browser/chromeos/platform_keys/extension_platform_keys_service_factory.h"
@@ -32,8 +34,6 @@ const char kEnterprisePlatformErrorInvalidX509Cert[] =
     "Certificate is not a valid X.509 certificate.";
 const char kUnsupportedKeystoreType[] = "The token is not valid.";
 const char kUnsupportedAlgorithmType[] = "Algorithm type is not supported.";
-const char kErrorAlgorithmNotPermittedByCertificate[] =
-    "The requested Algorithm is not permitted by the certificate.";
 
 // Converts a binary blob to a certificate.
 scoped_refptr<net::X509Certificate> ParseCertificate(
@@ -80,14 +80,13 @@ base::Optional<std::string> StringFromSigningAlgorithmName(
 
 }  // namespace
 
-KeystoreServiceAsh::KeystoreServiceAsh(
-    mojo::PendingReceiver<mojom::KeystoreService> receiver)
-    : receiver_(this, std::move(receiver)) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-}
+KeystoreServiceAsh::KeystoreServiceAsh() = default;
 
-KeystoreServiceAsh::~KeystoreServiceAsh() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+KeystoreServiceAsh::~KeystoreServiceAsh() = default;
+
+void KeystoreServiceAsh::BindReceiver(
+    mojo::PendingReceiver<mojom::KeystoreService> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 void KeystoreServiceAsh::ChallengeAttestationOnlyKeystore(
@@ -113,19 +112,25 @@ void KeystoreServiceAsh::ChallengeAttestationOnlyKeystore(
   }
   Profile* profile = ProfileManager::GetActiveUserProfile();
 
+  std::string key_name_for_spkac;
+  if (migrate && (key_type == chromeos::attestation::KEY_DEVICE)) {
+    key_name_for_spkac = base::StrCat(
+        {chromeos::attestation::kEnterpriseMachineKeyForSpkacPrefix, "lacros-",
+         base::UnguessableToken::Create().ToString()});
+  }
+
   std::unique_ptr<chromeos::attestation::TpmChallengeKey> challenge_key =
       chromeos::attestation::TpmChallengeKeyFactory::Create();
   chromeos::attestation::TpmChallengeKey* challenge_key_ptr =
       challenge_key.get();
   outstanding_challenges_.push_back(std::move(challenge_key));
-  //  TODO(https://crbug.com/1127505): Plumb |migrate| param.
   challenge_key_ptr->BuildResponse(
       key_type, profile,
       base::BindOnce(&KeystoreServiceAsh::DidChallengeAttestationOnlyKeystore,
                      weak_factory_.GetWeakPtr(), std::move(callback),
                      challenge_key_ptr),
       challenge,
-      /*register_key=*/false, /*key_name_for_spkac=*/"");
+      /*register_key=*/migrate, key_name_for_spkac);
 }
 
 void KeystoreServiceAsh::GetKeyStores(GetKeyStoresCallback callback) {
@@ -183,7 +188,8 @@ void KeystoreServiceAsh::GenerateKey(
     }
     default: {
       std::move(callback).Run(mojom::KeystoreBinaryResult::NewErrorMessage(
-          kUnsupportedAlgorithmType));
+          chromeos::platform_keys::StatusToString(
+              chromeos::platform_keys::Status::kErrorAlgorithmNotSupported)));
       break;
     }
   }
@@ -243,7 +249,9 @@ void KeystoreServiceAsh::GetPublicKey(
       StringFromSigningAlgorithmName(algorithm_name);
   if (!name) {
     std::move(callback).Run(mojom::GetPublicKeyResult::NewErrorMessage(
-        kErrorAlgorithmNotPermittedByCertificate));
+        chromeos::platform_keys::StatusToString(
+            chromeos::platform_keys::Status::
+                kErrorAlgorithmNotPermittedByCertificate)));
     return;
   }
 
@@ -252,7 +260,7 @@ void KeystoreServiceAsh::GetPublicKey(
                                                         name.value());
 
   mojom::GetPublicKeyResultPtr result_ptr = mojom::GetPublicKeyResult::New();
-  if (output.error.empty()) {
+  if (output.status == chromeos::platform_keys::Status::kSuccess) {
     base::Optional<crosapi::mojom::KeystoreSigningAlgorithmPtr>
         signing_algorithm =
             crosapi::keystore_service_util::SigningAlgorithmFromDictionary(
@@ -268,7 +276,8 @@ void KeystoreServiceAsh::GetPublicKey(
       result_ptr->set_error_message(kUnsupportedAlgorithmType);
     }
   } else {
-    result_ptr->set_error_message(output.error);
+    result_ptr->set_error_message(
+        chromeos::platform_keys::StatusToString(output.status));
   }
   std::move(callback).Run(std::move(result_ptr));
 }

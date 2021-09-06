@@ -56,17 +56,15 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:binary_size_cast_trybot",
+)
+
+build_recipe(
     name = "recipe:celab",
 )
 
 build_recipe(
     name = "recipe:chromium",
-)
-
-build_recipe(
-    name = "recipe:chromium (bbagent)",
-    recipe = "chromium",
-    use_bbagent = True,
 )
 
 build_recipe(
@@ -97,6 +95,11 @@ build_recipe(
 
 build_recipe(
     name = "recipe:chromium_libfuzzer_trybot",
+)
+
+build_recipe(
+    name = "recipe:chromium_rts/create_model",
+    use_bbagent = True,
 )
 
 build_recipe(

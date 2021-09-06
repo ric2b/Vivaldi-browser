@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/account_manager_facade_factory.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
@@ -46,10 +47,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/http/http_response_headers.h"
-#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/signin/signin_utils.h"
+#include "chrome/browser/android/signin/signin_bridge.h"
 #include "ui/android/view_android.h"
 #else
 #include "chrome/browser/ui/browser_commands.h"
@@ -136,12 +136,12 @@ class AccountReconcilorLockWrapper
 // * Main frame  requests.
 // * XHR requests having Gaia URL as referrer.
 bool ShouldBlockReconcilorForRequest(ChromeRequestAdapter* request) {
-  blink::mojom::ResourceType resource_type = request->GetResourceType();
-
-  if (resource_type == blink::mojom::ResourceType::kMainFrame)
+  if (request->GetRequestDestination() ==
+      network::mojom::RequestDestination::kDocument) {
     return true;
+  }
 
-  return (resource_type == blink::mojom::ResourceType::kXhr) &&
+  return request->IsFetchLikeAPI() &&
          gaia::IsGaiaSignonRealm(request->GetReferrerOrigin());
 }
 
@@ -259,7 +259,7 @@ void ProcessMirrorHeader(
                             manage_accounts_params.email)) {
       identity_manager->GetAccountsCookieMutator()->LogOutAllAccounts(
           gaia::GaiaSource::kChromeOS,
-          signin::AccountsCookieMutator::LogOutFromCookieCompletedCallback());
+          base::DoNothing::Once<const GoogleServiceAuthError&>());
       return;
     }
 
@@ -283,9 +283,10 @@ void ProcessMirrorHeader(
     }
 
     // Display a re-authentication dialog.
-    chromeos::InlineLoginDialogChromeOS::ShowDeprecated(
-        manage_accounts_params.email, ::account_manager::AccountManagerFacade::
-                                          AccountAdditionSource::kContentArea);
+    ::GetAccountManagerFacade(profile->GetPath().value())
+        ->ShowReauthAccountDialog(account_manager::AccountManagerFacade::
+                                      AccountAdditionSource::kContentArea,
+                                  manage_accounts_params.email);
     return;
   }
 
@@ -303,7 +304,7 @@ void ProcessMirrorHeader(
       // See https://crbug.com/1145031#c5 for details.
       return;
     }
-    SigninUtils::OpenAccountPickerBottomSheet(
+    SigninBridge::OpenAccountPickerBottomSheet(
         window, manage_accounts_params.continue_url.empty()
                     ? chrome::kChromeUINativeNewTabURL
                     : manage_accounts_params.continue_url);
@@ -322,8 +323,7 @@ void ProcessMirrorHeader(
     auto* window = web_contents->GetNativeView()->GetWindowAndroid();
     if (!window)
       return;
-    SigninUtils::OpenAccountManagementScreen(window, service_type,
-                                             manage_accounts_params.email);
+    SigninBridge::OpenAccountManagementScreen(window, service_type);
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_ANDROID)

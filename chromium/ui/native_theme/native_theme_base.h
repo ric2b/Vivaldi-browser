@@ -29,8 +29,7 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
                         const ExtraParams& extra) const override;
   float GetBorderRadiusForPart(Part part,
                                float width,
-                               float height,
-                               float zoom) const override;
+                               float height) const override;
   void Paint(cc::PaintCanvas* canvas,
              Part part,
              State state,
@@ -214,6 +213,9 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
   // have different padding from those on desktop Chrome. Get rid of this when
   // crbug.com/530746 is resolved.
   virtual void AdjustCheckboxRadioRectForPadding(SkRect* rect) const;
+
+  virtual float AdjustBorderWidthByZoom(float border_width,
+                                        float zoom_level) const;
 
   void set_scrollbar_button_length(int length) {
     scrollbar_button_length_ = length;

@@ -26,6 +26,7 @@ class NGBlockNode;
 class NGBoxFragmentBuilder;
 class NGLayoutResult;
 class NGPhysicalContainerFragment;
+struct NGLink;
 struct NGLogicalOutOfFlowPositionedNode;
 
 // Helper class for positioning of out-of-flow blocks.
@@ -85,6 +86,23 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
     LogicalRect rect;
   };
 
+  // TODO(almaher): Move this to the multicol algorithm in upcoming refactor.
+  // This stores the information needed to update a multicol child inside an
+  // existing multicol fragment. This is used during nested fragmentation of an
+  // OOF positioned element.
+  struct MulticolChildInfo {
+    // The mutable link of a multicol child.
+    NGLink* mutable_link;
+
+    // The multicol break token that stores a reference to |mutable_link|'s
+    // break token in its list of child break tokens.
+    const NGBlockBreakToken* parent_break_token;
+
+    explicit MulticolChildInfo(NGLink* mutable_link,
+                               NGBlockBreakToken* parent_break_token = nullptr)
+        : mutable_link(mutable_link), parent_break_token(parent_break_token) {}
+  };
+
   bool SweepLegacyCandidates(HashSet<const LayoutObject*>* placed_objects);
 
   const ContainingBlockInfo GetContainingBlockInfo(
@@ -104,8 +122,13 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
 
   void LayoutOOFsInMulticol(const NGBlockNode& multicol);
 
+  // Layout the OOF nodes that are descendants of a fragmentation context root.
+  // |multicol_children| holds the children of an inner multicol if
+  // we are laying out OOF elements inside a nested fragmentation context.
   void LayoutFragmentainerDescendants(
-      Vector<NGLogicalOutOfFlowPositionedNode>* descendants);
+      Vector<NGLogicalOutOfFlowPositionedNode>* descendants,
+      LayoutUnit column_inline_progression,
+      Vector<MulticolChildInfo>* multicol_children = nullptr);
 
   scoped_refptr<const NGLayoutResult> LayoutFragmentainerDescendant(
       const NGLogicalOutOfFlowPositionedNode&);
@@ -133,7 +156,9 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       bool should_use_fixed_block_size);
   void AddOOFResultsToFragmentainer(
       const Vector<scoped_refptr<const NGLayoutResult>>& results,
-      wtf_size_t index);
+      wtf_size_t index,
+      LayoutUnit column_inline_progression,
+      Vector<MulticolChildInfo>* multicol_children = nullptr);
   const NGConstraintSpace& GetFragmentainerConstraintSpace(wtf_size_t index);
   void AddOOFResultToFragmentainerResults(
       const scoped_refptr<const NGLayoutResult> result,
@@ -156,7 +181,6 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       fragmentainer_descendant_results_;
   const WritingMode writing_mode_;
   const WritingDirectionMode default_writing_direction_;
-  LayoutUnit column_inline_progression_ = kIndefiniteSize;
   // The block size of the multi-column (before adjustment for spanners, etc.)
   // This is used to calculate the column size of any newly added proxy
   // fragments when handling fragmentation for abspos elements.
@@ -166,6 +190,7 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
   bool allow_first_tier_oof_cache_;
   bool has_block_fragmentation_;
   bool can_traverse_fragments_ = false;
+  bool nested_fragmentation_context_ = false;
 };
 
 }  // namespace blink

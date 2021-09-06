@@ -155,10 +155,6 @@ metrics::MetricsService* TestingBrowserProcess::metrics_service() {
   return nullptr;
 }
 
-rappor::RapporServiceImpl* TestingBrowserProcess::rappor_service() {
-  return rappor_service_;
-}
-
 SystemNetworkContextManager*
 TestingBrowserProcess::system_network_context_manager() {
   return nullptr;
@@ -261,10 +257,12 @@ BackgroundModeManager* TestingBrowserProcess::background_mode_manager() {
   return nullptr;
 }
 
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 void TestingBrowserProcess::set_background_mode_manager_for_test(
     std::unique_ptr<BackgroundModeManager> manager) {
   NOTREACHED();
 }
+#endif
 
 StatusTray* TestingBrowserProcess::status_tray() {
   return nullptr;
@@ -506,11 +504,6 @@ void TestingBrowserProcess::SetFlocSortingLshClustersService(
     std::unique_ptr<federated_learning::FlocSortingLshClustersService>
         service) {
   floc_sorting_lsh_clusters_service_.swap(service);
-}
-
-void TestingBrowserProcess::SetRapporServiceImpl(
-    rappor::RapporServiceImpl* rappor_service) {
-  rappor_service_ = rappor_service;
 }
 
 void TestingBrowserProcess::SetShuttingDown(bool is_shutting_down) {

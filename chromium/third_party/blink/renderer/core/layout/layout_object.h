@@ -87,7 +87,6 @@ class LayoutNGTableSectionInterface;
 class LayoutNGTableCellInterface;
 class LayoutView;
 class LocalFrameView;
-class NGPhysicalBoxFragment;
 class PaintLayer;
 class PseudoElementStyleRequest;
 struct PaintInfo;
@@ -150,7 +149,7 @@ const int kShowTreeCharacterOffset = 39;
 // exclude certain functions like ~SVGImage() from this rule. This is allowed
 // when a Persistent is guaranteeing to keep the LayoutObject alive for that GC
 // cycle.
-class AllowDestroyingLayoutObjectInFinalizerScope {
+class CORE_EXPORT AllowDestroyingLayoutObjectInFinalizerScope {
   STACK_ALLOCATED();
 
  public:
@@ -303,11 +302,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 // Should be added at the beginning of every method to ensure we are not
 // accessing a LayoutObject after the Desroy() call.
 #if DCHECK_IS_ON()
-// TODO(keishi): Implement once LayoutObject is made GarbageCollected.
-#define NOT_DESTROYED() ((void)0)
+  ALWAYS_INLINE void CheckIsNotDestroyed() const { DCHECK(!is_destroyed_); }
 #else
-#define NOT_DESTROYED() ((void)0)
+  ALWAYS_INLINE void CheckIsNotDestroyed() const {}
 #endif
+#define NOT_DESTROYED() CheckIsNotDestroyed()
 
   // Returns the name of the layout object.
   virtual const char* GetName() const = 0;
@@ -335,9 +334,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // Hide DisplayItemClient's methods whose names are too generic for
   // LayoutObjects. Should use LayoutObject's methods instead.
+  using DisplayItemClient::GetPaintInvalidationReason;
   using DisplayItemClient::Invalidate;
   using DisplayItemClient::IsValid;
-  using DisplayItemClient::GetPaintInvalidationReason;
 
   DOMNodeId OwnerNodeId() const final;
 
@@ -452,13 +451,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // |NGInlineNodeData| and the root |NGPaintFragment| if it's in
   // LayoutNG context.
   LayoutBlockFlow* ContainingNGBlockFlow() const;
-
-  // Returns |NGPhysicalBoxFragment| for |ContainingNGBlockFlow()| or nullptr
-  // otherwise.
-  //
-  // TODO(crbug.com/1061423): Remove this method. We shouldn't assume
-  // that there's only one fragment.
-  const NGPhysicalBoxFragment* ContainingBlockFlowFragment() const;
 
   // Function to return our enclosing flow thread if we are contained inside
   // one. This function follows the containing block chain.
@@ -606,11 +598,24 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return ShouldApplyLayoutContainment(StyleRef());
   }
 
+  inline bool IsEligibleForSizeContainment() const {
+    NOT_DESTROYED();
+    return (!IsInline() || IsAtomicInlineLevel()) && !IsRubyText() &&
+           (!IsTablePart() || IsTableCaption()) && !IsTable();
+  }
   inline bool ShouldApplySizeContainment() const {
     NOT_DESTROYED();
-    return StyleRef().ContainsSize() &&
-           (!IsInline() || IsAtomicInlineLevel()) && !IsRubyText() &&
-           (!IsTablePart() || IsTableCaption()) && !IsTable();
+    return StyleRef().ContainsSize() && IsEligibleForSizeContainment();
+  }
+  inline bool ShouldApplyInlineSizeContainment() const {
+    NOT_DESTROYED();
+    return (StyleRef().ContainsInlineSize() || StyleRef().ContainsSize()) &&
+           IsEligibleForSizeContainment();
+  }
+  inline bool ShouldApplyBlockSizeContainment() const {
+    NOT_DESTROYED();
+    return (StyleRef().ContainsBlockSize() || StyleRef().ContainsSize()) &&
+           IsEligibleForSizeContainment();
   }
   inline bool ShouldApplyStyleContainment() const {
     NOT_DESTROYED();
@@ -627,7 +632,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   inline bool IsContainerForContainerQueries() const {
     NOT_DESTROYED();
-    return ShouldApplyLayoutContainment() && ShouldApplySizeContainment();
+    return ShouldApplyLayoutContainment() &&
+           (ShouldApplyInlineSizeContainment() ||
+            ShouldApplyBlockSizeContainment());
   }
 
   inline bool IsStackingContext() const {
@@ -845,10 +852,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     NOT_DESTROYED();
     return IsOfType(kLayoutObjectTableCol);
   }
-  bool IsLayoutNGTableCol() const {
-    NOT_DESTROYED();
-    return IsOfType(kLayoutObjectNGTableCol);
-  }
   bool IsListItem() const {
     NOT_DESTROYED();
     return IsOfType(kLayoutObjectListItem);
@@ -900,6 +903,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsLayoutGrid() const {
     NOT_DESTROYED();
     return IsOfType(kLayoutObjectGrid);
+  }
+  bool IsLayoutGridIncludingNG() const {
+    NOT_DESTROYED();
+    return IsOfType(kLayoutObjectGrid) || IsOfType(kLayoutObjectNGGrid);
   }
   bool IsLayoutIFrame() const {
     NOT_DESTROYED();
@@ -1628,7 +1635,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
   // Not returning StyleRef().HasTransformRelatedProperty() because some objects
-  // ignore the transform-related styles (e.g. LayoutInline, LayoutSVGBlock).
+  // ignore the transform-related styles (e.g., LayoutInline).
   bool HasTransformRelatedProperty() const {
     NOT_DESTROYED();
     return bitfields_.HasTransformRelatedProperty();
@@ -1643,7 +1650,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool HasClipPath() const {
     NOT_DESTROYED();
-    return StyleRef().ClipPath();
+    return StyleRef().HasClipPath();
   }
   bool HasHiddenBackface() const {
     NOT_DESTROYED();
@@ -2245,6 +2252,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   const LayoutBlock* InclusiveContainingBlock() const;
 
+  const LayoutBlock* EnclosingScrollportBox() const;
+
   bool CanContainAbsolutePositionObjects() const {
     NOT_DESTROYED();
     return style_->CanContainAbsolutePositionObjects() ||
@@ -2627,13 +2636,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsSelectable() const;
 
   /**
-     * Returns the local coordinates of the caret within this layout object.
-     * @param caretOffset zero-based offset determining position within the
+   * Returns the local coordinates of the caret within this layout object.
+   * @param caretOffset zero-based offset determining position within the
    * layout object.
-     * @param extraWidthToEndOfLine optional out arg to give extra width to end
+   * @param extraWidthToEndOfLine optional out arg to give extra width to end
    * of line -
-     * useful for character range rect computations
-     */
+   * useful for character range rect computations
+   */
   virtual LayoutRect LocalCaretRect(
       const InlineBox*,
       int caret_offset,
@@ -3128,6 +3137,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       layout_object_.SetShouldSkipNextLayoutShiftTracking(b);
     }
 
+    void SetShouldAssumePaintOffsetTranslationForLayoutShiftTracking(bool b) {
+      layout_object_
+          .SetShouldAssumePaintOffsetTranslationForLayoutShiftTracking(b);
+    }
+
     FragmentData& FirstFragment() { return layout_object_.fragment_; }
 
     void EnsureId() { layout_object_.fragment_.EnsureId(); }
@@ -3324,6 +3338,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     bitfields_.SetIsLayoutNGObjectForListMarkerImage(b);
   }
 
+  bool IsLayoutNGObjectForCanvasFormattedText() const {
+    return bitfields_.IsLayoutNGObjectForCanvasFormattedText();
+  }
+  void SetIsLayoutNGObjectForCanvasFormattedText(bool b) {
+    bitfields_.SetIsLayoutNGObjectForCanvasFormattedText(b);
+  }
+
   bool PreviousVisibilityVisible() const {
     NOT_DESTROYED();
     return bitfields_.PreviousVisibilityVisible();
@@ -3345,6 +3366,14 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   void SetShouldSkipNextLayoutShiftTracking(bool b) {
     bitfields_.SetShouldSkipNextLayoutShiftTracking(b);
+  }
+
+  bool ShouldAssumePaintOffsetTranslationForLayoutShiftTracking() const {
+    return bitfields_
+        .ShouldAssumePaintOffsetTranslationForLayoutShiftTracking();
+  }
+  void SetShouldAssumePaintOffsetTranslationForLayoutShiftTracking(bool b) {
+    bitfields_.SetShouldAssumePaintOffsetTranslationForLayoutShiftTracking(b);
   }
 
  protected:
@@ -3385,7 +3414,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectNGMixin,
     kLayoutObjectNGOutsideListMarker,
     kLayoutObjectNGProgress,
-    kLayoutObjectNGTableCol,
     kLayoutObjectNGText,
     kLayoutObjectNGTextControlMultiLine,
     kLayoutObjectNGTextControlSingleLine,
@@ -3777,7 +3805,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           is_layout_ng_object_for_list_marker_image_(false),
           is_table_column_constraints_dirty_(false),
           transform_affects_vector_effect_(false),
+          is_layout_ng_object_for_canvas_formatted_text(false),
           should_skip_next_layout_shift_tracking_(true),
+          should_assume_paint_offset_translation_for_layout_shift_tracking_(
+              false),
           positioned_state_(kIsStaticallyPositioned),
           selection_state_(static_cast<unsigned>(SelectionState::kNone)),
           subtree_paint_property_update_reasons_(
@@ -4091,11 +4122,22 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     // included).
     ADD_BOOLEAN_BITFIELD(transform_affects_vector_effect_,
                          TransformAffectsVectorEffect);
+    ADD_BOOLEAN_BITFIELD(is_layout_ng_object_for_canvas_formatted_text,
+                         IsLayoutNGObjectForCanvasFormattedText);
 
     // Whether to skip layout shift tracking in the next paint invalidation.
     // See PaintInvalidator::UpdateLayoutShiftTracking().
     ADD_BOOLEAN_BITFIELD(should_skip_next_layout_shift_tracking_,
                          ShouldSkipNextLayoutShiftTracking);
+
+    // Whether, on the next time PaintPropertyTreeBuilder builds for this
+    // object, it should be assumed it had the same paint offset transform last
+    // time as it has this time. This is used when layout reattach loses the
+    // information from the previous frame; this bit stores that information
+    // to inform the next frame for layout shift tracking.
+    ADD_BOOLEAN_BITFIELD(
+        should_assume_paint_offset_translation_for_layout_shift_tracking_,
+        ShouldAssumePaintOffsetTranslationForLayoutShiftTracking);
 
    private:
     // This is the cached 'position' value of this object
@@ -4153,9 +4195,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           break;
       }
     }
-    void ClearPositionedState() {
-      positioned_state_ = kIsStaticallyPositioned;
-    }
+    void ClearPositionedState() { positioned_state_ = kIsStaticallyPositioned; }
 
     ALWAYS_INLINE SelectionState GetSelectionState() const {
       return static_cast<SelectionState>(selection_state_);
@@ -4296,8 +4336,15 @@ inline bool LayoutObject::CanTraversePhysicalFragments() const {
     if (!IsInLayoutNGInlineFormattingContext())
       return false;
   }
+  // The NG paint system currently doesn't support replaced content.
+  if (IsLayoutReplaced())
+    return false;
   // The NG paint system currently doesn't support table-cells.
   if (IsTableCellLegacy())
+    return false;
+  // Text controls have some logic in the layout objects that will be missed if
+  // we traverse the fragment tree when hit-testing.
+  if (IsTextControlIncludingNG())
     return false;
   return true;
 }

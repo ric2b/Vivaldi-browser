@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "browser/translate/vivaldi_translate_language_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 
@@ -26,12 +27,16 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
 
   void PostProfileInit() override;
 
+  void PostMainMessageLoopRun() override;
+
   static std::unique_ptr<VivaldiBrowserMainExtraParts> Create();
 
  private:
   void EnsureBrowserContextKeyedServiceFactoriesBuilt();
 
   std::unique_ptr<vivaldi::StatsReporter> stats_reporter_;
+  std::unique_ptr<translate::VivaldiTranslateLanguageList>
+      translate_language_list_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserMainExtraParts);
 };

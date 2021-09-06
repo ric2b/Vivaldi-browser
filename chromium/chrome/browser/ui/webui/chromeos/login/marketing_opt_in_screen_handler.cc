@@ -7,10 +7,9 @@
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
-#include "chrome/browser/chromeos/login/screens/marketing_opt_in_screen.h"
+#include "chrome/browser/ash/login/screens/marketing_opt_in_screen.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/login/localized_values_builder.h"
 #include "components/prefs/pref_service.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -56,10 +55,11 @@ void MarketingOptInScreenHandler::DeclareLocalizedValues(
   builder->Add(
       "marketingOptInGetChromebookUpdates",
       IDS_LOGIN_MARKETING_OPT_IN_SCREEN_GET_CHROMEBOOK_UPDATES_SIGN_ME_UP);
-  builder->Add("marketingOptInScreenAllSet",
-               IDS_LOGIN_MARKETING_OPT_IN_SCREEN_ALL_SET);
-  builder->Add("marketingOptInScreenFooterNotice",
-               IDS_LOGIN_MARKETING_OPT_IN_SCREEN_FOOTER_NOTICE);
+  builder->Add("marketingOptInScreenAllSet", IDS_LOGIN_GET_STARTED);
+  builder->Add("marketingOptInScreenUnsubscribeShort",
+               IDS_LOGIN_MARKETING_OPT_IN_SCREEN_UNSUBSCRIBE_SHORT);
+  builder->Add("marketingOptInScreenUnsubscribeLong",
+               IDS_LOGIN_MARKETING_OPT_IN_SCREEN_UNSUBSCRIBE_LONG);
   builder->Add("marketingOptInA11yButtonLabel",
                IDS_MARKETING_OPT_IN_ACCESSIBILITY_BUTTON_LABEL);
   builder->Add("finalA11yPageTitle", IDS_MARKETING_OPT_IN_ACCESSIBILITY_TITLE);

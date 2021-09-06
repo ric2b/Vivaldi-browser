@@ -35,10 +35,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_util.h"
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
-#endif
-
 namespace {
 
 const char kIsUsingDefaultAvatarKey[] = "is_using_default_avatar";
@@ -71,17 +67,6 @@ ProfileInfoCache::ProfileInfoCache(PrefService* prefs,
        !it.IsAtEnd(); it.Advance()) {
     base::DictionaryValue* info = nullptr;
     cache->GetDictionaryWithoutPathExpansion(it.key(), &info);
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS) && !defined(OS_ANDROID) && \
-    !BUILDFLAG(IS_CHROMEOS_ASH)
-    std::string supervised_user_id;
-    info->GetString(ProfileAttributesEntry::kSupervisedUserId,
-                    &supervised_user_id);
-    // Silently ignore legacy supervised user profiles.
-    if (!supervised_user_id.empty() &&
-        supervised_user_id != supervised_users::kChildAccountSUID) {
-      continue;
-    }
-#endif
     base::string16 name;
     info->GetString(ProfileAttributesEntry::kNameKey, &name);
     keys_.push_back(it.key());
@@ -143,14 +128,6 @@ void ProfileInfoCache::AddProfileToCache(const base::FilePath& profile_path,
                                          size_t icon_index,
                                          const std::string& supervised_user_id,
                                          const AccountId& account_id) {
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS) && !defined(OS_ANDROID) && \
-    !BUILDFLAG(IS_CHROMEOS_ASH)
-  // Silently ignore legacy supervised user profiles.
-  if (!supervised_user_id.empty() &&
-      supervised_user_id != supervised_users::kChildAccountSUID) {
-    return;
-  }
-#endif
   std::string key = CacheKeyFromProfilePath(profile_path);
   DictionaryPrefUpdate update(prefs_, prefs::kProfileInfoCache);
   base::DictionaryValue* cache = update.Get();
@@ -169,8 +146,6 @@ void ProfileInfoCache::AddProfileToCache(const base::FilePath& profile_path,
   info->SetBoolean(ProfileAttributesEntry::kBackgroundAppsKey, false);
   info->SetString(ProfileAttributesEntry::kSupervisedUserId,
                   supervised_user_id);
-  info->SetBoolean(ProfileAttributesEntry::kIsOmittedFromProfileListKey,
-                   !supervised_user_id.empty());
   info->SetBoolean(ProfileAttributesEntry::kProfileIsEphemeral, false);
   info->SetBoolean(ProfileAttributesEntry::kProfileIsGuest, false);
   // Either the user has provided a name manually on purpose, and in this case
@@ -239,8 +214,8 @@ void ProfileInfoCache::NotifyProfileHostedDomainChanged(
 
 void ProfileInfoCache::DeleteProfileFromCache(
     const base::FilePath& profile_path) {
-  ProfileAttributesEntry* entry;
-  if (!GetProfileAttributesWithPath(profile_path, &entry)) {
+  ProfileAttributesEntry* entry = GetProfileAttributesWithPath(profile_path);
+  if (!entry) {
     NOTREACHED();
     return;
   }
@@ -667,20 +642,19 @@ void ProfileInfoCache::RemoveProfile(const base::FilePath& profile_path) {
   DeleteProfileFromCache(profile_path);
 }
 
-bool ProfileInfoCache::GetProfileAttributesWithPath(
-    const base::FilePath& path, ProfileAttributesEntry** entry) {
+ProfileAttributesEntry* ProfileInfoCache::GetProfileAttributesWithPath(
+    const base::FilePath& path) {
   const auto entry_iter = profile_attributes_entries_.find(path.value());
   if (entry_iter == profile_attributes_entries_.end())
-    return false;
+    return nullptr;
 
   std::unique_ptr<ProfileAttributesEntry>& current_entry = entry_iter->second;
   if (!current_entry) {
     // The profile info is in the cache but its entry isn't created yet, insert
     // it in the map.
-    current_entry.reset(new ProfileAttributesEntry());
+    current_entry = std::make_unique<ProfileAttributesEntry>();
     current_entry->Initialize(this, path, prefs_);
   }
 
-  *entry = current_entry.get();
-  return true;
+  return current_entry.get();
 }

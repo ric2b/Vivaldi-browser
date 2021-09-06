@@ -37,7 +37,6 @@ extern const Substitution SubstitutionLiteral;
 extern const Substitution SubstitutionOutput;
 extern const Substitution SubstitutionLabel;
 extern const Substitution SubstitutionLabelName;
-extern const Substitution SubstitutionLabelNoToolchain;
 extern const Substitution SubstitutionRootGenDir;
 extern const Substitution SubstitutionRootOutDir;
 extern const Substitution SubstitutionOutputDir;

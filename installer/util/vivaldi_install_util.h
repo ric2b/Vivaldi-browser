@@ -12,6 +12,12 @@
 
 #include "installer/util/vivaldi_install_constants.h"
 
+namespace base {
+namespace win {
+class RegKey;
+}
+}  // namespace base
+
 namespace vivaldi {
 
 enum class InstallType {
@@ -30,6 +36,8 @@ bool IsVivaldiInstalled(const base::FilePath& install_top_dir);
 base::Optional<InstallType> FindInstallType(
     const base::FilePath& install_top_dir);
 
+bool IsStandaloneBrowser();
+
 // Get the default directory for the Vivaldi installation. install_type must not
 // be kStandalone as that has no notion of a default directory.
 base::FilePath GetDefaultInstallTopDir(InstallType install_type);
@@ -44,11 +52,10 @@ bool ShellExecuteFromExplorer(const base::FilePath& application_path,
                               const base::string16& parameters,
                               const base::FilePath& directory);
 
-// Gets handles to all active processes on the system running from a given path
-// or path2 if it is given.
+// Gets handles to all active processes on the system running from a given path.
+// If path matches the path of the current process, it is not included.
 std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
-    const base::FilePath& path,
-    const base::FilePath* path2 = nullptr);
+    const base::FilePath& path);
 
 // Kills |processes|. The handles must have been open with PROCESS_TERMINATE
 // access for this to succeed.
@@ -59,9 +66,17 @@ void KillProcesses(std::vector<base::win::ScopedHandle> processes);
 // symbolic link and mount points resolved.
 const base::FilePath& GetDirectoryOfCurrentExe();
 
+// Get path of the current exe with all symlinks and mount points resolved.
+const base::FilePath& GetPathOfCurrentExe();
+
 // Get the update notifier executable from the given directory. If exe_dir is
 // null, use GetDirectoryOfCurrentExe().
 base::FilePath GetUpdateNotifierPath(const base::FilePath* exe_dir);
+
+// Get the command line to start the update notifier with common switches
+// reflecting the current browser process flags. This can be called from any
+// thread. If exe_dir is null, use GetDirectoryOfCurrentExe().
+base::CommandLine GetCommonUpdateNotifierCommand(const base::FilePath* exe_dir);
 
 // Return true if the update notifier is enabled for the installation in the
 // given exe_dir and optionally copy the full command line that should be used
@@ -70,19 +85,29 @@ bool IsUpdateNotifierEnabled(const base::FilePath* exe_dir,
                              base::CommandLine* cmdline = nullptr);
 
 // Return true if the update notifier is enabled for some path installation
-// path.
+// path. This can block and must not be called from the browser UI thread.
 bool IsUpdateNotifierEnabledForAnyPath();
 
 // Enable the update notifier using the given commnad line and launch the
-// updater process.
-void EnableUpdateNotifier(const base::CommandLine& cmdline);
+// updater process. This can block and must not be called from the browser UI
+// thread.
+bool EnableUpdateNotifier(const base::CommandLine& cmdline);
 
 // Disable the update notifier and quit any running instance. If exe_dir is
-// null, use GetDirectoryOfCurrentExe().
-void DisableUpdateNotifier(const base::FilePath* exe_dir);
+// null, use GetDirectoryOfCurrentExe(). This can block and must not be called
+// from the browser UI thread.
+bool DisableUpdateNotifier(const base::FilePath* exe_dir);
 
-// Launch the update notifier using the given commnad line.
-void LaunchNotifierProcess(const base::CommandLine& command);
+// Launch the update notifier using the given commnad line. This can block and
+// must not be called from the browser UI thread.
+bool LaunchNotifierProcess(const base::CommandLine& command);
+
+// Launch the update notifier using one of its subactions and wait for its exit.
+// Return the exit code or -1 on errors. This can block and must not be called
+// from the browser UI thread.
+int RunNotifierSubaction(const base::CommandLine& command);
+
+void SendQuitUpdateNotifier(const base::FilePath* exe_dir, bool global);
 
 // Get Winapi event name for the update notifier from the given exe_dir. If
 // exe_dir is null, use GetDirectoryOfCurrentExe().
@@ -95,19 +120,21 @@ base::string16 GetUpdateNotifierEventName(base::StringPiece16 event_prefix,
 // the path in the registry for autostart.
 base::FilePath NormalizeInstallExeDirectory(const base::FilePath& exe_dir);
 
-// Installer-specific helper to enable the notifier during the installation.
-void EnableUpdateNotifierFromInstaller(const base::FilePath& installer_exe_dir);
-
-// Installer-specific helper to quit all running update notifiers and start a
-// new one if the auto-update is enabled.
-void RestartUpdateNotifier(const base::FilePath& installer_exe_dir);
-
 // Installer-specific helper to quit all running notifiers.
-void QuitAllUpdateNotifiers(const base::FilePath& installer_exe_dir);
+void QuitAllUpdateNotifiers(const base::FilePath& installer_exe_dir,
+                            bool quit_old);
 
-  // Shows a modal messagebox with the installer result localized string.
-void ShowInstallerResultMessage(int string_resource_id);
+// Read a string from the registry. Return an empty string on errors. This
+// assumes that an empty string is never a valid value.
+std::wstring ReadRegistryString(const wchar_t* name, base::win::RegKey& key);
 
+// Return nullopt on errors.
+base::Optional<DWORD> ReadRegistryDW(const wchar_t* name,
+                                     base::win::RegKey& key);
+
+// Return nullopt on errors.
+base::Optional<bool> ReadRegistryBool(const wchar_t* name,
+                                      base::win::RegKey& key);
 }  // namespace vivaldi
 
 #endif  // INSTALLER_UTIL_VIVALDI_INSTALL_UTIL_H_

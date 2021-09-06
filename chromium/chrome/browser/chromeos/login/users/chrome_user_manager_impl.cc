@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/session/session_controller.h"
 #include "base/bind.h"
@@ -32,15 +33,19 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/login/demo_mode/demo_app_launcher.h"
+#include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/ash/system/timezone_resolver_manager.h"
+#include "chrome/browser/ash/system/timezone_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/extensions/active_tab_permission_granter_delegate_chromeos.h"
 #include "chrome/browser/chromeos/extensions/extension_tab_util_delegate_chromeos.h"
 #include "chrome/browser/chromeos/extensions/permissions_updater_delegate_chromeos.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
-#include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -61,11 +66,7 @@
 #include "chrome/browser/chromeos/policy/external_data_handlers/wallpaper_image_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/session_length_limiter.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
-#include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/profiles/profile.h"
@@ -77,8 +78,6 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_switches.h"
-#include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
@@ -342,22 +341,22 @@ ChromeUserManagerImpl::ChromeUserManagerImpl()
 
   allow_guest_subscription_ = cros_settings_->AddSettingsObserver(
       kAccountsPrefAllowGuest,
-      base::Bind(&UserManager::NotifyUsersSignInConstraintsChanged,
-                 weak_factory_.GetWeakPtr()));
+      base::BindRepeating(&UserManager::NotifyUsersSignInConstraintsChanged,
+                          weak_factory_.GetWeakPtr()));
   // For user allowlist.
   users_subscription_ = cros_settings_->AddSettingsObserver(
       kAccountsPrefUsers,
-      base::Bind(&UserManager::NotifyUsersSignInConstraintsChanged,
-                 weak_factory_.GetWeakPtr()));
+      base::BindRepeating(&UserManager::NotifyUsersSignInConstraintsChanged,
+                          weak_factory_.GetWeakPtr()));
   users_subscription_ = cros_settings_->AddSettingsObserver(
       kAccountsPrefFamilyLinkAccountsAllowed,
-      base::Bind(&UserManager::NotifyUsersSignInConstraintsChanged,
-                 weak_factory_.GetWeakPtr()));
+      base::BindRepeating(&UserManager::NotifyUsersSignInConstraintsChanged,
+                          weak_factory_.GetWeakPtr()));
 
   local_accounts_subscription_ = cros_settings_->AddSettingsObserver(
       kAccountsPrefDeviceLocalAccounts,
-      base::Bind(&ChromeUserManagerImpl::RetrieveTrustedDevicePolicies,
-                 weak_factory_.GetWeakPtr()));
+      base::BindRepeating(&ChromeUserManagerImpl::RetrieveTrustedDevicePolicies,
+                          weak_factory_.GetWeakPtr()));
   multi_profile_user_controller_.reset(
       new MultiProfileUserController(this, GetLocalState()));
 
@@ -542,13 +541,13 @@ void ChromeUserManagerImpl::RemoveUserInternal(
     user_manager::RemoveUserDelegate* delegate) {
   CrosSettings* cros_settings = CrosSettings::Get();
 
-  const base::Closure& callback =
-      base::Bind(&ChromeUserManagerImpl::RemoveUserInternal,
-                 weak_factory_.GetWeakPtr(), account_id, delegate);
+  auto callback =
+      base::BindOnce(&ChromeUserManagerImpl::RemoveUserInternal,
+                     weak_factory_.GetWeakPtr(), account_id, delegate);
 
   // Ensure the value of owner email has been fetched.
   if (CrosSettingsProvider::TRUSTED !=
-      cros_settings->PrepareTrustedValues(callback)) {
+      cros_settings->PrepareTrustedValues(std::move(callback))) {
     // Value of owner email is not fetched yet.  RemoveUserInternal will be
     // called again after fetch completion.
     return;

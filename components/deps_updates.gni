@@ -21,7 +21,7 @@ update_target("//chrome/browser:browser") {
   deps += [
     "//vivaldi/components/datasource:dataurl",
     "//vivaldi/components/request_filter/adblock_filter",
-    "//vivaldi_mojom/components/request_filter/adblock_filter/mojom"
+    "//vivaldi/components/request_filter/adblock_filter/mojom"
   ]
 }
 
@@ -29,6 +29,7 @@ update_target("//chrome/renderer:renderer") {
   deps += [
     "//vivaldi/components/request_filter/adblock_filter/renderer",
     "//vivaldi/components/content_injection/renderer",
+    "//vivaldi/components/translate/renderer",
   ]
 }
 

@@ -1665,8 +1665,7 @@ void AutomationInternalCustomBindings::AddRoutes() {
               GetAutomationAXTreeWrapperFromTreeID(
                   accessibility_focused_tree_id_);
           if (previous_tree_wrapper) {
-            previous_tree_wrapper->SetAccessibilityFocus(
-                ui::AXNode::kInvalidAXID);
+            previous_tree_wrapper->SetAccessibilityFocus(ui::kInvalidAXNodeID);
           }
         }
         accessibility_focused_tree_id_ = tree_id;
@@ -1685,6 +1684,14 @@ void AutomationInternalCustomBindings::AddRoutes() {
                   .ToLocalChecked());
         }
       });
+  RouteNodeIDFunction("GetValue", [](v8::Isolate* isolate,
+                                     v8::ReturnValue<v8::Value> result,
+                                     AutomationAXTreeWrapper* tree_wrapper,
+                                     ui::AXNode* node) {
+    const std::string value_str = node->GetValueForControl();
+    result.Set(
+        v8::String::NewFromUtf8(isolate, value_str.c_str()).ToLocalChecked());
+  });
   RouteNodeIDPlusEventFunction(
       "EventListenerAdded",
       [](v8::Isolate* isolate, v8::ReturnValue<v8::Value> result,
@@ -2478,11 +2485,11 @@ void AutomationInternalCustomBindings::SendAutomationEvent(
                     ax_event == ax::mojom::Event::kMediaStartedPlaying ||
                     ax_event == ax::mojom::Event::kMediaStoppedPlaying;
 
-  // If we don't explicitly recognize the event type, require a valid node
-  // target.
+  // If we don't explicitly recognize the event type, require a valid, unignored
+  // node target.
   ui::AXNode* node =
       tree_wrapper->GetNodeFromTree(tree_wrapper->GetTreeID(), event.id);
-  if (!fire_event && !node)
+  if (!fire_event && (!node || node->data().IsIgnored()))
     return;
 
   while (node && tree_wrapper && !fire_event) {
@@ -2500,6 +2507,8 @@ void AutomationInternalCustomBindings::SendAutomationEvent(
   event_params.SetKey("eventType", base::Value(automation_event_type_str));
 
   event_params.SetKey("eventFrom", base::Value(ui::ToString(event.event_from)));
+  event_params.SetKey("eventFromAction",
+                      base::Value(ui::ToString(event.event_from_action)));
   event_params.SetKey("actionRequestID", base::Value(event.action_request_id));
   event_params.SetKey("mouseX", base::Value(mouse_location.x()));
   event_params.SetKey("mouseY", base::Value(mouse_location.y()));
@@ -2543,6 +2552,7 @@ void AutomationInternalCustomBindings::MaybeSendFocusAndBlur(
   // Determine whether there's a focus or blur event and take its event from.
   // Also, save the raw event target (tree + node).
   ax::mojom::EventFrom event_from = ax::mojom::EventFrom::kNone;
+  ax::mojom::Action event_from_action = ax::mojom::Action::kNone;
   ui::AXNodeData::AXID raw_focus_target_id = ui::AXNodeData::kInvalidAXID;
   bool event_bundle_has_focus_or_blur = false;
   for (const auto& event : event_bundle.events) {
@@ -2550,6 +2560,7 @@ void AutomationInternalCustomBindings::MaybeSendFocusAndBlur(
     bool is_focus = event.event_type == ax::mojom::Event::kFocus;
     if (is_blur || is_focus) {
       event_from = event.event_from;
+      event_from_action = event.event_from_action;
       event_bundle_has_focus_or_blur = true;
     }
 
@@ -2586,6 +2597,7 @@ void AutomationInternalCustomBindings::MaybeSendFocusAndBlur(
     ui::AXEvent blur_event;
     blur_event.id = old_node->id();
     blur_event.event_from = event_from;
+    blur_event.event_from_action = event_from_action;
     blur_event.event_type = ax::mojom::Event::kBlur;
     SendAutomationEvent(old_wrapper->GetTreeID(), event_bundle.mouse_location,
                         blur_event);
@@ -2599,6 +2611,7 @@ void AutomationInternalCustomBindings::MaybeSendFocusAndBlur(
     ui::AXEvent focus_event;
     focus_event.id = new_node->id();
     focus_event.event_from = event_from;
+    focus_event.event_from_action = event_from_action;
     focus_event.event_type = ax::mojom::Event::kFocus;
     SendAutomationEvent(new_wrapper->GetTreeID(), event_bundle.mouse_location,
                         focus_event);

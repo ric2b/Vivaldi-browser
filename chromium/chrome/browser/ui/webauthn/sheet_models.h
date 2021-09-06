@@ -38,6 +38,11 @@ class AuthenticatorSheetModelBase
     return dialog_model_;
   }
 
+  // Returns a string containing the RP ID, styled as an origin, truncated to a
+  // reasonable width.
+  static base::string16 GetRelyingPartyIdString(
+      const AuthenticatorRequestDialogModel* dialog_model);
+
  protected:
   // AuthenticatorRequestSheetModel:
   bool IsActivityIndicatorVisible() const override;
@@ -52,7 +57,7 @@ class AuthenticatorSheetModelBase
   void OnCancel() override;
 
   // AuthenticatorRequestDialogModel::Observer:
-  void OnModelDestroyed() override;
+  void OnModelDestroyed(AuthenticatorRequestDialogModel* model) override;
 
  private:
   AuthenticatorRequestDialogModel* dialog_model_;
@@ -243,6 +248,7 @@ class AuthenticatorOffTheRecordInterstitialSheetModel
   bool IsAcceptButtonVisible() const override;
   bool IsAcceptButtonEnabled() const override;
   base::string16 GetAcceptButtonLabel() const override;
+  base::string16 GetCancelButtonLabel() const override;
   void OnAccept() override;
 
   std::unique_ptr<OtherTransportsMenuModel> other_transports_menu_model_;
@@ -263,6 +269,27 @@ class AuthenticatorPaaskSheetModel : public AuthenticatorSheetModelBase {
   base::string16 GetStepTitle() const override;
   base::string16 GetStepDescription() const override;
   ui::MenuModel* GetOtherTransportsMenuModel() override;
+
+  std::unique_ptr<OtherTransportsMenuModel> other_transports_menu_model_;
+};
+
+class AuthenticatorAndroidAccessorySheetModel
+    : public AuthenticatorSheetModelBase {
+ public:
+  explicit AuthenticatorAndroidAccessorySheetModel(
+      AuthenticatorRequestDialogModel* dialog_model);
+  ~AuthenticatorAndroidAccessorySheetModel() override;
+
+ private:
+  // AuthenticatorSheetModelBase:
+  bool IsBackButtonVisible() const override;
+  bool IsActivityIndicatorVisible() const override;
+  const gfx::VectorIcon& GetStepIllustration(
+      ImageColorScheme color_scheme) const override;
+  base::string16 GetStepTitle() const override;
+  base::string16 GetStepDescription() const override;
+  ui::MenuModel* GetOtherTransportsMenuModel() override;
+  void OnBack() override;
 
   std::unique_ptr<OtherTransportsMenuModel> other_transports_menu_model_;
 };
@@ -497,6 +524,18 @@ class AttestationPermissionRequestSheetModel
   base::string16 GetAcceptButtonLabel() const override;
   bool IsCancelButtonVisible() const override;
   base::string16 GetCancelButtonLabel() const override;
+};
+
+class EnterpriseAttestationPermissionRequestSheetModel
+    : public AttestationPermissionRequestSheetModel {
+ public:
+  explicit EnterpriseAttestationPermissionRequestSheetModel(
+      AuthenticatorRequestDialogModel* dialog_model);
+
+ private:
+  // AuthenticatorSheetModelBase:
+  base::string16 GetStepTitle() const override;
+  base::string16 GetStepDescription() const override;
 };
 
 class AuthenticatorQRSheetModel : public AuthenticatorSheetModelBase {

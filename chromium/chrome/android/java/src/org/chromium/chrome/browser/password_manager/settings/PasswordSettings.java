@@ -459,7 +459,7 @@ public class PasswordSettings
             // Launch preference activity with a PasswordEntryEditor fragment.
             PasswordManagerHandlerProvider.getInstance()
                     .getPasswordManagerHandler()
-                    .showPasswordEntryEditingView(getContext(),
+                    .showPasswordEntryEditingView(getActivity(), new SettingsLauncherImpl(),
                             preference.getExtras().getInt(PasswordSettings.PASSWORD_LIST_ID));
         } else {
             // Launch preference activity with PasswordEntryViewer fragment with

@@ -384,7 +384,8 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   computeDialogSaveDisabled_() {
-    return !this.dialogTileUrl_ || normalizeUrl(this.dialogTileUrl_) === null ||
+    return !this.dialogTileUrl_.trim() ||
+        normalizeUrl(this.dialogTileUrl_) === null ||
         this.dialogShortcutAlreadyExists_;
   }
 
@@ -668,6 +669,9 @@ class MostVisitedElement extends PolymerElement {
    * @private
    */
   onDragStart_(e) {
+    if (!this.customLinksEnabled_) {
+      return;
+    }
     // |dataTransfer| is null in tests.
     if (e.dataTransfer) {
       // Remove the ghost image that appears when dragging.
@@ -915,15 +919,6 @@ class MostVisitedElement extends PolymerElement {
     this.pageHandler_.onMostVisitedTilesRendered(
         this.tiles_.slice(0, assert(this.maxVisibleTiles_)),
         BrowserProxy.getInstance().now());
-  }
-
-  /**
-   * @param {boolean} value
-   * @return {string} String representing the given boolean.
-   * @private
-   */
-  booleanToString_(value) {
-    return Boolean(value).toString();
   }
 }
 

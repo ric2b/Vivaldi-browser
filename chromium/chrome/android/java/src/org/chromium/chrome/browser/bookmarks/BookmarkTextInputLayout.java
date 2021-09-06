@@ -77,9 +77,4 @@ public class BookmarkTextInputLayout extends TextInputLayout {
             setError(isEmpty() ? mEmptyErrorMessage : null);
         }
     }
-
-    // Vivaldi
-    public boolean isEmptyPublic() { return isEmpty(); }
-    public void validatePublic() { validate(); }
-    public String getTrimmedTextPublic() { return getTrimmedText(); }
 }

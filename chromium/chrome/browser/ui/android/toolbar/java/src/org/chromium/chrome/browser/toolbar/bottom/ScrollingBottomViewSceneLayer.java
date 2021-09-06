@@ -19,6 +19,10 @@ import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.base.BuildConfig;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+
 /**
  * A composited view that sits at the bottom of the screen and listens to changes in the browser
  * controls. When visible, the view will mimic the behavior of the top browser controls when
@@ -113,6 +117,15 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
         // The composited shadow should be visible if the Android toolbar's isn't.
         boolean isShadowVisible = mBottomView.getVisibility() != View.VISIBLE;
 
+        // Note(david@vivaldi.com): Apply the height of bottom view as an offset to send scene off
+        // screen instead of making scene invisible. This will ensure that all scrolling offsets
+        // continue to work and we won't run in any UI glitches or freezes (see VAB-2956 &
+        // VAB-2947).
+        if (BuildConfig.IS_VIVALDI && !mIsVisible) {
+            if (mCurrentYOffsetPx < mBottomView.getHeight())
+                mCurrentYOffsetPx += mBottomView.getHeight();
+        }
+
         ScrollingBottomViewSceneLayerJni.get().updateScrollingBottomViewLayer(mNativePtr,
                 ScrollingBottomViewSceneLayer.this, resourceManager, mResourceId,
                 mTopShadowHeightPx, mCurrentXOffsetPx, viewport.height() + mCurrentYOffsetPx,
@@ -123,6 +136,10 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
 
     @Override
     public boolean isSceneOverlayTreeShowing() {
+        // (david@vivaldi.com): Scene overlay is only visible with toolbar at the top.
+        if (BuildConfig.IS_VIVALDI)
+            return !SharedPreferencesManager.getInstance().readBoolean(
+                    "address_bar_to_bottom", false);
         // If the offset is greater than the toolbar's height, don't draw the layer.
         return mIsVisible && mCurrentYOffsetPx < mBottomView.getHeight() - mTopShadowHeightPx;
     }

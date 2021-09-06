@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
 #include "third_party/blink/public/common/css/navigation_controls.h"
@@ -38,8 +39,10 @@
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/layout/layout_counter.h"
+#include "third_party/blink/renderer/core/layout/layout_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
+#include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
@@ -104,6 +107,13 @@ class StyleEngineTest : public testing::Test {
   void ClearUseCounter(mojom::WebFeature feature) {
     GetDocument().ClearUseCounterForTesting(feature);
     DCHECK(!IsUseCounted(feature));
+  }
+
+  String GetListMarkerText(LayoutObject* list_item) {
+    LayoutObject* marker = ListMarker::MarkerFromListItem(list_item);
+    if (auto* legacy_marker = DynamicTo<LayoutListMarker>(marker))
+      return legacy_marker->TextAlternative();
+    return ListMarker::Get(marker)->TextAlternative(*marker);
   }
 
  private:
@@ -2108,7 +2118,9 @@ TEST_F(StyleEngineTest, MarkForWhitespaceReattachment) {
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
   EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   GetStyleEngine().MarkForWhitespaceReattachment();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
   EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   UpdateAllLifecyclePhases();
@@ -2120,7 +2132,9 @@ TEST_F(StyleEngineTest, MarkForWhitespaceReattachment) {
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
   EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   GetStyleEngine().MarkForWhitespaceReattachment();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
   EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
   UpdateAllLifecyclePhases();
@@ -2131,7 +2145,9 @@ TEST_F(StyleEngineTest, MarkForWhitespaceReattachment) {
   EXPECT_FALSE(GetDocument().ChildNeedsStyleRecalc());
   EXPECT_FALSE(GetStyleEngine().NeedsLayoutTreeRebuild());
 
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
   GetStyleEngine().MarkForWhitespaceReattachment();
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
   EXPECT_TRUE(GetStyleEngine().NeedsLayoutTreeRebuild());
 }
 
@@ -3420,34 +3436,6 @@ TEST_F(StyleEngineTest, MediaAttributeChangeUpdatesFontCacheVersion) {
   UpdateAllLifecyclePhases();
 }
 
-// https://crbug.com/1137624
-TEST_F(StyleEngineTest, DisabledAdvanceOverrideDescriptor) {
-  ScopedCSSFontFaceAdvanceOverrideForTest advance_override_disabled(false);
-
-  GetDocument().body()->setInnerHTML(R"HTML(
-    <style>
-      @font-face {
-        font-family: custom-font;
-        src: url(fake-font.woff);
-        advance-override: 0.1;
-      }
-    </style>
-  )HTML");
-
-  // Shouldn't crash.
-  UpdateAllLifecyclePhases();
-
-  // 'advance-override' should be ignored when disabled.
-  const FontFace* font_face = GetStyleEngine()
-                                  .GetFontSelector()
-                                  ->GetFontFaceCache()
-                                  ->CssConnectedFontFaces()
-                                  .front()
-                                  .Get();
-  ASSERT_TRUE(font_face);
-  EXPECT_FALSE(font_face->HasFontMetricsOverride());
-}
-
 // Properties stored for forced colors mode should only be usable by the UA.
 TEST_F(StyleEngineTest, InternalForcedProperties) {
   String properties_to_test[] = {
@@ -3793,13 +3781,15 @@ TEST_F(StyleEngineTest, UpdateStyleAndLayoutTreeForContainer) {
   SetDependsOnContainerQueries(*affected);
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container1);
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+      *container1, LogicalSize(), LogicalAxes(kLogicalAxisBoth));
 
   // The first span.affected child and #container2
   EXPECT_EQ(2u, GetStyleEngine().StyleForElementCount() - start_count);
 
   start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container2);
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+      *container2, LogicalSize(), LogicalAxes(kLogicalAxisBoth));
 
   // Three direct span.affected children, and the two display:none elements.
   EXPECT_EQ(6u, GetStyleEngine().StyleForElementCount() - start_count);
@@ -3846,7 +3836,8 @@ TEST_F(StyleEngineTest, ContainerQueriesContainmentNotApplying) {
   SetDependsOnContainerQueries(*affected);
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container);
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+      *container, LogicalSize(), LogicalAxes(kLogicalAxisBoth));
 
   // span.affected is updated because containment does not apply to the display
   // types on the element styled with containment. All marked as affected are
@@ -3882,7 +3873,8 @@ TEST_F(StyleEngineTest, PseudoElementContainerQueryRecalc) {
   SetDependsOnContainerQueries(*before);
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container);
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+      *container, LogicalSize(), LogicalAxes(kLogicalAxisBoth));
 
   EXPECT_EQ(2u, GetStyleEngine().StyleForElementCount() - start_count);
 }
@@ -3911,7 +3903,8 @@ TEST_F(StyleEngineTest, MarkStyleDirtyFromContainerRecalc) {
   EXPECT_TRUE(old_inner_style);
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container);
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+      *container, LogicalSize(), LogicalAxes(kLogicalAxisBoth));
 
   // Input elements mark their InnerEditorElement() style-dirty when they are
   // recalculated. That means the UpdateStyleAndLayoutTreeForContainer() call
@@ -3928,6 +3921,35 @@ TEST_F(StyleEngineTest, MarkStyleDirtyFromContainerRecalc) {
   const ComputedStyle* new_inner_style = inner_editor->GetComputedStyle();
   EXPECT_TRUE(new_inner_style);
   EXPECT_NE(old_inner_style, new_inner_style);
+}
+
+TEST_F(StyleEngineTest, VideoControlsReject) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <video controls></video>
+    <div id="target"></div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetStyleEngine();
+  // If the Stats() were already enabled, we would not start with 0 counts.
+  EXPECT_FALSE(engine.Stats());
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+  EXPECT_EQ(0u, stats->rules_rejected);
+
+  Element* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target);
+  target->SetInlineStyleProperty(CSSPropertyID::kColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetStyleEngine().RecalcStyle();
+
+  // There should be no UA rules for a div to reject
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+  EXPECT_EQ(0u, stats->rules_rejected);
 }
 
 TEST_F(StyleEngineTest, FastRejectForHostChild) {
@@ -4012,6 +4034,52 @@ TEST_F(StyleEngineTest, RejectSlottedSelector) {
   EXPECT_EQ(1u, stats->rules_fast_rejected);
 }
 
+TEST_F(StyleEngineTest, AudioUAStyleNameSpace) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <audio id="html-audio"></audio>
+  )HTML");
+  Element* html_audio = GetDocument().getElementById("html-audio");
+  Element* audio = GetDocument().createElementNS("http://dummyns", "audio",
+                                                 ASSERT_NO_EXCEPTION);
+  GetDocument().body()->appendChild(audio);
+  UpdateAllLifecyclePhases();
+
+  // display:none UA rule for audio element should not apply outside html.
+  EXPECT_TRUE(audio->GetComputedStyle());
+  EXPECT_FALSE(html_audio->GetComputedStyle());
+
+  FloatSize page_size(400, 400);
+  GetDocument().GetFrame()->StartPrinting(page_size, page_size, 1);
+
+  // Also for printing.
+  EXPECT_TRUE(audio->GetComputedStyle());
+  EXPECT_FALSE(html_audio->GetComputedStyle());
+}
+
+TEST_F(StyleEngineTest, TargetTextUseCount) {
+  ClearUseCounter(WebFeature::kCSSSelectorTargetText);
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #nevermatch::target-text { background-color: pink }
+    </style>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSSelectorTargetText));
+  ClearUseCounter(WebFeature::kCSSSelectorTargetText);
+
+  // Count ::target-text if we would have matched if the page was loaded with a
+  // text fragment url.
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      div::target-text { background-color: pink }
+    </style>
+    <div></div>
+  )HTML");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSSelectorTargetText));
+  ClearUseCounter(WebFeature::kCSSSelectorTargetText);
+}
+
 // https://crbug.com/1172679
 TEST_F(StyleEngineTest, CounterContentNameCase) {
   // Reproducible only with legacy counter styles
@@ -4038,6 +4106,111 @@ TEST_F(StyleEngineTest, CounterContentNameCase) {
 
   // Hiragana "A"
   EXPECT_EQ(String(u"\u3042"), counter->GetText());
+}
+
+// https://crbug.com/1182969
+TEST_F(StyleEngineTest, CountersShouldNotCauseListMarkerUpdates) {
+  // Reproducible only when @counter-style rules are disabled
+  ScopedCSSAtRuleCounterStyleForTest disabled_scope(false);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { counter-reset: a; }
+      p::before {
+        counter-increment: a;
+        content: counter(a);
+      }
+    </style>
+    <ol><li id="target"></li></ol>
+  )HTML");
+
+  // Shouldn't crash
+  UpdateAllLifecyclePhases();
+
+  LayoutObject* list_item =
+      GetDocument().getElementById("target")->GetLayoutObject();
+  LayoutObject* marker = ListMarker::MarkerFromListItem(list_item);
+
+  GetDocument().body()->appendChild(GetDocument().CreateElementForBinding("p"));
+  GetDocument().UpdateStyleAndLayoutTree();
+
+  EXPECT_FALSE(marker->NeedsLayout());
+}
+
+TEST_F(StyleEngineTest, NonDirtyStyleRecalcRoot) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <div id="host">
+      <span id="slotted"></span>
+    </div>
+  )HTML");
+
+  auto* host = GetDocument().getElementById("host");
+  auto* slotted = GetDocument().getElementById("slotted");
+
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.setInnerHTML("<slot></slot>");
+  UpdateAllLifecyclePhases();
+
+  slotted->remove();
+  GetDocument().body()->appendChild(slotted);
+  host->remove();
+  auto* recalc_root = GetStyleRecalcRoot();
+  ASSERT_TRUE(recalc_root);
+  EXPECT_TRUE(recalc_root->NeedsStyleRecalc());
+}
+
+TEST_F(StyleEngineTest, AtCounterStyleUseCounter) {
+  ScopedCSSAtRuleCounterStyleForTest scope(true);
+
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSAtRuleCounterStyle));
+
+  GetDocument().body()->setInnerHTML("<style>@counter-style foo {}</style>");
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSAtRuleCounterStyle));
+}
+
+TEST_F(StyleEngineTest, CounterStyleDisabledInShadowDOM) {
+  ScopedCSSAtRuleCounterStyleForTest counter_style_enabled(true);
+  ScopedCSSAtRuleCounterStyleInShadowDOMForTest
+      counter_style_in_shadow_dom_disabled(false);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      @counter-style foo { symbols: A; }
+    </style>
+    <ol id="foo" style="list-style-type: foo"><li></li></ol>
+    <div id="host"></div>
+  )HTML");
+
+  Element* host = GetDocument().getElementById("host");
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.setInnerHTML(R"HTML(
+    <style>
+      @counter-style bar { symbols: B; }
+    </style>
+    <ol id="foo" style="list-style-type: foo"><li></li></ol>
+    <ol id="bar" style="list-style-type: bar"><li></li></ol>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  // Only @counter-style rules defined in the document scope are effective,
+  // matching the spec status as of Feb 2021.
+
+  LayoutObject* document_foo =
+      GetDocument().getElementById("foo")->firstChild()->GetLayoutObject();
+  EXPECT_EQ("A. ", GetListMarkerText(document_foo));
+
+  LayoutObject* shadow_foo =
+      shadow_root.getElementById("foo")->firstChild()->GetLayoutObject();
+  EXPECT_EQ("A. ", GetListMarkerText(shadow_foo));
+
+  LayoutObject* shadow_bar =
+      shadow_root.getElementById("bar")->firstChild()->GetLayoutObject();
+  EXPECT_EQ("1. ", GetListMarkerText(shadow_bar));
 }
 
 }  // namespace blink

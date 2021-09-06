@@ -133,9 +133,6 @@ void ReverseChildOrder(int profile, const NoteNode* parent);
 // notes model. Returns true if they match.
 bool ModelMatchesVerifier(int profile) WARN_UNUSED_RESULT;
 
-// Checks if the notes models of all sync profiles match the verifier
-// notes model. Returns true if they match.
-bool AllModelsMatchVerifier() WARN_UNUSED_RESULT;
 
 // Checks if the notes models of |profile_a| and |profile_b| match each
 // other. Returns true if they match.

@@ -19,11 +19,6 @@
 
 namespace {
 
-const char kErrorAlgorithmNotPermittedByCertificate[] =
-    "The requested Algorithm is not permitted by the certificate.";
-const char kErrorInvalidX509Cert[] =
-    "Certificate is not a valid X.509 certificate.";
-
 using crosapi::keystore_service_util::kWebCryptoEcdsa;
 using crosapi::keystore_service_util::kWebCryptoNamedCurveP256;
 using crosapi::keystore_service_util::kWebCryptoRsassaPkcs1v15;
@@ -74,8 +69,12 @@ std::string StatusToString(Status status) {
       return "The operation was successfully executed.";
     case Status::kErrorAlgorithmNotSupported:
       return "Algorithm not supported.";
+    case Status::kErrorAlgorithmNotPermittedByCertificate:
+      return "The requested Algorithm is not permitted by the certificate.";
     case Status::kErrorCertificateNotFound:
       return "Certificate could not be found.";
+    case Status::kErrorCertificateInvalid:
+      return "Certificate is not a valid X.509 certificate.";
     case Status::kErrorInputTooLong:
       return "Input too long.";
     case Status::kErrorGrantKeyPermissionForExtension:
@@ -106,8 +105,7 @@ std::string StatusToString(Status status) {
 void IntersectCertificates(
     const net::CertificateList& certs1,
     const net::CertificateList& certs2,
-    const base::Callback<void(std::unique_ptr<net::CertificateList>)>&
-        callback) {
+    base::OnceCallback<void(std::unique_ptr<net::CertificateList>)> callback) {
   std::unique_ptr<net::CertificateList> intersection(new net::CertificateList);
   net::CertificateList* const intersection_ptr = intersection.get();
 
@@ -120,7 +118,7 @@ void IntersectCertificates(
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&IntersectOnWorkerThread, certs1, certs2,
                      intersection_ptr),
-      base::BindOnce(callback, base::Passed(&intersection)));
+      base::BindOnce(std::move(callback), std::move(intersection)));
 }
 
 GetPublicKeyAndAlgorithmOutput::GetPublicKeyAndAlgorithmOutput() = default;
@@ -134,7 +132,7 @@ GetPublicKeyAndAlgorithmOutput GetPublicKeyAndAlgorithm(
   GetPublicKeyAndAlgorithmOutput output;
 
   if (possibly_invalid_cert_der.empty()) {
-    output.error = kErrorInvalidX509Cert;
+    output.status = Status::kErrorCertificateInvalid;
     return output;
   }
 
@@ -147,7 +145,7 @@ GetPublicKeyAndAlgorithmOutput GetPublicKeyAndAlgorithm(
           reinterpret_cast<const char*>(possibly_invalid_cert_der.data()),
           possibly_invalid_cert_der.size(), options);
   if (!cert_x509) {
-    output.error = kErrorInvalidX509Cert;
+    output.status = Status::kErrorCertificateInvalid;
     return output;
   }
 
@@ -158,7 +156,7 @@ GetPublicKeyAndAlgorithmOutput GetPublicKeyAndAlgorithm(
                                              &key_info.key_size_bits) ||
       (key_info.key_type != net::X509Certificate::kPublicKeyTypeRSA &&
        key_info.key_type != net::X509Certificate::kPublicKeyTypeECDSA)) {
-    output.error = StatusToString(Status::kErrorAlgorithmNotSupported);
+    output.status = Status::kErrorAlgorithmNotSupported;
     return output;
   }
 
@@ -169,7 +167,7 @@ GetPublicKeyAndAlgorithmOutput GetPublicKeyAndAlgorithm(
   // with the ECDSA algorithm.
   if (algorithm_name == kWebCryptoRsassaPkcs1v15) {
     if (key_info.key_type != net::X509Certificate::kPublicKeyTypeRSA) {
-      output.error = kErrorAlgorithmNotPermittedByCertificate;
+      output.status = Status::kErrorAlgorithmNotPermittedByCertificate;
       return output;
     }
 
@@ -177,12 +175,13 @@ GetPublicKeyAndAlgorithmOutput GetPublicKeyAndAlgorithm(
     output.public_key =
         std::vector<uint8_t>(key_info.public_key_spki_der.begin(),
                              key_info.public_key_spki_der.end());
+    output.status = Status::kSuccess;
     return output;
   }
 
   if (algorithm_name == kWebCryptoEcdsa) {
     if (key_info.key_type != net::X509Certificate::kPublicKeyTypeECDSA) {
-      output.error = kErrorAlgorithmNotPermittedByCertificate;
+      output.status = Status::kErrorAlgorithmNotPermittedByCertificate;
       return output;
     }
 
@@ -190,10 +189,11 @@ GetPublicKeyAndAlgorithmOutput GetPublicKeyAndAlgorithm(
     output.public_key =
         std::vector<uint8_t>(key_info.public_key_spki_der.begin(),
                              key_info.public_key_spki_der.end());
+    output.status = Status::kSuccess;
     return output;
   }
 
-  output.error = kErrorAlgorithmNotPermittedByCertificate;
+  output.status = Status::kErrorAlgorithmNotPermittedByCertificate;
   return output;
 }
 

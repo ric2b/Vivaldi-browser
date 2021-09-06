@@ -169,7 +169,7 @@ LayoutText* FirstLetterPseudoElement::FirstLetterTextLayoutObject(
       return nullptr;
     } else if (first_letter_text_layout_object
                    ->IsFlexibleBoxIncludingDeprecatedAndNG() ||
-               first_letter_text_layout_object->IsLayoutGrid()) {
+               first_letter_text_layout_object->IsLayoutGridIncludingNG()) {
       first_letter_text_layout_object =
           first_letter_text_layout_object->NextSibling();
     } else if (!first_letter_text_layout_object->IsInline() &&
@@ -318,9 +318,8 @@ FirstLetterPseudoElement::CustomStyleForLayoutObject(
   if (!first_letter_text)
     return nullptr;
   DCHECK(first_letter_text->Parent());
-  // TODO(crbug.com/1145970): Pass StyleRecalcContext to StyleForPseudoElement.
   return ParentOrShadowHostElement()->StyleForPseudoElement(
-      PseudoElementStyleRequest(GetPseudoId()),
+      style_recalc_context, PseudoElementStyleRequest(GetPseudoId()),
       first_letter_text->Parent()->FirstLineStyle());
 }
 

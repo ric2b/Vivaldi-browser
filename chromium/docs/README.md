@@ -48,8 +48,8 @@ used when committed.
     (on a Linux host)
 *   [Cast for Android Build Instructions](android_cast_build_instructions.md) -
     Cast for Android (on a Linux host)
-*   [Fuchsia Build Instructions](fuchsia_build_instructions.md) - Fuchsia target
-    (on a Linux host)
+*   [Fuchsia Build Instructions](fuchsia/build_instructions.md) -
+    Fuchsia target (on a Linux host)
 *   [iOS Build Instructions](ios/build_instructions.md) - iOS target (on a MacOS
     host)
 *   [Chrome OS Build Instructions](chromeos_build_instructions.md) - Chrome OS
@@ -305,6 +305,7 @@ used when committed.
     *   [Kiosk mode and public sessions](enterprise/kiosk_public_session.md)
 *   [Debugging UI in OOBE/login/lock](login/ui_debugging.md)
 *   [Chrome Logging on Chrome OS](chrome_os_logging.md)
+*   [Debugging tips](testing/chromeos_debugging_tips.md)
 
 ### Misc WebUI-Specific Docs
 *   [Creating WebUI Interfaces in components/](webui_in_components.md) How to

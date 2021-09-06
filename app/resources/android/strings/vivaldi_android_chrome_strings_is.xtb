@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="is">
-<translation id="1397811292916898096">Leita með  <ph name="PRODUCT_NAME" /> 1</translation>
+<translation id="1397811292916898096">Leita með <ph name="PRODUCT_NAME" /> 1</translation>
 <translation id="1598449788754183301">Skiptu á milli venjulegra/einka flipa</translation>
 <translation id="1644574205037202324">Saga</translation>
 <translation id="17513872634828108">Opnir flipar</translation>
 <translation id="1829244130665387512">Leita á síðunni</translation>
 <translation id="2038563949887743358">Kveiktu á borðtölvuútgáfu</translation>
+<translation id="2306442503286132111">Bókamerki vistað í <ph name="FOLDER_NAME" /> möppu</translation>
 <translation id="2433507940547922241">Útlit</translation>
 <translation id="2501278716633472235">Fara til baka</translation>
 <translation id="2633278372998075009">Einkaflipar</translation>
 <translation id="3076631378407175873">Höfundarréttur <ph name="YEAR" /> Vivaldi Technologies AS. Öll réttindi áskilin.</translation>
 <translation id="3234355010754616171">Nýr einkaflipi</translation>
+<translation id="3377025655491224618">Einkaflipi</translation>
 <translation id="3518985090088779359">Samþykkja og halda áfram</translation>
 <translation id="3700829948786686853">Velkomin/n í Vivaldi</translation>
 <translation id="3719826155360621982">Heimasíða</translation>
@@ -30,10 +32,12 @@
 <translation id="5840488417521835756">Kynntu þér efni netsins án þess að fara af síðunni. "Ýttu til að leita" er eiginleiki sem virkar þegar Google er sjálfgefin leitarvél. Það sendir orð og umhverfi þess inn í Google leitarvélina, og finnur skilgreiningar, myndir, niðurstöður og fleira.
 
 Haltu við orðið sem þú vilt leita að. Þá birtist leitarspjald neðst á skjánum. Renndu spjaldinu upp til þess að fínstilla leitina.</translation>
+<translation id="6150320133806434356">Bókamerki vistað</translation>
 <translation id="6336451774241870485">Nýr einkaflipi</translation>
 <translation id="6593061639179217415">Nota borðtölvuútlit</translation>
 <translation id="6610147964972079463">Loka einkagluggum</translation>
 <translation id="706339621163631076">Persónuverndarstefna vafrans</translation>
+<translation id="732145680195464316">Bókamerki vistað í <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Um Vivaldi</translation>
 <translation id="7465104139234185284">Loka öllum einkagluggum</translation>
 <translation id="7519434535192513364">"Ýttu til að leita" er eiginleiki sem virkar þegar Google er sjálfgefin leitarvél. Það sendir orð og umhverfi þess inn í Google leitarvélina. Þú getur slökkt á því í <ph name="BEGIN_LINK" />stillingum<ph name="END_LINK" />.</translation>

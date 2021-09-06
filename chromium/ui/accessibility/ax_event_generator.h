@@ -9,9 +9,10 @@
 #include <map>
 #include <ostream>
 #include <set>
+#include <string>
 #include <vector>
 
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "ui/accessibility/ax_event_intent.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/accessibility/ax_tree.h"
@@ -118,6 +119,7 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
   struct AX_EXPORT EventParams {
     EventParams(Event event,
                 ax::mojom::EventFrom event_from,
+                ax::mojom::Action event_from_action,
                 const std::vector<AXEventIntent>& event_intents);
     EventParams(const EventParams& other);
     ~EventParams();
@@ -127,6 +129,7 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
 
     Event event;
     ax::mojom::EventFrom event_from;
+    ax::mojom::Action event_from_action;
     std::vector<AXEventIntent> event_intents;
   };
 
@@ -315,7 +318,7 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
 
   // Please make sure that this ScopedObserver is always declared last in order
   // to prevent any use-after-free.
-  ScopedObserver<AXTree, AXTreeObserver> tree_event_observer_{this};
+  base::ScopedObservation<AXTree, AXTreeObserver> tree_event_observation_{this};
 };
 
 AX_EXPORT std::ostream& operator<<(std::ostream& os,

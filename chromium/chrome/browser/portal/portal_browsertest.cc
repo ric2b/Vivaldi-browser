@@ -29,7 +29,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/safe_browsing/core/db/test_database_manager.h"
+#include "components/safe_browsing/core/db/fake_database_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -41,6 +41,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -130,11 +131,7 @@ IN_PROC_BROWSER_TEST_F(
                 browser()->tab_strip_model()->GetActiveWebContents(), nullptr));
 }
 
-// TODO(mcnee): Disabled due to the initial fix for this causing a regression.
-// See https://crbug.com/1076696 . Investigate the cause of this regression and
-// re-enable.
-IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
-                       DISABLED_HttpBasicAuthenticationInPortal) {
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest, HttpBasicAuthenticationInPortal) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/title1.html"));
   ui_test_utils::NavigateToURL(browser(), url);
@@ -210,7 +207,8 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, TaskManagerUpdatesAfterActivation) {
 
   // Check that both tasks appear.
   chrome::ShowTaskManager(browser());
-  auto tester = task_manager::TaskManagerTester::Create(base::Closure());
+  auto tester =
+      task_manager::TaskManagerTester::Create(base::RepeatingClosure());
   task_manager::browsertest_util::WaitForTaskManagerRows(
       1, expected_tab_title_before_activation);
   task_manager::browsertest_util::WaitForTaskManagerRows(1,
@@ -283,7 +281,8 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, TaskManagerOrderingOfDependentRows) {
 
   // Check that the tasks are grouped in the UI as expected.
   chrome::ShowTaskManager(browser());
-  auto tester = task_manager::TaskManagerTester::Create(base::Closure());
+  auto tester =
+      task_manager::TaskManagerTester::Create(base::RepeatingClosure());
   task_manager::browsertest_util::WaitForTaskManagerRows(kNumTabs,
                                                          expected_tab_title);
   task_manager::browsertest_util::WaitForTaskManagerRows(
@@ -409,64 +408,6 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, BrowserHistoryUpdatesOnActivation) {
       base::Contains(ui_test_utils::HistoryEnumerator(profile).urls(), url2));
 }
 
-namespace {
-
-// Allows us to treat certain URLs as dangerous with Safe Browsing.
-class FakeSafeBrowsingDatabaseManager
-    : public safe_browsing::TestSafeBrowsingDatabaseManager {
- public:
-  FakeSafeBrowsingDatabaseManager() = default;
-
-  void AddDangerousUrl(const GURL& dangerous_url) {
-    dangerous_urls_.insert(dangerous_url);
-  }
-
-  // safe_browsing::TestSafeBrowsingDatabaseManager:
-  bool CheckBrowseUrl(const GURL& url,
-                      const safe_browsing::SBThreatTypeSet& threat_types,
-                      Client* client) override {
-    if (!dangerous_urls_.contains(url))
-      return true;
-
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::IO},
-        base::BindOnce(&FakeSafeBrowsingDatabaseManager::CheckBrowseURLAsync,
-                       this, url, client));
-    return false;
-  }
-  bool IsSupported() const override { return true; }
-  bool ChecksAreAlwaysAsync() const override { return false; }
-  bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
-                         Client* client) override {
-    return true;
-  }
-  bool CheckUrlForSubresourceFilter(const GURL& url, Client* client) override {
-    return true;
-  }
-  bool CanCheckResourceType(
-      blink::mojom::ResourceType resource_type) const override {
-    return true;
-  }
-  safe_browsing::ThreatSource GetThreatSource() const override {
-    // This choice is arbitrary. The blocking page expects this to not be
-    // |UNKNOWN|.
-    return safe_browsing::ThreatSource::LOCAL_PVER4;
-  }
-
- private:
-  ~FakeSafeBrowsingDatabaseManager() override = default;
-
-  void CheckBrowseURLAsync(const GURL& url, Client* client) {
-    client->OnCheckBrowseUrlResult(url,
-                                   safe_browsing::SB_THREAT_TYPE_URL_PHISHING,
-                                   safe_browsing::ThreatMetadata());
-  }
-
-  base::flat_set<GURL> dangerous_urls_;
-};
-
-}  // namespace
-
 class PortalSafeBrowsingBrowserTest : public PortalBrowserTest {
  public:
   PortalSafeBrowsingBrowserTest()
@@ -478,7 +419,7 @@ class PortalSafeBrowsingBrowserTest : public PortalBrowserTest {
   void CreatedBrowserMainParts(
       content::BrowserMainParts* browser_main_parts) override {
     fake_safe_browsing_database_manager_ =
-        base::MakeRefCounted<FakeSafeBrowsingDatabaseManager>();
+        base::MakeRefCounted<safe_browsing::FakeSafeBrowsingDatabaseManager>();
     safe_browsing_factory_->SetTestDatabaseManager(
         fake_safe_browsing_database_manager_.get());
     safe_browsing::SafeBrowsingService::RegisterFactory(
@@ -492,11 +433,12 @@ class PortalSafeBrowsingBrowserTest : public PortalBrowserTest {
   }
 
   void AddDangerousUrl(const GURL& dangerous_url) {
-    fake_safe_browsing_database_manager_->AddDangerousUrl(dangerous_url);
+    fake_safe_browsing_database_manager_->AddDangerousUrl(
+        dangerous_url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
   }
 
  private:
-  scoped_refptr<FakeSafeBrowsingDatabaseManager>
+  scoped_refptr<safe_browsing::FakeSafeBrowsingDatabaseManager>
       fake_safe_browsing_database_manager_;
   std::unique_ptr<safe_browsing::TestSafeBrowsingServiceFactory>
       safe_browsing_factory_;

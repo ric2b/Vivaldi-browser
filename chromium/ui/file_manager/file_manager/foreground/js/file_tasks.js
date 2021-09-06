@@ -18,12 +18,10 @@
 // #import {decorate} from 'chrome://resources/js/cr/ui.m.js';
 // #import {FilesPasswordDialog} from '../elements/files_password_dialog.m.js';
 // #import {ProgressCenterItem, ProgressItemType, ProgressItemState} from '../../common/js/progress_center_common.m.js';
-// #import {webStoreUtils} from './web_store_utils.m.js';
 // #import {FileTransferController} from './file_transfer_controller.m.js';
 // #import {FilesConfirmDialog} from './ui/files_confirm_dialog.m.js';
 // #import {VolumeManagerCommon} from '../../../base/js/volume_manager_types.m.js';
 // #import {FileType} from '../../common/js/file_type.m.js';
-// #import {SuggestAppsDialog} from './ui/suggest_apps_dialog.m.js';
 // #import {constants} from './constants.m.js';
 // #import {util, strf, str} from '../../common/js/util.m.js';
 // #import {AsyncUtil} from '../../common/js/async_util.m.js'
@@ -205,48 +203,6 @@
    */
   getNonOpenTaskItems() {
     return this.tasks_.filter(task => !FileTasks.isOpenTask(task));
-  }
-
-  /**
-   * Opens the suggest file dialog.
-   *
-   * @param {function()} onSuccess Success callback.
-   * @param {function()} onCancelled User-cancelled callback.
-   * @param {function()} onFailure Failure callback.
-   */
-  openSuggestAppsDialog(onSuccess, onCancelled, onFailure) {
-    if (this.entries_.length !== 1) {
-      onFailure();
-      return;
-    }
-
-    const entry = this.entries_[0];
-    const mimeType = this.mimeTypes_[0];
-    const basename = entry.name;
-    const splitted = util.splitExtension(basename);
-    const extension = splitted[1];
-
-    // Returns with failure if the file has neither extension nor MIME type.
-    if (!extension && !mimeType) {
-      onFailure();
-      return;
-    }
-
-    const onDialogClosed = (result, itemId) => {
-      switch (result) {
-        case SuggestAppsDialog.Result.SUCCESS:
-          onSuccess();
-          break;
-        case SuggestAppsDialog.Result.FAILED:
-          onFailure();
-          break;
-        default:
-          onCancelled();
-      }
-    };
-
-    this.ui_.suggestAppsDialog.showByExtensionAndMime(
-        extension, mimeType, onDialogClosed);
   }
 
   /**
@@ -639,45 +595,14 @@
           textMessageId = 'NO_TASK_FOR_FILE';
       }
 
-      const webStoreUrl = webStoreUtils.createWebStoreLink(extension, mimeType);
-      const text =
-          strf(textMessageId, webStoreUrl, str('NO_TASK_FOR_FILE_URL'));
+      const text = strf(textMessageId, str('NO_TASK_FOR_FILE_URL'));
       const title = titleMessageId ? str(titleMessageId) : filename;
       this.ui_.alertDialog.showHtml(title, text, null, null, null);
       callback(false, this.entries_);
     };
 
     const onViewFilesFailure = () => {
-      if (extension &&
-          (FileTasks.EXTENSIONS_TO_SKIP_SUGGEST_APPS_.indexOf(extension) !==
-               -1 ||
-           constants.EXECUTABLE_EXTENSIONS.indexOf(assert(extension)) !== -1)) {
-        showAlert();
-        return;
-      }
-
-      this.openSuggestAppsDialog(
-          () => {
-            FileTasks
-                .create(
-                    this.volumeManager_, this.metadataModel_,
-                    this.directoryModel_, this.ui_,
-                    this.fileTransferController_, this.entries_,
-                    this.mimeTypes_, this.taskHistory_, this.namingController_,
-                    this.crostini_, this.progressCenter_)
-                .then(
-                    tasks => {
-                      tasks.executeDefault();
-                      callback(true, this.entries_);
-                    },
-                    () => {
-                      callback(false, this.entries_);
-                    });
-          },
-          () => {
-            callback(false, this.entries_);
-          },
-          showAlert);
+      showAlert();
     };
 
     const onViewFiles = result => {
@@ -1461,17 +1386,6 @@ FileTasks.UMA_INDEX_KNOWN_EXTENSIONS = Object.freeze([
   '.dng',      '.nef',         '.nrw',
   '.orf',      '.raf',         '.rw2',
   '.tini'
-]);
-
-/**
- * The list of extensions to skip the suggest app dialog.
- * @private @const {Array<string>}
- */
-FileTasks.EXTENSIONS_TO_SKIP_SUGGEST_APPS_ = Object.freeze([
-  '.crdownload',
-  '.dsc',
-  '.inf',
-  '.crx',
 ]);
 
 /**

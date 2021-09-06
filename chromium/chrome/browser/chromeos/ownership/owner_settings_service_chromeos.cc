@@ -11,6 +11,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
@@ -22,16 +23,15 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_checker.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/ash/settings/device_settings_provider.h"
+#include "chrome/browser/ash/settings/owner_flags_storage.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_provider.h"
-#include "chrome/browser/chromeos/settings/owner_flags_storage.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "chromeos/tpm/tpm_token_loader.h"
 #include "components/ownership/owner_key_util.h"
@@ -650,6 +650,16 @@ void OwnerSettingsServiceChromeOS::UpdateDeviceSettings(
     } else {
       NOTREACHED();
     }
+  } else if (path == kDevicePeripheralDataAccessEnabled) {
+    em::DevicePciPeripheralDataAccessEnabledProto*
+        peripheral_data_access_proto =
+            settings.mutable_device_pci_peripheral_data_access_enabled();
+    bool enabled;
+    if (value.GetAsBoolean(&enabled)) {
+      peripheral_data_access_proto->set_enabled(enabled);
+    } else {
+      NOTREACHED();
+    }
   } else {
     // The remaining settings don't support Set(), since they are not
     // intended to be customizable by the user:
@@ -776,8 +786,8 @@ void OwnerSettingsServiceChromeOS::OnPolicyAssembledAndSigned(
   }
   device_settings_service_->Store(
       std::move(policy_response),
-      base::Bind(&OwnerSettingsServiceChromeOS::OnSignedPolicyStored,
-                 store_settings_factory_.GetWeakPtr(), true /* success */));
+      base::BindOnce(&OwnerSettingsServiceChromeOS::OnSignedPolicyStored,
+                     store_settings_factory_.GetWeakPtr(), true /* success */));
 }
 
 void OwnerSettingsServiceChromeOS::OnSignedPolicyStored(bool success) {

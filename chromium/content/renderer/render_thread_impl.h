@@ -34,7 +34,6 @@
 #include "content/common/agent_scheduling_group.mojom.h"
 #include "content/common/content_export.h"
 #include "content/common/frame.mojom.h"
-#include "content/common/frame_replication_state.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/renderer_host.mojom.h"
@@ -71,6 +70,7 @@
 class SkBitmap;
 
 namespace blink {
+class WebResourceRequestSenderDelegate;
 class WebVideoCaptureImplManager;
 }
 
@@ -108,9 +108,9 @@ class AgentSchedulingGroup;
 class CategorizedWorkerPool;
 class GpuVideoAcceleratorFactoriesImpl;
 class MediaInterfaceFactory;
+class RenderFrameImpl;
 class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
-class ResourceDispatcher;
 class VariationsRenderThreadObserver;
 
 #if defined(OS_ANDROID)
@@ -162,28 +162,32 @@ class CONTENT_EXPORT RenderThreadImpl
   static void RegisterSchemes();
 
   // RenderThread implementation:
-  bool Send(IPC::Message* msg) override;
   IPC::SyncChannel* GetChannel() override;
   std::string GetLocale() override;
   IPC::SyncMessageFilter* GetSyncMessageFilter() override;
   void AddRoute(int32_t routing_id, IPC::Listener* listener) override;
+  void AttachTaskRunnerToRoute(
+      int32_t routing_id,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
   void RemoveRoute(int32_t routing_id) override;
   int GenerateRoutingID() override;
   bool GenerateFrameRoutingID(
       int32_t& routing_id,
-      base::UnguessableToken& frame_token,
+      blink::LocalFrameToken& frame_token,
       base::UnguessableToken& devtools_frame_token) override;
   void AddFilter(IPC::MessageFilter* filter) override;
   void RemoveFilter(IPC::MessageFilter* filter) override;
   void AddObserver(RenderThreadObserver* observer) override;
   void RemoveObserver(RenderThreadObserver* observer) override;
-  void SetResourceDispatcherDelegate(
-      ResourceDispatcherDelegate* delegate) override;
+  void SetResourceRequestSenderDelegate(
+      blink::WebResourceRequestSenderDelegate* delegate) override;
+  blink::WebResourceRequestSenderDelegate* GetResourceRequestSenderDelegate() {
+    return resource_request_sender_delegate_;
+  }
   void RegisterExtension(std::unique_ptr<v8::Extension> extension) override;
   int PostTaskToAllWebWorkers(base::RepeatingClosure closure) override;
   base::WaitableEvent* GetShutdownEvent() override;
   int32_t GetClientId() override;
-  bool IsOnline() override;
   void SetRendererProcessType(
       blink::scheduler::WebRendererProcessType type) override;
   blink::WebString GetUserAgent() override;
@@ -252,8 +256,8 @@ class CONTENT_EXPORT RenderThreadImpl
     return compositor_task_runner_;
   }
 
-  ResourceDispatcher* resource_dispatcher() const {
-    return resource_dispatcher_.get();
+  const std::vector<std::string> cors_exempt_header_list() const {
+    return cors_exempt_header_list_;
   }
 
   URLLoaderThrottleProvider* url_loader_throttle_provider() const {
@@ -417,10 +421,14 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // mojom::Renderer:
   void CreateAgentSchedulingGroup(
-      mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap) override;
+      mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap,
+      mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> broker_remote)
+      override;
   void CreateAssociatedAgentSchedulingGroup(
       mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup>
-          agent_scheduling_group) override;
+          agent_scheduling_group,
+      mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> broker_remote)
+      override;
   void OnNetworkConnectionChanged(
       net::NetworkChangeNotifier::ConnectionType type,
       double max_bandwidth_mbps) override;
@@ -483,8 +491,9 @@ class CONTENT_EXPORT RenderThreadImpl
   // These objects live solely on the render thread.
   std::unique_ptr<blink::scheduler::WebThreadScheduler> main_thread_scheduler_;
   std::unique_ptr<RendererBlinkPlatformImpl> blink_platform_impl_;
-  std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
   std::unique_ptr<URLLoaderThrottleProvider> url_loader_throttle_provider_;
+
+  std::vector<std::string> cors_exempt_header_list_;
 
   // Used on the render thread.
   std::unique_ptr<blink::WebVideoCaptureImplManager> vc_manager_;
@@ -584,7 +593,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   RendererMemoryMetrics purge_and_suspend_memory_metrics_;
   int process_foregrounded_count_;
-  bool online_status_ = true;
 
   int32_t client_id_;
 
@@ -594,6 +602,10 @@ class CONTENT_EXPORT RenderThreadImpl
   // this member.
   mojo::Receiver<viz::mojom::CompositingModeWatcher>
       compositing_mode_watcher_receiver_{this};
+
+  // Delegate is expected to live as long as requests may be sent.
+  blink::WebResourceRequestSenderDelegate* resource_request_sender_delegate_ =
+      nullptr;
 
   base::WeakPtrFactory<RenderThreadImpl> weak_factory_{this};
 

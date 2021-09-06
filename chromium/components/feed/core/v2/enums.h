@@ -7,18 +7,21 @@
 
 #include <iosfwd>
 
-#include "components/feed/core/common/enums.h"
-
 namespace feed {
 
+// One value for each network API method used by the feed.
 enum class NetworkRequestType : int {
   kFeedQuery = 0,
   kUploadActions = 1,
+  kNextPage = 2,
+  kListFollowedWebFeeds = 3,
+  kUnfollowWebFeed = 4,
 };
 
 // This must be kept in sync with FeedLoadStreamStatus in enums.xml.
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.feed.v2
 enum class LoadStreamStatus {
   // Loading was not attempted.
   kNoStatus = 0,
@@ -59,6 +62,7 @@ enum class LoadStreamStatus {
 std::ostream& operator<<(std::ostream& out, LoadStreamStatus value);
 
 // Keep this in sync with FeedUploadActionsStatus in enums.xml.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.feed.v2
 enum class UploadActionsStatus {
   kNoStatus = 0,
   kNoPendingActions = 1,

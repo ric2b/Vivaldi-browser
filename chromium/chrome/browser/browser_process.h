@@ -101,10 +101,6 @@ class PrintJobManager;
 class PrintPreviewDialogController;
 }
 
-namespace rappor {
-class RapporServiceImpl;
-}
-
 namespace resource_coordinator {
 class ResourceCoordinatorParts;
 class TabManager;
@@ -134,7 +130,6 @@ class BrowserProcess {
 
   // Services: any of these getters may return NULL
   virtual metrics::MetricsService* metrics_service() = 0;
-  virtual rappor::RapporServiceImpl* rappor_service() = 0;
   virtual ProfileManager* profile_manager() = 0;
   virtual PrefService* local_state() = 0;
   virtual scoped_refptr<network::SharedURLLoaderFactory>
@@ -204,8 +199,10 @@ class BrowserProcess {
 
   // Returns the object that manages background applications.
   virtual BackgroundModeManager* background_mode_manager() = 0;
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   virtual void set_background_mode_manager_for_test(
       std::unique_ptr<BackgroundModeManager> manager) = 0;
+#endif
 
   // Returns the StatusTray, which provides an API for displaying status icons
   // in the system status tray. Returns NULL if status icons are not supported

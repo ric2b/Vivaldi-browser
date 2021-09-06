@@ -19,6 +19,10 @@
 #include "base/optional.h"
 #include "base/timer/timer.h"
 
+namespace aura {
+class Window;
+}  // namespace aura
+
 namespace gfx {
 class Rect;
 }  // namespace gfx
@@ -44,6 +48,9 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
       const ClipboardHistoryControllerImpl&) = delete;
   ~ClipboardHistoryControllerImpl() override;
 
+  // Clean up th child widgets prior to destruction.
+  void Shutdown();
+
   void AddObserver(
       ClipboardHistoryController::Observer* observer) const override;
   void RemoveObserver(
@@ -57,6 +64,9 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
 
   // Returns bounds for the contextual menu in screen coordinates.
   gfx::Rect GetMenuBoundsInScreenForTest() const;
+
+  // Whether the ClipboardHistory has items.
+  bool IsEmpty() const;
 
   // Returns the history which tracks what is being copied to the clipboard.
   const ClipboardHistory* history() const { return clipboard_history_.get(); }
@@ -94,6 +104,8 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   void ShowMenu(const gfx::Rect& anchor_rect,
                 ui::MenuSourceType source_type,
                 ShowSource show_source) override;
+  bool ShouldShowNewFeatureBadge() const override;
+  void MarkNewFeatureBadgeShown() override;
   std::unique_ptr<ScopedClipboardHistoryPause> CreateScopedPause() override;
   base::Value GetHistoryValues(
       const std::set<std::string>& item_id_filter) const override;
@@ -123,8 +135,10 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   // clipboard data should be pasted.
   void PasteMenuItemData(int command_id, bool paste_plain_text);
 
-  // Pastes the specified clipboard history item.
-  void PasteClipboardHistoryItem(const ClipboardHistoryItem& item,
+  // Pastes the specified clipboard history item, if |intended_window| matches
+  // the active window.
+  void PasteClipboardHistoryItem(aura::Window* intended_window,
+                                 ClipboardHistoryItem item,
                                  bool paste_plain_text);
 
   // Delete the menu item being selected and its corresponding data. If no item

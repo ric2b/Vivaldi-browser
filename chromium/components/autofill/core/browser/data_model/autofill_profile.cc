@@ -68,10 +68,10 @@ namespace {
 // similarly.
 ServerFieldType GetStorableTypeCollapsingGroups(ServerFieldType type) {
   ServerFieldType storable_type = AutofillType(type).GetStorableType();
-  if (AutofillType(storable_type).group() == NAME)
+  if (AutofillType(storable_type).group() == FieldTypeGroup::kName)
     return NAME_FULL;
 
-  if (AutofillType(storable_type).group() == PHONE_HOME)
+  if (AutofillType(storable_type).group() == FieldTypeGroup::kPhoneHome)
     return PHONE_HOME_WHOLE_NUMBER;
 
   return storable_type;
@@ -168,7 +168,7 @@ void GetFieldsForDistinguishingProfiles(
 
   // Keep track of which fields we've seen so that we avoid duplicate entries.
   // Always ignore fields of unknown type and the excluded field.
-  std::set<ServerFieldType> seen_fields;
+  ServerFieldTypeSet seen_fields;
   seen_fields.insert(UNKNOWN_TYPE);
   seen_fields.insert(GetStorableTypeCollapsingGroups(excluded_field));
 
@@ -223,7 +223,8 @@ static_assert(kNumSupportedTypesForValidation * kValidityBitsPerType <= 64,
 // main stored type for used to mark field validity .
 ServerFieldType NormalizeTypeForValidityCheck(ServerFieldType type) {
   auto field_type_group = AutofillType(type).group();
-  if (field_type_group == PHONE_HOME || field_type_group == PHONE_BILLING)
+  if (field_type_group == FieldTypeGroup::kPhoneHome ||
+      field_type_group == FieldTypeGroup::kPhoneBilling)
     return PHONE_HOME_WHOLE_NUMBER;
   return type;
 }
@@ -326,8 +327,7 @@ void AutofillProfile::GetMatchingTypes(
     const std::string& app_locale,
     ServerFieldTypeSet* matching_types) const {
   ServerFieldTypeSet matching_types_in_this_profile;
-  FormGroupList info = FormGroups();
-  for (const auto* form_group : info) {
+  for (const auto* form_group : FormGroups()) {
     form_group->GetMatchingTypes(text, app_locale,
                                  &matching_types_in_this_profile);
   }
@@ -346,8 +346,7 @@ void AutofillProfile::GetMatchingTypesAndValidities(
     return;
 
   ServerFieldTypeSet matching_types_in_this_profile;
-  FormGroupList info = FormGroups();
-  for (const auto* form_group : info) {
+  for (const auto* form_group : FormGroups()) {
     form_group->GetMatchingTypes(text, app_locale,
                                  &matching_types_in_this_profile);
   }
@@ -385,8 +384,7 @@ void AutofillProfile::SetRawInfoWithVerificationStatus(
 
 void AutofillProfile::GetSupportedTypes(
     ServerFieldTypeSet* supported_types) const {
-  FormGroupList info = FormGroups();
-  for (const auto* form_group : info) {
+  for (const auto* form_group : FormGroups()) {
     form_group->GetSupportedTypes(supported_types);
   }
 }
@@ -577,7 +575,7 @@ bool AutofillProfile::IsSubsetOfForFieldSet(
         // conditions that follow.
         return false;
       }
-    } else if (AutofillType(type).group() == PHONE_HOME) {
+    } else if (AutofillType(type).group() == FieldTypeGroup::kPhoneHome) {
       // Phone numbers should be canonicalized before comparing.
       if (type != PHONE_HOME_WHOLE_NUMBER &&
           type != PHONE_HOME_CITY_AND_NUMBER) {
@@ -1013,14 +1011,15 @@ bool AutofillProfile::IsAnInvalidPhoneNumber(ServerFieldType type) const {
     return true;
 
   ServerFieldTypeSet types;
-  if (GroupTypeOfServerFieldType(type) == PHONE_HOME) {
+  if (GroupTypeOfServerFieldType(type) == FieldTypeGroup::kPhoneHome) {
     types = {PHONE_HOME_NUMBER, PHONE_HOME_CITY_CODE,
              PHONE_HOME_CITY_AND_NUMBER};
     if (type == PHONE_HOME_WHOLE_NUMBER) {
       types.insert(PHONE_HOME_WHOLE_NUMBER);
       types.insert(PHONE_HOME_COUNTRY_CODE);
     }
-  } else if (GroupTypeOfServerFieldType(type) == PHONE_BILLING) {
+  } else if (GroupTypeOfServerFieldType(type) ==
+             FieldTypeGroup::kPhoneBilling) {
     types = {PHONE_BILLING_NUMBER, PHONE_BILLING_CITY_CODE,
              PHONE_BILLING_CITY_AND_NUMBER};
     if (type == PHONE_BILLING_WHOLE_NUMBER) {
@@ -1142,7 +1141,7 @@ bool AutofillProfile::ShouldSkipFillingOrSuggesting(
           autofill::features::kAutofillProfileClientValidation) &&
       GetValidityState(type, AutofillProfile::CLIENT) ==
           AutofillProfile::INVALID &&
-      (GroupTypeOfServerFieldType(type) != ADDRESS_HOME ||
+      (GroupTypeOfServerFieldType(type) != FieldTypeGroup::kAddressHome ||
        !GetRawInfo(ADDRESS_HOME_COUNTRY).empty())) {
     return true;
   }
@@ -1275,16 +1274,6 @@ void AutofillProfile::CreateInferredLabelsHelper(
   }
 }
 
-AutofillProfile::FormGroupList AutofillProfile::FormGroups() const {
-  FormGroupList v(5);
-  v[0] = &name_;
-  v[1] = &email_;
-  v[2] = &company_;
-  v[3] = &phone_number_;
-  v[4] = &address_;
-  return v;
-}
-
 const FormGroup* AutofillProfile::FormGroupForType(
     const AutofillType& type) const {
   return const_cast<AutofillProfile*>(this)->MutableFormGroupForType(type);
@@ -1292,30 +1281,30 @@ const FormGroup* AutofillProfile::FormGroupForType(
 
 FormGroup* AutofillProfile::MutableFormGroupForType(const AutofillType& type) {
   switch (type.group()) {
-    case NAME:
-    case NAME_BILLING:
+    case FieldTypeGroup::kName:
+    case FieldTypeGroup::kNameBilling:
       return &name_;
 
-    case EMAIL:
+    case FieldTypeGroup::kEmail:
       return &email_;
 
-    case COMPANY:
+    case FieldTypeGroup::kCompany:
       return &company_;
 
-    case PHONE_HOME:
-    case PHONE_BILLING:
+    case FieldTypeGroup::kPhoneHome:
+    case FieldTypeGroup::kPhoneBilling:
       return &phone_number_;
 
-    case ADDRESS_HOME:
-    case ADDRESS_BILLING:
+    case FieldTypeGroup::kAddressHome:
+    case FieldTypeGroup::kAddressBilling:
       return &address_;
 
-    case NO_GROUP:
-    case CREDIT_CARD:
-    case PASSWORD_FIELD:
-    case USERNAME_FIELD:
-    case TRANSACTION:
-    case UNFILLABLE:
+    case FieldTypeGroup::kNoGroup:
+    case FieldTypeGroup::kCreditCard:
+    case FieldTypeGroup::kPasswordField:
+    case FieldTypeGroup::kUsernameField:
+    case FieldTypeGroup::kTransaction:
+    case FieldTypeGroup::kUnfillable:
       return nullptr;
   }
 
@@ -1357,11 +1346,13 @@ std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
       NAME_LAST_SECOND,
       EMAIL_ADDRESS,
       COMPANY_NAME,
+      ADDRESS_HOME_ADDRESS,
       ADDRESS_HOME_LINE1,
       ADDRESS_HOME_LINE2,
       ADDRESS_HOME_LINE3,
       ADDRESS_HOME_STREET_ADDRESS,
       ADDRESS_HOME_STREET_NAME,
+      ADDRESS_HOME_DEPENDENT_STREET_NAME,
       ADDRESS_HOME_HOUSE_NUMBER,
       ADDRESS_HOME_APT_NUM,
       ADDRESS_HOME_FLOOR,

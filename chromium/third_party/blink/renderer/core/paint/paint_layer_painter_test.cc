@@ -45,6 +45,12 @@ class PaintLayerPainterTest : public PaintControllerPaintTest {
         ->GraphicsLayerBacking(&GetLayoutView())
         ->GetPaintController();
   }
+
+  CullRect GetCullRect(const PaintLayer& layer) {
+    if (RuntimeEnabledFeatures::CullRectUpdateEnabled())
+      return layer.GetLayoutObject().FirstFragment().GetCullRect();
+    return layer.PreviousCullRect();
+  }
 };
 
 INSTANTIATE_PAINT_TEST_SUITE_P(PaintLayerPainterTest);
@@ -421,7 +427,7 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceRetainsPreviousPaintResult) {
   EXPECT_THAT(ContentDisplayItems(),
               ElementsAre(VIEW_SCROLLING_BACKGROUND_DISPLAY_ITEM,
                           IsSameId(content1, kBackgroundType)));
-  EXPECT_EQ(IntRect(0, 0, 800, 4600), target_layer->PreviousCullRect().Rect());
+  EXPECT_EQ(IntRect(0, 0, 800, 4600), GetCullRect(*target_layer).Rect());
   auto chunks = ContentPaintChunks();
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
     // |target| still created subsequence (cached).
@@ -454,8 +460,9 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceRetainsPreviousPaintResult) {
   EXPECT_THAT(ContentDisplayItems(),
               ElementsAre(VIEW_SCROLLING_BACKGROUND_DISPLAY_ITEM,
                           IsSameId(content1, kBackgroundType)));
-  EXPECT_EQ(IntRect(0, 0, 800, 4600), target_layer->PreviousCullRect().Rect());
+  EXPECT_EQ(IntRect(0, 0, 800, 4600), GetCullRect(*target_layer).Rect());
   chunks = ContentPaintChunks();
+  EXPECT_EQ(CullRect(IntRect(0, 0, 800, 4600)), GetCullRect(*target_layer));
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
     EXPECT_THAT(ContentDisplayItems(),
                 ElementsAre(VIEW_SCROLLING_BACKGROUND_DISPLAY_ITEM,
@@ -476,9 +483,15 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceRetainsPreviousPaintResult) {
   GetLayoutView().GetScrollableArea()->SetScrollOffset(
       ScrollOffset(0, 3000), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesExceptPaint();
-  // Scrolling doesn't set SelfNeedsRepaint flag. Change of paint dirty rect of
-  // a partially painted layer will trigger repaint.
-  EXPECT_FALSE(target_layer->SelfNeedsRepaint());
+  if (RuntimeEnabledFeatures::CullRectUpdateEnabled()) {
+    // The layer needs repaint when its contents cull rect changes.
+    EXPECT_TRUE(target_layer->SelfNeedsRepaint());
+  } else {
+    // Scrolling doesn't set SelfNeedsRepaint flag. Change of paint dirty rect
+    // of a partially painted layer will trigger repaint.
+    EXPECT_FALSE(target_layer->SelfNeedsRepaint());
+  }
+
   counter.Reset();
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(2u, counter.NumNewCachedItems());
@@ -491,8 +504,9 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceRetainsPreviousPaintResult) {
               ElementsAre(VIEW_SCROLLING_BACKGROUND_DISPLAY_ITEM,
                           IsSameId(content1, kBackgroundType),
                           IsSameId(content2, kBackgroundType)));
-  EXPECT_EQ(IntRect(0, 0, 800, 7600), target_layer->PreviousCullRect().Rect());
+  EXPECT_EQ(IntRect(0, 0, 800, 7600), GetCullRect(*target_layer).Rect());
   chunks = ContentPaintChunks();
+  EXPECT_EQ(CullRect(IntRect(0, 0, 800, 7600)), GetCullRect(*target_layer));
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
     // |target| still created subsequence (repainted).
     EXPECT_SUBSEQUENCE_FROM_CHUNK(*target_layer, chunks.begin() + 1, 2);
@@ -1032,7 +1046,7 @@ TEST_P(PaintLayerPainterTestCAP, SimpleCullRect) {
   )HTML");
 
   EXPECT_EQ(IntRect(0, 0, 800, 600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, TallLayerCullRect) {
@@ -1045,7 +1059,7 @@ TEST_P(PaintLayerPainterTestCAP, TallLayerCullRect) {
   // Viewport rect (0, 0, 800, 600) expanded by 4000 for scrolling then clipped
   // by the contents rect.
   EXPECT_EQ(IntRect(0, 0, 800, 4600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, WideLayerCullRect) {
@@ -1057,39 +1071,39 @@ TEST_P(PaintLayerPainterTestCAP, WideLayerCullRect) {
 
   // Same as TallLayerCullRect.
   EXPECT_EQ(IntRect(0, 0, 4800, 600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, TallScrolledLayerCullRect) {
   SetBodyInnerHTML(R"HTML(
-    <div id='target' style='width: 200px; height: 10000px; position: relative'>
+    <div id='target' style='width: 200px; height: 12000px; position: relative'>
     </div>
   )HTML");
 
   // Viewport rect (0, 0, 800, 600) expanded by 4000 for scrolling then clipped
   // by the contents rect.
   EXPECT_EQ(IntRect(0, 0, 800, 4600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 
   GetDocument().View()->LayoutViewport()->SetScrollOffset(
       ScrollOffset(0, 4000), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(IntRect(0, 0, 800, 8600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 
   GetDocument().View()->LayoutViewport()->SetScrollOffset(
       ScrollOffset(0, 4500), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
   // Used the previous cull rect because the scroll amount is small.
   EXPECT_EQ(IntRect(0, 0, 800, 8600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 
   GetDocument().View()->LayoutViewport()->SetScrollOffset(
       ScrollOffset(0, 4600), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
   // Used new cull rect.
   EXPECT_EQ(IntRect(0, 600, 800, 8600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, WholeDocumentCullRect) {
@@ -1113,18 +1127,14 @@ TEST_P(PaintLayerPainterTestCAP, WholeDocumentCullRect) {
   )HTML");
 
   // Viewport clipping is disabled.
-  EXPECT_TRUE(GetLayoutView().Layer()->PreviousCullRect().IsInfinite());
-  EXPECT_TRUE(
-      GetPaintLayerByElementId("relative")->PreviousCullRect().IsInfinite());
-  EXPECT_TRUE(
-      GetPaintLayerByElementId("fixed")->PreviousCullRect().IsInfinite());
-  EXPECT_TRUE(
-      GetPaintLayerByElementId("scroll")->PreviousCullRect().IsInfinite());
+  EXPECT_TRUE(GetCullRect(*GetLayoutView().Layer()).IsInfinite());
+  EXPECT_TRUE(GetCullRect(*GetPaintLayerByElementId("relative")).IsInfinite());
+  EXPECT_TRUE(GetCullRect(*GetPaintLayerByElementId("fixed")).IsInfinite());
+  EXPECT_TRUE(GetCullRect(*GetPaintLayerByElementId("scroll")).IsInfinite());
 
   // Cull rect is normal for contents below scroll other than the viewport.
-  EXPECT_EQ(
-      IntRect(0, 0, 200, 4200),
-      GetPaintLayerByElementId("below-scroll")->PreviousCullRect().Rect());
+  EXPECT_EQ(IntRect(0, 0, 200, 4200),
+            GetCullRect(*GetPaintLayerByElementId("below-scroll")).Rect());
 
   EXPECT_THAT(ContentDisplayItems(),
               UnorderedElementsAre(
@@ -1163,7 +1173,7 @@ TEST_P(PaintLayerPainterTestCAP, VerticalRightLeftWritingModeDocument) {
   // 4200px in non-RTL mode. Expanding the resulting rect by 4000px in each
   // direction and clipping by the contents rect yields this result.
   EXPECT_EQ(IntRect(200, 0, 8800, 600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 // TODO(wangxianzhu): These tests should correspond to the tests in
@@ -1185,7 +1195,7 @@ TEST_P(PaintLayerPainterTestCAP, ScaledCullRect) {
   // The scale doesn't affect the cull rect.
   // TODO(wangxianzhu): actually it should.
   EXPECT_EQ(IntRect(0, 0, 4200, 4300),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, ScaledAndRotatedCullRect) {
@@ -1202,7 +1212,7 @@ TEST_P(PaintLayerPainterTestCAP, ScaledAndRotatedCullRect) {
   // The scale and the rotation don't affect the cull rect.
   // TODO(wangxianzhu): actually they should.
   EXPECT_EQ(IntRect(0, 0, 4200, 4300),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, 3DRotated90DegreesCullRect) {
@@ -1218,7 +1228,7 @@ TEST_P(PaintLayerPainterTestCAP, 3DRotated90DegreesCullRect) {
   // It's rotated 90 degrees about the X axis, which means its visual content
   // rect is empty, we fall back to the 4000px cull rect padding amount.
   EXPECT_EQ(IntRect(0, 0, 4200, 4300),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, 3DRotatedNear90DegreesCullRect) {
@@ -1236,7 +1246,7 @@ TEST_P(PaintLayerPainterTestCAP, 3DRotatedNear90DegreesCullRect) {
   // original layer size in certain dimensions. In such cases, we often fall
   // back to the 4000px cull rect padding amount.
   EXPECT_EQ(IntRect(0, 0, 4200, 4300),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, PerspectiveCullRect) {
@@ -1247,8 +1257,7 @@ TEST_P(PaintLayerPainterTestCAP, PerspectiveCullRect) {
   )HTML");
 
   // Use infinite cull rect with perspective.
-  EXPECT_TRUE(
-      GetPaintLayerByElementId("target")->PreviousCullRect().IsInfinite());
+  EXPECT_TRUE(GetCullRect(*GetPaintLayerByElementId("target")).IsInfinite());
 }
 
 TEST_P(PaintLayerPainterTestCAP, 3D45DegRotatedTallCullRect) {
@@ -1259,8 +1268,7 @@ TEST_P(PaintLayerPainterTestCAP, 3D45DegRotatedTallCullRect) {
   )HTML");
 
   // Use infinite cull rect with 3d transform.
-  EXPECT_TRUE(
-      GetPaintLayerByElementId("target")->PreviousCullRect().IsInfinite());
+  EXPECT_TRUE(GetCullRect(*GetPaintLayerByElementId("target")).IsInfinite());
 }
 
 TEST_P(PaintLayerPainterTestCAP, FixedPositionCullRect) {
@@ -1271,7 +1279,7 @@ TEST_P(PaintLayerPainterTestCAP, FixedPositionCullRect) {
   )HTML");
 
   EXPECT_EQ(IntRect(-200, -100, 800, 600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, LayerOffscreenNearCullRect) {
@@ -1285,7 +1293,7 @@ TEST_P(PaintLayerPainterTestCAP, LayerOffscreenNearCullRect) {
   )HTML");
 
   EXPECT_EQ(IntRect(0, 0, 4200, 4300),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, LayerOffscreenFarCullRect) {
@@ -1299,8 +1307,7 @@ TEST_P(PaintLayerPainterTestCAP, LayerOffscreenFarCullRect) {
   )HTML");
 
   // The layer is too far away from the viewport.
-  EXPECT_EQ(IntRect(),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+  EXPECT_EQ(IntRect(), GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, ScrollingLayerCullRect) {
@@ -1323,7 +1330,7 @@ TEST_P(PaintLayerPainterTestCAP, ScrollingLayerCullRect) {
   // space yields (0, 0, 195, 193). This is then expanded by 4000px and clipped
   // by the contents rect.
   EXPECT_EQ(IntRect(0, 0, 195, 4193),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, NonCompositedScrollingLayerCullRect) {
@@ -1341,7 +1348,7 @@ TEST_P(PaintLayerPainterTestCAP, NonCompositedScrollingLayerCullRect) {
 
   // See ScrollingLayerCullRect for the calculation.
   EXPECT_EQ(IntRect(0, 0, 195, 193),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 TEST_P(PaintLayerPainterTestCAP, ClippedBigLayer) {
@@ -1356,7 +1363,7 @@ TEST_P(PaintLayerPainterTestCAP, ClippedBigLayer) {
   // The viewport is not scrollable because of the clip, so the cull rect is
   // just the viewport rect.
   EXPECT_EQ(IntRect(0, 0, 800, 600),
-            GetPaintLayerByElementId("target")->PreviousCullRect().Rect());
+            GetCullRect(*GetPaintLayerByElementId("target")).Rect());
 }
 
 }  // namespace blink

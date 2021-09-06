@@ -520,9 +520,9 @@ TEST_P(OopImagePixelTest, DrawImage) {
 
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
-  PaintFlags flags;
-  flags.setFilterQuality(FilterQuality());
-  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, &flags);
+  SkSamplingOptions sampling(FilterQuality());
+  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling,
+                                       nullptr);
   display_item_list->EndPaintOfUnpaired(rect);
   display_item_list->Finalize();
 
@@ -559,9 +559,9 @@ TEST_P(OopImagePixelTest, DrawImageScaled) {
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
   display_item_list->push<ScaleOp>(0.5f, 0.5f);
-  PaintFlags flags;
-  flags.setFilterQuality(FilterQuality());
-  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, &flags);
+  SkSamplingOptions sampling(FilterQuality());
+  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling,
+                                       nullptr);
   display_item_list->EndPaintOfUnpaired(rect);
   display_item_list->Finalize();
 
@@ -633,9 +633,8 @@ TEST_P(OopImagePixelTest, DrawRecordShaderWithImageScaled) {
       PaintImage::GetNextId());
   auto paint_image = builder.TakePaintImage();
   auto paint_record = sk_make_sp<PaintOpBuffer>();
-  PaintFlags flags;
-  flags.setFilterQuality(FilterQuality());
-  paint_record->push<DrawImageOp>(paint_image, 0.f, 0.f, &flags);
+  SkSamplingOptions sampling(FilterQuality());
+  paint_record->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling, nullptr);
   auto paint_record_shader = PaintShader::MakePaintRecord(
       paint_record, gfx::RectToSkRect(rect), SkTileMode::kRepeat,
       SkTileMode::kRepeat, nullptr);
@@ -683,6 +682,10 @@ TEST_F(OopImagePixelTest, DrawRecordShaderTranslatedTileRect) {
   sk_sp<PaintShader> paint_record_shader = PaintShader::MakePaintRecord(
       shader_buffer, tile_rect, SkTileMode::kRepeat, SkTileMode::kRepeat,
       nullptr, PaintShader::ScalingBehavior::kRasterAtScale);
+  // Force paint_flags to convert this to kFixedScale, so we can safely compare
+  // pixels between direct and oop-r modes (since oop will convert to
+  // kFixedScale no matter what.
+  paint_record_shader->set_has_animated_images(true);
 
   gfx::Size output_size(10, 10);
 
@@ -728,9 +731,9 @@ TEST_P(OopImagePixelTest, DrawImageWithTargetColorSpace) {
 
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
-  PaintFlags flags;
-  flags.setFilterQuality(FilterQuality());
-  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, &flags);
+  SkSamplingOptions sampling(FilterQuality());
+  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling,
+                                       nullptr);
   display_item_list->EndPaintOfUnpaired(rect);
   display_item_list->Finalize();
 
@@ -774,9 +777,9 @@ TEST_P(OopImagePixelTest, DrawImageWithSourceColorSpace) {
 
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
-  PaintFlags flags;
-  flags.setFilterQuality(FilterQuality());
-  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, &flags);
+  SkSamplingOptions sampling(FilterQuality());
+  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling,
+                                       nullptr);
   display_item_list->EndPaintOfUnpaired(rect);
   display_item_list->Finalize();
 
@@ -819,9 +822,9 @@ TEST_P(OopImagePixelTest, DrawImageWithSourceAndTargetColorSpace) {
 
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
-  PaintFlags flags;
-  flags.setFilterQuality(FilterQuality());
-  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, &flags);
+  SkSamplingOptions sampling(FilterQuality());
+  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling,
+                                       nullptr);
   display_item_list->EndPaintOfUnpaired(rect);
   display_item_list->Finalize();
 
@@ -859,10 +862,10 @@ TEST_P(OopImagePixelTest, DrawImageWithSetMatrix) {
 
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
-  PaintFlags flags;
-  flags.setFilterQuality(FilterQuality());
-  display_item_list->push<SetMatrixOp>(SkMatrix::Scale(0.5f, 0.5f));
-  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, &flags);
+  SkSamplingOptions sampling(FilterQuality());
+  display_item_list->push<SetMatrixOp>(SkM44::Scale(0.5f, 0.5f));
+  display_item_list->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling,
+                                       nullptr);
   display_item_list->EndPaintOfUnpaired(rect);
   display_item_list->Finalize();
 
@@ -934,8 +937,7 @@ TEST_F(OopPixelTest, DrawMailboxBackedImage) {
 
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
-  PaintFlags flags;
-  display_item_list->push<DrawImageOp>(src_paint_image, 0.f, 0.f, &flags);
+  display_item_list->push<DrawImageOp>(src_paint_image, 0.f, 0.f);
   display_item_list->EndPaintOfUnpaired(gfx::Rect(options.resource_size));
   display_item_list->Finalize();
 
@@ -1712,7 +1714,12 @@ class OopRecordShaderPixelTest : public OopPixelTest,
         BuildTextBlob(SkTypeface::MakeDefault(), UseLcdText()), 0u, 0u, flags);
     auto paint_record_shader = PaintShader::MakePaintRecord(
         paint_record, SkRect::MakeWH(25, 25), SkTileMode::kRepeat,
-        SkTileMode::kRepeat, nullptr);
+        SkTileMode::kRepeat, nullptr,
+        PaintShader::ScalingBehavior::kRasterAtScale);
+    // Force paint_flags to convert this to kFixedScale, so we can safely
+    // compare pixels between direct and oop-r modes (since oop will convert to
+    // kFixedScale no matter what.
+    paint_record_shader->set_has_animated_images(true);
 
     auto display_item_list = base::MakeRefCounted<DisplayItemList>();
     display_item_list->StartPaint();
@@ -1737,7 +1744,7 @@ class OopRecordFilterPixelTest : public OopPixelTest,
                                  public ::testing::WithParamInterface<bool> {
  public:
   bool UseLcdText() const { return GetParam(); }
-  void RunTest(const SkMatrix& mat) {
+  void RunTest(const SkM44& mat) {
     RasterOptions options;
     options.resource_size = gfx::Size(100, 100);
     options.content_size = options.resource_size;
@@ -1771,13 +1778,16 @@ class OopRecordFilterPixelTest : public OopPixelTest,
 };
 
 TEST_P(OopRecordFilterPixelTest, FilterWithTextScaled) {
-  SkMatrix mat = SkMatrix::Scale(2.f, 2.f);
+  SkM44 mat = SkM44::Scale(2.f, 2.f);
   RunTest(mat);
 }
 
 TEST_P(OopRecordFilterPixelTest, FilterWithTextAndComplexCTM) {
-  SkMatrix mat = SkMatrix::Scale(2.f, 2.f);
-  mat.preSkew(2.f, 2.f);
+  SkM44 mat = SkM44::Scale(2.f, 2.f);
+  SkM44 skew = SkM44();
+  skew.setRC(0, 1, 2.f);
+  skew.setRC(1, 0, 2.f);
+  mat.preConcat(skew);
   RunTest(mat);
 }
 

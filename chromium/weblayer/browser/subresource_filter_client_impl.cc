@@ -78,25 +78,12 @@ void SubresourceFilterClientImpl::CreateThrottleManagerWithClientForWebContents(
           std::make_unique<SubresourceFilterClientImpl>(web_contents), dealer);
 }
 
-void SubresourceFilterClientImpl::OnReloadRequested() {
-  // TODO(crbug.com/1116095): Bring up this flow on Android when user requests
-  // it via the infobar.
-  NOTIMPLEMENTED();
-}
-
 void SubresourceFilterClientImpl::ShowNotification() {
 #if defined(OS_ANDROID)
-  // TODO(crbug.com/1116095): Move ChromeSubresourceFilterClient::ShowUI()'s
-  // interaction with metrics and content settings into code that's shared by
-  // WebLayer.
   subresource_filter::AdsBlockedInfobarDelegate::Create(
       InfoBarService::FromWebContents(web_contents_));
 #endif
 }
-
-void SubresourceFilterClientImpl::OnAdsViolationTriggered(
-    content::RenderFrameHost* rfh,
-    subresource_filter::mojom::AdsViolation triggered_violation) {}
 
 const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
 SubresourceFilterClientImpl::GetSafeBrowsingDatabaseManager() {

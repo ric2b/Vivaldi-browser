@@ -70,6 +70,7 @@ class WebRuntimeFeatures {
 
   BLINK_PLATFORM_EXPORT static void EnableAOMAriaRelationshipProperties(bool);
   BLINK_PLATFORM_EXPORT static void EnableAccelerated2dCanvas(bool);
+  BLINK_PLATFORM_EXPORT static void EnableAccessibilityAriaVirtualContent(bool);
   BLINK_PLATFORM_EXPORT static void EnableAccessibilityExposeDisplayNone(bool);
   BLINK_PLATFORM_EXPORT static void EnableAccessibilityExposeHTMLElement(bool);
   BLINK_PLATFORM_EXPORT static void EnableAccessibilityExposeIgnoredNodes(bool);
@@ -88,7 +89,13 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableBlockingFocusWithoutUserActivation(
       bool);
   BLINK_PLATFORM_EXPORT static void EnableCacheInlineScriptCode(bool);
+  BLINK_PLATFORM_EXPORT static void EnableCapabilityDelegationPaymentRequest(
+      bool enable);
   BLINK_PLATFORM_EXPORT static void EnableClickPointerEvent(bool enable);
+  BLINK_PLATFORM_EXPORT static void EnableCompositeBGColorAnimation(
+      bool enable);
+  BLINK_PLATFORM_EXPORT static void EnableCompositeRelativeKeyframes(
+      bool enable);
   BLINK_PLATFORM_EXPORT static void EnableCookieDeprecationMessages(bool);
   BLINK_PLATFORM_EXPORT static void EnableCookiesWithoutSameSiteMustBeSecure(
       bool);
@@ -97,6 +104,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableCSSHexAlphaColor(bool);
   BLINK_PLATFORM_EXPORT static void EnableSameSiteByDefaultCookies(bool);
   BLINK_PLATFORM_EXPORT static void EnableScrollTopLeftInterop(bool);
+  BLINK_PLATFORM_EXPORT static void EnableKeyboardAccessibleTooltip(bool);
   BLINK_PLATFORM_EXPORT static void EnableKeyboardFocusableScrollers(bool);
   BLINK_PLATFORM_EXPORT static void EnableDatabase(bool);
   BLINK_PLATFORM_EXPORT static void EnableDecodeJpeg420ImagesToYUV(bool);
@@ -149,6 +157,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableSharedArrayBuffer(bool);
   BLINK_PLATFORM_EXPORT static void EnableSharedWorker(bool);
   BLINK_PLATFORM_EXPORT static void EnableTextFragmentAnchor(bool);
+  BLINK_PLATFORM_EXPORT static void EnableTextFragmentColorChange(bool);
   BLINK_PLATFORM_EXPORT static void EnableTouchEventFeatureDetection(bool);
   BLINK_PLATFORM_EXPORT static void EnableScrollUnification(bool);
   BLINK_PLATFORM_EXPORT static void EnableUserActivationSameOriginVisibility(
@@ -173,6 +182,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableWebXRARModule(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRCameraAccess(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRDepth(bool);
+  BLINK_PLATFORM_EXPORT static void EnableWebXRHandInput(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRHitTest(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRImageTracking(bool);
   BLINK_PLATFORM_EXPORT static void EnableWebXRLightEstimation(bool);

@@ -25,6 +25,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/site_for_cookies_mojom_traits.h"
+#include "services/network/public/mojom/auth_and_certificate_observer.mojom.h"
 #include "services/network/public/mojom/chunked_data_pipe_getter.mojom.h"
 #include "services/network/public/mojom/client_security_state.mojom-forward.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
@@ -78,6 +79,16 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
         const_cast<network::ResourceRequest::TrustedParams&>(trusted_params)
             .cookie_observer);
   }
+  static mojo::PendingRemote<
+      network::mojom::AuthenticationAndCertificateObserver>
+  auth_cert_observer(
+      const network::ResourceRequest::TrustedParams& trusted_params) {
+    if (!trusted_params.auth_cert_observer)
+      return mojo::NullRemote();
+    return std::move(
+        const_cast<network::ResourceRequest::TrustedParams&>(trusted_params)
+            .auth_cert_observer);
+  }
   static const network::mojom::ClientSecurityStatePtr& client_security_state(
       const network::ResourceRequest::TrustedParams& trusted_params) {
     return trusted_params.client_security_state;
@@ -91,6 +102,10 @@ template <>
 struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
     StructTraits<network::mojom::WebBundleTokenParamsDataView,
                  network::ResourceRequest::WebBundleTokenParams> {
+  static const GURL& bundle_url(
+      const network::ResourceRequest::WebBundleTokenParams& params) {
+    return params.bundle_url;
+  }
   static const base::UnguessableToken& token(
       const network::ResourceRequest::WebBundleTokenParams& params) {
     return params.token;
@@ -102,6 +117,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
     return std::move(
         const_cast<network::ResourceRequest::WebBundleTokenParams&>(params)
             .handle);
+  }
+  static int32_t render_process_id(
+      const network::ResourceRequest::WebBundleTokenParams& params) {
+    return params.render_process_id;
   }
 
   static bool Read(network::mojom::WebBundleTokenParamsDataView data,
@@ -268,6 +287,9 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   }
   static bool is_fetch_like_api(const network::ResourceRequest& request) {
     return request.is_fetch_like_api;
+  }
+  static bool is_favicon(const network::ResourceRequest& request) {
+    return request.is_favicon;
   }
   static bool obey_origin_policy(const network::ResourceRequest& request) {
     return request.obey_origin_policy;

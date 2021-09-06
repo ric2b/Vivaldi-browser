@@ -482,7 +482,6 @@ public class BookmarkManager
         if (mToolbar.isSearching()) mToolbar.hideSearchView();
         setState(BookmarkUIState.createFolderState(folder, mBookmarkModel));
         mRecyclerView.scrollToPosition(0);
-        setSortOrder(true); // TODO
     }
 
     @Override

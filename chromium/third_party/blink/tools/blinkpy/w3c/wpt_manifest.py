@@ -163,7 +163,7 @@ class WPTManifest(object):
         for test_type in self.test_types:
             if test_type not in items:
                 continue
-            for filename, records in items[test_type].iteritems():
+            for filename, records in items[test_type].items():
                 for item in filter(self._is_not_jsshell, records):
                     url_for_item = self._get_url_from_item(item)
                     url_items[url_for_item] = item
@@ -317,7 +317,7 @@ class WPTManifest(object):
                 _log.error('Manifest base not found at "%s".',
                            base_manifest_path)
 
-        WPTManifest.generate_manifest(port.host, wpt_path)
+        WPTManifest.generate_manifest(port, wpt_path)
 
         if fs.isfile(manifest_path):
             _log.debug('Manifest generation completed.')
@@ -328,17 +328,18 @@ class WPTManifest(object):
             fs.write_text_file(manifest_path, '{}')
 
     @staticmethod
-    def generate_manifest(host, dest_path):
+    def generate_manifest(port, dest_path):
         """Generates MANIFEST.json on the specified directory."""
-        wpt_exec_path = PathFinder(host.filesystem).path_from_blink_tools(
-            'blinkpy', 'third_party', 'wpt', 'wpt', 'wpt')
+        wpt_exec_path = PathFinder(
+            port.host.filesystem).path_from_chromium_base(
+                'third_party', 'wpt_tools', 'wpt', 'wpt')
         cmd = [
-            'python', wpt_exec_path, '--py2', 'manifest', '-v',
+            port.python3_command(), wpt_exec_path, 'manifest', '-v',
             '--no-download', '--tests-root', dest_path
         ]
 
         # ScriptError will be raised if the command fails.
-        output = host.executive.run_command(
+        output = port.host.executive.run_command(
             cmd,
             timeout_seconds=600,
             # This will also include stderr in the exception message.

@@ -8,30 +8,35 @@
 #include "ash/accessibility/accessibility_layer.h"
 #include "ash/accessibility/point_scan_layer_animation_info.h"
 #include "ash/ash_export.h"
+#include "ui/compositor/layer.h"
 
 namespace ash {
 
 class PointScanLayer : public AccessibilityLayer {
  public:
-  explicit PointScanLayer(AccessibilityLayerDelegate* delegate);
+  enum Orientation {
+    HORIZONTAL = 0,
+    VERTICAL,
+  };
+
+  enum Type {
+    LINE = 0,
+    RANGE,
+  };
+
+  explicit PointScanLayer(AccessibilityLayerDelegate* delegate,
+                          Orientation orientation,
+                          Type type);
   ~PointScanLayer() override = default;
 
   PointScanLayer(const PointScanLayer&) = delete;
   PointScanLayer& operator=(const PointScanLayer&) = delete;
 
-  // Begins sweeping a line horizontally across the screen, for the user to pick
-  // an x-coordinate.
-  void StartHorizontalRangeScanning();
-  void StartHorizontalScanning();
-  void StartVerticalRangeScanning();
-  void StartVerticalScanning();
-  void PauseHorizontalScanning();
-  void PauseHorizontalRangeScanning();
-  void PauseVerticalScanning();
-  void PauseVerticalRangeScanning();
+  void Start();
+  void Pause();
 
-  gfx::Rect GetBounds() const;
   bool IsMoving() const;
+  gfx::Rect bounds() { return layer()->bounds(); }
 
   // AccessibilityLayer overrides:
   bool CanAnimate() const override;
@@ -48,17 +53,10 @@ class PointScanLayer : public AccessibilityLayer {
     gfx::Point end;
   };
 
-  // The bounds within which we are scanning.
-  gfx::Rect bounds_;
-
-  // The line currently being drawn.
+  Orientation orientation_;
+  Type type_;
   Line line_;
-
   bool is_moving_ = false;
-
-  bool is_range_scan_ = false;
-
-  bool is_horizontal_range_ = false;
 };
 
 }  // namespace ash

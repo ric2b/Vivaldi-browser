@@ -13,9 +13,8 @@ void SyncEngineHostStub::OnEngineInitialized(
     ModelTypeSet initial_types,
     const WeakHandle<JsBackend>& js_backend,
     const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
-    const std::string& birthday,
-    const std::string& bag_of_chips,
-    bool success) {}
+    bool success,
+    bool is_first_time_sync_configure) {}
 
 void SyncEngineHostStub::OnSyncCycleCompleted(
     const SyncCycleSnapshot& snapshot) {}

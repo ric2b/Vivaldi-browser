@@ -27,6 +27,7 @@
 #include "ash/child_accounts/parent_access_controller_impl.h"
 #include "ash/clipboard/clipboard_history_controller_impl.h"
 #include "ash/clipboard/control_v_histogram_recorder.h"
+#include "ash/constants/ash_features.h"
 #include "ash/dbus/ash_dbus_services.h"
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/detachable_base/detachable_base_notification_controller.h"
@@ -73,8 +74,10 @@
 #include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/media/media_controller_impl.h"
 #include "ash/media/media_notification_controller_impl.h"
+#include "ash/metrics/login_unlock_throughput_recorder.h"
 #include "ash/multi_device_setup/multi_device_notification_presenter.h"
 #include "ash/policy/policy_recommendation_restorer.h"
+#include "ash/projector/projector_controller_impl.h"
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_prefs.h"
@@ -119,6 +122,7 @@
 #include "ash/system/nearby_share/nearby_share_controller_impl.h"
 #include "ash/system/network/sms_observer.h"
 #include "ash/system/night_light/night_light_controller_impl.h"
+#include "ash/system/pcie_peripheral/pcie_peripheral_notification_controller.h"
 #include "ash/system/power/backlights_forced_off_setter.h"
 #include "ash/system/power/peripheral_battery_notifier.h"
 #include "ash/system/power/power_button_controller.h"
@@ -143,6 +147,7 @@
 #include "ash/wm/cursor_manager_chromeos.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/event_client_impl.h"
+#include "ash/wm/full_restore/full_restore_controller.h"
 #include "ash/wm/gestures/back_gesture/back_gesture_event_handler.h"
 #include "ash/wm/immersive_context_ash.h"
 #include "ash/wm/lock_state_controller.h"
@@ -175,7 +180,6 @@
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/trace_event/trace_event.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/initialize_dbus_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "chromeos/dbus/usb/usbguard_client.h"
@@ -590,6 +594,7 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
 
 Shell::~Shell() {
   TRACE_EVENT0("shutdown", "ash::Shell::Destructor");
+  login_unlock_throughput_recorder_.reset();
 
   hud_display::HUDDisplayView::Destroy();
 
@@ -659,6 +664,7 @@ Shell::~Shell() {
   keyboard_controller_->DestroyVirtualKeyboard();
 
   // Depends on |tablet_mode_controller_|.
+  full_restore_controller_.reset();
   shelf_controller_->Shutdown();
   shelf_config_->Shutdown();
 
@@ -689,6 +695,10 @@ Shell::~Shell() {
   // need to be removed. It will be destroyed later after all windows are closed
   // since it might be accessed during this process.
   tablet_mode_controller_->Shutdown();
+
+  // Shutdown the clipboard history controller to clean up the child windows and
+  // widgets that may be animating out.
+  clipboard_history_controller_->Shutdown();
 
   // Destroy UserSettingsEventLogger before |system_tray_model_| and
   // |video_detector_| which it observes.
@@ -839,6 +849,7 @@ Shell::~Shell() {
 
   display_color_manager_.reset();
   projecting_observer_.reset();
+  projector_controller_.reset();
 
   if (display_change_observer_)
     display_manager_->configurator()->RemoveObserver(
@@ -873,6 +884,8 @@ Shell::~Shell() {
   // destructed before it.
   media_notification_controller_.reset();
 
+  pcie_peripheral_notification_controller_.reset();
+
   // Destroys the MessageCenter singleton, so must happen late.
   message_center_controller_.reset();
 
@@ -901,6 +914,9 @@ void Shell::Init(
     PrefService* local_state,
     std::unique_ptr<keyboard::KeyboardUIFactory> keyboard_ui_factory,
     scoped_refptr<dbus::Bus> dbus_bus) {
+  login_unlock_throughput_recorder_ =
+      std::make_unique<LoginUnlockThroughputRecorder>();
+
   // Required by DetachableBaseHandler.
   chromeos::InitializeDBusClient<chromeos::HammerdClient>(dbus_bus.get());
 
@@ -933,6 +949,10 @@ void Shell::Init(
   media_controller_ = std::make_unique<MediaControllerImpl>();
 
   tablet_mode_controller_ = std::make_unique<TabletModeController>();
+
+  pcie_peripheral_notification_controller_ =
+      std::make_unique<PciePeripheralNotificationController>(
+          message_center::MessageCenter::Get());
 
   accessibility_focus_ring_controller_ =
       std::make_unique<AccessibilityFocusRingControllerImpl>();
@@ -1008,6 +1028,9 @@ void Shell::Init(
   overview_controller_ = std::make_unique<OverviewController>();
 
   screen_position_controller_ = std::make_unique<ScreenPositionController>();
+
+  frame_throttling_controller_ =
+      std::make_unique<FrameThrottlingController>(context_factory);
 
   window_tree_host_manager_->Start();
   AshWindowTreeHostInitParams ash_init_params;
@@ -1205,6 +1228,11 @@ void Shell::Init(
   // WindowTreeHostManager to host the keyboard window.
   keyboard_controller_->CreateVirtualKeyboard(std::move(keyboard_ui_factory));
 
+  // Create full restore controller after WindowTreeHostManager::InitHosts()
+  // since it may need to add observers to root windows.
+  if (features::IsFullRestoreEnabled())
+    full_restore_controller_ = std::make_unique<FullRestoreController>();
+
   cursor_manager_->HideCursor();  // Hide the mouse cursor on startup.
   cursor_manager_->SetCursor(ui::mojom::CursorType::kPointer);
 
@@ -1228,8 +1256,6 @@ void Shell::Init(
   sms_observer_.reset(new SmsObserver());
   snap_controller_ = std::make_unique<SnapControllerImpl>();
   key_accessibility_enabler_ = std::make_unique<KeyAccessibilityEnabler>();
-  frame_throttling_controller_ =
-      std::make_unique<FrameThrottlingController>(context_factory);
 
   // Create UserSettingsEventLogger after |system_tray_model_| and
   // |video_detector_| which it observes.
@@ -1256,6 +1282,10 @@ void Shell::Init(
   if (features::IsDisplayAlignmentAssistanceEnabled()) {
     display_alignment_controller_ =
         std::make_unique<DisplayAlignmentController>();
+  }
+
+  if (chromeos::features::IsProjectorEnabled()) {
+    projector_controller_ = std::make_unique<ProjectorControllerImpl>();
   }
 
   // Injects the factory which fulfills the implementation of the text context

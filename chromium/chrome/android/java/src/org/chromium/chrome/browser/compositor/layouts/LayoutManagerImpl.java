@@ -36,16 +36,14 @@ import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.gesturenav.HistoryNavigationCoordinator;
 import org.chromium.chrome.browser.layouts.CompositorModelChangeProcessor;
 import org.chromium.chrome.browser.layouts.EventFilter;
-import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.layouts.ManagedLayoutManager;
 import org.chromium.chrome.browser.layouts.SceneOverlay;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
-import org.chromium.chrome.browser.native_page.NativePageFactory;
-import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
@@ -53,7 +51,6 @@ import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -61,11 +58,12 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
-import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.bottom.ScrollingBottomViewSceneLayer;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarOverlayCoordinator;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.LocalizationUtils;
@@ -83,6 +81,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -92,7 +91,7 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  * A class that is responsible for managing an active {@link Layout} to show to the screen.  This
  * includes lifecycle managment like showing/hiding this {@link Layout}.
  */
-public class LayoutManagerImpl implements LayoutManager, LayoutUpdateHost, LayoutProvider,
+public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost, LayoutProvider,
                                           TabModelSelector.CloseAllTabsDelegate {
     /** Sampling at 60 fps. */
     private static final long FRAME_DELTA_TIME_MS = 16;
@@ -359,15 +358,19 @@ public class LayoutManagerImpl implements LayoutManager, LayoutUpdateHost, Layou
             EventFilter eventFilter = mSceneOverlays.get(i).getEventFilter();
             if (eventFilter == null) continue;
             if (offsets != null) eventFilter.setCurrentMotionEventOffsets(offsets.x, offsets.y);
-            // Note(david@vivaldi.com): Since the tab strip can be a the bottom we need to apply
-            // the window viewport height to the y-value for that particular overlay.
+            // Note(david@vivaldi.com): As the tab strip can be located in different places we need
+            // to manipulated the y-offset here.
             if (mSceneOverlays.get(i) instanceof StripLayoutHelperManager) {
-                if (((StripLayoutHelperManager) mSceneOverlays.get(i)).isSceneOffScreen())
-                    continue;
-                if (!VivaldiUtils.isTopToolbarOn())
-                    e = MotionEvent.obtain(e.getDownTime(), e.getEventTime(), e.getAction(),
-                            e.getX(), mCachedWindowViewport.height() - e.getY(),
-                            e.getMetaState());
+                if (((StripLayoutHelperManager) mSceneOverlays.get(i)).isSceneOffScreen()) continue;
+                // When toolbar is at the bottom we need to apply the window viewport height.
+                float yOffset = mCachedWindowViewport.height() - e.getY();
+                // When toolbar is at the top we need to consider the top controls minimum height.
+                if (VivaldiUtils.isTopToolbarOn())
+                    yOffset = e.getY()
+                            - mBrowserControlsStateProviderSupplier.get().getTopControlsMinHeight();
+                // Create a new motion event with the correct y-offset.
+                e = MotionEvent.obtain(e.getDownTime(), e.getEventTime(), e.getAction(), e.getX(),
+                        yOffset, e.getMetaState());
             }
             if (eventFilter.onInterceptTouchEvent(e, isKeyboardShowing)) {
                 layoutFilter = eventFilter;
@@ -558,7 +561,7 @@ public class LayoutManagerImpl implements LayoutManager, LayoutUpdateHost, Layou
 
         if (mNextActiveLayout != null) startShowing(mNextActiveLayout, true);
 
-        mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
+        mTabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
             public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
                 tabModelSwitched(newModel.isIncognito());
@@ -572,9 +575,7 @@ public class LayoutManagerImpl implements LayoutManager, LayoutUpdateHost, Layou
                 mTabModelFilterObserver);
     }
 
-    /**
-     * Cleans up and destroys this object.  It should not be used after this.
-     */
+    @Override
     public void destroy() {
         mAnimationHandler.destroy();
         mSceneChangeObservers.clear();
@@ -828,7 +829,7 @@ public class LayoutManagerImpl implements LayoutManager, LayoutUpdateHost, Layou
         TopUiThemeColorProvider topUiTheme = mTopUiThemeColorProvider.get();
         layoutTab.initFromHost(topUiTheme.getBackgroundColor(tab), shouldStall(tab),
                 canUseLiveTexture, topUiTheme.getSceneLayerBackground(tab),
-                ToolbarColors.getTextBoxColorForToolbarBackground(mContext.getResources(), tab,
+                ThemeUtils.getTextBoxColorForToolbarBackground(mContext.getResources(), tab,
                         topUiTheme.calculateColor(tab, tab.getThemeColor())),
                 topUiTheme.getTextBoxBackgroundAlpha(tab));
 
@@ -838,7 +839,7 @@ public class LayoutManagerImpl implements LayoutManager, LayoutUpdateHost, Layou
     // Whether the tab is ready to display or it should be faded in as it loads.
     private static boolean shouldStall(Tab tab) {
         return (tab.isFrozen() || tab.needsReload())
-                && !NativePageFactory.isNativePageUrl(tab.getUrlString(), tab.isIncognito());
+                && !NativePage.isNativePageUrl(tab.getUrlString(), tab.isIncognito());
     }
 
     @Override

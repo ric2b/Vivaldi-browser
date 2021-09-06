@@ -15,7 +15,6 @@ extern const char kEventSSLStateChanged[];
 extern const char kEventTargetURLChanged[];
 extern const char kEventCreateSearch[];
 extern const char kEventPasteAndGo[];
-extern const char kEventSimpleAction[];
 extern const char kAttributeExtensionHost[];
 extern const char kEventOnFullscreen[];
 extern const char kEventContentAllowed[];

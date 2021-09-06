@@ -13,6 +13,13 @@
 
 namespace features {
 
+AX_BASE_EXPORT extern const base::Feature
+    kEnableAccessibilityAriaVirtualContent;
+
+// Returns true if "aria-virtualcontent" should be recognized as a valid aria
+// property.
+AX_BASE_EXPORT bool IsAccessibilityAriaVirtualContentEnabled();
+
 AX_BASE_EXPORT extern const base::Feature kEnableAccessibilityExposeDisplayNone;
 
 // Returns true if "display: none" nodes should be exposed to the
@@ -77,6 +84,15 @@ AX_BASE_EXPORT extern const base::Feature kMagnifierPanningImprovements;
 
 // Returns true if the new magnifier panning improvements feature is enabled.
 AX_BASE_EXPORT bool IsMagnifierPanningImprovementsEnabled();
+
+// Enables ability to choose new continuous mouse following mode in Magnifier
+// settings.
+AX_BASE_EXPORT extern const base::Feature
+    kMagnifierContinuousMouseFollowingModeSetting;
+
+// Returns true if the feature to allow choosing the new continuous mouse
+// following mode in Magnifier settings is enabled.
+AX_BASE_EXPORT bool IsMagnifierContinuousMouseFollowingModeSettingEnabled();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Enables Get Image Descriptions to augment existing images labels,

@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/constants/ash_switches.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
+#include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
+#include "chrome/browser/ash/login/demo_mode/demo_setup_test_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_setup_controller.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_setup_test_utils.h"
 #include "chrome/browser/chromeos/login/test/enrollment_helper_mixin.h"
 #include "chrome/browser/chromeos/login/test/enrollment_ui_mixin.h"
 #include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
@@ -28,7 +29,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
 #include "chromeos/attestation/attestation_flow_utils.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/attestation/fake_attestation_client.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"

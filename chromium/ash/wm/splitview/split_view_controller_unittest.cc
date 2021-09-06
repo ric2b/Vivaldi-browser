@@ -2164,8 +2164,13 @@ TEST_F(SplitViewControllerTest, ShadowDisappearsWhenSnapped) {
   // Snap |window1| to the left. Its shadow should disappear.
   split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
   EXPECT_FALSE(shadow_controller->IsShadowVisibleForWindow(window1.get()));
-  EXPECT_TRUE(shadow_controller->IsShadowVisibleForWindow(window2.get()));
-  EXPECT_TRUE(shadow_controller->IsShadowVisibleForWindow(window3.get()));
+  auto* overview_controller = Shell::Get()->overview_controller();
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  auto* overview_session = overview_controller->overview_session();
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window2.get()));
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window3.get()));
+  EXPECT_FALSE(shadow_controller->IsShadowVisibleForWindow(window2.get()));
+  EXPECT_FALSE(shadow_controller->IsShadowVisibleForWindow(window3.get()));
 
   // Snap |window2| to the right. Its shadow should also disappear.
   split_view_controller()->SnapWindow(window2.get(),
@@ -2221,12 +2226,11 @@ TEST_F(SplitViewControllerTest, OverviewExitAnimationTest) {
 
   // 3) If overview is ended because of snapping a window:
   split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
+  WaitForOverviewEnterAnimation();
+  EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
   // Reset the observer as we'll need the OverviewStatesObserver to be added to
   // to ShellObserver list after SplitViewController.
   overview_observer.reset(new OverviewStatesObserver(window1->GetRootWindow()));
-  ToggleOverview();  // Start overview.
-  WaitForOverviewEnterAnimation();
-  EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
   // Test |overview_animate_when_exiting_| has been properly reset.
   EXPECT_TRUE(overview_observer->overview_animate_when_exiting());
   CheckOverviewEnterExitHistogram("EnterInSplitView", {2, 1}, {2, 0});
@@ -2287,7 +2291,6 @@ TEST_F(SplitViewControllerTest, ActivateNonSnappableWindow) {
   std::unique_ptr<aura::Window> window3(CreateNonSnappableWindow(bounds));
 
   split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
-  ToggleOverview();
   EXPECT_TRUE(split_view_controller()->InSplitViewMode());
   EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
 
@@ -2841,6 +2844,88 @@ TEST_F(SplitViewControllerTest, WindowDestroyedDuringResize) {
 
   window1.reset();
   EXPECT_FALSE(split_view_controller()->is_resizing());
+}
+
+TEST_F(SplitViewControllerTest, WMSnapEvent) {
+  const gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
+  EXPECT_FALSE(split_view_controller()->InSplitViewMode());
+
+  // Test the functionalities in tablet mode.
+  // Sending WM_EVENT_SNAP_RIGHT to |window1| will snap to left.
+  WMEvent wm_left_snap_event(WM_EVENT_SNAP_LEFT);
+  WindowState::Get(window1.get())->OnWMEvent(&wm_left_snap_event);
+  EXPECT_TRUE(split_view_controller()->InSplitViewMode());
+  EXPECT_EQ(split_view_controller()->left_window(), window1.get());
+  EXPECT_FALSE(split_view_controller()->IsWindowInSplitView(window2.get()));
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  OverviewSession* overview_session = overview_controller->overview_session();
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window2.get()));
+
+  // Sending WM_EVENT_SNAP_RIGHT to |window1| will snap to right.
+  WMEvent wm_right_snap_event(WM_EVENT_SNAP_RIGHT);
+  WindowState::Get(window1.get())->OnWMEvent(&wm_right_snap_event);
+  EXPECT_TRUE(split_view_controller()->InSplitViewMode());
+  EXPECT_EQ(split_view_controller()->right_window(), window1.get());
+  EXPECT_FALSE(split_view_controller()->IsWindowInSplitView(window2.get()));
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window2.get()));
+
+  // Sending WM_EVENT_SNAP_RIGHT to |window2| will replace |window1|.
+  WindowState::Get(window2.get())->OnWMEvent(&wm_right_snap_event);
+  EXPECT_TRUE(split_view_controller()->InSplitViewMode());
+  EXPECT_EQ(split_view_controller()->right_window(), window2.get());
+  EXPECT_FALSE(split_view_controller()->IsWindowInSplitView(window1.get()));
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window1.get()));
+
+  // Sending WM_EVENT_SNAP_LEFT to |window1| to snap |window1|.
+  WindowState::Get(window1.get())->OnWMEvent(&wm_left_snap_event);
+  EXPECT_TRUE(split_view_controller()->InSplitViewMode());
+  EXPECT_EQ(split_view_controller()->left_window(), window1.get());
+  EXPECT_EQ(split_view_controller()->right_window(), window2.get());
+  EXPECT_FALSE(overview_controller->InOverviewSession());
+
+  // Sending WM_EVENT_SNAP_RIGHT to |window1| will replace |window2| and put
+  // |window2| in overview.
+  WindowState::Get(window1.get())->OnWMEvent(&wm_right_snap_event);
+  EXPECT_TRUE(split_view_controller()->InSplitViewMode());
+  EXPECT_EQ(split_view_controller()->right_window(), window1.get());
+  EXPECT_FALSE(split_view_controller()->IsWindowInSplitView(window2.get()));
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  overview_session = overview_controller->overview_session();
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window2.get()));
+  ToggleOverview();
+  EndSplitView();
+
+  // Test the functionalities in clamshell mode.
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(false);
+  // Sending WM_EVENT_SNAP_LEFT to |window1| will snap to left but won't put
+  // |window1| in splitview.
+  WindowState::Get(window1.get())->OnWMEvent(&wm_left_snap_event);
+  EXPECT_FALSE(split_view_controller()->InSplitViewMode());
+  EXPECT_FALSE(overview_controller->InOverviewSession());
+
+  ToggleOverview();
+  // Sending WM_EVENT_SNAP_LEFT to |window1| to snap to left while overview is
+  // active will put |window1| in splitview and |window2| in overview.
+  WindowState::Get(window1.get())->OnWMEvent(&wm_left_snap_event);
+  EXPECT_TRUE(split_view_controller()->InSplitViewMode());
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  overview_session = overview_controller->overview_session();
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window2.get()));
+
+  // Sending WM_EVENT_SNAP_RIGHT to |window1| to snap to right while overview
+  // is active will put |window1| to snap to the right in splitview and
+  // |window2| remains in overview.
+  WindowState::Get(window1.get())->OnWMEvent(&wm_right_snap_event);
+  EXPECT_TRUE(split_view_controller()->InSplitViewMode());
+  EXPECT_EQ(split_view_controller()->right_window(), window1.get());
+  EXPECT_FALSE(split_view_controller()->IsWindowInSplitView(window2.get()));
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  EXPECT_TRUE(overview_session->IsWindowInOverview(window2.get()));
 }
 
 // Test the tab-dragging related functionalities in tablet mode. Tab(s) can be
@@ -4540,7 +4625,6 @@ TEST_F(SplitViewTabDraggingTest, DragActiveWindow) {
       CreateWindowWithType(bounds, AppType::BROWSER));
 
   split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
-  ToggleOverview();
   EXPECT_EQ(split_view_controller()->InSplitViewMode(), true);
   EXPECT_EQ(split_view_controller()->state(),
             SplitViewController::State::kLeftSnapped);
@@ -5110,6 +5194,7 @@ TEST_F(SplitViewAppDraggingTest, FlingWhenSplitViewIsActive) {
 TEST_F(SplitViewAppDraggingTest, BackdropBoundsDuringDrag) {
   InitializeWindow();
   std::unique_ptr<aura::Window> window2 = CreateTestWindowWithWidget(true);
+  ToggleOverview();
   split_view_controller()->SnapWindow(window(), SplitViewController::LEFT);
   split_view_controller()->SnapWindow(window2.get(),
                                       SplitViewController::RIGHT);

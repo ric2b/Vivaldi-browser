@@ -174,6 +174,10 @@ public class AwMetricsIntegrationTest {
             Assert.assertEquals(
                     ApiHelperForM.isProcess64Bit(), systemProfile.getAppVersion().contains("-64"));
         }
+        Assert.assertTrue(
+                "Should have some low_entropy_source", systemProfile.hasLowEntropySource());
+        Assert.assertTrue(
+                "Should have some old_low_entropy_source", systemProfile.hasOldLowEntropySource());
     }
 
     @Test
@@ -291,6 +295,33 @@ public class AwMetricsIntegrationTest {
 
         Assert.assertEquals(
                 1, RecordHistogram.getHistogramTotalCountForTesting("MemoryAndroid.LowRamDevice"));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testMetadata_samplingRate() throws Throwable {
+        // Wait for a metrics log, since SamplingMetricsProvider only logs this histogram during log
+        // collection. Do not assert anything about this histogram before this point (ex. do not
+        // assert total count == 0), because this would race with the initial metrics log.
+        mPlatformServiceBridge.waitForNextMetricsLog();
+
+        Assert.assertEquals(
+                1, RecordHistogram.getHistogramTotalCountForTesting("UMA.SamplingRatePerMille"));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testMetadata_accessibility() throws Throwable {
+        // Wait for a metrics log, since AccessibilityMetricsProvider only logs this histogram
+        // during log collection. Do not assert anything about this histogram before this point (ex.
+        // do not assert total count == 0), because this would race with the initial metrics log.
+        mPlatformServiceBridge.waitForNextMetricsLog();
+
+        Assert.assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Accessibility.Android.ScreenReader.EveryReport"));
     }
 
     @Test

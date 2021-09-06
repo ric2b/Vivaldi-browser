@@ -238,11 +238,8 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
             swa_data.system_app_type));
   }
 
-  if (web_app.run_on_os_login_mode() != RunOnOsLoginMode::kUndefined) {
-    local_data->set_user_run_on_os_login_mode(
-        ToWebAppProtoRunOnOsLoginMode(web_app.run_on_os_login_mode()));
-  }
-
+  local_data->set_user_run_on_os_login_mode(
+      ToWebAppProtoRunOnOsLoginMode(web_app.run_on_os_login_mode()));
   local_data->set_is_in_sync_install(web_app.is_in_sync_install());
 
   for (const WebApplicationIconInfo& icon_info : web_app.icon_infos())
@@ -347,6 +344,9 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     local_data->set_capture_links(CaptureLinksToProto(web_app.capture_links()));
   else
     local_data->clear_capture_links();
+
+  if (!web_app.manifest_url().is_empty())
+    local_data->set_manifest_url(web_app.manifest_url().spec());
 
   return local_data;
 }
@@ -686,6 +686,15 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   else
     web_app->SetCaptureLinks(blink::mojom::CaptureLinks::kUndefined);
 
+  if (local_data.has_manifest_url()) {
+    GURL manifest_url(local_data.manifest_url());
+    if (manifest_url.is_empty() || !manifest_url.is_valid()) {
+      DLOG(ERROR) << "WebApp proto manifest_url parse error: "
+                  << manifest_url.possibly_invalid_spec();
+      return nullptr;
+    }
+    web_app->SetManifestUrl(manifest_url);
+  }
   return web_app;
 }
 

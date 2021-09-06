@@ -44,13 +44,35 @@
         "name": "enableUpdateNotifier",
         "type": "function",
         "description": "Sets the update notifier to run on startup and launches it.",
-        "parameters": []
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "result"
+              }
+            ]
+          }
+        ]
       },
       {
         "name": "disableUpdateNotifier",
         "type": "function",
         "description": "Removes the update notifier from autorun and attempts to terminate it.",
-        "parameters": []
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "result"
+              }
+            ]
+          }
+        ]
       },
       {
         "name": "getAutoInstallUpdates",

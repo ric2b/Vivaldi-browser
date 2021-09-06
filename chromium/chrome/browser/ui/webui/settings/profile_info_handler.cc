@@ -15,7 +15,7 @@
 #include "ui/base/webui/web_ui_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ui/webui/chromeos/user_image_source.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
@@ -150,10 +150,11 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
       chromeos::UserImageSource::GetUserImage(user->GetAccountId());
   icon_url = webui::GetPngDataUrl(image->front(), image->size());
 #else   // !BUILDFLAG(IS_CHROMEOS_ASH)
-  ProfileAttributesEntry* entry;
-  if (g_browser_process->profile_manager()
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
           ->GetProfileAttributesStorage()
-          .GetProfileAttributesWithPath(profile_->GetPath(), &entry)) {
+          .GetProfileAttributesWithPath(profile_->GetPath());
+  if (entry) {
     name = base::UTF16ToUTF8(entry->GetLocalProfileName());
     // TODO(crbug.com/710660): return chrome://theme/IDR_PROFILE_AVATAR_*
     // and update theme_source.cc to get high res avatar icons. This does less

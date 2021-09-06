@@ -82,12 +82,6 @@ namespace cc {
 class VideoLayer;
 }
 
-namespace gpu {
-namespace gles2 {
-class GLES2Interface;
-}
-}  // namespace gpu
-
 namespace media {
 class CdmContextRef;
 class ChunkDemuxer;
@@ -148,7 +142,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void SetAutoplayInitiated(bool autoplay_initiated) override;
   void OnRequestPictureInPicture() override;
   void OnTimeUpdate() override;
-  void SetSinkId(
+  bool SetSinkId(
       const blink::WebString& sink_id,
       blink::WebSetSinkIdCompleteCallback completion_callback) override;
   void SetPoster(const blink::WebURL& poster) override;
@@ -158,13 +152,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // paint() the current video frame into |canvas|. This is used to support
   // various APIs and functionalities, including but not limited to: <canvas>,
-  // WebGL texImage2D, ImageBitmap, printing and capturing capabilities.
+  // ImageBitmap, printing and capturing capabilities.
   void Paint(cc::PaintCanvas* canvas,
-             const blink::WebRect& rect,
-             cc::PaintFlags& flags,
-             int already_uploaded_id,
-             VideoFrameUploadMetadata* out_metadata) override;
+             const gfx::Rect& rect,
+             cc::PaintFlags& flags) override;
   scoped_refptr<VideoFrame> GetCurrentFrame() override;
+  media::PaintCanvasVideoRenderer* GetPaintCanvasVideoRenderer() override;
 
   // True if the loaded media has a playable video/audio track.
   bool HasVideo() const override;
@@ -213,31 +206,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   bool HasAvailableVideoFrame() const override;
 
-  bool CopyVideoTextureToPlatformTexture(
-      gpu::gles2::GLES2Interface* gl,
-      unsigned int target,
-      unsigned int texture,
-      unsigned internal_format,
-      unsigned format,
-      unsigned type,
-      int level,
-      bool premultiply_alpha,
-      bool flip_y,
-      int already_uploaded_id,
-      VideoFrameUploadMetadata* out_metadata) override;
-
-  bool PrepareVideoFrameForWebGL(
-      gpu::gles2::GLES2Interface* gl,
-      unsigned target,
-      unsigned texture,
-      int already_uploaded_id,
-      WebMediaPlayer::VideoFrameUploadMetadata* out_metadata) override;
-
-  static void ComputeFrameUploadMetadata(
-      VideoFrame* frame,
-      int already_uploaded_id,
-      VideoFrameUploadMetadata* out_metadata);
-
   scoped_refptr<blink::WebAudioSourceProviderImpl> GetAudioSourceProvider()
       override;
 
@@ -258,7 +226,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnFrameClosed() override;
   void OnFrameShown() override;
   void OnIdleTimeout() override;
-  void OnSetAudioSink(const std::string& sink_id) override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
   void OnBecamePersistentVideo(bool value) override;
   void OnPowerExperimentState(bool state) override;
@@ -378,8 +345,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnVideoOpacityChange(bool opaque) override;
   void OnVideoFrameRateChange(base::Optional<int> fps) override;
   void OnVideoAverageKeyframeDistanceUpdate() override;
-  void OnAudioDecoderChange(const PipelineDecoderInfo& info) override;
-  void OnVideoDecoderChange(const PipelineDecoderInfo& info) override;
+  void OnAudioDecoderChange(const AudioDecoderInfo& info) override;
+  void OnVideoDecoderChange(const VideoDecoderInfo& info) override;
 
   // Simplified watch time reporting.
   void OnSimpleWatchTimerTick();
@@ -927,8 +894,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Monitors the watch time of the played content.
   std::unique_ptr<blink::WatchTimeReporter> watch_time_reporter_;
-  std::string audio_decoder_name_;
-  std::string video_decoder_name_;
+  AudioDecoderType audio_decoder_type_ = AudioDecoderType::kUnknown;
+  VideoDecoderType video_decoder_type_ = VideoDecoderType::kUnknown;
 
   // The time at which DoLoad() is executed.
   base::TimeTicks load_start_time_;
@@ -1029,7 +996,13 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   OverlayInfo overlay_info_;
 
-  base::CancelableClosure update_background_status_cb_;
+  base::CancelableOnceClosure update_background_status_cb_;
+
+  // We cannot use `update_background_status_cb_.IsCancelled()` as that changes
+  // when the callback is run, even if not explicitly cancelled. This is
+  // initialized to true to keep in line with the existing behavior of
+  // base::CancellableOnceClosure.
+  bool is_background_status_change_cancelled_ = true;
 
   mojo::Remote<mojom::MediaMetricsProvider> media_metrics_provider_;
   mojo::Remote<mojom::PlaybackEventsRecorder> playback_events_recorder_;

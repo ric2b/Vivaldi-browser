@@ -33,7 +33,6 @@
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print.mojom-test-utils.h"
 #include "components/printing/common/print.mojom.h"
-#include "components/printing/common/print_messages.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -479,14 +478,14 @@ class BackForwardCachePrintBrowserTest : public PrintBrowserTest {
   ~BackForwardCachePrintBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    scoped_feature_list_.InitAndEnableFeatureWithParameters(
-        ::features::kBackForwardCache,
-        {
-            // Set a very long TTL before expiration (longer than the test
-            // timeout) so tests that are expecting deletion don't pass when
-            // they shouldn't.
-            {"TimeToLiveInBackForwardCacheInSeconds", "3600"},
-        });
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {{features::kBackForwardCache,
+          // Set a very long TTL before expiration (longer than the test
+          // timeout) so tests that are expecting deletion don't pass when
+          // they shouldn't.
+          {{"TimeToLiveInBackForwardCacheInSeconds", "3600"}}}},
+        // Allow BackForwardCache for all devices regardless of their memory.
+        {features::kBackForwardCacheMemoryControls});
 
     PrintBrowserTest::SetUpCommandLine(command_line);
   }

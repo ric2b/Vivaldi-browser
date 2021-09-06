@@ -12,17 +12,9 @@
 // <include src="../../../../../ui/login/display_manager.js">
 // <include src="demo_mode_test_helper.js">
 
-// <include
-// src="../../../../../ui/login/account_picker/chromeos_screen_account_picker.js">
-
 // <include src="../../../../../ui/login/login_ui_tools.js">
-// <include
-// src="../../../../../ui/login/account_picker/chromeos_user_pod_row.js">
 // <include src="cr_ui.js">
 // <include src="oobe_select.js">
-
-// <include src="screen_error_message.js">
-// <include src="screen_discover.js">
 
 // <include src="../../gaia_auth_host/authenticator.js">
 
@@ -38,6 +30,8 @@ function ensurePinKeyboardLoaded(onLoaded) {
 }
 
 HTMLImports.whenReady(() => {
+  i18nTemplate.process(document, loadTimeData);
+
   cr.define('cr.ui.Oobe', function() {
     return {
       /**
@@ -46,9 +40,6 @@ HTMLImports.whenReady(() => {
        */
       initialize() {
         cr.ui.login.DisplayManager.initialize();
-        login.AccountPickerScreen.register();
-        login.ErrorMessageScreen.register();
-        login.DiscoverScreen.register();
 
         cr.ui.Bubble.decorate($('bubble-persistent'));
         $('bubble-persistent').persistent = true;

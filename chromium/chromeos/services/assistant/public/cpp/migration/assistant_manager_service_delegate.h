@@ -7,8 +7,10 @@
 
 #include <memory>
 
-#include "base/macros.h"
 #include "base/single_thread_task_runner.h"
+#include "chromeos/services/libassistant/public/mojom/audio_input_controller.mojom-forward.h"
+#include "chromeos/services/libassistant/public/mojom/platform_delegate.mojom-forward.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 
 namespace assistant_client {
 class AssistantManager;
@@ -19,23 +21,22 @@ class PlatformApi;
 namespace chromeos {
 namespace assistant {
 
-class AssistantMediaSession;
 class AudioInputHost;
-class CrosPlatformApi;
 
 // Interface class that provides factory methods for assistant internal
 // functionality.
 class AssistantManagerServiceDelegate {
  public:
   AssistantManagerServiceDelegate() = default;
+  AssistantManagerServiceDelegate(const AssistantManagerServiceDelegate&) =
+      delete;
+  AssistantManagerServiceDelegate& operator=(
+      const AssistantManagerServiceDelegate&) = delete;
   virtual ~AssistantManagerServiceDelegate() = default;
 
-  virtual std::unique_ptr<AudioInputHost> CreateAudioInputHost() = 0;
-
-  virtual std::unique_ptr<CrosPlatformApi> CreatePlatformApi(
-      AssistantMediaSession* media_session,
-      scoped_refptr<base::SingleThreadTaskRunner>
-          background_thread_task_runner) = 0;
+  virtual std::unique_ptr<AudioInputHost> CreateAudioInputHost(
+      mojo::PendingRemote<chromeos::libassistant::mojom::AudioInputController>
+          pending_remote) = 0;
 
   virtual std::unique_ptr<assistant_client::AssistantManager>
   CreateAssistantManager(assistant_client::PlatformApi* platform_api,
@@ -44,9 +45,6 @@ class AssistantManagerServiceDelegate {
   virtual assistant_client::AssistantManagerInternal*
   UnwrapAssistantManagerInternal(
       assistant_client::AssistantManager* assistant_manager) = 0;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AssistantManagerServiceDelegate);
 };
 
 }  // namespace assistant

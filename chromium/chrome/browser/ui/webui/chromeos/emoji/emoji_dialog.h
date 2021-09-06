@@ -6,7 +6,10 @@
 #define CHROME_BROWSER_UI_WEBUI_CHROMEOS_EMOJI_EMOJI_DIALOG_H_
 
 #include "base/macros.h"
+#include "ui/base/ime/text_input_client.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
+
+#include "chrome/browser/ui/webui/chromeos/emoji/emoji_handler.h"
 
 namespace chromeos {
 
@@ -32,6 +35,10 @@ class EmojiPickerDialog : public ui::WebDialogDelegate {
   bool ShouldShowDialogTitle() const override;
 
   content::WebUI* webui_ = nullptr;
+
+  // Window for the emoji picker.  Used by the handler to close the window.
+  static gfx::NativeWindow window;
+  friend class EmojiHandler;
 
   DISALLOW_COPY_AND_ASSIGN(EmojiPickerDialog);
 };

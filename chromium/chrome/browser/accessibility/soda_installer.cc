@@ -34,8 +34,9 @@ void SodaInstaller::NotifyOnSodaProgress(int percent) {
 }
 
 void SodaInstaller::NotifySodaInstalledForTesting() {
-  if (!IsSodaRegistered())
-    NotifyOnSodaInstalled();
+  soda_binary_installed_ = true;
+  language_installed_ = true;
+  NotifyOnSodaInstalled();
 }
 
 }  // namespace speech

@@ -373,8 +373,16 @@ EmphasizeTitlesCondition GetEmphasizeTitlesConditionForInput(
 // ---------------------------------------------------------
 // For UI experiments.
 
-// Returns true if the short bookmark suggestions flag is enabled.
+// Short bookmarks.
+// Determine whether bookmarks should look for exact matches only or prefix
+// matches as well when the input is short.
 bool IsShortBookmarkSuggestionsEnabled();
+bool IsShortBookmarkSuggestionsByTotalInputLengthEnabled();
+// If |...Counterfactual()| returns true, when applicable, the feature will be
+// logged as triggered but won't affect omnibox results.
+bool ShortBookmarkSuggestionsByTotalInputLengthCounterfactual();
+// Returns the minimum input length to enable prefix matches.
+size_t ShortBookmarkSuggestionsByTotalInputLengthThreshold();
 
 // Whether a single row of buttons is shown on suggestions with actionable
 // elements like keywords, tab-switch buttons, and Pedals.
@@ -401,8 +409,6 @@ bool IsRefinedFocusStateEnabled();
 bool IsRichAutocompletionEnabled();
 bool RichAutocompletionAutocompleteTitles();
 size_t RichAutocompletionAutocompleteTitlesMinChar();
-bool RichAutocompletionTwoLineOmnibox();
-bool RichAutocompletionShowTitles();
 bool RichAutocompletionAutocompleteNonPrefixAll();
 bool RichAutocompletionAutocompleteNonPrefixShortcutProvider();
 size_t RichAutocompletionAutocompleteNonPrefixMinChar();
@@ -411,6 +417,7 @@ bool RichAutocompletionSplitTitleCompletion();
 bool RichAutocompletionSplitUrlCompletion();
 size_t RichAutocompletionSplitCompletionMinChar();
 bool RichAutocompletionCounterfactual();
+bool RichAutocompletionAutocompletePreferUrlsOverPrefixes();
 
 // On Device Head Suggestions feature and its helper functions.
 bool IsOnDeviceHeadSuggestEnabledForIncognito();
@@ -536,11 +543,14 @@ extern const char kOnDeviceHeadSuggestDemoteMode[];
 // Non-const because some unittests modify this value.
 extern int kDefaultMinimumTimeBetweenSuggestQueriesMs;
 
+// Parameter names used for short bookmarks variations.
+extern const char
+    kShortBookmarkSuggestionsByTotalInputLengthCounterfactualParam[];
+extern const char kShortBookmarkSuggestionsByTotalInputLengthThresholdParam[];
+
 // Parameter names used for rich autocompletion variations.
 extern const char kRichAutocompletionAutocompleteTitlesParam[];
 extern const char kRichAutocompletionAutocompleteTitlesMinCharParam[];
-extern const char kRichAutocompletionTwoLineOmniboxParam[];
-extern const char kRichAutocompletionShowTitlesParam[];
 extern const char kRichAutocompletionAutocompleteNonPrefixAllParam[];
 extern const char
     kRichAutocompletionAutocompleteNonPrefixShortcutProviderParam[];
@@ -550,6 +560,7 @@ extern const char kRichAutocompletionSplitTitleCompletionParam[];
 extern const char kRichAutocompletionSplitUrlCompletionParam[];
 extern const char kRichAutocompletionSplitCompletionMinCharParam[];
 extern const char kRichAutocompletionCounterfactualParam[];
+extern const char kRichAutocompletionAutocompletePreferUrlsOverPrefixesParam[];
 
 // Parameter names used by omnibox experiments that hide the path (and
 // optionally subdomains) in the steady state.
@@ -564,6 +575,7 @@ extern const char kEntitySuggestionsReduceLatencyDecoderWakeupParam[];
 
 // Parameter names used for bookmark path variations that determine whether
 // bookmark suggestion texts will contain the title, URL, and/or path.
+extern const char kBookmarkPathsCounterfactual[];
 extern const char kBookmarkPathsUiReplaceTitle[];
 extern const char kBookmarkPathsUiReplaceUrl[];
 extern const char kBookmarkPathsUiAppendAfterTitle[];

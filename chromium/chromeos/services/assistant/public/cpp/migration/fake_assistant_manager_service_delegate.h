@@ -13,6 +13,7 @@ namespace chromeos {
 namespace assistant {
 
 class FakeAssistantManager;
+class FakeAssistantManagerInternal;
 
 // Implementation of |AssistantManagerServiceDelegate| that returns fake
 // instances for all of the member methods. Used during unittests.
@@ -24,13 +25,12 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE_MIGRATION_TEST_SUPPORT)
   ~FakeAssistantManagerServiceDelegate() override;
 
   FakeAssistantManager* assistant_manager();
+  FakeAssistantManagerInternal* assistant_manager_internal();
 
-  // AssistantManagerServiceDelegate:
-  std::unique_ptr<AudioInputHost> CreateAudioInputHost() override;
-  std::unique_ptr<CrosPlatformApi> CreatePlatformApi(
-      AssistantMediaSession* media_session,
-      scoped_refptr<base::SingleThreadTaskRunner> background_thread_task_runner)
-      override;
+  // AssistantManagerServiceDelegate implementation:
+  std::unique_ptr<AudioInputHost> CreateAudioInputHost(
+      mojo::PendingRemote<chromeos::libassistant::mojom::AudioInputController>
+          pending_remote) override;
   std::unique_ptr<assistant_client::AssistantManager> CreateAssistantManager(
       assistant_client::PlatformApi* platform_api,
       const std::string& libassistant_config) override;

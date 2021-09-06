@@ -11,7 +11,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
-#include "vivaldi_mojom/components/content_injection/mojom/content_injection.mojom.h"
+#include "components/content_injection/mojom/content_injection.mojom.h"
 
 namespace blink {
 class WebLocalFrame;

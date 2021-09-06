@@ -111,21 +111,21 @@ struct CheckedTuple {
 //    time_t, suseconds_t (including typedefs to)
 // 3. Any template referencing types above (e.g. std::vector<size_t>)
 template <class P>
-static inline void WriteParam(base::Pickle* m, const P& p) {
+inline void WriteParam(base::Pickle* m, const P& p) {
   typedef typename SimilarTypeTraits<P>::Type Type;
   ParamTraits<Type>::Write(m, static_cast<const Type& >(p));
 }
 
 template <class P>
-static inline bool WARN_UNUSED_RESULT ReadParam(const base::Pickle* m,
-                                                base::PickleIterator* iter,
-                                                P* p) {
+inline bool WARN_UNUSED_RESULT ReadParam(const base::Pickle* m,
+                                         base::PickleIterator* iter,
+                                         P* p) {
   typedef typename SimilarTypeTraits<P>::Type Type;
   return ParamTraits<Type>::Read(m, iter, reinterpret_cast<Type* >(p));
 }
 
 template <class P>
-static inline void LogParam(const P& p, std::string* l) {
+inline void LogParam(const P& p, std::string* l) {
   typedef typename SimilarTypeTraits<P>::Type Type;
   ParamTraits<Type>::Log(static_cast<const Type& >(p), l);
 }
@@ -349,7 +349,7 @@ struct ParamTraits<base::string16> {
 
 #if defined(OS_WIN) && defined(BASE_STRING16_IS_STD_U16STRING)
 template <>
-struct ParamTraits<std::wstring> {
+struct COMPONENT_EXPORT(IPC) ParamTraits<std::wstring> {
   typedef std::wstring param_type;
   static void Write(base::Pickle* m, const param_type& p) {
     m->WriteString16(base::AsStringPiece16(p));
@@ -357,7 +357,7 @@ struct ParamTraits<std::wstring> {
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,
                    param_type* r);
-  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
+  static void Log(const param_type& p, std::string* l);
 };
 #endif
 
@@ -746,6 +746,16 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::FilePath> {
 template <>
 struct COMPONENT_EXPORT(IPC) ParamTraits<base::ListValue> {
   typedef base::ListValue param_type;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+
+template <>
+struct COMPONENT_EXPORT(IPC) ParamTraits<base::Value> {
+  typedef base::Value param_type;
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

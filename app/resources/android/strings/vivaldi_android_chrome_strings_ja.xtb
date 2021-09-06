@@ -7,11 +7,13 @@
 <translation id="17513872634828108">開いているタブ</translation>
 <translation id="1829244130665387512">ページ内検索</translation>
 <translation id="2038563949887743358">[デスクトップ版サイトを見る] をオンにします</translation>
+<translation id="2306442503286132111">ブックマークを <ph name="FOLDER_NAME" /> フォルダーに保存しました</translation>
 <translation id="2433507940547922241">外観</translation>
 <translation id="2501278716633472235">戻る</translation>
 <translation id="2633278372998075009">プライベートタブ</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved.</translation>
 <translation id="3234355010754616171">新しいプライベートタブ</translation>
+<translation id="3377025655491224618">プライベートタブ</translation>
 <translation id="3518985090088779359">同意して続行</translation>
 <translation id="3700829948786686853">Vivaldiへようこそ</translation>
 <translation id="3719826155360621982">ホームページ</translation>
@@ -30,10 +32,12 @@
 <translation id="5840488417521835756">ウェブサイト上のトピックについて、ページを移動せずに調べられます。GoogleがVivaldiのデフォルト検索エンジンに設定されている場合のみ使用可能な「タップして検索」機能では、単語とその周囲のコンテキストが Google検索に送信され、定義、画像、検索結果などの情報が返されます。
 
 検索用語を長押しするとその用語が選択され、選択範囲を調整できます。検索結果を絞り込むには、パネルを上にスライドして検索ボックスをタップします。</translation>
+<translation id="6150320133806434356">ブックマークが保存されました</translation>
 <translation id="6336451774241870485">新しいプライベートタブ</translation>
 <translation id="6593061639179217415">デスクトップ用サイト</translation>
 <translation id="6610147964972079463">プライベートタブを閉じる</translation>
 <translation id="706339621163631076">ブラウザ プライバシーポリシー</translation>
+<translation id="732145680195464316">ブックマークを <ph name="PRODUCT_NAME" /> に保存しました</translation>
 <translation id="7427132068601343474">Vivaldiについて</translation>
 <translation id="7465104139234185284">プライベートタブを全て閉じる</translation>
 <translation id="7519434535192513364">「タップして検索」は、GoogleがVivaldiのデフォルト検索エンジンに設定されている場合のみ使用可能です。選択した単語と現在のページがコンテキストとして Google検索に送信されます。これは [<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />] で無効にすることができます。</translation>

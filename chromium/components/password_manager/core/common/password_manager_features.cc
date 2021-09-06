@@ -28,7 +28,17 @@ const base::Feature kDetectFormSubmissionOnFormClear = {
 
 // Enables the editing of passwords in Chrome settings.
 const base::Feature kEditPasswordsInSettings = {
+#if defined(OS_ANDROID) || defined(OS_IOS)
     "EditPasswordsInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+#else
+    "EditPasswordsInSettings", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
+
+// Enables UI that allows the user to create a strong password even if the field
+// wasn't parsed as a new password field.
+// TODO(crbug/1181254): Remove once it's launched.
+const base::Feature kEnableManualPasswordGeneration = {
+    "EnableManualPasswordGeneration", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables UI in settings that allows the user to move multiple passwords to the
 // account storage.
@@ -50,6 +60,11 @@ const base::Feature KEnablePasswordGenerationForClearTextFields = {
     "EnablePasswordGenerationForClearTextFields",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables filling password on a website when there is saved password on
+// affiliated website.
+const base::Feature kFillingAcrossAffiliatedWebsites{
+    "FillingAcrossAffiliatedWebsites", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables showing UI button in password fallback sheet.
 // The button opens a different sheet that allows filling a password from any
 // origin.
@@ -60,6 +75,12 @@ const base::Feature kFillingPasswordsFromAnyOrigin{
 // selection, rather than autofilling on page load, with highlighting of fields.
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables finding a confirmation password field during saving by inspecting the
+// values of the fields. Used as a kill switch.
+// TODO(crbug.com/1164861): Remove once confirmed to be safe (around M92 or so).
+const base::Feature kInferConfirmationPasswordField = {
+    "InferConfirmationPasswordField", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables password change flow from leaked password dialog.
 const base::Feature kPasswordChange = {"PasswordChange",
@@ -87,10 +108,6 @@ const base::Feature kPasswordReuseDetectionEnabled = {
 const base::Feature kPasswordScriptsFetching = {
     "PasswordScriptsFetching", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables checking credentials for weakness in Password Check.
-const base::Feature kPasswordsWeaknessCheck = {
-    "PasswordsWeaknessCheck", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables showing UI which allows users to easily revert their choice to
 // never save passwords on a certain website.
 const base::Feature kRecoverFromNeverSaveAndroid = {
@@ -100,11 +117,11 @@ const base::Feature kRecoverFromNeverSaveAndroid = {
 // dynamic form change.
 const base::Feature kReparseServerPredictionsFollowingFormChange = {
     "ReparseServerPredictionsFollowingFormChange",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables considering secondary server field predictions during form parsing.
 const base::Feature kSecondaryServerFieldPredictions = {
-    "SecondaryServerFieldPredictions", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SecondaryServerFieldPredictions", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables syncing of compromised credentials.
 const base::Feature kSyncingCompromisedCredentials = {

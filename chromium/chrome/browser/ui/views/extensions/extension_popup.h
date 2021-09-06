@@ -15,9 +15,12 @@
 #include "content/public/browser/devtools_agent_host_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "extensions/browser/extension_host.h"
+#include "extensions/browser/extension_host_observer.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 #include "url/gurl.h"
 
 #if defined(USE_AURA)
@@ -46,8 +49,11 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
                        public extensions::ExtensionRegistryObserver,
                        public content::NotificationObserver,
                        public TabStripModelObserver,
-                       public content::DevToolsAgentHostObserver {
+                       public content::DevToolsAgentHostObserver,
+                       public extensions::ExtensionHostObserver {
  public:
+  METADATA_HEADER(ExtensionPopup);
+
   enum ShowAction {
     SHOW,
     SHOW_AND_INSPECT,
@@ -72,6 +78,8 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
                         views::BubbleBorder::Arrow arrow,
                         ShowAction show_action);
 
+  ExtensionPopup(const ExtensionPopup&) = delete;
+  ExtensionPopup& operator=(const ExtensionPopup&) = delete;
   ~ExtensionPopup() override;
 
   extensions::ExtensionViewHost* host() const { return host_.get(); }
@@ -116,6 +124,9 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
   void DevToolsAgentHostDetached(
       content::DevToolsAgentHost* agent_host) override;
 
+  // extensions::ExtensionHostObserver:
+  void OnExtensionHostShouldClose(extensions::ExtensionHost* host) override;
+
  private:
   ExtensionPopup(std::unique_ptr<extensions::ExtensionViewHost> host,
                  views::View* anchor_view,
@@ -133,6 +144,10 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
 
   ExtensionViewViews* extension_view_;
 
+  base::ScopedObservation<extensions::ExtensionHost,
+                          extensions::ExtensionHostObserver>
+      extension_host_observation_{this};
+
   base::ScopedObservation<extensions::ExtensionRegistry,
                           extensions::ExtensionRegistryObserver>
       extension_registry_observation_{this};
@@ -140,8 +155,6 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
   ShowAction show_action_;
 
   content::NotificationRegistrar registrar_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionPopup);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_

@@ -14,11 +14,13 @@
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-blink.h"
 #include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-shared.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_directory_picker_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_file_picker_accept_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_open_file_picker_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_save_file_picker_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/well_known_directory_or_file_system_handle.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/fileapi/file_error.h"
@@ -32,7 +34,6 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/ascii_ctype.h"
@@ -41,12 +42,18 @@ namespace blink {
 
 namespace {
 
+constexpr char kDefaultStartingDirectoryId[] = "";
+
 constexpr bool IsHTTPWhitespace(UChar chr) {
   return chr == ' ' || chr == '\n' || chr == '\t' || chr == '\r';
 }
 
 bool IsValidSuffixCodePoint(UChar chr) {
   return IsASCIIAlphanumeric(chr) || chr == '+' || chr == '.';
+}
+
+bool IsValidIdCodePoint(UChar chr) {
+  return IsASCIIAlphanumeric(chr) || chr == '_' || chr == '-';
 }
 
 bool VerifyIsValidExtension(const String& extension,
@@ -73,6 +80,21 @@ bool VerifyIsValidExtension(const String& extension,
   }
 
   return true;
+}
+
+String VerifyIsValidId(const String& id, ExceptionState& exception_state) {
+  if (!id.IsAllSpecialCharacters<IsValidIdCodePoint>()) {
+    exception_state.ThrowTypeError("ID '" + id +
+                                   "' contains invalid characters.");
+    return String();
+  }
+  if (id.length() > 32) {
+    exception_state.ThrowTypeError("ID '" + id +
+                                   "' cannot be longer than 32 characters.");
+    return String();
+  }
+
+  return std::move(id);
 }
 
 bool AddExtension(const String& extension,
@@ -168,37 +190,33 @@ void VerifyIsAllowedToShowFilePicker(const LocalDOMWindow& window,
   }
 }
 
-mojom::blink::CommonDirectory ConvertCommonDirectory(
-    const String& starting_directory,
+mojom::blink::WellKnownDirectory ConvertWellKnownDirectory(
+    const String& directory,
     ExceptionState& exception_state) {
-  if (starting_directory == "")
-    return mojom::blink::CommonDirectory::kDefault;
-  else if (starting_directory == "desktop")
-    return mojom::blink::CommonDirectory::kDirDesktop;
-  else if (starting_directory == "documents")
-    return mojom::blink::CommonDirectory::kDirDocuments;
-  else if (starting_directory == "downloads")
-    return mojom::blink::CommonDirectory::kDirDownloads;
-  else if (starting_directory == "home")
-    return mojom::blink::CommonDirectory::kDirHome;
-  else if (starting_directory == "music")
-    return mojom::blink::CommonDirectory::kDirMusic;
-  else if (starting_directory == "pictures")
-    return mojom::blink::CommonDirectory::kDirPictures;
-  else if (starting_directory == "videos")
-    return mojom::blink::CommonDirectory::kDirVideos;
+  if (directory == "")
+    return mojom::blink::WellKnownDirectory::kDefault;
+  else if (directory == "desktop")
+    return mojom::blink::WellKnownDirectory::kDirDesktop;
+  else if (directory == "documents")
+    return mojom::blink::WellKnownDirectory::kDirDocuments;
+  else if (directory == "downloads")
+    return mojom::blink::WellKnownDirectory::kDirDownloads;
+  else if (directory == "music")
+    return mojom::blink::WellKnownDirectory::kDirMusic;
+  else if (directory == "pictures")
+    return mojom::blink::WellKnownDirectory::kDirPictures;
+  else if (directory == "videos")
+    return mojom::blink::WellKnownDirectory::kDirVideos;
 
   NOTREACHED();
-  return mojom::blink::CommonDirectory::kDefault;
+  return mojom::blink::WellKnownDirectory::kDefault;
 }
 
 ScriptPromise ShowFilePickerImpl(
     ScriptState* script_state,
     LocalDOMWindow& window,
-    mojom::blink::ChooseFileSystemEntryType chooser_type,
-    Vector<mojom::blink::ChooseFileSystemEntryAcceptsOptionPtr> accepts,
-    mojom::blink::CommonDirectory starting_directory,
-    bool accept_all,
+    mojom::blink::FilePickerOptionsPtr options,
+    mojom::blink::CommonFilePickerOptionsPtr common_options,
     bool return_as_sequence) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise resolver_result = resolver->Promise();
@@ -213,11 +231,7 @@ ScriptPromise ShowFilePickerImpl(
 
   auto* raw_manager = manager.get();
   raw_manager->ChooseEntries(
-      chooser_type, std::move(accepts),
-      RuntimeEnabledFeatures::FileSystemAccessAPIExperimentalEnabled()
-          ? starting_directory
-          : mojom::blink::CommonDirectory::kDefault,
-      accept_all,
+      std::move(options), std::move(common_options),
       WTF::Bind(
           [](ScriptPromiseResolver* resolver,
              mojo::Remote<mojom::blink::FileSystemAccessManager>,
@@ -285,25 +299,45 @@ ScriptPromise GlobalFileSystemAccess::showOpenFilePicker(
     return ScriptPromise();
   }
 
-  auto starting_directory = mojom::blink::CommonDirectory::kDefault;
-  if (options->hasStartInNonNull()) {
-    starting_directory = ConvertCommonDirectory(
-        IDLEnumAsString(options->startInNonNull()), exception_state);
+  String starting_directory_id = kDefaultStartingDirectoryId;
+  if (options->hasId()) {
+    starting_directory_id = VerifyIsValidId(options->id(), exception_state);
     if (exception_state.HadException())
       return ScriptPromise();
+  }
+
+  auto well_known_starting_directory =
+      mojom::blink::WellKnownDirectory::kDefault;
+  mojo::PendingRemote<blink::mojom::blink::FileSystemAccessTransferToken> token;
+  if (options->hasStartIn()) {
+    auto& start_in = options->startIn();
+    if (start_in.IsWellKnownDirectory()) {
+      well_known_starting_directory = ConvertWellKnownDirectory(
+          start_in.GetAsWellKnownDirectory(), exception_state);
+      if (exception_state.HadException())
+        return ScriptPromise();
+    }
+    if (start_in.IsFileSystemHandle()) {
+      token = start_in.GetAsFileSystemHandle()->Transfer();
+    }
   }
 
   VerifyIsAllowedToShowFilePicker(window, exception_state);
   if (exception_state.HadException())
     return ScriptPromise();
 
+  auto open_file_picker_options = mojom::blink::OpenFilePickerOptions::New(
+      mojom::blink::AcceptsTypesInfo::New(std::move(accepts),
+                                          !options->excludeAcceptAllOption()),
+      options->multiple());
+
   return ShowFilePickerImpl(
       script_state, window,
-      options->multiple()
-          ? mojom::blink::ChooseFileSystemEntryType::kOpenMultipleFiles
-          : mojom::blink::ChooseFileSystemEntryType::kOpenFile,
-      std::move(accepts), starting_directory,
-      !options->excludeAcceptAllOption(),
+      mojom::blink::FilePickerOptions::NewOpenFilePickerOptions(
+          std::move(open_file_picker_options)),
+      mojom::blink::CommonFilePickerOptions::New(
+          std::move(starting_directory_id),
+          std::move(well_known_starting_directory), std::move(token)),
       /*return_as_sequence=*/true);
 }
 
@@ -326,23 +360,47 @@ ScriptPromise GlobalFileSystemAccess::showSaveFilePicker(
     return ScriptPromise();
   }
 
-  auto starting_directory = mojom::blink::CommonDirectory::kDefault;
-  if (options->hasStartInNonNull()) {
-    starting_directory = ConvertCommonDirectory(
-        IDLEnumAsString(options->startInNonNull()), exception_state);
+  String starting_directory_id = kDefaultStartingDirectoryId;
+  if (options->hasId()) {
+    starting_directory_id = VerifyIsValidId(options->id(), exception_state);
     if (exception_state.HadException())
       return ScriptPromise();
+  }
+
+  auto well_known_starting_directory =
+      mojom::blink::WellKnownDirectory::kDefault;
+  mojo::PendingRemote<blink::mojom::blink::FileSystemAccessTransferToken> token;
+  if (options->hasStartIn()) {
+    auto& start_in = options->startIn();
+    if (start_in.IsWellKnownDirectory()) {
+      well_known_starting_directory = ConvertWellKnownDirectory(
+          start_in.GetAsWellKnownDirectory(), exception_state);
+      if (exception_state.HadException())
+        return ScriptPromise();
+    }
+    if (start_in.IsFileSystemHandle()) {
+      token = start_in.GetAsFileSystemHandle()->Transfer();
+    }
   }
 
   VerifyIsAllowedToShowFilePicker(window, exception_state);
   if (exception_state.HadException())
     return ScriptPromise();
 
-  return ShowFilePickerImpl(script_state, window,
-                            mojom::blink::ChooseFileSystemEntryType::kSaveFile,
-                            std::move(accepts), starting_directory,
-                            !options->excludeAcceptAllOption(),
-                            /*return_as_sequence=*/false);
+  auto save_file_picker_options = mojom::blink::SaveFilePickerOptions::New(
+      mojom::blink::AcceptsTypesInfo::New(std::move(accepts),
+                                          !options->excludeAcceptAllOption()),
+      (options->hasSuggestedName() && !options->suggestedName().IsNull())
+          ? options->suggestedName()
+          : g_empty_string);
+  return ShowFilePickerImpl(
+      script_state, window,
+      mojom::blink::FilePickerOptions::NewSaveFilePickerOptions(
+          std::move(save_file_picker_options)),
+      mojom::blink::CommonFilePickerOptions::New(
+          std::move(starting_directory_id),
+          std::move(well_known_starting_directory), std::move(token)),
+      /*return_as_sequence=*/false);
 }
 
 // static
@@ -353,22 +411,41 @@ ScriptPromise GlobalFileSystemAccess::showDirectoryPicker(
     ExceptionState& exception_state) {
   UseCounter::Count(window, WebFeature::kFileSystemPickerMethod);
 
-  auto starting_directory = mojom::blink::CommonDirectory::kDefault;
-  if (options->hasStartInNonNull()) {
-    starting_directory = ConvertCommonDirectory(
-        IDLEnumAsString(options->startInNonNull()), exception_state);
+  String starting_directory_id = kDefaultStartingDirectoryId;
+  if (options->hasId()) {
+    starting_directory_id = VerifyIsValidId(options->id(), exception_state);
     if (exception_state.HadException())
       return ScriptPromise();
   }
+
+  auto well_known_starting_directory =
+      mojom::blink::WellKnownDirectory::kDefault;
+  mojo::PendingRemote<blink::mojom::blink::FileSystemAccessTransferToken> token;
+  if (options->hasStartIn()) {
+    auto& start_in = options->startIn();
+    if (start_in.IsWellKnownDirectory()) {
+      well_known_starting_directory = ConvertWellKnownDirectory(
+          start_in.GetAsWellKnownDirectory(), exception_state);
+      if (exception_state.HadException())
+        return ScriptPromise();
+    }
+    if (start_in.IsFileSystemHandle()) {
+      token = start_in.GetAsFileSystemHandle()->Transfer();
+    }
+  }
+
   VerifyIsAllowedToShowFilePicker(window, exception_state);
   if (exception_state.HadException())
     return ScriptPromise();
 
+  auto directory_picker_options = mojom::blink::DirectoryPickerOptions::New();
   return ShowFilePickerImpl(
       script_state, window,
-      mojom::blink::ChooseFileSystemEntryType::kOpenDirectory, {},
-      starting_directory,
-      /*accept_all=*/true,
+      mojom::blink::FilePickerOptions::NewDirectoryPickerOptions(
+          std::move(directory_picker_options)),
+      mojom::blink::CommonFilePickerOptions::New(
+          std::move(starting_directory_id),
+          std::move(well_known_starting_directory), std::move(token)),
       /*return_as_sequence=*/false);
 }
 

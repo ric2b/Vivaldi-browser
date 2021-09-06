@@ -45,6 +45,7 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
     scoped_refptr<const NGPhysicalFragment> fragment;
   };
   typedef Vector<ChildWithOffset, 4> ChildrenVector;
+  using MulticolCollection = HashSet<LayoutBox*>;
 
   LayoutUnit BfcLineOffset() const { return bfc_line_offset_; }
   void SetBfcLineOffset(LayoutUnit bfc_line_offset) {
@@ -142,7 +143,9 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
       Vector<NGLogicalOutOfFlowPositionedNode>* descendants);
 
   void SwapMulticolsWithPendingOOFs(
-      HashSet<NGBlockNode>* multicols_with_pending_oofs);
+      MulticolCollection* multicols_with_pending_oofs);
+
+  void ClearOutOfFlowFragmentainerDescendants();
 
   bool HasOutOfFlowPositionedCandidates() const {
     return !oof_positioned_candidates_.IsEmpty();
@@ -154,6 +157,11 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
 
   bool HasMulticolsWithPendingOOFs() const {
     return !multicols_with_pending_oofs_.IsEmpty();
+  }
+
+  Vector<NGLogicalOutOfFlowPositionedNode>*
+  MutableOutOfFlowPositionedCandidates() {
+    return &oof_positioned_candidates_;
   }
 
   // This method should only be used within the inline layout algorithm. It is
@@ -260,7 +268,7 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
       oof_positioned_fragmentainer_descendants_;
   Vector<NGLogicalOutOfFlowPositionedNode> oof_positioned_descendants_;
 
-  HashSet<NGBlockNode> multicols_with_pending_oofs_;
+  MulticolCollection multicols_with_pending_oofs_;
 
   NGUnpositionedListMarker unpositioned_list_marker_;
 

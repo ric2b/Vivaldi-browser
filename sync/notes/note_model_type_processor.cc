@@ -227,19 +227,19 @@ void NoteModelTypeProcessor::ModelReadyToSync(
   sync_pb::NotesModelMetadata model_metadata;
   model_metadata.ParseFromString(metadata_str);
 
-  const bool initial_sync_done =
-      model_metadata.model_type_state().initial_sync_done();
-  const bool notes_metadata_empty = model_metadata.notes_metadata().empty();
-
   note_tracker_ = SyncedNoteTracker::CreateFromNotesModelAndMetadata(
       model, std::move(model_metadata));
 
   if (note_tracker_) {
     note_tracker_->CheckAllNodesTracked(notes_model_);
     StartTrackingMetadata();
-  } else if (!initial_sync_done && !notes_metadata_empty) {
-    DLOG(ERROR)
-        << "Persisted Metadata not empty while initial sync is not done.";
+  } else if (!metadata_str.empty()) {
+    DLOG(WARNING) << "Persisted note sync metadata invalidated when loading.";
+    // Schedule a save to make sure the corrupt metadata is deleted from disk as
+    // soon as possible, to avoid reporting again after restart if nothing else
+    // schedules a save meanwhile (which is common if sync is not running
+    // properly, e.g. auth error).
+    schedule_save_closure_.Run();
   }
 
   ConnectIfReady();
@@ -480,8 +480,7 @@ void NoteModelTypeProcessor::AppendNodeAndChildrenForDebugging(
                                                          : node->GetTitle());
   data.is_folder = node->is_folder();
   data.unique_position = metadata->unique_position();
-  data.specifics =
-      CreateSpecificsFromNoteNode(node, notes_model_, entity->has_final_guid());
+  data.specifics = CreateSpecificsFromNoteNode(node, notes_model_);
   if (node->is_permanent_node()) {
     data.server_defined_unique_tag =
         ComputeServerDefinedUniqueTagForDebugging(node, notes_model_);

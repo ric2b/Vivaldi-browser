@@ -220,12 +220,6 @@ TEST_P(PaintLayerTest, CompositedScrollingNoNeedsRepaint) {
 }
 
 TEST_P(PaintLayerTest, NonCompositedScrollingNeedsRepaint) {
-  // CAP scrolling raster invalidation decisions are made in
-  // ContentLayerClientImpl::GenerateRasterInvalidations through
-  // PaintArtifactCompositor.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetBodyInnerHTML(R"HTML(
     <style>
      /* to prevent the mock overlay scrollbar from affecting compositing. */
@@ -238,6 +232,11 @@ TEST_P(PaintLayerTest, NonCompositedScrollingNeedsRepaint) {
   )HTML");
 
   PaintLayer* scroll_layer = GetPaintLayerByElementId("scroll");
+  EXPECT_FALSE(scroll_layer->GetLayoutObject()
+                   .FirstFragment()
+                   .PaintProperties()
+                   ->ScrollTranslation()
+                   ->HasDirectCompositingReasons());
   EXPECT_EQ(kNotComposited, scroll_layer->GetCompositingState());
 
   PaintLayer* content_layer = GetPaintLayerByElementId("content");
@@ -254,7 +253,14 @@ TEST_P(PaintLayerTest, NonCompositedScrollingNeedsRepaint) {
       content_layer->ContainingLayer()->PixelSnappedScrolledContentOffset());
 
   EXPECT_TRUE(scroll_layer->SelfNeedsRepaint());
-  EXPECT_FALSE(content_layer->SelfNeedsRepaint());
+  if (RuntimeEnabledFeatures::CullRectUpdateEnabled()) {
+    // The content layer needs repaint because its cull rect changed.
+    EXPECT_TRUE(content_layer->SelfNeedsRepaint());
+  } else {
+    // We don't set the layer needing repaint, but will repaint the layer when
+    // we find that the cull rect changes during paint.
+    EXPECT_FALSE(content_layer->SelfNeedsRepaint());
+  }
   UpdateAllLifecyclePhasesForTest();
 }
 
@@ -2844,6 +2850,29 @@ TEST_P(PaintLayerOverlapTest, FixedUsesExpandedBoundingBoxForOverlap) {
     EXPECT_EQ(fixed->UnclippedAbsoluteBoundingBox(), IntRect(60, 60, 10, 10));
     EXPECT_EQ(fixed->ClippedAbsoluteBoundingBox(), IntRect(60, 60, 10, 10));
   }
+}
+
+TEST_P(PaintLayerOverlapTest, IncludeIntermediateScrollerOffset) {
+  SetBodyInnerHTML(R"HTML(
+    <style>body { margin:0; }</style>
+    <div id=intermediate style="overflow:scroll; width: 100px; height: 100px">
+      <div style="height: 2000px"></div>
+      <div id="target" style="position: relative; width: 100px; height: 100px"></div>
+    </div>
+    <div style="height: 2000px"></div>
+    )HTML");
+  PaintLayer* position = GetPaintLayerByElementId("target");
+  LayoutBoxModelObject* intermediate =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("intermediate"));
+
+  intermediate->GetScrollableArea()->ScrollBy(ScrollOffset(0, 1950),
+                                              mojom::blink::ScrollType::kUser);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(100, 100), mojom::blink::ScrollType::kProgrammatic);
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_EQ(position->UnclippedAbsoluteBoundingBox(), IntRect(0, 50, 100, 100));
+  EXPECT_EQ(position->ClippedAbsoluteBoundingBox(), IntRect(0, 50, 100, 50));
 }
 
 TEST_P(PaintLayerOverlapTest,

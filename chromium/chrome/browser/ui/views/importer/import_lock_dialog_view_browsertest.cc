@@ -18,8 +18,7 @@ class ImportLockDialogViewBrowserTest : public DialogBrowserTest {
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {
     gfx::NativeWindow native_window = browser()->window()->GetNativeWindow();
-    ImportLockDialogView::Show(native_window, base::OnceCallback<void(bool)>(),
-                               base::string16());
+    ImportLockDialogView::Show(native_window, base::OnceCallback<void(bool)>());
   }
 
  private:

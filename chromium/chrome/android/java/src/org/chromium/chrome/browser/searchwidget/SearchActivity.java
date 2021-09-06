@@ -26,14 +26,18 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.WebContentsFactory;
-import org.chromium.chrome.browser.WindowDelegate;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.init.SingleWindowKeyboardVisibilityDelegate;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.omnibox.BackKeyBehaviorDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
+import org.chromium.chrome.browser.omnibox.OverrideUrlLoadingDelegate;
+import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
+import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
+import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBuilder;
@@ -54,6 +58,7 @@ import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.ActivityKeyboardVisibilityDelegate;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.base.WindowDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.url.GURL;
 
@@ -63,9 +68,12 @@ import org.vivaldi.browser.qrcode.VivaldiQrCodeScanDialog;
 
 /** Queries the user's default search engine and shows autocomplete suggestions. */
 public class SearchActivity extends AsyncInitializationActivity
-        implements SnackbarManageable, SearchActivityLocationBarLayout.Delegate {
+        implements SnackbarManageable, BackKeyBehaviorDelegate, UrlFocusChangeListener {
     // Shared with other org.chromium.chrome.browser.searchwidget classes.
     protected static final String TAG = "searchwidget";
+
+    public static final String EXTRA_FROM_SEARCH_ACTIVITY =
+            "org.chromium.chrome.browser.searchwidget.FROM_SEARCH_ACTIVITY";
 
     /** Notified about events happening inside a SearchActivity. */
     public static class SearchActivityDelegate {
@@ -117,7 +125,7 @@ public class SearchActivity extends AsyncInitializationActivity
 
     /** The View that represents the search box. */
     private SearchActivityLocationBarLayout mSearchBox;
-    private LocationBarCoordinator mLocationBarCoordinator;
+    LocationBarCoordinator mLocationBarCoordinator;
 
     private SnackbarManager mSnackbarManager;
     private SearchBoxDataProvider mSearchBoxDataProvider;
@@ -128,11 +136,6 @@ public class SearchActivity extends AsyncInitializationActivity
     protected boolean isStartedUpCorrectly(Intent intent) {
         if (getActivityDelegate().isActivityDisabledForTests()) return false;
         return super.isStartedUpCorrectly(intent);
-    }
-
-    @Override
-    public void backKeyPressed() {
-        cancelSearch();
     }
 
     @Override
@@ -171,21 +174,24 @@ public class SearchActivity extends AsyncInitializationActivity
         // Build the search box.
         mSearchBox = (SearchActivityLocationBarLayout) mContentView.findViewById(
                 R.id.search_location_bar);
-        mSearchBox.setDelegate(this);
         View anchorView = mContentView.findViewById(R.id.toolbar);
+        OverrideUrlLoadingDelegate overrideUrlLoadingDelegate =
+                (String url, @PageTransition int transition, String postDataType, byte[] postData,
+                        boolean incognito) -> {
+            loadUrl(url, transition, postDataType, postData);
+            return true;
+        };
         mLocationBarCoordinator = new LocationBarCoordinator(mSearchBox, anchorView,
                 mProfileSupplier, mSearchBoxDataProvider, null, new WindowDelegate(getWindow()),
                 getWindowAndroid(),
-                /*activityTabProvider=*/null, /*modalDialogManagerSupplier=*/
+                /*activityTabSupplier=*/() -> null, /*modalDialogManagerSupplier=*/
                 getModalDialogManagerSupplier(),
                 /*shareDelegateSupplier=*/null, /*incognitoStateProvider=*/null,
-                getLifecycleDispatcher(), /*overrideUrlLoadingDelegate=*/
-                (String url, @PageTransition int transition, String postDataType, byte[] postData,
-                        boolean incognito) -> {
-                    loadUrl(url, transition, postDataType, postData);
-                    return true;
-                });
+                getLifecycleDispatcher(), overrideUrlLoadingDelegate,
+                /*backKeyBehavior=*/this, SearchEngineLogoUtils.getInstance());
         mLocationBarCoordinator.setUrlBarFocusable(true);
+        mLocationBarCoordinator.setShouldShowMicButtonWhenUnfocused(true);
+        mLocationBarCoordinator.getFakeboxDelegate().addUrlFocusChangeListener(this);
 
         // Kick off everything needed for the user to type into the box.
         beginQuery();
@@ -284,6 +290,13 @@ public class SearchActivity extends AsyncInitializationActivity
                 SearchActivity.this, onSearchEngineFinalizedCallback);
     }
 
+    // OverrideBackKeyBehaviorDelegate implementation.
+    @Override
+    public boolean handleBackKeyPressed() {
+        cancelSearch();
+        return true;
+    }
+
     private void finishDeferredInitialization() {
         assert !mIsActivityUsable
                 : "finishDeferredInitialization() incorrectly called multiple times";
@@ -296,7 +309,9 @@ public class SearchActivity extends AsyncInitializationActivity
         //                will navigate to Tabbed mode.  Investigate whether this can inflate
         //                the tabbed mode layout in the background instead of CCTs.
         CustomTabsConnection.getInstance().warmup(0);
-        mSearchBox.onDeferredStartup(isVoiceSearchIntent());
+        VoiceRecognitionHandler voiceRecognitionHandler =
+                mLocationBarCoordinator.getVoiceRecognitionHandler();
+        mSearchBox.onDeferredStartup(isVoiceSearchIntent(), voiceRecognitionHandler);
         RecordUserAction.record("SearchWidget.WidgetSelected");
 
         getActivityDelegate().onFinishDeferredInitialization();
@@ -324,6 +339,11 @@ public class SearchActivity extends AsyncInitializationActivity
                 getIntent(), SearchWidgetProvider.EXTRA_START_VOICE_SEARCH, false);
     }
 
+    private boolean isFromSearchWidget() {
+        return IntentUtils.safeGetBooleanExtra(
+                getIntent(), SearchWidgetProvider.EXTRA_FROM_SEARCH_WIDGET, false);
+    }
+
     private String getOptionalIntentQuery() {
         return IntentUtils.safeGetStringExtra(getIntent(), SearchManager.QUERY);
     }
@@ -337,7 +357,8 @@ public class SearchActivity extends AsyncInitializationActivity
             return;
         }
 
-        mSearchBox.beginQuery(isVoiceSearchIntent(), getOptionalIntentQuery());
+        mSearchBox.beginQuery(isVoiceSearchIntent(), getOptionalIntentQuery(),
+                mLocationBarCoordinator.getVoiceRecognitionHandler());
     }
 
     @Override
@@ -346,6 +367,10 @@ public class SearchActivity extends AsyncInitializationActivity
         // we are using shortcuts in the widget.
         SearchEngineIconHandler.get().restoreDSE();
         if (mTab != null && mTab.isInitialized()) mTab.destroy();
+        if (mLocationBarCoordinator != null
+                && mLocationBarCoordinator.getFakeboxDelegate() != null) {
+            mLocationBarCoordinator.getFakeboxDelegate().removeUrlFocusChangeListener(this);
+        }
         mHandler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
@@ -353,6 +378,13 @@ public class SearchActivity extends AsyncInitializationActivity
     @Override
     public boolean shouldStartGpuProcess() {
         return true;
+    }
+
+    @Override
+    public void onUrlFocusChange(boolean hasFocus) {
+        if (hasFocus) {
+            mLocationBarCoordinator.setUrlFocusChangeInProgress(false);
+        }
     }
 
     /* package */ void loadUrl(String url, @PageTransition int transition,
@@ -402,6 +434,10 @@ public class SearchActivity extends AsyncInitializationActivity
             intent.putExtra(IntentHandler.EXTRA_POST_DATA_TYPE, postDataType);
             intent.putExtra(IntentHandler.EXTRA_POST_DATA, postData);
         }
+        if (isFromSearchWidget()) {
+            intent.putExtra(SearchWidgetProvider.EXTRA_FROM_SEARCH_WIDGET, true);
+        }
+        intent.putExtra(EXTRA_FROM_SEARCH_ACTIVITY, true);
         IntentHandler.addTrustedIntentExtras(intent);
 
         return intent;
@@ -443,5 +479,9 @@ public class SearchActivity extends AsyncInitializationActivity
     @VisibleForTesting
     static void setDelegateForTests(SearchActivityDelegate delegate) {
         sDelegate = delegate;
+    }
+
+    LocationBarCoordinator getLocationBarCoordinatorForTesting() {
+        return mLocationBarCoordinator;
     }
 }

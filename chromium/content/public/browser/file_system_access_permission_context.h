@@ -124,18 +124,23 @@ class FileSystemAccessPermissionContext {
   // shown if there is no need to ask for it.
   virtual bool CanObtainWritePermission(const url::Origin& origin) = 0;
 
-  // Store the directory recently chosen using a file picker.
+  // Store the directory recently chosen by a file picker. This can later be
+  // retrieved via a call to |GetLastPickedDirectory| with the corresponding
+  // |origin| and |id|.
   virtual void SetLastPickedDirectory(const url::Origin& origin,
+                                      const std::string& id,
                                       const base::FilePath& path,
                                       const PathType type) = 0;
-  // Returns the directory recently chosen using a file picker.
-  virtual PathInfo GetLastPickedDirectory(const url::Origin& origin) = 0;
+  // Returns the directory recently chosen by a file picker for a given
+  // |origin| and |id|.
+  virtual PathInfo GetLastPickedDirectory(const url::Origin& origin,
+                                          const std::string& id) = 0;
 
   // Return the path associated with well-known directories such as "desktop"
   // and "music", or a default path if the |directory| cannot be matched to a
   // well-known directory.
-  virtual base::FilePath GetCommonDirectoryPath(
-      blink::mojom::CommonDirectory directory) = 0;
+  virtual base::FilePath GetWellKnownDirectoryPath(
+      blink::mojom::WellKnownDirectory directory) = 0;
 
  protected:
   virtual ~FileSystemAccessPermissionContext() = default;

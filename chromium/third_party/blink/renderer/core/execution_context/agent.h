@@ -73,15 +73,24 @@ class CORE_EXPORT Agent : public GarbageCollected<Agent> {
   // URL to create an iframe, would have an origin-keyed data: URL Agent,
   // plus a site-keyed outer page Agent, both in the same process.
   bool IsOriginKeyed();
-  void SetIsOriginKeyed(bool value);
+
+  // TODO(domenic,wjmaclean): once logical cross-origin isolation is implemented
+  // and unified with origin-keyed agent clusters, then this should no longer be
+  // necessary; we can just check IsOriginKeyed().
+  bool IsExplicitlyOriginKeyed() const { return is_explicitly_origin_keyed_; }
+
+  // This sets whether the agent cluster is explicitly requested to be
+  // origin-keyed via the Origin-Agent-Cluster header. It can also be
+  // implicitly origin-keyed if it is in a cross-origin isolated agent cluster.
+  void SetIsExplicitlyOriginKeyed(bool value);
 
  private:
   scoped_refptr<scheduler::EventLoop> event_loop_;
   const base::UnguessableToken cluster_id_;
-  bool is_origin_keyed_ = false;
+  bool is_explicitly_origin_keyed_ = false;
 
 #if DCHECK_IS_ON()
-  bool is_origin_keyed_set_ = false;
+  bool is_explicitly_origin_keyed_set_ = false;
 #endif
 };
 

@@ -17,12 +17,12 @@
 #include "third_party/blink/renderer/modules/webcodecs/codec_logger.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/platform/heap/visitor.h"
 
 namespace blink {
 
 class ExceptionState;
 enum class DOMExceptionCode;
-class Visitor;
 
 template <typename Traits>
 class MODULES_EXPORT EncoderBase
@@ -95,7 +95,7 @@ class MODULES_EXPORT EncoderBase
   virtual void ProcessEncode(Request* request) = 0;
   virtual void ProcessConfigure(Request* request) = 0;
   virtual void ProcessReconfigure(Request* request) = 0;
-  virtual void ProcessFlush(Request* request) = 0;
+  virtual void ProcessFlush(Request* request);
   virtual void ResetInternal();
 
   virtual bool CanReconfigure(InternalConfigType& original_config,

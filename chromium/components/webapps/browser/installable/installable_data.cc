@@ -10,13 +10,13 @@ namespace webapps {
 
 InstallableData::InstallableData(std::vector<InstallableStatusCode> errors,
                                  const GURL& manifest_url,
-                                 const blink::Manifest* manifest,
+                                 const blink::Manifest& manifest,
                                  const GURL& primary_icon_url,
                                  const SkBitmap* primary_icon,
                                  bool has_maskable_primary_icon,
                                  const GURL& splash_icon_url,
                                  const SkBitmap* splash_icon,
-                                 const std::map<GURL, SkBitmap>& screenshots,
+                                 const std::vector<SkBitmap>& screenshots,
                                  bool valid_manifest,
                                  bool has_worker)
     : errors(std::move(errors)),

@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/multi_user/multi_user_window_manager_impl.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
@@ -18,7 +17,11 @@
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
 #include "ash/wm/wm_highlight_item_border.h"
+#include "ash/wm/workspace/backdrop_controller.h"
+#include "ash/wm/workspace/workspace_layout_manager.h"
+#include "ash/wm/workspace_controller.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "ui/aura/client/aura_constants.h"
@@ -92,18 +95,19 @@ struct LayerData {
 // multi-profile ownership status (i.e. can only be shown if it belongs to the
 // active user).
 bool CanShowWindowForMultiProfile(aura::Window* window) {
-  MultiUserWindowManager* multi_user_window_manager =
-      MultiUserWindowManagerImpl::Get();
-  if (!multi_user_window_manager)
-    return true;
+  aura::Window* window_to_check = window;
+  // If |window| is a backdrop, check the window which has this backdrop
+  // instead.
+  WorkspaceController* workspace_controller =
+      GetWorkspaceControllerForContext(window_to_check);
+  if (workspace_controller) {
+    BackdropController* backdrop_controller =
+        workspace_controller->layout_manager()->backdrop_controller();
+    if (backdrop_controller->backdrop_window() == window_to_check)
+      window_to_check = backdrop_controller->window_having_backdrop();
+  }
 
-  const AccountId account_id =
-      multi_user_window_manager->GetUserPresentingWindow(window);
-  // An empty account ID is returned if the window is presented for all users.
-  if (!account_id.is_valid())
-    return true;
-
-  return account_id == multi_user_window_manager->CurrentAccountId();
+  return window_util::ShouldShowForCurrentUser(window_to_check);
 }
 
 // Returns the LayerData entry for |target_layer| in |layer_data|. Returns an
@@ -441,21 +445,18 @@ void DeskPreviewView::Layout() {
   Button::Layout();
 }
 
+bool DeskPreviewView::OnMousePressed(const ui::MouseEvent& event) {
+  if (features::IsBentoEnabled())
+    mini_view_->owner_bar()->HandlePressEvent(mini_view_, event);
+
+  return Button::OnMousePressed(event);
+}
+
 bool DeskPreviewView::OnMouseDragged(const ui::MouseEvent& event) {
-  if (!features::IsBentoEnabled())
-    return Button::OnMouseDragged(event);
+  if (features::IsBentoEnabled())
+    mini_view_->owner_bar()->HandleDragEvent(mini_view_, event);
 
-  DesksBarView* owner_bar = mini_view_->owner_bar();
-
-  if (!owner_bar->IsDraggingDesk()) {
-    owner_bar->HandleStartDragEvent(mini_view_, event);
-    return true;
-  }
-
-  if (!owner_bar->HandleDragEvent(mini_view_, event))
-    return Button::OnMouseDragged(event);
-
-  return true;
+  return Button::OnMouseDragged(event);
 }
 
 void DeskPreviewView::OnMouseReleased(const ui::MouseEvent& event) {
@@ -472,15 +473,16 @@ void DeskPreviewView::OnGestureEvent(ui::GestureEvent* event) {
   DesksBarView* owner_bar = mini_view_->owner_bar();
 
   switch (event->type()) {
+    // Only long press can trigger drag & drop.
     case ui::ET_GESTURE_LONG_PRESS:
-      owner_bar->HandleStartDragEvent(mini_view_, *event);
+      owner_bar->HandleLongPressEvent(mini_view_, *event);
       event->SetHandled();
       break;
     case ui::ET_GESTURE_SCROLL_BEGIN:
       FALLTHROUGH;
     case ui::ET_GESTURE_SCROLL_UPDATE:
-      if (owner_bar->HandleDragEvent(mini_view_, *event))
-        event->SetHandled();
+      owner_bar->HandleDragEvent(mini_view_, *event);
+      event->SetHandled();
       break;
     case ui::ET_GESTURE_END:
       if (owner_bar->HandleReleaseEvent(mini_view_, *event))

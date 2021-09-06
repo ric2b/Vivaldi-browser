@@ -28,8 +28,7 @@ MediaPlayerRendererClientFactory::CreateRenderer(
     media::AudioRendererSink* audio_renderer_sink,
     media::VideoRendererSink* video_renderer_sink,
     media::RequestOverlayInfoCB request_overlay_info_cb,
-    const gfx::ColorSpace& /* target_color_space */,
-    bool use_platform_media_pipeline) {
+    const gfx::ColorSpace& target_color_space) {
   // Used to send messages from the MPRC (Renderer process), to the MPR (Browser
   // process). The |renderer_extension_request| will be bound in
   // MediaPlayerRenderer.

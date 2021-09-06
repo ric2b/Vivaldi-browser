@@ -38,6 +38,8 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/views/sync/dice_bubble_sync_promo_view.h"
@@ -75,7 +77,7 @@ views::View* AnchorViewForBrowser(const ExtensionInstalledBubbleModel* model,
           browser_view->toolbar()->browser_actions();
       // Hitting this DCHECK means |ShouldShow| failed.
       DCHECK(container);
-      DCHECK(!container->animating());
+      DCHECK(!container->GetAnimating());
 
       reference_view = container->GetViewForId(model->extension_id());
     }
@@ -120,9 +122,13 @@ std::unique_ptr<views::View> CreateSigninPromoView(
 class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
                                      public views::BubbleDialogDelegateView {
  public:
+  METADATA_HEADER(ExtensionInstalledBubbleView);
   ExtensionInstalledBubbleView(
       Browser* browser,
       std::unique_ptr<ExtensionInstalledBubbleModel> model);
+  ExtensionInstalledBubbleView(const ExtensionInstalledBubbleView&) = delete;
+  ExtensionInstalledBubbleView& operator=(const ExtensionInstalledBubbleView&) =
+      delete;
   ~ExtensionInstalledBubbleView() override;
 
   static void Show(Browser* browser,
@@ -144,8 +150,6 @@ class ExtensionInstalledBubbleView : public BubbleSyncPromoDelegate,
 
   Browser* const browser_;
   const std::unique_ptr<ExtensionInstalledBubbleModel> model_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionInstalledBubbleView);
 };
 
 // static
@@ -274,6 +278,9 @@ void ExtensionInstalledBubbleView::LinkClicked() {
   GetWidget()->Close();
 }
 
+BEGIN_METADATA(ExtensionInstalledBubbleView, views::BubbleDialogDelegateView)
+END_METADATA
+
 void ShowUiOnToolbarMenu(scoped_refptr<const extensions::Extension> extension,
                          Browser* browser,
                          const SkBitmap& icon) {
@@ -354,7 +361,7 @@ class IconAnimationWaiter {
           BrowserView::GetBrowserViewForBrowser(browser_)
               ->toolbar()
               ->browser_actions();
-      return container && !container->animating();
+      return container && !container->GetAnimating();
     }
     return true;
   }

@@ -67,7 +67,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram base="true" name="HoldingSpace.Item.Action"
     enum="HoldingSpaceItemType" expires_after="2021-09-24">
-<!-- Name completed by histogram_suffixes name="HoldingSpaceActionType" -->
+<!-- Name completed by histogram_suffixes name="HoldingSpaceItemAction" -->
 
   <owner>dmblack@google.com</owner>
   <owner>gzadina@google.com</owner>
@@ -96,6 +96,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Records the count of all visible items of a specific type in holding space
     at the moment holding space UI is shown.
+  </summary>
+</histogram>
+
+<histogram name="HoldingSpace.Item.FailureToLaunch" enum="HoldingSpaceItemType"
+    expires_after="2021-09-24">
+  <owner>dmblack@google.com</owner>
+  <owner>gzadina@google.com</owner>
+  <summary>
+    Records a failure to launch a holding space item of a specific type at the
+    moment of failure.
   </summary>
 </histogram>
 
@@ -149,6 +159,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <suffix name="Drag" label="The user dragged the item."/>
   <suffix name="Launch" label="The user launched the item."/>
   <suffix name="Pin" label="The user pinned the item."/>
+  <suffix name="Remove" label="The user removed the item."/>
   <suffix name="ShowInFolder" label="The user showed the item in its folder."/>
   <suffix name="Unpin" label="The user unpinned the item."/>
   <affected-histogram name="HoldingSpace.Item.Action"/>

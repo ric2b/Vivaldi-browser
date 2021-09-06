@@ -37,6 +37,8 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
         getActivity().setTitle(R.string.theme_settings);
 
         SharedPreferencesManager sharedPreferencesManager = SharedPreferencesManager.getInstance();
+        // Note(nagamani@vivaldi.com): Theme Settings is loaded using VivaldiThemePreference.java.
+        if (!ChromeApplication.isVivaldi()) {
         RadioButtonGroupThemePreference radioButtonGroupThemePreference =
                 (RadioButtonGroupThemePreference) findPreference(PREF_UI_THEME_PREF);
         radioButtonGroupThemePreference.initialize(NightModeUtils.getThemeSetting(),
@@ -52,6 +54,7 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
             sharedPreferencesManager.writeInt(UI_THEME_SETTING, theme);
             return true;
         });
+        }
 
         // Note(david@vivaldi.com): Switch to handle dark mode for web pages.
         if (ChromeApplication.isVivaldi()

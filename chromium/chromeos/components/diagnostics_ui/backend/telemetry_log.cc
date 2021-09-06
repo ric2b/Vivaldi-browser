@@ -7,6 +7,11 @@
 #include <sstream>
 #include <utility>
 
+#include "base/i18n/time_formatting.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
+
 namespace chromeos {
 namespace diagnostics {
 namespace {
@@ -15,13 +20,14 @@ const char kNewline[] = "\n";
 
 // SystemInfo constants:
 const char kSystemInfoSectionName[] = "--- System Info ---";
+const char kSystemInfoCurrentTimeTitle[] = "Snapshot Time: ";
 const char kSystemInfoBoardNameTitle[] = "Board Name: ";
 const char kSystemInfoMarketingNameTitle[] = "Marketing Name: ";
 const char kSystemInfoCpuModelNameTitle[] = "CpuModel Name: ";
 const char kSystemInfoTotalMemoryTitle[] = "Total Memory (kib): ";
 const char kSystemInfoCpuThreadCountTitle[] = "Thread Count:  ";
 const char kSystemInfoCpuMaxClockSpeedTitle[] = "Cpu Max Clock Speed (kHz):  ";
-const char kSystemInfoMilestoneVersionTitle[] = "Milestone Version: ";
+const char kSystemInfoMilestoneVersionTitle[] = "Version: ";
 const char kSystemInfoHasBatteryTitle[] = "Has Battery: ";
 
 // BatteryChargeStatus constants:
@@ -47,12 +53,17 @@ const char kMemoryUsageFreeMemoryTitle[] = "Free Memory (kib): ";
 
 // CpuUsage constants:
 const char kCpuUsageSectionName[] = "--- Cpu Usage ---";
-const char kCpuUsageUserTitle[] = "Usage User: ";
-const char kCpuUsageSystemTitle[] = "Usage System: ";
-const char kCpuUsageFreeTitle[] = "Usage Free: ";
+const char kCpuUsageUserTitle[] = "Usage User (%): ";
+const char kCpuUsageSystemTitle[] = "Usage System (%): ";
+const char kCpuUsageFreeTitle[] = "Usage Free (%): ";
 const char kCpuUsageAvgTempTitle[] = "Avg Temp (C): ";
 const char kCpuUsageScalingFrequencyTitle[] =
     "Current scaled frequency (kHz): ";
+
+std::string GetCurrentDateTimeWithTimeZoneAsString() {
+  return base::UTF16ToUTF8(
+      base::TimeFormatShortDateAndTimeWithTimeZone(base::Time::Now()));
+}
 
 }  // namespace
 
@@ -82,12 +93,13 @@ void TelemetryLog::UpdateCpuUsage(mojom::CpuUsagePtr latest_cpu_usage) {
   latest_cpu_usage_ = std::move(latest_cpu_usage);
 }
 
-std::string TelemetryLog::GetTelemetryLog() const {
+std::string TelemetryLog::GetContents() const {
   std::stringstream output;
   if (latest_system_info_) {
-    output << kSystemInfoSectionName << kNewline << kSystemInfoBoardNameTitle
-           << latest_system_info_->board_name << kNewline
-           << kSystemInfoMarketingNameTitle
+    output << kSystemInfoSectionName << kNewline << kSystemInfoCurrentTimeTitle
+           << GetCurrentDateTimeWithTimeZoneAsString() << kNewline
+           << kSystemInfoBoardNameTitle << latest_system_info_->board_name
+           << kNewline << kSystemInfoMarketingNameTitle
            << latest_system_info_->marketing_name << kNewline
            << kSystemInfoCpuModelNameTitle
            << latest_system_info_->cpu_model_name << kNewline
@@ -98,10 +110,12 @@ std::string TelemetryLog::GetTelemetryLog() const {
            << kSystemInfoCpuMaxClockSpeedTitle
            << latest_system_info_->cpu_max_clock_speed_khz << kNewline
            << kSystemInfoMilestoneVersionTitle
-           << latest_system_info_->version_info->milestone_version << kNewline
+           << latest_system_info_->version_info->full_version_string << kNewline
            << kSystemInfoHasBatteryTitle
-           << latest_system_info_->device_capabilities->has_battery << kNewline
-           << kNewline;
+           << ((latest_system_info_->device_capabilities->has_battery)
+                   ? "true"
+                   : "false")
+           << kNewline << kNewline;
   }
   if (latest_battery_charge_status_) {
     output << kBatteryChargeStatusSectionName << kNewline
@@ -126,8 +140,9 @@ std::string TelemetryLog::GetTelemetryLog() const {
            << kNewline << kBatteryHealthCycleCountTitle
            << latest_battery_health_->cycle_count << kNewline
            << kBatteryHealthWearPercentageTitle
-           << latest_battery_health_->battery_wear_percentage << kNewline
-           << kNewline;
+           << base::NumberToString(
+                  latest_battery_health_->battery_wear_percentage)
+           << kNewline << kNewline;
   }
   if (latest_memory_usage_) {
     output << kMemoryUsageSectionName << kNewline
@@ -140,11 +155,12 @@ std::string TelemetryLog::GetTelemetryLog() const {
   }
   if (latest_cpu_usage_) {
     output << kCpuUsageSectionName << kNewline << kCpuUsageUserTitle
-           << latest_cpu_usage_->percent_usage_user << kNewline
-           << kCpuUsageSystemTitle << latest_cpu_usage_->percent_usage_system
+           << base::NumberToString(latest_cpu_usage_->percent_usage_user)
+           << kNewline << kCpuUsageSystemTitle
+           << base::NumberToString(latest_cpu_usage_->percent_usage_system)
            << kNewline << kCpuUsageFreeTitle
-           << latest_cpu_usage_->percent_usage_free << kNewline
-           << kCpuUsageAvgTempTitle
+           << base::NumberToString(latest_cpu_usage_->percent_usage_free)
+           << kNewline << kCpuUsageAvgTempTitle
            << latest_cpu_usage_->average_cpu_temp_celsius << kNewline
            << kCpuUsageScalingFrequencyTitle
            << latest_cpu_usage_->scaling_current_frequency_khz << kNewline

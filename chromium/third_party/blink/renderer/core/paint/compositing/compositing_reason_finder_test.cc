@@ -247,9 +247,6 @@ TEST_F(CompositingReasonFinderTest, DontPromoteEmptyIframe) {
 }
 
 TEST_F(CompositingReasonFinderTest, PromoteCrossOriginIframe) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(
-      blink::features::kCompositeCrossOriginIframes, true);
   SetBodyInnerHTML(R"HTML(
     <!DOCTYPE html>
     <iframe id=iframe></iframe>
@@ -414,6 +411,48 @@ TEST_F(CompositingReasonFinderTest, CompositedSVGText) {
   ASSERT_TRUE(text->IsText());
   EXPECT_EQ(CompositingReason::kNone,
             CompositingReasonFinder::DirectReasonsForPaintProperties(*text));
+}
+
+TEST_F(CompositingReasonFinderTest, NotSupportedTransformAnimationsOnSVG) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      * { animation: transformKeyframes 1s infinite; }
+      @keyframes transformKeyframes {
+        0% { transform: rotate(-5deg); }
+        100% { transform: rotate(5deg); }
+      }
+    </style>
+    <svg>
+      <defs id="defs" />
+      <text id="text">text content
+        <tspan id="tspan">tspan content</tspan>
+      </text>
+    </svg>
+  )HTML");
+
+  auto* defs = GetLayoutObjectByElementId("defs");
+  EXPECT_EQ(CompositingReason::kNone,
+            CompositingReasonFinder::DirectReasonsForPaintProperties(*defs));
+
+  auto* text = GetLayoutObjectByElementId("text");
+  EXPECT_EQ(CompositingReason::kActiveTransformAnimation,
+            CompositingReasonFinder::DirectReasonsForPaintProperties(*text));
+
+  auto* text_content = text->SlowFirstChild();
+  ASSERT_TRUE(text_content->IsText());
+  EXPECT_EQ(
+      CompositingReason::kNone,
+      CompositingReasonFinder::DirectReasonsForPaintProperties(*text_content));
+
+  auto* tspan = GetLayoutObjectByElementId("tspan");
+  EXPECT_EQ(CompositingReason::kNone,
+            CompositingReasonFinder::DirectReasonsForPaintProperties(*tspan));
+
+  auto* tspan_content = tspan->SlowFirstChild();
+  ASSERT_TRUE(tspan_content->IsText());
+  EXPECT_EQ(
+      CompositingReason::kNone,
+      CompositingReasonFinder::DirectReasonsForPaintProperties(*tspan_content));
 }
 
 }  // namespace blink

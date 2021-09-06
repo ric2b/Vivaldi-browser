@@ -105,7 +105,7 @@ AuthenticatorRequestDialogModel::AuthenticatorRequestDialogModel(
 
 AuthenticatorRequestDialogModel::~AuthenticatorRequestDialogModel() {
   for (auto& observer : observers_)
-    observer.OnModelDestroyed();
+    observer.OnModelDestroyed(this);
 }
 
 void AuthenticatorRequestDialogModel::SetCurrentStep(Step step) {
@@ -120,13 +120,20 @@ void AuthenticatorRequestDialogModel::HideDialog() {
 
 void AuthenticatorRequestDialogModel::StartFlow(
     TransportAvailabilityInfo transport_availability,
-    base::Optional<device::FidoTransportProtocol> last_used_transport) {
+    base::Optional<device::FidoTransportProtocol> last_used_transport,
+    bool is_conditional) {
   DCHECK_EQ(current_step(), Step::kNotStarted);
 
   transport_availability_ = std::move(transport_availability);
   last_used_transport_ = last_used_transport;
 
-  StartGuidedFlowForMostLikelyTransportOrShowTransportSelection();
+  if (is_conditional) {
+    // If this is a conditional request, keep the UI hidden while dispatching
+    // requests.
+    SetCurrentStep(Step::kSubtleUI);
+  } else {
+    StartGuidedFlowForMostLikelyTransportOrShowTransportSelection();
+  }
 }
 
 void AuthenticatorRequestDialogModel::StartOver() {
@@ -219,7 +226,8 @@ void AuthenticatorRequestDialogModel::
 void AuthenticatorRequestDialogModel::StartWinNativeApi() {
   DCHECK(transport_availability_.has_win_native_api_authenticator);
 
-  if (might_create_resident_credential_ &&
+  if (resident_key_requirement() !=
+          device::ResidentKeyRequirement::kDiscouraged &&
       !transport_availability_.win_native_ui_shows_resident_credential_notice) {
     SetCurrentStep(Step::kResidentCredentialConfirmation);
   } else {
@@ -325,6 +333,16 @@ void AuthenticatorRequestDialogModel::
   DispatchRequestAsync(&*platform_authenticator_it);
 }
 
+void AuthenticatorRequestDialogModel::ShowCableUsbFallback() {
+  DCHECK_EQ(current_step(), Step::kCableActivate);
+  SetCurrentStep(Step::kAndroidAccessory);
+}
+
+void AuthenticatorRequestDialogModel::ShowCable() {
+  DCHECK_EQ(current_step(), Step::kAndroidAccessory);
+  SetCurrentStep(Step::kCableActivate);
+}
+
 void AuthenticatorRequestDialogModel::Cancel() {
   if (is_request_complete()) {
     SetCurrentStep(Step::kClosed);
@@ -352,9 +370,14 @@ void AuthenticatorRequestDialogModel::OnRequestComplete() {
 }
 
 void AuthenticatorRequestDialogModel::OnRequestTimeout() {
+  if (current_step_ == Step::kSubtleUI) {
+    Cancel();
+    return;
+  }
   // The request may time out while the UI shows a different error.
-  if (!is_request_complete())
+  if (!is_request_complete()) {
     SetCurrentStep(Step::kTimedOut);
+  }
 }
 
 void AuthenticatorRequestDialogModel::OnActivatedKeyNotRegistered() {
@@ -540,6 +563,11 @@ void AuthenticatorRequestDialogModel::SetSelectedAuthenticatorForTesting(
       std::move(test_authenticator));
 }
 
+bool AuthenticatorRequestDialogModel::cable_should_suggest_usb() const {
+  return base::Contains(transport_availability_.available_transports,
+                        AuthenticatorTransport::kAndroidAccessory);
+}
+
 void AuthenticatorRequestDialogModel::CollectPIN(
     device::pin::PINEntryReason reason,
     device::pin::PINEntryError error,
@@ -587,10 +615,13 @@ void AuthenticatorRequestDialogModel::OnBioEnrollmentDone() {
 }
 
 void AuthenticatorRequestDialogModel::RequestAttestationPermission(
+    bool is_enterprise_attestation,
     base::OnceCallback<void(bool)> callback) {
   DCHECK(current_step_ != Step::kClosed);
   attestation_callback_ = std::move(callback);
-  SetCurrentStep(Step::kAttestationPermissionRequest);
+  SetCurrentStep(is_enterprise_attestation
+                     ? Step::kEnterpriseAttestationPermissionRequest
+                     : Step::kAttestationPermissionRequest);
 }
 
 void AuthenticatorRequestDialogModel::set_cable_transport_info(

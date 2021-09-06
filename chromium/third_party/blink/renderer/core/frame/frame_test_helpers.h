@@ -149,16 +149,20 @@ WebMouseEvent CreateMouseEvent(WebInputEvent::Type,
 // ensuring that non-null clients outlive the created frame.
 
 // Helper for creating a local child frame of a local parent frame.
-WebLocalFrameImpl* CreateLocalChild(WebLocalFrame& parent,
-                                    blink::mojom::blink::TreeScopeType,
-                                    TestWebFrameClient* = nullptr);
+WebLocalFrameImpl* CreateLocalChild(
+    WebLocalFrame& parent,
+    blink::mojom::blink::TreeScopeType,
+    TestWebFrameClient*,
+    WebPolicyContainerBindParams policy_container_bind_params);
 
 // Similar, but unlike the overload which takes the client as a raw pointer,
 // ownership of the TestWebFrameClient is transferred to the test framework.
 // TestWebFrameClient may not be null.
-WebLocalFrameImpl* CreateLocalChild(WebLocalFrame& parent,
-                                    blink::mojom::blink::TreeScopeType,
-                                    std::unique_ptr<TestWebFrameClient>);
+WebLocalFrameImpl* CreateLocalChild(
+    WebLocalFrame& parent,
+    blink::mojom::blink::TreeScopeType,
+    std::unique_ptr<TestWebFrameClient>,
+    WebPolicyContainerBindParams policy_container_bind_params);
 
 // Helper for creating a remote frame. Generally used when creating a remote
 // frame to swap into the frame tree.
@@ -235,7 +239,9 @@ class TestWebFrameWidget : public WebFrameWidgetImpl {
  public:
   template <typename... Args>
   explicit TestWebFrameWidget(Args&&... args)
-      : WebFrameWidgetImpl(std::forward<Args>(args)...) {}
+      : WebFrameWidgetImpl(std::forward<Args>(args)...) {
+    agent_group_scheduler_ = fake_thread_scheduler_.CreateAgentGroupScheduler();
+  }
   ~TestWebFrameWidget() override = default;
 
   TestWebFrameWidgetHost& WidgetHost() { return *widget_host_; }
@@ -250,6 +256,10 @@ class TestWebFrameWidget : public WebFrameWidgetImpl {
 
   scheduler::WebThreadScheduler* main_thread_scheduler() {
     return &fake_thread_scheduler_;
+  }
+
+  blink::scheduler::WebAgentGroupScheduler& GetAgentGroupScheduler() {
+    return *agent_group_scheduler_;
   }
 
   // The returned pointer is valid after AllocateNewLayerTreeFrameSink() occurs,
@@ -284,6 +294,8 @@ class TestWebFrameWidget : public WebFrameWidgetImpl {
   cc::TestTaskGraphRunner test_task_graph_runner_;
   cc::FakeLayerTreeFrameSink* last_created_frame_sink_ = nullptr;
   blink::scheduler::WebFakeThreadScheduler fake_thread_scheduler_;
+  std::unique_ptr<blink::scheduler::WebAgentGroupScheduler>
+      agent_group_scheduler_;
   Vector<std::unique_ptr<blink::WebCoalescedInputEvent>>
       injected_scroll_events_;
   std::unique_ptr<TestWidgetInputHandlerHost> widget_input_handler_host_;
@@ -452,6 +464,10 @@ class WebViewHelper : public ScopedMockOverlayScrollbars {
         is_for_child_local_root, is_for_nested_main_frame);
   }
 
+  blink::scheduler::WebAgentGroupScheduler& GetAgentGroupScheduler() {
+    return *agent_group_scheduler_;
+  }
+
  private:
   void InitializeWebView(TestWebViewClient*,
                          class WebView* opener);
@@ -493,15 +509,14 @@ class TestWebFrameClient : public WebLocalFrameClient {
 
   // WebLocalFrameClient:
   void FrameDetached() override;
-  WebLocalFrame* CreateChildFrame(blink::mojom::blink::TreeScopeType,
-                                  const WebString& name,
-                                  const WebString& fallback_name,
-                                  const FramePolicy&,
-                                  const WebFrameOwnerProperties&,
-                                  mojom::blink::FrameOwnerElementType,
-                                  blink::CrossVariantMojoAssociatedReceiver<
-                                      mojom::PolicyContainerHostInterfaceBase>
-                                      policy_container_host_receiver) override;
+  WebLocalFrame* CreateChildFrame(
+      blink::mojom::blink::TreeScopeType,
+      const WebString& name,
+      const WebString& fallback_name,
+      const FramePolicy&,
+      const WebFrameOwnerProperties&,
+      mojom::blink::FrameOwnerElementType,
+      WebPolicyContainerBindParams policy_container_bind_params) override;
   void InitializeAsChildFrame(WebLocalFrame* parent) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
@@ -577,8 +592,6 @@ class TestWebRemoteFrameClient : public WebRemoteFrameClient {
   AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override {
     return associated_interface_provider_.get();
   }
-  viz::FrameSinkId GetFrameSinkId() const override;
-  const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
 
  private:
   // If set to a non-null value, self-deletes on frame detach.

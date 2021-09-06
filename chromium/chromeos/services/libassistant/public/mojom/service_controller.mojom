@@ -4,6 +4,8 @@
 
 module chromeos.libassistant.mojom;
 
+import "services/network/public/mojom/url_loader_factory.mojom";
+
 enum ServiceState {
   // The service has been started but is not ready yet to handle queries.
   kStarted,
@@ -22,7 +24,8 @@ interface ServiceController {
   // Note that calling Initialize() will not cause any change in the service
   // state, as the service will remain in state |kStopped| until Start() is
   // called.
-  Initialize(BootupConfig bootup_config);
+  Initialize(BootupConfig bootup_config,
+      pending_remote<network.mojom.URLLoaderFactory> url_loading_factory);
 
   // Start the service. Can be called multiple times, and will be a noop if
   // the service is already started or running.
@@ -31,16 +34,19 @@ interface ServiceController {
   // Stop the service. Will be a noop if the service is already stopped.
   Stop();
 
-  // Sets the locale override of the device. This field overrides the
-  // value obtained from the user's assistant settings.
-  SetLocaleOverride(string locale_override);
+  // Stop the service, and erase all config files and user data.
+  // Will be a noop if the service is already stopped.
+  ResetAllDataAndStop();
 
-  // Sets the internal Libassistant options.
-  SetInternalOptions(string locale, bool spoken_feedback_enabled);
+  // Sets whether spoken feedback is enabled.
+  SetSpokenFeedbackEnabled(bool value);
 
   // Sets the authentication tokens used by Libassistant.
   // Passing in an empty array will restart Libassistant in signed-out mode.
   SetAuthenticationTokens(array<AuthenticationToken> tokens);
+
+  // Sets whether hotword detection is enabled.
+  SetHotwordEnabled(bool value);
 
   // Add a state observer. It will immediately be called with the current state,
   // and then once for each state change.
@@ -71,4 +77,8 @@ struct BootupConfig {
   // If true, Libassistant logs will appear in the user's home directory.
   // If false, the logs will end up in /var/log/chrome/.
   bool log_in_home_dir;
+
+  string locale;
+  bool spoken_feedback_enabled;
+  bool hotword_enabled;
 };

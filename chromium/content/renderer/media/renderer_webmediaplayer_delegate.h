@@ -63,11 +63,6 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   bool IsIdle(int player_id) override;
   void ClearStaleFlag(int player_id) override;
   bool IsStale(int player_id) override;
-  void SetIsEffectivelyFullscreen(
-      int player_id,
-      blink::WebFullscreenVideoStatus fullscreen_video_status) override;
-  void DidAudioOutputSinkChange(int delegate_id,
-                                const std::string& hashed_device_id) override;
 
   // content::RenderFrameObserver overrides.
   void WasHidden() override;
@@ -93,7 +88,6 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   void OnMediaDelegateSuspendAllMediaPlayers();
   void OnMediaDelegateVolumeMultiplierUpdate(int player_id, double multiplier);
   void OnMediaDelegateBecamePersistentVideo(int player_id, bool value);
-  void OnMediaDelegateSetAudioSink(int player_id, std::string sink_id);
   void OnMediaDelegatePowerExperimentState(int player_id, bool state);
 
   // Schedules UpdateTask() to run soon.

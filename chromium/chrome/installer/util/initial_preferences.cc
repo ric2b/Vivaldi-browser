@@ -14,6 +14,7 @@
 #include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/common/env_vars.h"
 #include "chrome/common/pref_names.h"
@@ -93,16 +94,28 @@ InitialPreferences::InitialPreferences(const std::string& prefs) {
   InitializeFromString(prefs);
 }
 
+InitialPreferences::InitialPreferences(const base::DictionaryValue& prefs)
+    : initial_dictionary_(prefs.CreateDeepCopy()) {
+  // Cache a pointer to the distribution dictionary.
+  initial_dictionary_->GetDictionary(
+      installer::initial_preferences::kDistroDict, &distribution_);
+
+  EnforceLegacyPreferences();
+}
+
 InitialPreferences::~InitialPreferences() = default;
 
 void InitialPreferences::InitializeFromCommandLine(
     const base::CommandLine& cmd_line) {
 #if defined(OS_WIN)
+#if !defined(VIVALDI_BUILD)
   if (cmd_line.HasSwitch(installer::switches::kInstallerData)) {
     base::FilePath prefs_path(
         cmd_line.GetSwitchValuePath(installer::switches::kInstallerData));
     InitializeFromFilePath(prefs_path);
-  } else {
+  } else
+#endif
+  {
     initial_dictionary_.reset(new base::DictionaryValue());
   }
 
@@ -119,7 +132,9 @@ void InitialPreferences::InitializeFromCommandLine(
        installer::initial_preferences::kAllowDowngrade},
       {installer::switches::kDisableLogging,
        installer::initial_preferences::kDisableLogging},
+#if !defined(VIVALDI_BUILD)
       {installer::switches::kMsi, installer::initial_preferences::kMsi},
+#endif
       {installer::switches::kDoNotRegisterForUpdateLaunch,
        installer::initial_preferences::kDoNotRegisterForUpdateLaunch},
       {installer::switches::kDoNotLaunchChrome,
@@ -147,9 +162,10 @@ void InitialPreferences::InitializeFromCommandLine(
   if (!str_value.empty()) {
     name.assign(installer::initial_preferences::kDistroDict);
     name.append(".").append(installer::initial_preferences::kLogFile);
-    initial_dictionary_->SetString(name, str_value);
+    initial_dictionary_->SetString(name, base::WideToUTF8(str_value));
   }
 
+#if !defined(VIVALDI_BUILD)
   // Handle the special case of --system-level being implied by the presence of
   // the kGoogleUpdateIsMachineEnvVar environment variable.
   std::unique_ptr<base::Environment> env(base::Environment::Create());
@@ -163,6 +179,7 @@ void InitialPreferences::InitializeFromCommandLine(
       initial_dictionary_->SetBoolean(name, true);
     }
   }
+#endif
 
   // Cache a pointer to the distribution dictionary. Ignore errors if any.
   initial_dictionary_->GetDictionary(
@@ -275,6 +292,15 @@ bool InitialPreferences::GetString(const std::string& name,
   if (distribution_)
     ret = (distribution_->GetString(name, value) && !value->empty());
   return ret;
+}
+
+bool InitialPreferences::GetPath(const std::string& name,
+                                 base::FilePath* value) const {
+  std::string string_value;
+  if (!GetString(name, &string_value))
+    return false;
+  *value = base::FilePath::FromUTF8Unsafe(string_value);
+  return true;
 }
 
 std::vector<std::string> InitialPreferences::GetFirstRunTabs() const {

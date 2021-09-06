@@ -60,10 +60,12 @@ String literals
 
       string           = `"` { char | escape | expansion } `"` .
       escape           = `\` ( "$" | `"` | char ) .
-      BracketExpansion = "{" ( identifier | ArrayAccess | ScopeAccess ) "}" .
+      BracketExpansion = "{" ( identifier | ArrayAccess | ScopeAccess "
+                         ") "}" .
       Hex              = "0x" [0-9A-Fa-f][0-9A-Fa-f]
       expansion        = "$" ( identifier | BracketExpansion | Hex ) .
-      char             = /* any character except "$", `"`, or newline */ .
+      char             = /* any character except "$", `"`, or newline "
+                        "*/ .
 
   After a backslash, certain sequences represent special characters:
 
@@ -176,6 +178,10 @@ Lists
 
     mylist = []
     mylist = otherlist
+
+  When assigning to a list named 'sources' using '=' or '+=', list items may be
+  automatically filtered out. See "gn help set_sources_assignment_filter" for
+  more.
 
 Scopes
 
@@ -788,7 +794,7 @@ void Parser::TraverseOrder(const ParseNode* root,
       for (const auto& statement : block->statements())
         TraverseOrder(statement.get(), pre, post);
       TraverseOrder(block->End(), pre, post);
-    } else if (const ConditionNode* condition = root->AsCondition()) {
+    } else if (const ConditionNode* condition = root->AsConditionNode()) {
       TraverseOrder(condition->condition(), pre, post);
       TraverseOrder(condition->if_true(), pre, post);
       TraverseOrder(condition->if_false(), pre, post);
@@ -931,11 +937,5 @@ void RenderToText(const base::Value& node,
     for (const base::Value& n : child->GetList()) {
       RenderToText(n, indent_level + 1, os);
     }
-  }
-  const base::Value* end = node.FindKey("end");
-  if (end &&
-      (end->FindKey(kJsonBeforeComment) || end->FindKey(kJsonSuffixComment) ||
-       end->FindKey(kJsonAfterComment))) {
-    RenderToText(*end, indent_level + 1, os);
   }
 }

@@ -329,6 +329,9 @@
                 "begin": 6,
                 "abridged": false
             },
+            "system_health.pcscan": {
+                "abridged": false
+            },
             "tab_switching.typical_25": {
                 "abridged": false
             },
@@ -355,6 +358,18 @@
     },
     "25": {
         "benchmarks": {
+            "blink_perf.webgl": {
+                "abridged": false
+            },
+            "blink_perf.webgl_fast_call": {
+                "abridged": false
+            },
+            "blink_perf.webgpu": {
+                "abridged": false
+            },
+            "blink_perf.webgpu_fast_call": {
+                "abridged": false
+            },
             "v8.browsing_desktop-future": {
                 "begin": 12,
                 "abridged": false

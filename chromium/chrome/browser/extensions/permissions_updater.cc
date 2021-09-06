@@ -36,10 +36,12 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/common/cors_util.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/manifest_handlers/permissions_parser.h"
+#include "extensions/common/mojom/renderer.mojom.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 
@@ -176,11 +178,6 @@ void PermissionsUpdater::NetworkPermissionsUpdateHelper::UpdatePermissions(
     return;
   }
 
-  std::vector<network::mojom::CorsOriginPatternPtr> allow_list =
-      CreateCorsOriginAccessAllowList(
-          *extension,
-          PermissionsData::EffectiveHostPermissionsMode::kOmitTabSpecific);
-
   NetworkPermissionsUpdateHelper* helper = new NetworkPermissionsUpdateHelper(
       browser_context,
       base::BindOnce(&PermissionsUpdater::NotifyPermissionsUpdated,
@@ -189,9 +186,9 @@ void PermissionsUpdater::NetworkPermissionsUpdateHelper::UpdatePermissions(
 
   // After an asynchronous call below, the helper will call
   // NotifyPermissionsUpdated if the profile is still valid.
-  browser_context->SetCorsOriginAccessListForOrigin(
-      url::Origin::Create(extension->url()), std::move(allow_list),
-      CreateCorsOriginAccessBlockList(*extension),
+  util::SetCorsOriginAccessListForExtension(
+      browser_context, *extension,
+      content::BrowserContext::TargetBrowserContexts::kAllRelatedContexts,
       base::BindOnce(&NetworkPermissionsUpdateHelper::OnOriginAccessUpdated,
                      helper->weak_factory_.GetWeakPtr()));
 }
@@ -217,13 +214,10 @@ void PermissionsUpdater::NetworkPermissionsUpdateHelper::
                      helper->weak_factory_.GetWeakPtr()));
 
   for (const auto& extension : extensions) {
-    std::vector<network::mojom::CorsOriginPatternPtr> allow_list =
-        CreateCorsOriginAccessAllowList(
-            *extension,
-            PermissionsData::EffectiveHostPermissionsMode::kOmitTabSpecific);
-    browser_context->SetCorsOriginAccessListForOrigin(
-        url::Origin::Create(extension->url()), std::move(allow_list),
-        CreateCorsOriginAccessBlockList(*extension), barrier_closure);
+    util::SetCorsOriginAccessListForExtension(
+        browser_context, *extension,
+        content::BrowserContext::TargetBrowserContexts::kAllRelatedContexts,
+        barrier_closure);
   }
 }
 
@@ -680,18 +674,22 @@ void PermissionsUpdater::NotifyDefaultPolicyHostRestrictionsUpdated(
     const URLPatternSet default_runtime_allowed_hosts) {
   Profile* profile = Profile::FromBrowserContext(browser_context);
 
-  ExtensionMsg_UpdateDefaultPolicyHostRestrictions_Params params;
-  params.default_policy_blocked_hosts = default_runtime_blocked_hosts.Clone();
-  params.default_policy_allowed_hosts = default_runtime_allowed_hosts.Clone();
-
   // Send the new policy to the renderers.
   for (RenderProcessHost::iterator host_iterator(
            RenderProcessHost::AllHostsIterator());
        !host_iterator.IsAtEnd(); host_iterator.Advance()) {
     RenderProcessHost* host = host_iterator.GetCurrentValue();
-    if (profile->IsSameOrParent(
+    if (host->IsInitializedAndNotDead() &&
+        profile->IsSameOrParent(
             Profile::FromBrowserContext(host->GetBrowserContext()))) {
-      host->Send(new ExtensionMsg_UpdateDefaultPolicyHostRestrictions(params));
+      mojom::Renderer* renderer =
+          RendererStartupHelperFactory::GetForBrowserContext(
+              host->GetBrowserContext())
+              ->GetRenderer(host);
+      if (renderer) {
+        renderer->UpdateDefaultPolicyHostRestrictions(
+            default_runtime_blocked_hosts, default_runtime_allowed_hosts);
+      }
     }
   }
 }

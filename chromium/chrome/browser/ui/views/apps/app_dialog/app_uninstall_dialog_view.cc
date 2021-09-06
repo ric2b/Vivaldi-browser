@@ -104,6 +104,7 @@ AppUninstallDialogView::AppUninstallDialogView(
     : apps::UninstallDialog::UiBase(uninstall_dialog),
       AppDialogView(image),
       profile_(profile) {
+  SetModalType(ui::MODAL_TYPE_WINDOW);
   SetTitle(GetWindowTitleForApp(profile, app_type, app_id, app_name));
 
   SetCloseCallback(base::BindOnce(&AppUninstallDialogView::OnDialogCancelled,
@@ -129,10 +130,6 @@ AppUninstallDialogView* AppUninstallDialogView::GetActiveViewForTesting() {
   return g_app_uninstall_dialog_view;
 }
 
-ui::ModalType AppUninstallDialogView::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
-}
-
 void AppUninstallDialogView::InitializeView(Profile* profile,
                                             apps::mojom::AppType app_type,
                                             const std::string& app_id,
@@ -152,7 +149,6 @@ void AppUninstallDialogView::InitializeView(Profile* profile,
     case apps::mojom::AppType::kMacOs:
     case apps::mojom::AppType::kLacros:
     case apps::mojom::AppType::kRemote:
-    case apps::mojom::AppType::kBorealis:
       NOTREACHED();
       break;
     case apps::mojom::AppType::kArc:
@@ -170,6 +166,9 @@ void AppUninstallDialogView::InitializeView(Profile* profile,
       NOTREACHED();
 #endif
       break;
+    case apps::mojom::AppType::kBorealis:
+      // TODO(b/178741230): Borealis' uninstaller needs custom text.  For now
+      // just use Crostini's.
     case apps::mojom::AppType::kCrostini:
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       InitializeViewWithMessage(l10n_util::GetStringUTF16(

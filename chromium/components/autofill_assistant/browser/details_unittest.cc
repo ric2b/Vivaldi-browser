@@ -65,48 +65,35 @@ class DetailsTest : public testing::Test {
 TEST_F(DetailsTest, UpdateFromParametersEmpty) {
   Details details;
   // Nothing has to be updated.
-  auto context = TriggerContext::CreateEmpty();
-  EXPECT_FALSE(details.UpdateFromParameters(*context));
+  EXPECT_FALSE(details.UpdateFromParameters({}));
 }
 
 TEST_F(DetailsTest, UpdateFromParametersShowInitialNoUpdate) {
-  std::map<std::string, std::string> parameters;
-  parameters["DETAILS_SHOW_INITIAL"] = "false";
-  auto context = TriggerContext::Create(parameters, "exps");
-
   Details details;
-  EXPECT_FALSE(details.UpdateFromParameters(*context));
+  EXPECT_FALSE(
+      details.UpdateFromParameters({{{"DETAILS_SHOW_INITIAL", "false"}}}));
 }
 
 TEST_F(DetailsTest, UpdateFromParametersSetsPlaceholderFlags) {
-  std::map<std::string, std::string> parameters;
-  parameters["DETAILS_SHOW_INITIAL"] = "true";
-
-  auto context = TriggerContext::Create(parameters, "exps");
-
   Details details;
-  details.UpdateFromParameters(*context);
+  details.UpdateFromParameters({{{"DETAILS_SHOW_INITIAL", "true"}}});
 
   EXPECT_TRUE(details.placeholders().show_image_placeholder());
 }
 
 TEST_F(DetailsTest, UpdateFromParametersUpdateFromDetails) {
-  std::map<std::string, std::string> parameters;
-  parameters["DETAILS_SHOW_INITIAL"] = "true";
-  parameters["DETAILS_TITLE"] = "title";
-  parameters["DETAILS_DESCRIPTION_LINE_1"] = "line1";
-  parameters["DETAILS_DESCRIPTION_LINE_2"] = "line2";
-  parameters["DETAILS_DESCRIPTION_LINE_3"] = "Est. total";
-  parameters["DETAILS_IMAGE_URL"] = "image";
-  parameters["DETAILS_IMAGE_ACCESSIBILITY_HINT"] = "hint";
-  parameters["DETAILS_IMAGE_CLICKTHROUGH_URL"] = "clickthrough";
-  parameters["DETAILS_TOTAL_PRICE_LABEL"] = "total";
-  parameters["DETAILS_TOTAL_PRICE"] = "12";
-
-  auto context = TriggerContext::Create(parameters, "exps");
-
   Details details;
-  EXPECT_TRUE(details.UpdateFromParameters(*context));
+  EXPECT_TRUE(details.UpdateFromParameters(
+      {{{"DETAILS_SHOW_INITIAL", "true"},
+        {"DETAILS_TITLE", "title"},
+        {"DETAILS_DESCRIPTION_LINE_1", "line1"},
+        {"DETAILS_DESCRIPTION_LINE_2", "line2"},
+        {"DETAILS_DESCRIPTION_LINE_3", "Est. total"},
+        {"DETAILS_IMAGE_URL", "image"},
+        {"DETAILS_IMAGE_ACCESSIBILITY_HINT", "hint"},
+        {"DETAILS_IMAGE_CLICKTHROUGH_URL", "clickthrough"},
+        {"DETAILS_TOTAL_PRICE_LABEL", "total"},
+        {"DETAILS_TOTAL_PRICE", "12"}}}));
 
   EXPECT_TRUE(details.placeholders().show_image_placeholder());
   EXPECT_THAT(details.title(), Eq("title"));
@@ -120,27 +107,6 @@ TEST_F(DetailsTest, UpdateFromParametersUpdateFromDetails) {
   EXPECT_THAT(details.imageClickthroughUrl(), Eq("clickthrough"));
   EXPECT_THAT(details.totalPriceLabel(), Eq("total"));
   EXPECT_THAT(details.totalPrice(), Eq("12"));
-}
-
-TEST_F(DetailsTest, UpdateFromParametersBackwardsCompatibility) {
-  base::test::ScopedRestoreICUDefaultLocale restore_locale;
-  base::i18n::SetICUDefaultLocale("en_US");
-
-  std::map<std::string, std::string> parameters;
-  parameters["MOVIES_MOVIE_NAME"] = "movie_name";
-  parameters["MOVIES_THEATER_NAME"] = "movie_theater";
-  parameters["MOVIES_SCREENING_DATETIME"] = "2019-09-26T16:40:02";
-
-  auto context = TriggerContext::Create(parameters, "exps");
-
-  Details details;
-  EXPECT_TRUE(details.UpdateFromParameters(*context));
-
-  EXPECT_TRUE(details.placeholders().show_image_placeholder());
-  EXPECT_THAT(details.title(), Eq("movie_name"));
-  EXPECT_THAT(details.descriptionLine2(), Eq("movie_theater"));
-  EXPECT_THAT(details.descriptionLine1(),
-              Eq("4:40 PM \xE2\x80\xA2 Thu, Sep 26"));
 }
 
 TEST_F(DetailsTest, UpdateFromProtoNoDetails) {

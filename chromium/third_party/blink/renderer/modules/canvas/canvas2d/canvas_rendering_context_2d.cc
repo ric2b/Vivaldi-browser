@@ -38,8 +38,6 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
-#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/rendering_context.h"
@@ -245,6 +243,9 @@ void CanvasRenderingContext2D::DidSetSurfaceSize() {
 
 void CanvasRenderingContext2D::Trace(Visitor* visitor) const {
   visitor->Trace(hit_region_manager_);
+  visitor->Trace(dispatch_context_lost_event_timer_);
+  visitor->Trace(dispatch_context_restored_event_timer_);
+  visitor->Trace(try_restore_context_event_timer_);
   visitor->Trace(filter_operations_);
   CanvasRenderingContext::Trace(visitor);
   BaseRenderingContext2D::Trace(visitor);
@@ -647,11 +648,7 @@ void CanvasRenderingContext2D::UpdateFilterReferences(
   filter_operations_ = filters;
 }
 
-void CanvasRenderingContext2D::ResourceContentChanged(InvalidationModeMask) {
-  ResourceElementChanged();
-}
-
-void CanvasRenderingContext2D::ResourceElementChanged() {
+void CanvasRenderingContext2D::ResourceContentChanged(SVGResource*) {
   ClearFilterReferences();
   GetState().ClearResolvedFilter();
 }
@@ -689,13 +686,6 @@ ImageData* CanvasRenderingContext2D::getImageDataInternal(
     int sh,
     ImageDataSettings* image_data_settings,
     ExceptionState& exception_state) {
-  const IdentifiableSurface surface = IdentifiableSurface::FromTypeAndToken(
-      IdentifiableSurface::Type::kCanvasReadback, GetContextType());
-  if (IdentifiabilityStudySettings::Get()->ShouldSample(surface)) {
-    blink::IdentifiabilityMetricBuilder(ukm_source_id_)
-        .Set(surface, 0)
-        .Record(ukm_recorder_);
-  }
   return BaseRenderingContext2D::getImageDataInternal(
       sx, sy, sw, sh, image_data_settings, exception_state);
 }
@@ -979,6 +969,28 @@ TextMetrics* CanvasRenderingContext2D::measureText(const String& text) {
                                            GetState().GetTextAlign(), text);
 }
 
+void CanvasRenderingContext2D::fillFormattedText(
+    CanvasFormattedText* formatted_text,
+    double x,
+    double y,
+    double wrap_width) {
+  if (!formatted_text)
+    return;
+
+  if (!GetState().HasRealizedFont())
+    setFont(font());
+
+  FloatRect bounds;
+  sk_sp<PaintRecord> recording = formatted_text->PaintFormattedText(
+      canvas()->GetDocument(), GetState().GetFontDescription(), x, y,
+      wrap_width, bounds);
+  Draw([recording](cc::PaintCanvas* c, const PaintFlags* flags)  // draw lambda
+       { c->drawPicture(recording); },
+       [](const SkIRect& rect) { return false; }, bounds,
+       CanvasRenderingContext2DState::PaintType::kFillPaintType,
+       CanvasRenderingContext2DState::kNoImage);
+}
+
 void CanvasRenderingContext2D::DrawTextInternal(
     const String& text,
     double x,
@@ -1178,7 +1190,11 @@ void CanvasRenderingContext2D::DrawFocusRing(const Path& path) {
   if (!GetOrCreatePaintCanvas())
     return;
 
-  SkColor color = LayoutTheme::GetTheme().FocusRingColor().Rgb();
+  // TODO(crbug.com/929098) Need to pass an appropriate color scheme here.
+  SkColor color =
+      LayoutTheme::GetTheme()
+          .FocusRingColor(ComputedStyle::InitialStyle().UsedColorScheme())
+          .Rgb();
   const int kFocusRingWidth = 5;
   DrawPlatformFocusRing(path.GetSkPath(), GetPaintCanvas(), color,
                         /*width=*/kFocusRingWidth, /*radius=*/kFocusRingWidth);

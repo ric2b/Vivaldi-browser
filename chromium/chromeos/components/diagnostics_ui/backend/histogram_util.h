@@ -7,11 +7,24 @@
 
 #include <cstdint>
 
+#include "chromeos/components/diagnostics_ui/mojom/system_routine_controller.mojom.h"
+
+namespace base {
+class TimeDelta;
+}  // namespace base
+
 namespace chromeos {
 namespace diagnostics {
 namespace metrics {
 
+void EmitAppOpenDuration(const base::TimeDelta& time_elapsed);
+
+void EmitMemoryRoutineDuration(const base::TimeDelta& memory_routine_duration);
+
 void EmitRoutineRunCount(uint16_t routine_count);
+
+void EmitRoutineResult(mojom::RoutineType routine_type,
+                       mojom::StandardRoutineResult result);
 
 }  // namespace metrics
 }  // namespace diagnostics

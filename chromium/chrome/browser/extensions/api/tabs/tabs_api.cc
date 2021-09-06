@@ -107,6 +107,7 @@
 #include "ui/base/ui_base_types.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/translate/vivaldi_translate_client.h"
 #include "content/public/common/url_constants.h"
 
 using content::BrowserThread;
@@ -352,7 +353,7 @@ int MoveTabToWindow(ExtensionFunction* function,
 
   return target_tab_strip->InsertWebContentsAt(
       target_index, std::move(web_contents),
-          vivaldi::IsVivaldiRunning() && pinned
+          ::vivaldi::IsVivaldiRunning() && pinned
           // We want to retain pinned in Vivaldi.
             ? TabStripModel::ADD_PINNED :
               TabStripModel::ADD_NONE);
@@ -579,7 +580,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   TabStripModel* source_tab_strip = NULL;
   int tab_index = -1;
 
-  bool is_vivaldi = vivaldi::IsVivaldiRunning();
+  bool is_vivaldi = ::vivaldi::IsVivaldiRunning();
 
   windows::Create::Params::CreateData* create_data = params->create_data.get();
 
@@ -618,7 +619,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
 
   // We allow opening normal windows from an incognito window, but only
   // if we do it ourself.
-  if (extension() && is_vivaldi && vivaldi::IsVivaldiApp(extension_id()) &&
+  if (extension() && is_vivaldi && ::vivaldi::IsVivaldiApp(extension_id()) &&
       calling_profile->IsOffTheRecord() && open_incognito_window == false) {
     window_profile = calling_profile->GetOriginalProfile();
   }
@@ -661,7 +662,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
         window_type = Browser::TYPE_POPUP;
         // NOTE(andre@vivaldi.com) : We do the popup sizing in
         // WebContentsImpl::CreateNewWindow.
-        if (!vivaldi::IsVivaldiRunning()) {
+        if (!::vivaldi::IsVivaldiRunning()) {
         extension_id = extension()->id();
         }
         break;
@@ -726,7 +727,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     return RespondNow(Error(tabs_constants::kBrowserWindowNotAllowed));
 
   ui::PageTransition transition = ui::PAGE_TRANSITION_LINK;
-  if (extension() && vivaldi::IsVivaldiApp(extension()->id())) {
+  if (extension() && ::vivaldi::IsVivaldiApp(extension()->id())) {
     // Vivaldi-specific properties, no extension are allowed to
     // set them.
     transition =
@@ -751,6 +752,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
       // TODO(crbug.com/984350): Add tests for checking opener SiteInstance
       // behavior from a SW based extension's extension frame (e.g. from popup).
       // See ExtensionApiTest.WindowsCreate* tests for details.
+      navigate_params.initiator_origin = extension()->origin();
       navigate_params.opener = render_frame_host();
       navigate_params.source_site_instance =
           render_frame_host()->GetSiteInstance();
@@ -774,7 +776,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
       TabStripModel* target_tab_strip = new_window->tab_strip_model();
       target_tab_strip->InsertWebContentsAt(
           urls.size(), std::move(detached_tab),
-          vivaldi::IsVivaldiRunning() && pinned
+          ::vivaldi::IsVivaldiRunning() && pinned
               // We keep the pinned state when moving tabs.
               ? TabStripModel::ADD_PINNED
               : TabStripModel::ADD_NONE
@@ -1246,7 +1248,7 @@ ExtensionFunction::ResponseAction TabsCreateFunction::Run() {
   AssignOptionalValue(params->create_properties.index, &options.index);
   AssignOptionalValue(params->create_properties.url, &options.url);
 
-  if (extension() && vivaldi::IsVivaldiApp(extension()->id())) {
+  if (extension() && ::vivaldi::IsVivaldiApp(extension()->id())) {
     // Vivaldi-specific properties, no extension are allowed to
     // set them.
     AssignOptionalValue(params->create_properties.ext_data, &options.ext_data);
@@ -1552,8 +1554,7 @@ bool TabsUpdateFunction::UpdateURL(const std::string& url_string,
   // since URLs can be opened on behalf of untrusted content.
   load_params.is_renderer_initiated = true;
   // All renderer-initiated navigations need to have an initiator origin.
-  load_params.initiator_origin = url::Origin::Create(
-      Extension::GetBaseURLFromExtensionId(extension()->id()));
+  load_params.initiator_origin = extension()->origin();
   // |source_site_instance| needs to be set so that a renderer process
   // compatible with |initiator_origin| is picked by Site Isolation.
   load_params.source_site_instance = content::SiteInstance::CreateForURL(
@@ -1606,7 +1607,8 @@ ExtensionFunction::ResponseAction TabsMoveFunction::Run() {
   if (params->tab_ids.as_integers) {
     std::vector<int>& tab_ids = *params->tab_ids.as_integers;
     num_tabs = tab_ids.size();
-    if (vivaldi::IsVivaldiRunning() && vivaldi::IsVivaldiApp(extension_id())) {
+    if (::vivaldi::IsVivaldiRunning() &&
+        ::vivaldi::IsVivaldiApp(extension_id())) {
       // NOTE(espen@vivaldi.com): The original behavior is not suitable for
       // Vivaldi when moving more than two tabs at once and especially into
       // stacks. MoveTab() will add 'i' to the 'new_index' and next use
@@ -2160,10 +2162,40 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
     return RespondNow(
         Error(tabs_constants::kCannotDetermineLanguageOfUnloadedTab));
   }
+  VivaldiTranslateClient* vivaldi_translate_client =
+      VivaldiTranslateClient::FromWebContents(contents);
+  if (vivaldi_translate_client) {
 
+    AddRef();  // Balanced in RespondWithLanguage().
+
+    if (!vivaldi_translate_client->GetLanguageState()
+             .original_language()
+             .empty()) {
+      // Delay the callback invocation until after the current JS call has
+      // returned.
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(&TabsDetectLanguageFunction::RespondWithLanguage, this,
+                         vivaldi_translate_client->GetLanguageState()
+                             .original_language()));
+      return RespondLater();
+    }
+
+    // The tab contents does not know its language yet. Let's wait until it
+    // receives it, or until the tab is closed/navigates to some other page.
+
+    // Observe the WebContents' lifetime and navigations.
+    Observe(contents);
+    // Wait until the language is determined.
+    vivaldi_translate_client->translate_driver()->AddLanguageDetectionObserver(
+        this);
+    is_observing_ = true;
+
+    return RespondLater();
+  }
   ChromeTranslateClient* chrome_translate_client =
       ChromeTranslateClient::FromWebContents(contents);
-  if (!chrome_translate_client && vivaldi::IsVivaldiRunning())
+  if (!chrome_translate_client)
     return RespondNow(Error("Translation unsupported"));
 
   AddRef();  // Balanced in RespondWithLanguage().
@@ -2216,10 +2248,18 @@ void TabsDetectLanguageFunction::RespondWithLanguage(
     const std::string& language) {
   // Stop observing.
   if (is_observing_) {
+    VivaldiTranslateClient* translate_client =
+        VivaldiTranslateClient::FromWebContents(web_contents());
+    if (translate_client) {
+      translate_client->translate_driver()->RemoveLanguageDetectionObserver(
+          this);
+      Observe(nullptr);
+    } else {
     ChromeTranslateClient::FromWebContents(web_contents())
         ->GetTranslateDriver()
         ->RemoveLanguageDetectionObserver(this);
     Observe(nullptr);
+    }
   }
 
   Respond(OneArgument(base::Value(language)));

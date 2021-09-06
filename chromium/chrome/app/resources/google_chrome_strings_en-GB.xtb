@@ -10,6 +10,7 @@ Some features may be unavailable and changes to preferences won't be saved.</tra
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> was previously using Chrome</translation>
 <translation id="1097330777386562916">Clear cookies and site data when you quit Chrome</translation>
 <translation id="110877069173485804">This is your Chrome</translation>
+<translation id="1125124144982679672">Who's using Chrome?</translation>
 <translation id="1142745911746664600">Can't update Chrome</translation>
 <translation id="1154147086299354128">&amp;Open in Chrome</translation>
 <translation id="123620459398936149">Chrome OS could not sync your data. Please update your Sync passphrase.</translation>
@@ -19,7 +20,9 @@ Some features may be unavailable and changes to preferences won't be saved.</tra
 <translation id="1399397803214730675">This computer already has a more recent version of Google Chrome. If the software is not working, please uninstall Google Chrome and try again.</translation>
 <translation id="1434626383986940139">Chrome Canary Apps</translation>
 <translation id="147727933880789532">Chrome recommends disabling this extension because it does not currently meet Enhanced Safe Browsing standards.</translation>
+<translation id="1516530951338665275">Google Chrome needs Bluetooth access to continue pairing. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">Update Chrome</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" /> is already signed in to this Chrome profile. This will create a new Chrome profile for <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="1587223624401073077">Google Chrome is using your camera.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> is dangerous, so Chrome has blocked it.</translation>
 <translation id="1597911401261118146">To check if your passwords are safe from data breaches and other security issues, <ph name="BEGIN_LINK" />sign in to Chrome<ph name="END_LINK" />.</translation>
@@ -89,6 +92,7 @@ Some features may be unavailable and changes to preferences won't be saved.</tra
 <translation id="3065168410429928842">Chrome Tab</translation>
 <translation id="3080151273017101988">Continue running background apps when Google Chrome is closed</translation>
 <translation id="3089968997497233615">There's a new, safer version of Google Chrome available.</translation>
+<translation id="3100998948628680988">Name your Chrome profile</translation>
 <translation id="3114643501466072395">To check if your other passwords are safe from data breaches and other security issues, <ph name="BEGIN_LINK" />sign in to Chrome<ph name="END_LINK" />.</translation>
 <translation id="3127818369811890733">Chrome OS could not sync your data.</translation>
 <translation id="3140883423282498090">Your changes will take effect the next time you relaunch Google Chrome.</translation>
@@ -113,6 +117,7 @@ Some features may be unavailable and changes to preferences won't be saved.</tra
 <translation id="3735758079232443276">The extension "<ph name="EXTENSION_NAME" />" has changed the page that is shown when you start Chrome.</translation>
 <translation id="3779473566290487688">To get future Google Chrome updates, you'll need OS X 10.11 or later. This computer is using OS X 10.10.</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">This will create a new Chrome profile for <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="386202838227397562">Please close all Google Chrome windows and try again.</translation>
 <translation id="3865754807470779944">Chrome version <ph name="PRODUCT_VERSION" /> is installed</translation>
 <translation id="3873044882194371212">Open link in Chrome inco&amp;gnito window</translation>
@@ -120,7 +125,6 @@ Some features may be unavailable and changes to preferences won't be saved.</tra
 <translation id="4050175100176540509">Important security improvements and new features are available in the latest version.</translation>
 <translation id="4053720452172726777">Customise and control Google Chrome</translation>
 <translation id="4110895483821904099">Set up your new Chrome profile</translation>
-<translation id="4143243756087420366">Chrome name and picture</translation>
 <translation id="4147555960264124640">You are signing in with a managed account and giving its administrator control over your Google Chrome profile. Your Chrome data, such as your apps, bookmarks, history, passwords and other settings will become permanently tied to <ph name="USER_NAME" />. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">The installer failed to uncompress archive. Please download Google Chrome again.</translation>
 <translation id="4191857738314598978">{0,plural, =1{Relaunch Chrome within a day}other{Relaunch Chrome within # days}}</translation>
@@ -149,7 +153,6 @@ Some features may be unavailable and changes to preferences won't be saved.</tra
 <translation id="4633000520311261472">To make Chrome safer, we disabled some extensions that aren't listed in the <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> and may have been added without your knowledge.</translation>
 <translation id="4666328473657283332">To access your Chrome stuff across all your devices, sign in so that you can turn on sync.</translation>
 <translation id="4728575227883772061">Installation failed due to unspecified error. If Google Chrome is currently running, please close it and try again.</translation>
-<translation id="4750550185319565338">Restart Chrome to enable <ph name="PLUGIN_NAME" /></translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">This file may be dangerous, so Chrome has blocked it.</translation>
 <translation id="479167709087336770">This uses the same spell checker that's used in Google search. Text that you type in the browser is sent to Google. You can always change this behaviour in settings.</translation>
@@ -175,10 +178,9 @@ Some features may be unavailable. Please specify a different profile directory o
 <translation id="5430073640787465221">Your preferences file is corrupt or invalid.
 
 Google Chrome is unable to recover your settings.</translation>
+<translation id="5434383153637353914">This page allows you to manage your signed-in Google Accounts. These accounts will be available in Chrome browser and Play Store apps, as well as services like Gmail, Drive and YouTube. <ph name="LINK_BEGIN" />Learn more<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">Google Chrome is trying to show passwords.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">You can manage this and other Google Accounts that you've added for <ph name="USER_NAME" /> from one place in <ph name="LINK_BEGIN" />Settings<ph name="LINK_END" />.
-          Permissions that you have granted to websites in the Chrome Browser and apps from Google Play may apply to all accounts.</translation>
 <translation id="5657226924540934362">If a setting doesn't show on this page, look in your <ph name="LINK_BEGIN" />
       Chrome OS settings<ph name="LINK_END" /></translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> may be dangerous, so Chrome has blocked it.</translation>
@@ -187,6 +189,7 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{Google Chrome will restart in 1 second}other{Google Chrome will restart in # seconds}}</translation>
 <translation id="573759479754913123">About Chrome OS</translation>
+<translation id="5756509061973259733">A Chrome profile with this account already exists on this device</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> – Google Chrome Canary</translation>
 <translation id="5804318322022881572">Couldn't launch Chrome. Try again.</translation>
 <translation id="5867197326698922595">Google Chrome is trying to edit passwords.</translation>
@@ -259,7 +262,6 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="7930071585467473040">Google Chrome is trying to copy passwords.</translation>
 <translation id="7962410387636238736">This computer will no longer receive Google Chrome updates because Windows XP and Windows Vista are no longer supported</translation>
 <translation id="8008534537613507642">Reinstall Chrome</translation>
-<translation id="8009904340233602924">Use Chrome without an account</translation>
 <translation id="8013993649590906847">If an image doesn’t have a useful description, Chrome will try to provide one for you. To create descriptions, images are sent to Google.</translation>
 <translation id="8129812357326543296">About &amp;Google Chrome</translation>
 <translation id="8255190535488645436">Google Chrome is using your camera and microphone.</translation>
@@ -300,6 +302,5 @@ Google Chrome is unable to recover your settings.</translation>
 <translation id="9138603949443464873">To apply your changes, relaunch Chrome</translation>
 <translation id="919706545465235479">Update Chrome to start sync</translation>
 <translation id="940313311831216333">To access your Chrome stuff across all your devices, sign in, then turn on sync.</translation>
-<translation id="94743460404517794">If you have multiple Google Accounts, you can add them to your <ph name="DEVICE_TYPE" />. Your accounts will be available in Chrome browser and Play Store, as well as services like Gmail, Drive and YouTube. <ph name="LINK_BEGIN" />Learn more<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">Google Chrome is your default browser</translation>
 </translationbundle>

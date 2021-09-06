@@ -127,7 +127,7 @@ def RunHooks(hooks, cwd, env=None, prefix_name=None):
     "checkout_pgo_profiles": False,
   }
   global_vars["checkout_x64"]= True # Always checking out on x64 systems
-  if checkout_os == "checkout_android":
+  if checkout_os in ["checkout_android", "checkout_arm", "checkout_arm64"] :
     global_vars["checkout_linux"]= True # Always checking out android on linux systems
 
   if args.download_pgo_profiles:

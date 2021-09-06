@@ -47,10 +47,8 @@ const tests = [
   async function testPropertiesDialog() {
     await ensurePropertiesDialogOpen();
 
-    // TODO(crbug.com/93169): None of the following expected values should be
-    // '-' when support for every property is implemented.
     [['file-name', 'document_info.pdf'],
-     ['file-size', '-'],
+     ['file-size', '714 B'],
      ['title', 'Sample PDF Document Info'],
      ['author', 'Chromium Authors'],
      ['subject', 'Testing'],
@@ -61,7 +59,7 @@ const tests = [
      ['pdf-producer', 'fixup_pdf_template.py'],
      ['pdf-version', '1.7'],
      ['page-count', '1'],
-     ['page-size', '-'],
+     ['page-size', '2.78 × 2.78 in (portrait)'],
      ['fast-web-view', 'No'],
     ].forEach(([field, expectedValue]) => assertField(field, expectedValue));
 

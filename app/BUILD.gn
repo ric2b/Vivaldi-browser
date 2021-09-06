@@ -79,21 +79,9 @@ if (generate_untranslated) {
   }
 }
 
-single_grit_action("vivaldi_native_strings") {
+vivaldi_strings_grit_action("vivaldi_native_strings") {
   source = "native_resources/vivaldi_native_strings.grd"
   resource_ids = "//vivaldi/app/gritsettings/resource_ids"
-  have_strings = true
-  source_translations = "native_resources/strings/vivaldi_native_strings_"
-  inputs = []
-  foreach(locale, locales + vivaldi_pending_locales - ["en-US"]) {
-    inputs += [ "${source_translations}$locale.xtb" ]
-  }
-  outputs = [
-    "grit/vivaldi_native_strings.h",
-  ]
-  foreach(locale, locales_with_fake_bidi + vivaldi_pending_locales) {
-    outputs += [ "$root_gen_dir/vivaldi/app/vivaldi_native_strings_$locale.pak" ]
-  }
 }
 
 if (is_android) {
@@ -147,6 +135,11 @@ grit("vivaldi_native_resources") {
     "vivaldi_native_resources_100_percent.pak",
     "vivaldi_native_resources_200_percent.pak",
   ]
+  if (!is_android) {
+    deps = [
+      "//vivaldi/vivapp:vivaldi_app"
+    ]
+  }
 }
 
 grit("vivaldi_unscaled_native_resources") {
@@ -154,6 +147,9 @@ grit("vivaldi_unscaled_native_resources") {
     "force_sopranos_build=$force_sopranos_build",
     "is_official_build=$is_official_build",
   ]
+  if (is_android) {
+    defines += [ "is_oem_automotive_build=$is_oem_automotive_build" ]
+  }
   output_dir = "$root_gen_dir/vivaldi"
   resource_ids = "//vivaldi/app/gritsettings/resource_ids"
   source = "native_resources/vivaldi_native_unscaled.grd"

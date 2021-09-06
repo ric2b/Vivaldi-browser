@@ -7,7 +7,10 @@
 #include "base/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
@@ -31,6 +34,7 @@
 #include "ui/views/controls/throbber.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
 
 DeviceChooserContentView::DeviceChooserContentView(
@@ -92,24 +96,45 @@ DeviceChooserContentView::DeviceChooserContentView(
     return container;
   };
 
-  auto no_options_help =
-      std::make_unique<views::Label>(chooser_controller_->GetNoOptionsText());
-  no_options_help->SetMultiLine(true);
-  no_options_view_ = add_centering_view(std::move(no_options_help));
+  {
+    auto no_options_help =
+        std::make_unique<views::Label>(chooser_controller_->GetNoOptionsText());
+    no_options_help->SetMultiLine(true);
+    no_options_view_ = add_centering_view(std::move(no_options_help));
 
-  base::string16 link_text = l10n_util::GetStringUTF16(
-      IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ON_BLUETOOTH_LINK_TEXT);
-  size_t offset = 0;
-  base::string16 text = l10n_util::GetStringFUTF16(
-      IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ADAPTER_OFF, link_text, &offset);
-  auto adapter_off_help = std::make_unique<views::StyledLabel>();
-  adapter_off_help->SetText(text);
-  adapter_off_help->AddStyleRange(
-      gfx::Range(offset, offset + link_text.size()),
-      views::StyledLabel::RangeStyleInfo::CreateForLink(
-          base::BindRepeating(&ChooserController::OpenAdapterOffHelpUrl,
-                              base::Unretained(chooser_controller_.get()))));
-  adapter_off_view_ = add_centering_view(std::move(adapter_off_help));
+    base::string16 link_text = l10n_util::GetStringUTF16(
+        IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ON_BLUETOOTH_LINK_TEXT);
+    size_t offset = 0;
+    base::string16 text = l10n_util::GetStringFUTF16(
+        IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ADAPTER_OFF, link_text, &offset);
+    auto adapter_off_help = std::make_unique<views::StyledLabel>();
+    adapter_off_help->SetText(text);
+    adapter_off_help->AddStyleRange(
+        gfx::Range(offset, offset + link_text.size()),
+        views::StyledLabel::RangeStyleInfo::CreateForLink(
+            base::BindRepeating(&ChooserController::OpenAdapterOffHelpUrl,
+                                base::Unretained(chooser_controller_.get()))));
+    adapter_off_view_ = add_centering_view(std::move(adapter_off_help));
+  }
+
+  {
+    base::string16 link_text = l10n_util::GetStringUTF16(
+        IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK_TEXT);
+    base::string16 text = l10n_util::GetStringFUTF16(
+        IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH, link_text);
+    size_t text_end = text.size();
+    auto adapter_unauthorized_help = std::make_unique<views::StyledLabel>();
+    adapter_unauthorized_help->SetHorizontalAlignment(
+        gfx::HorizontalAlignment::ALIGN_CENTER);
+    adapter_unauthorized_help->SetText(text);
+    adapter_unauthorized_help->AddStyleRange(
+        gfx::Range(text_end - link_text.size(), text_end),
+        views::StyledLabel::RangeStyleInfo::CreateForLink(
+            base::BindRepeating(&ChooserController::OpenPermissionPreferences,
+                                base::Unretained(chooser_controller_.get()))));
+    adapter_unauthorized_view_ =
+        add_centering_view(std::move(adapter_unauthorized_help));
+  }
 
   UpdateTableView();
 }
@@ -199,6 +224,15 @@ void DeviceChooserContentView::OnAdapterEnabledChanged(bool enabled) {
 
   if (GetWidget() && GetWidget()->GetRootView())
     GetWidget()->GetRootView()->Layout();
+}
+
+void DeviceChooserContentView::OnAdapterAuthorizationChanged(bool authorized) {
+  // No row is selected since we are not authorized to get device info anyway.
+  table_view_->Select(-1);
+  adapter_authorized_ = authorized;
+  UpdateTableView();
+
+  ShowReScanButton(authorized);
 }
 
 void DeviceChooserContentView::OnRefreshStateChanged(bool refreshing) {
@@ -318,7 +352,7 @@ void DeviceChooserContentView::Close() {
 }
 
 void DeviceChooserContentView::UpdateTableView() {
-  bool has_options = adapter_enabled_ && RowCount() > 0;
+  bool has_options = adapter_enabled_ && adapter_authorized_ && RowCount() > 0;
   if (!is_initialized_ && GetWidget() &&
       GetWidget()->GetFocusManager()->GetFocusedView()) {
     is_initialized_ = true;  // Can show no_options_view_ after initial focus.
@@ -334,9 +368,9 @@ void DeviceChooserContentView::UpdateTableView() {
                           !chooser_controller_->TableViewAlwaysDisabled());
   // Do not set to visible until initialization is complete, in order to prevent
   // message from briefly flashing and being read by screen reader.
-  no_options_view_->SetVisible(!has_options && adapter_enabled_ &&
-                               is_initialized_);
+  no_options_view_->SetVisible(RowCount() == 0 && is_initialized_);
   adapter_off_view_->SetVisible(!adapter_enabled_);
+  adapter_unauthorized_view_->SetVisible(!adapter_authorized_);
 }
 
 void DeviceChooserContentView::SelectAllCheckboxChanged() {
@@ -379,3 +413,7 @@ views::Throbber* DeviceChooserContentView::ThrobberForTesting() {
 views::Label* DeviceChooserContentView::ThrobberLabelForTesting() {
   return throbber_label_;
 }
+
+BEGIN_METADATA(DeviceChooserContentView, views::View)
+ADD_READONLY_PROPERTY_METADATA(base::string16, WindowTitle)
+END_METADATA

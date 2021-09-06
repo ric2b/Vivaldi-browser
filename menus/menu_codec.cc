@@ -16,6 +16,9 @@
 
 namespace menus {
 
+MenuCodec::MenuCodec() = default;
+MenuCodec::~MenuCodec() = default;
+
 bool MenuCodec::GetVersion(std::string* version, const base::Value& value) {
   if (!value.is_list()) {
     LOG(ERROR) << "Menu Codec: No list";
@@ -46,6 +49,18 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
       const std::string* type = menu.FindStringPath("type");
       const std::string* guid = menu.FindStringPath("guid");
       bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
+      if (guid_valid) {
+        std::map<std::string, bool>::iterator it = guids_.find(*guid);
+        if (it != guids_.end()) {
+          LOG(ERROR) << "Menu Codec: guid collision " << *guid;
+#if defined(OFFICIAL_BUILD)
+          return false;
+#else
+          return true;  // Do not stop parsing in devel mode.
+#endif
+        }
+        guids_[*guid] = true;
+      }
 
       if (guid_valid && type && *type == "menu") {
         const std::string* action = menu.FindStringPath("action");
@@ -134,6 +149,18 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
     const std::string* parameter = value.FindStringPath("parameter");
     const int origin = value.FindIntKey("origin").value_or(Menu_Node::BUNDLE);
     bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
+    if (guid_valid) {
+      std::map<std::string, bool>::iterator it = guids_.find(*guid);
+      if (it != guids_.end()) {
+        LOG(ERROR) << "Menu Codec: guid collision " << *guid;
+#if defined(OFFICIAL_BUILD)
+        return false;
+#else
+        return true;  // Do not stop parsing in devel mode.
+#endif
+      }
+      guids_[*guid] = true;
+    }
 
     if (type) {
       if (!guid_valid) {

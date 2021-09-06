@@ -46,9 +46,6 @@
 
 namespace views {
 
-// static
-bool BubbleDialogDelegate::devtools_dismiss_override_ = false;
-
 namespace {
 
 // A BubbleFrameView will apply a masking path to its ClientView to ensure
@@ -197,9 +194,9 @@ class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver,
  public:
   AnchorWidgetObserver(BubbleDialogDelegate* owner, Widget* widget)
       : owner_(owner) {
-    widget_observer_.Add(widget);
+    widget_observation_.Observe(widget);
 #if !defined(OS_APPLE)
-    window_observer_.Add(widget->GetNativeWindow());
+    window_observation_.Observe(widget->GetNativeWindow());
 #endif
   }
   ~AnchorWidgetObserver() override = default;
@@ -207,9 +204,11 @@ class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver,
   // WidgetObserver:
   void OnWidgetDestroying(Widget* widget) override {
 #if !defined(OS_APPLE)
-    window_observer_.Remove(widget->GetNativeWindow());
+    DCHECK(window_observation_.IsObservingSource(widget->GetNativeWindow()));
+    window_observation_.Reset();
 #endif
-    widget_observer_.Remove(widget);
+    DCHECK(widget_observation_.IsObservingSource(widget));
+    widget_observation_.Reset();
     owner_->OnAnchorWidgetDestroying();
     // |this| may be destroyed here!
   }
@@ -240,9 +239,11 @@ class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver,
 
  private:
   BubbleDialogDelegate* owner_;
-  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_{this};
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 #if !defined(OS_APPLE)
-  ScopedObserver<aura::Window, aura::WindowObserver> window_observer_{this};
+  base::ScopedObservation<aura::Window, aura::WindowObserver>
+      window_observation_{this};
 #endif
 };
 
@@ -252,7 +253,7 @@ class BubbleDialogDelegate::BubbleWidgetObserver : public WidgetObserver {
  public:
   BubbleWidgetObserver(BubbleDialogDelegate* owner, Widget* widget)
       : owner_(owner) {
-    observer_.Add(widget);
+    observation_.Observe(widget);
   }
   ~BubbleWidgetObserver() override = default;
 
@@ -266,7 +267,8 @@ class BubbleDialogDelegate::BubbleWidgetObserver : public WidgetObserver {
   }
 
   void OnWidgetDestroyed(Widget* widget) override {
-    observer_.Remove(widget);
+    DCHECK(observation_.IsObservingSource(widget));
+    observation_.Reset();
     owner_->OnWidgetDestroyed(widget);
   }
 
@@ -297,7 +299,8 @@ class BubbleDialogDelegate::BubbleWidgetObserver : public WidgetObserver {
 
  private:
   BubbleDialogDelegate* owner_;
-  ScopedObserver<views::Widget, views::WidgetObserver> observer_{this};
+  base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
+      this};
 };
 
 BubbleDialogDelegate::BubbleDialogDelegate() = default;
@@ -388,7 +391,7 @@ BubbleDialogDelegate::CreateNonClientFrameView(Widget* widget) {
   auto frame = std::make_unique<BubbleDialogFrameView>(title_margins_);
   LayoutProvider* provider = LayoutProvider::Get();
 
-  frame->set_footnote_margins(
+  frame->SetFootnoteMargins(
       provider->GetInsetsMetric(INSETS_DIALOG_SUBSECTION));
   frame->SetFootnoteView(DisownFootnoteView());
 
@@ -456,9 +459,6 @@ void BubbleDialogDelegate::OnAnchorWidgetDestroying() {
 }
 
 void BubbleDialogDelegate::OnBubbleWidgetActivationChanged(bool active) {
-  if (devtools_dismiss_override_)
-    return;
-
 #if defined(OS_APPLE)
   // Install |mac_bubble_closer_| the first time the widget becomes active.
   if (active && !mac_bubble_closer_) {

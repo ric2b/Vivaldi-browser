@@ -21,6 +21,14 @@ namespace {
 // The maximum number of TYPE_WINDOW_CONTENT_CHANGED events to fire in one
 // atomic update before we give up and fire it on the root node instead.
 constexpr int kMaxContentChangedEventsToFire = 5;
+
+// The number of 'ticks' on a slider when no step value is defined. The value
+// of 20 implies 20 steps, or a 5% move with each increment/decrement action.
+constexpr int kDefaultNumberOfTicksForSliders = 20;
+
+// The minimum amount a slider can move per increment/decement action as a
+// percentage of the total range, regardless of step value set on the element.
+constexpr float kMinimumPercentageMoveForSliders = 0.01f;
 }  // namespace
 
 class BrowserAccessibilityAndroid;
@@ -142,11 +150,15 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   // where |element_type| is a special uppercase string from TalkBack or
   // BrailleBack indicating general categories of web content like
   // "SECTION" or "CONTROL".  Return 0 if not found.
+  // Use |can_wrap_to_last_element| to specify if a backwards search can wrap
+  // around to the last element. This is used to expose the last HTML element
+  // upon swiping backwards into a WebView.
   jint FindElementType(JNIEnv* env,
                        const base::android::JavaParamRef<jobject>& obj,
                        jint start_id,
                        const base::android::JavaParamRef<jstring>& element_type,
-                       jboolean forwards);
+                       jboolean forwards,
+                       jboolean can_wrap_to_last_element);
 
   // Respond to a ACTION_[NEXT/PREVIOUS]_AT_MOVEMENT_GRANULARITY action
   // and move the cursor/selection within the given node id. We keep track

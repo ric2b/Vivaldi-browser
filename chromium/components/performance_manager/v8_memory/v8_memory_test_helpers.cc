@@ -166,6 +166,7 @@ V8MemoryPerformanceManagerTestHarness::V8MemoryPerformanceManagerTestHarness()
           // Use MOCK_TIME so that ExpectQueryAndDelayReply can be used.
           base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
   GetGraphFeaturesHelper().EnableExecutionContextRegistry();
+  GetGraphFeaturesHelper().EnableV8ContextTracker();
 }
 
 V8MemoryPerformanceManagerTestHarness::
@@ -317,6 +318,15 @@ WorkerNodeImpl* WebMemoryTestHarness::AddWorkerNode(
   return worker_node;
 }
 
+WorkerNodeImpl* WebMemoryTestHarness::AddWorkerNodeWithoutData(
+    WorkerNode::WorkerType worker_type,
+    FrameNodeImpl* parent) {
+  auto worker_node = CreateNode<WorkerNodeImpl>(worker_type, process_.get());
+  worker_node->AddClientFrame(parent);
+  workers_.push_back(std::move(worker_node));
+  return workers_.back().get();
+}
+
 WorkerNodeImpl* WebMemoryTestHarness::AddWorkerNode(
     WorkerNode::WorkerType worker_type,
     std::string url,
@@ -339,6 +349,11 @@ WorkerNodeImpl* WebMemoryTestHarness::AddWorkerNodeImpl(
   }
   workers_.push_back(std::move(worker_node));
   return workers_.back().get();
+}
+
+void WebMemoryTestHarness::SetBlinkMemory(Bytes bytes) {
+  V8DetailedMemoryProcessData::GetOrCreateForTesting(process_node())
+      ->set_blink_bytes_used(*bytes);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

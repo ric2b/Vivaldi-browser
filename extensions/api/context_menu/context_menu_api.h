@@ -6,7 +6,7 @@
 #define EXTENSIONS_API_CONTEXT_MENU_CONTEXT_MENU_API_H_
 
 #include "extensions/browser/extension_function.h"
-#include "browser/menus/vivaldi_context_menu_controller.h"
+#include "extensions/schema/context_menu.h"
 
 namespace extensions {
 
@@ -19,18 +19,11 @@ class ContextMenuAPI {
 };
 
 class ContextMenuShowFunction :
-    public ExtensionFunction,
-    public ::vivaldi::ContextMenuController::Delegate {
+    public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("contextMenu.show",
                              CONTEXTMENU_SHOW)
   ContextMenuShowFunction();
-
-  // vivaldi::ContextMenuController::Delegate
-  void OnAction(int command, int event_state) override;
-  void OnHover(const std::string& url) override;
-  void OnOpened() override;
-  void OnClosed() override;
 
  protected:
   ~ContextMenuShowFunction() override;
@@ -39,7 +32,6 @@ class ContextMenuShowFunction :
   ExtensionFunction::ResponseAction Run() override;
 
  private:
-  std::unique_ptr<::vivaldi::ContextMenuController> controller_;
   DISALLOW_COPY_AND_ASSIGN(ContextMenuShowFunction);
 };
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved
 
 #ifndef EXTENSIONS_API_PREFS_PREFS_API_H_
 #define EXTENSIONS_API_PREFS_PREFS_API_H_
@@ -125,6 +125,76 @@ class PrefsGetForCacheFunction : public ExtensionFunction {
 
   DISALLOW_COPY_AND_ASSIGN(PrefsGetForCacheFunction);
 };
+
+
+class PrefsSetLanguagePairToAlwaysTranslateFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("prefs.setLanguagePairToAlwaysTranslate",
+                             PREFS_SETLANGUAGEPAIRTOALWAYSTRANSLATE)
+  PrefsSetLanguagePairToAlwaysTranslateFunction() = default;
+
+ private:
+  ~PrefsSetLanguagePairToAlwaysTranslateFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(PrefsSetLanguagePairToAlwaysTranslateFunction);
+};
+
+class PrefsSetLanguageToNeverTranslateFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("prefs.setLanguageToNeverTranslate",
+                             PREFS_SETLANGUAGETONEVERTRANSLATE)
+  PrefsSetLanguageToNeverTranslateFunction() = default;
+
+ private:
+  ~PrefsSetLanguageToNeverTranslateFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(PrefsSetLanguageToNeverTranslateFunction);
+};
+
+class PrefsGetTranslateSettingsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("prefs.getTranslateSettings",
+                             PREFS_GETTRANSLATESETTINGS)
+  PrefsGetTranslateSettingsFunction() = default;
+
+ private:
+  ~PrefsGetTranslateSettingsFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(PrefsGetTranslateSettingsFunction);
+};
+
+class PrefsSetSiteToNeverTranslateFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("prefs.setSiteToNeverTranslate",
+                             PREFS_SETLANGUAGETONEVERTRANSLATE)
+  PrefsSetSiteToNeverTranslateFunction() = default;
+
+ private:
+  ~PrefsSetSiteToNeverTranslateFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(PrefsSetSiteToNeverTranslateFunction);
+};
+
+class PrefsSetTranslationDeclinedFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("prefs.setTranslationDeclined",
+                             PREFS_SETTRANSLATIONDECLINED)
+  PrefsSetTranslationDeclinedFunction() = default;
+
+ private:
+  ~PrefsSetTranslationDeclinedFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(PrefsSetTranslationDeclinedFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_PREFS_PREFS_API_H_

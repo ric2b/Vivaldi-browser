@@ -87,7 +87,9 @@ public class RunningInChromeTest {
                     compositorViewHolderSupplier, tabCreatorManager, tabCreatorSupplier,
                     isPromotableToTabSupplier, statusBarColorController, screenOrientationProvider,
                     notificationManagerProxySupplier, tabContentManagerSupplier,
-                    compositorViewHolderInitializer) -> {
+                    activityTabStartupMetricsTrackerSupplier, compositorViewHolderInitializer,
+                    chromeActivityNativeDelegate, modalDialogManagerSupplier,
+                    browserControlsStateProvider) -> {
                 return new ChromeActivityCommonsModule(activity, bottomSheetController,
                         tabModelSelectorSupplier, browserControlsManager,
                         browserControlsVisibilityManager, browserControlsSizer, fullscreenManager,
@@ -98,7 +100,9 @@ public class RunningInChromeTest {
                         screenOrientationProvider,
                         ()
                                 -> mMockNotificationManager,
-                        tabContentManagerSupplier, compositorViewHolderInitializer);
+                        tabContentManagerSupplier, activityTabStartupMetricsTrackerSupplier,
+                        compositorViewHolderInitializer, chromeActivityNativeDelegate,
+                        modalDialogManagerSupplier, browserControlsStateProvider);
             });
 
     @Rule

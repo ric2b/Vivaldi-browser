@@ -1750,6 +1750,18 @@ message DeviceArcDataSnapshotHoursProto {
   optional string arc_data_snapshot_hours = 1;
 }
 
+// Setting that controls whether system-wide trace collection using the Perfetto
+// system tracing service is allowed.
+message DeviceSystemWideTracingEnabledProto {
+  optional bool enabled = 1 [default = true];
+}
+
+// Setting that controls whether data access is enabled for Thunderbolt/USB4
+// peripherals.
+message DevicePciPeripheralDataAccessEnabledProto {
+  optional bool enabled = 1 [default = false];
+}
+
 message ChromeDeviceSettingsProto {
   reserved 61, 90;
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
@@ -1896,4 +1908,10 @@ message ChromeDeviceSettingsProto {
   optional DeviceFamilyLinkAccountsAllowedProto family_link_accounts_allowed =
       114;
   optional DeviceArcDataSnapshotHoursProto arc_data_snapshot_hours = 115;
+  optional BooleanPolicyProto device_allow_mgs_to_store_display_properties =
+      116;
+  optional DeviceSystemWideTracingEnabledProto
+      device_system_wide_tracing_enabled = 117;
+  optional DevicePciPeripheralDataAccessEnabledProto
+      device_pci_peripheral_data_access_enabled = 118;
 }

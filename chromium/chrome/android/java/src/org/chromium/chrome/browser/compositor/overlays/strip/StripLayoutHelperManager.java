@@ -33,7 +33,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -100,7 +99,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
     private TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
     private final TabModelSelectorObserver mTabModelSelectorObserver =
-            new EmptyTabModelSelectorObserver() {
+            new TabModelSelectorObserver() {
                 @Override
                 public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
                     tabModelSwitched(newModel.isIncognito());
@@ -305,9 +304,9 @@ public class StripLayoutHelperManager implements SceneOverlay {
         assert mTabStripTreeProvider != null;
 
         // Note(david@vivaldi.com): Apply the correct |yOffset| according to the toolbar position.
+        float dpToPx = (1.f / mActivity.getResources().getDisplayMetrics().density);
         if (!VivaldiUtils.isTopToolbarOn() && !mShouldHideOverlay) {
-            mViewportHeightOffset = viewport.height()
-                    * (1.f / mActivity.getResources().getDisplayMetrics().density);
+            mViewportHeightOffset = viewport.height() * dpToPx;
             yOffset += mViewportHeightOffset - mHeight;
         } else {
             mViewportHeightOffset = 0;
@@ -317,7 +316,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
                         mActivity.getLayoutManager().getOverlayPanelManager().getActivePanel();
                 if (panel != null) yOffset += panel.getBasePageY();
             }
-            yOffset += 0;
+            yOffset += mActivity.getBrowserControlsManager().getTopControlsMinHeight() * dpToPx;
         }
 
         Tab selectedTab = mTabModelSelector.getCurrentModel().getTabAt(
@@ -445,7 +444,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         if (mTabModelSelector.isTabStateInitialized()) {
             updateModelSwitcherButton();
         } else {
-            mTabModelSelector.addObserver(new EmptyTabModelSelectorObserver() {
+            mTabModelSelector.addObserver(new TabModelSelectorObserver() {
                 @Override
                 public void onTabStateInitialized() {
                     updateModelSwitcherButton();
@@ -723,7 +722,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     /** Vivaldi - Function to return value of y with correct offset value **/
     private float getValueOfY(float y) {
-        if (!VivaldiUtils.isTopToolbarOn()) y = mViewportHeightOffset - y;
-        return y;
+        if (!VivaldiUtils.isTopToolbarOn()) return mViewportHeightOffset - y;
+        return y - mActivity.getBrowserControlsManager().getTopControlsMinHeight();
     }
 }

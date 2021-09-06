@@ -39,6 +39,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/extension_l10n_util.h"
+#include "extensions/common/manifest_handlers/oauth2_manifest_handler.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 
@@ -92,16 +93,6 @@ void RecordFunctionResult(const IdentityGetAuthTokenError& error,
   }
 }
 
-bool IsReturnScopesInGetAuthTokenEnabled() {
-  return base::FeatureList::IsEnabled(
-      extensions_features::kReturnScopesInGetAuthToken);
-}
-
-bool IsSelectedUserIdInGetAuthTokenEnabled() {
-  return base::FeatureList::IsEnabled(
-      extensions_features::kSelectedUserIdInGetAuthToken);
-}
-
 }  // namespace
 
 IdentityGetAuthTokenFunction::IdentityGetAuthTokenFunction()
@@ -139,7 +130,7 @@ ExtensionFunction::ResponseAction IdentityGetAuthTokenFunction::Run() {
       interactive_ && IsBrowserSigninAllowed(GetProfile());
 
   enable_granular_permissions_ =
-      IsReturnScopesInGetAuthTokenEnabled() && params->details.get() &&
+      params->details.get() &&
       params->details->enable_granular_permissions.get() &&
       *params->details->enable_granular_permissions;
 
@@ -212,7 +203,7 @@ void IdentityGetAuthTokenFunction::GetAuthTokenForPrimaryAccount(
     const std::string& extension_gaia_id) {
   auto* identity_manager = IdentityManagerFactory::GetForProfile(GetProfile());
   CoreAccountInfo primary_account_info =
-      identity_manager->GetPrimaryAccountInfo();
+      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSync);
   bool primary_account_only = IsPrimaryAccountOnly();
 
   // Detect and handle the case where the extension is using an account other
@@ -341,18 +332,14 @@ void IdentityGetAuthTokenFunction::CompleteFunctionWithResult(
     const std::set<std::string>& granted_scopes) {
   RecordFunctionResult(IdentityGetAuthTokenError(), remote_consent_approved_);
 
-  if (IsReturnScopesInGetAuthTokenEnabled()) {
-    std::unique_ptr<base::Value> granted_scopes_value =
-        std::make_unique<base::Value>(base::Value::Type::LIST);
-    for (const auto& scope : granted_scopes)
-      granted_scopes_value->Append(scope);
+  std::unique_ptr<base::Value> granted_scopes_value =
+      std::make_unique<base::Value>(base::Value::Type::LIST);
+  for (const auto& scope : granted_scopes)
+    granted_scopes_value->Append(scope);
 
-    CompleteAsyncRun(TwoArguments(
-        base::Value(access_token),
-        base::Value::FromUniquePtrValue(std::move(granted_scopes_value))));
-  } else {
-    CompleteAsyncRun(OneArgument(base::Value(access_token)));
-  }
+  CompleteAsyncRun(TwoArguments(
+      base::Value(access_token),
+      base::Value::FromUniquePtrValue(std::move(granted_scopes_value))));
 }
 
 void IdentityGetAuthTokenFunction::CompleteFunctionWithError(
@@ -404,13 +391,14 @@ void IdentityGetAuthTokenFunction::StartSigninFlow() {
   auto* identity_manager = IdentityManagerFactory::GetForProfile(GetProfile());
   account_listening_mode_ = AccountListeningMode::kListeningTokens;
   if (IsPrimaryAccountOnly()) {
-    if (!identity_manager->HasPrimaryAccount()) {
+    if (!identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
       account_listening_mode_ = AccountListeningMode::kListeningPrimaryAccount;
     } else {
       // Fixing an authentication error. Either there is no token, or it is in
       // error.
-      DCHECK_EQ(token_key_.account_info.account_id,
-                identity_manager->GetPrimaryAccountId());
+      DCHECK_EQ(
+          token_key_.account_info.account_id,
+          identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSync));
       DCHECK(!identity_manager->HasAccountWithRefreshToken(
                  token_key_.account_info.account_id) ||
              identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
@@ -530,13 +518,6 @@ void IdentityGetAuthTokenFunction::StartMintToken(
                                    cache_entry.granted_scopes());
         break;
 
-      case IdentityTokenCacheValue::CACHE_STATUS_ADVICE:
-        CompleteMintTokenFlow();
-        should_prompt_for_signin_ = false;
-        issue_advice_ = cache_entry.issue_advice();
-        StartMintTokenFlow(IdentityMintRequestQueue::MINT_TYPE_INTERACTIVE);
-        break;
-
       case IdentityTokenCacheValue::CACHE_STATUS_REMOTE_CONSENT:
         CompleteMintTokenFlow();
         should_prompt_for_signin_ = false;
@@ -561,9 +542,6 @@ void IdentityGetAuthTokenFunction::StartMintToken(
                                    cache_entry.granted_scopes());
         break;
       case IdentityTokenCacheValue::CACHE_STATUS_NOTFOUND:
-      case IdentityTokenCacheValue::CACHE_STATUS_ADVICE:
-        ShowOAuthApprovalDialog(issue_advice_);
-        break;
       case IdentityTokenCacheValue::CACHE_STATUS_REMOTE_CONSENT:
         ShowRemoteConsentDialog(resolution_data_);
         break;
@@ -620,27 +598,6 @@ void IdentityGetAuthTokenFunction::OnMintTokenFailure(
 
   CompleteFunctionWithError(
       IdentityGetAuthTokenError::FromMintTokenAuthError(error.ToString()));
-}
-
-void IdentityGetAuthTokenFunction::OnIssueAdviceSuccess(
-    const IssueAdviceInfo& issue_advice) {
-  TRACE_EVENT_NESTABLE_ASYNC_INSTANT0("identity", "OnIssueAdviceSuccess", this);
-
-  IdentityAPI* identity_api =
-      IdentityAPI::GetFactoryInstance()->Get(GetProfile());
-  identity_api->token_cache()->SetToken(
-      token_key_, IdentityTokenCacheValue::CreateIssueAdvice(issue_advice));
-  // IssueAdvice doesn't communicate back to Chrome which account has been
-  // chosen by the user. Cached gaia id may contain incorrect information so
-  // it's better to remove it.
-  identity_api->EraseGaiaIdForExtension(token_key_.extension_id);
-  CompleteMintTokenFlow();
-
-  should_prompt_for_signin_ = false;
-  // Existing grant was revoked and we used NO_FORCE, so we got info back
-  // instead. Start a consent UI if we can.
-  issue_advice_ = issue_advice;
-  StartMintTokenFlow(IdentityMintRequestQueue::MINT_TYPE_INTERACTIVE);
 }
 
 void IdentityGetAuthTokenFunction::OnRemoteConsentSuccess(
@@ -723,70 +680,6 @@ void IdentityGetAuthTokenFunction::SigninFailed() {
       IdentityGetAuthTokenError::State::kSignInFailed));
 }
 
-void IdentityGetAuthTokenFunction::OnGaiaFlowFailure(
-    GaiaWebAuthFlow::Failure failure,
-    GoogleServiceAuthError service_error,
-    const std::string& oauth_error) {
-  CompleteMintTokenFlow();
-  IdentityGetAuthTokenError error;
-
-  switch (failure) {
-    case GaiaWebAuthFlow::WINDOW_CLOSED:
-      error = IdentityGetAuthTokenError(
-          IdentityGetAuthTokenError::State::kGaiaFlowRejected);
-      break;
-
-    case GaiaWebAuthFlow::INVALID_REDIRECT:
-      error = IdentityGetAuthTokenError(
-          IdentityGetAuthTokenError::State::kInvalidRedirect);
-      break;
-
-    case GaiaWebAuthFlow::SERVICE_AUTH_ERROR:
-      if (TryRecoverFromServiceAuthError(service_error)) {
-        return;
-      }
-      error = IdentityGetAuthTokenError::FromGaiaFlowAuthError(
-          service_error.ToString());
-      break;
-
-    case GaiaWebAuthFlow::OAUTH_ERROR:
-      error = IdentityGetAuthTokenError::FromOAuth2Error(oauth_error);
-      break;
-
-    case GaiaWebAuthFlow::LOAD_FAILED:
-      error = IdentityGetAuthTokenError(
-          IdentityGetAuthTokenError::State::kPageLoadFailure);
-      break;
-
-    default:
-      NOTREACHED() << "Unexpected error from gaia web auth flow: " << failure;
-      error = IdentityGetAuthTokenError(
-          IdentityGetAuthTokenError::State::kInvalidRedirect);
-      break;
-  }
-
-  CompleteFunctionWithError(error);
-}
-
-void IdentityGetAuthTokenFunction::OnGaiaFlowCompleted(
-    const std::string& access_token,
-    const std::string& expiration) {
-  TRACE_EVENT_NESTABLE_ASYNC_INSTANT0("identity", "OnGaiaFlowCompleted", this);
-  int time_to_live;
-  if (!expiration.empty() && base::StringToInt(expiration, &time_to_live)) {
-    IdentityTokenCacheValue token_value = IdentityTokenCacheValue::CreateToken(
-        access_token, token_key_.scopes,
-        base::TimeDelta::FromSeconds(time_to_live));
-    IdentityAPI::GetFactoryInstance()
-        ->Get(GetProfile())
-        ->token_cache()
-        ->SetToken(token_key_, token_value);
-  }
-
-  CompleteMintTokenFlow();
-  CompleteFunctionWithResult(access_token, token_key_.scopes);
-}
-
 void IdentityGetAuthTokenFunction::OnGaiaRemoteConsentFlowFailed(
     GaiaRemoteConsentFlow::Failure failure) {
   CompleteMintTokenFlow();
@@ -847,7 +740,7 @@ void IdentityGetAuthTokenFunction::OnGaiaRemoteConsentFlowApproved(
   if (IsPrimaryAccountOnly()) {
     CoreAccountId primary_account_id =
         IdentityManagerFactory::GetForProfile(GetProfile())
-            ->GetPrimaryAccountId();
+            ->GetPrimaryAccountId(signin::ConsentLevel::kSync);
     if (primary_account_id != account->account_id) {
       CompleteMintTokenFlow();
       CompleteFunctionWithError(IdentityGetAuthTokenError(
@@ -933,7 +826,6 @@ void IdentityGetAuthTokenFunction::OnAccessTokenFetchCompleted(
 }
 
 void IdentityGetAuthTokenFunction::OnIdentityAPIShutdown() {
-  gaia_web_auth_flow_.reset();
   device_access_token_request_.reset();
   token_key_account_access_token_fetcher_.reset();
   scoped_identity_manager_observer_.RemoveAll();
@@ -1031,15 +923,6 @@ void IdentityGetAuthTokenFunction::ShowExtensionLoginPrompt() {
                                              email_hint);
 }
 
-void IdentityGetAuthTokenFunction::ShowOAuthApprovalDialog(
-    const IssueAdviceInfo& issue_advice) {
-  const std::string locale = extension_l10n_util::CurrentLocaleOrDefault();
-
-  gaia_web_auth_flow_.reset(new GaiaWebAuthFlow(this, GetProfile(), &token_key_,
-                                                oauth2_client_id_, locale));
-  gaia_web_auth_flow_->Start();
-}
-
 void IdentityGetAuthTokenFunction::ShowRemoteConsentDialog(
     const RemoteConsentResolutionData& resolution_data) {
   gaia_remote_consent_flow_ = std::make_unique<GaiaRemoteConsentFlow>(
@@ -1097,8 +980,7 @@ bool IdentityGetAuthTokenFunction::enable_granular_permissions() const {
 }
 
 std::string IdentityGetAuthTokenFunction::GetSelectedUserId() const {
-  if (IsSelectedUserIdInGetAuthTokenEnabled() &&
-      selected_gaia_id_ == token_key_.account_info.gaia)
+  if (selected_gaia_id_ == token_key_.account_info.gaia)
     return selected_gaia_id_;
 
   return "";

@@ -4,6 +4,7 @@
 
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
+#include <wayland-cursor.h>
 #include <algorithm>
 #include <memory>
 
@@ -51,7 +52,8 @@ WaylandWindow::WaylandWindow(PlatformWindowDelegate* delegate,
                              WaylandConnection* connection)
     : delegate_(delegate),
       connection_(connection),
-      wayland_overlay_delegation_enabled_(IsWaylandOverlayDelegationEnabled()),
+      wayland_overlay_delegation_enabled_(connection->viewporter() &&
+                                          IsWaylandOverlayDelegationEnabled()),
       accelerated_widget_(
           connection->wayland_window_manager()->AllocateAcceleratedWidget()) {
   // Set a class property key, which allows |this| to be used for drag action.
@@ -76,12 +78,6 @@ WaylandWindow::~WaylandWindow() {
 
   if (parent_window_)
     parent_window_->set_child_window(nullptr);
-
-  if (drag_handler_delegate_) {
-    drag_handler_delegate_->OnDragFinished(
-        DragDropTypes::DragOperation::DRAG_NONE);
-  }
-  CancelDrag();
 }
 
 void WaylandWindow::OnWindowLostCapture() {
@@ -133,11 +129,18 @@ void WaylandWindow::SetPointerFocus(bool focus) {
   // cursor. Otherwise, it is invalidated whenever the pointer leaves the
   // surface and is not restored by the Wayland compositor.
   if (has_pointer_focus_ && bitmap_) {
-    // Translate physical pixels to DIPs.
-    gfx::Point hotspot_in_dips =
-        gfx::ScaleToRoundedPoint(bitmap_->hotspot(), 1.0f / ui_scale_);
-    connection_->SetCursorBitmap(bitmap_->bitmaps(), hotspot_in_dips,
-                                 buffer_scale());
+    // Check for theme-provided cursor.
+    if (bitmap_->platform_data()) {
+      connection_->SetPlatformCursor(
+          reinterpret_cast<wl_cursor*>(bitmap_->platform_data()),
+          buffer_scale());
+    } else {
+      // Translate physical pixels to DIPs.
+      gfx::Point hotspot_in_dips =
+          gfx::ScaleToRoundedPoint(bitmap_->hotspot(), 1.0f / ui_scale_);
+      connection_->SetCursorBitmap(bitmap_->bitmaps(), hotspot_in_dips,
+                                   buffer_scale());
+    }
   }
 }
 
@@ -184,14 +187,18 @@ bool WaylandWindow::IsVisible() const {
   return false;
 }
 
-void WaylandWindow::PrepareForShutdown() {}
+void WaylandWindow::PrepareForShutdown() {
+  if (drag_handler_delegate_)
+    OnDragSessionClose(DragDropTypes::DRAG_NONE);
+}
 
 void WaylandWindow::SetBounds(const gfx::Rect& bounds_px) {
   if (bounds_px_ == bounds_px)
     return;
   bounds_px_ = bounds_px;
 
-  UpdateWindowMask();
+  if (update_visual_size_immediately_)
+    UpdateVisualSize(bounds_px.size());
   delegate_->OnBoundsChanged(bounds_px_);
 }
 
@@ -237,9 +244,7 @@ PlatformWindowState WaylandWindow::GetPlatformWindowState() const {
   return PlatformWindowState::kNormal;
 }
 
-void WaylandWindow::Activate() {
-  NOTIMPLEMENTED_LOG_ONCE();
-}
+void WaylandWindow::Activate() {}
 
 void WaylandWindow::Deactivate() {
   NOTIMPLEMENTED_LOG_ONCE();
@@ -268,6 +273,12 @@ void WaylandWindow::SetCursor(PlatformCursor cursor) {
     // Hide the cursor.
     connection_->SetCursorBitmap(std::vector<SkBitmap>(), gfx::Point(),
                                  buffer_scale());
+    return;
+  }
+  // Check for theme-provided cursor.
+  if (bitmap_->platform_data()) {
+    connection_->SetPlatformCursor(
+        reinterpret_cast<wl_cursor*>(bitmap_->platform_data()), buffer_scale());
     return;
   }
   // Check for Wayland server-side cursor support (e.g. exo for lacros).
@@ -325,6 +336,10 @@ void WaylandWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
 
 void WaylandWindow::SizeConstraintsChanged() {}
 
+bool WaylandWindow::ShouldUseLayerForShapedWindow() const {
+  return true;
+}
+
 bool WaylandWindow::CanDispatchEvent(const PlatformEvent& event) {
   if (event->IsMouseEvent())
     return has_pointer_focus_;
@@ -377,17 +392,27 @@ uint32_t WaylandWindow::DispatchEvent(const PlatformEvent& native_event) {
   return DispatchEventToDelegate(native_event);
 }
 
-void WaylandWindow::HandleSurfaceConfigure(int32_t widht,
-                                           int32_t height,
-                                           bool is_maximized,
-                                           bool is_fullscreen,
-                                           bool is_activated) {
+void WaylandWindow::HandleSurfaceConfigure(uint32_t serial) {
   NOTREACHED()
       << "Only shell surfaces must receive HandleSurfaceConfigure calls.";
 }
 
+void WaylandWindow::HandleToplevelConfigure(int32_t widht,
+                                            int32_t height,
+                                            bool is_maximized,
+                                            bool is_fullscreen,
+                                            bool is_activated) {
+  NOTREACHED()
+      << "Only shell toplevels must receive HandleToplevelConfigure calls.";
+}
+
 void WaylandWindow::HandlePopupConfigure(const gfx::Rect& bounds_dip) {
   NOTREACHED() << "Only shell popups must receive HandlePopupConfigure calls.";
+}
+
+void WaylandWindow::UpdateVisualSize(const gfx::Size& size_px) {
+  visual_size_px_ = size_px;
+  UpdateWindowMask();
 }
 
 void WaylandWindow::OnCloseRequest() {
@@ -400,7 +425,7 @@ base::Optional<std::vector<gfx::Rect>> WaylandWindow::GetWindowShape() const {
 
 void WaylandWindow::UpdateWindowMask() {
   UpdateWindowShape();
-  root_surface_->SetOpaqueRegion(bounds_px_);
+  root_surface_->SetOpaqueRegion(gfx::Rect(visual_size_px()));
 }
 
 void WaylandWindow::UpdateWindowShape() {}
@@ -753,7 +778,13 @@ bool WaylandWindow::CommitOverlays(
     }
   }
 
+  if (!num_primary_planes && overlays.front()->z_order == INT32_MIN)
+    split = overlays.begin();
+  UpdateVisualSize((*split)->bounds_rect.size());
+  root_surface_->SetViewportDestination(visual_size_px_);
+
   if (!wayland_overlay_delegation_enabled_) {
+    root_surface_->SetViewportSource((*split)->crop_rect);
     connection_->buffer_manager_host()->CommitBufferInternal(
         root_surface(), (*split)->buffer_id, (*split)->damage_region,
         /*wait_for_frame_callback=*/true);
@@ -772,15 +803,16 @@ bool WaylandWindow::CommitOverlays(
         std::move((*split)->access_fence_handle));
   }
 
-  root_surface_->SetViewportDestination(bounds_px_.size());
-
+  gfx::Rect background_damage;
   if (overlays.front()->z_order == INT32_MIN) {
     background_buffer_id_ = overlays.front()->buffer_id;
+    background_damage = overlays.front()->damage_region;
     should_attach_background_buffer_ = true;
   }
 
   if (should_attach_background_buffer_) {
-    connection_->buffer_manager_host()->EndFrame(background_buffer_id_);
+    connection_->buffer_manager_host()->EndFrame(background_buffer_id_,
+                                                 background_damage);
     should_attach_background_buffer_ = false;
   } else {
     // Subsurfaces are set to sync, above surface configs will only take effect

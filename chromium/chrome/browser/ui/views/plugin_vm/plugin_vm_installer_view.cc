@@ -37,6 +37,7 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/progress_bar.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 namespace {
@@ -414,6 +415,7 @@ base::string16 PluginVmInstallerView::GetMessage() const {
               IDS_PLUGIN_VM_DLC_NEED_REBOOT_FAILED_MESSAGE, app_name_);
         case Reason::INSUFFICIENT_DISK_SPACE:
         case Reason::DLC_NEED_SPACE:
+        case Reason::OUT_OF_DISK_SPACE:
           return l10n_util::GetStringFUTF16(
               IDS_PLUGIN_VM_INSUFFICIENT_DISK_SPACE_MESSAGE,
               ui::FormatBytesWithUnits(
@@ -589,3 +591,8 @@ void PluginVmInstallerView::StartInstallation() {
   if (failure_reason)
     OnError(failure_reason.value());
 }
+
+BEGIN_METADATA(PluginVmInstallerView, views::BubbleDialogDelegateView)
+ADD_READONLY_PROPERTY_METADATA(base::string16, Title)
+ADD_READONLY_PROPERTY_METADATA(base::string16, Message)
+END_METADATA

@@ -27,14 +27,6 @@ TEST(NinjaGroupTargetWriter, Run) {
   dep2.SetToolchain(setup.toolchain());
   ASSERT_TRUE(dep2.OnResolved(&err));
 
-  Target bundle_data_dep(setup.settings(),
-                         Label(SourceDir("//foo/"), "bundle_data_dep"));
-  bundle_data_dep.sources().push_back(SourceFile("//foo/some_data.txt"));
-  bundle_data_dep.set_output_type(Target::BUNDLE_DATA);
-  bundle_data_dep.visibility().SetPublic();
-  bundle_data_dep.SetToolchain(setup.toolchain());
-  ASSERT_TRUE(bundle_data_dep.OnResolved(&err));
-
   Target datadep(setup.settings(), Label(SourceDir("//foo/"), "datadep"));
   datadep.set_output_type(Target::ACTION);
   datadep.visibility().SetPublic();
@@ -43,7 +35,6 @@ TEST(NinjaGroupTargetWriter, Run) {
 
   target.public_deps().push_back(LabelTargetPair(&dep));
   target.public_deps().push_back(LabelTargetPair(&dep2));
-  target.public_deps().push_back(LabelTargetPair(&bundle_data_dep));
   target.data_deps().push_back(LabelTargetPair(&datadep));
 
   target.SetToolchain(setup.toolchain());
@@ -55,6 +46,6 @@ TEST(NinjaGroupTargetWriter, Run) {
 
   const char expected[] =
       "build obj/foo/bar.stamp: stamp obj/foo/dep.stamp obj/foo/dep2.stamp || "
-      "obj/foo/bundle_data_dep.stamp obj/foo/datadep.stamp\n";
+      "obj/foo/datadep.stamp\n";
   EXPECT_EQ(expected, out.str());
 }

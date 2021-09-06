@@ -224,7 +224,8 @@ bool IsNodeFullyGrown(NGBlockNode node,
   // constrained. If it doesn't affect the block size, it means that the node
   // cannot grow any further.
   LayoutUnit max_block_size = ComputeBlockSizeForFragment(
-      space, node.Style(), border_padding, LayoutUnit::Max(), inline_size);
+      space, node.Style(), border_padding, LayoutUnit::Max(), inline_size,
+      node.ShouldBeConsideredAsReplaced());
   DCHECK_GE(max_block_size, current_total_block_size);
   return max_block_size == current_total_block_size;
 }
@@ -594,12 +595,12 @@ bool MovePastBreakpoint(const NGConstraintSpace& space,
       DynamicTo<NGBlockBreakToken>(physical_fragment.BreakToken());
 
   LayoutUnit space_left =
-      space.FragmentainerBlockSize() - fragmentainer_block_offset;
+      FragmentainerCapacity(space) - fragmentainer_block_offset;
 
   // If we haven't used any space at all in the fragmentainer yet, we cannot
   // break before this child, or there'd be no progress. We'd risk creating an
   // infinite number of fragmentainers without putting any content into them.
-  bool refuse_break_before = space_left >= space.FragmentainerBlockSize();
+  bool refuse_break_before = space_left >= FragmentainerCapacity(space);
 
   // If the child starts past the end of the fragmentainer (probably due to a
   // block-start margin), we must break before it.
@@ -726,15 +727,8 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
   space_builder.SetAvailableSize(column_size);
   space_builder.SetPercentageResolutionSize(percentage_resolution_size);
   space_builder.SetStretchInlineSizeIfAuto(true);
-
-  // To ensure progression, we need something larger than 0 here. The spec
-  // actually says that fragmentainers have to accept at least 1px of content.
-  // See https://www.w3.org/TR/css-break-3/#breaking-rules
-  LayoutUnit column_block_size =
-      std::max(column_size.block_size, LayoutUnit(1));
-
   space_builder.SetFragmentationType(kFragmentColumn);
-  space_builder.SetFragmentainerBlockSize(column_block_size);
+  space_builder.SetFragmentainerBlockSize(column_size.block_size);
   space_builder.SetIsAnonymous(true);
   space_builder.SetIsInColumnBfc();
   if (balance_columns)
@@ -750,6 +744,30 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
 
   space_builder.SetBaselineAlgorithmType(parent_space.BaselineAlgorithmType());
 
+  return space_builder.ToConstraintSpace();
+}
+
+NGBoxFragmentBuilder CreateContainerBuilderForMulticol(
+    const NGBlockNode& multicol,
+    const NGConstraintSpace& space,
+    const NGFragmentGeometry& fragment_geometry) {
+  const ComputedStyle* style = &multicol.Style();
+  NGBoxFragmentBuilder multicol_container_builder(multicol, style, &space,
+                                                  style->GetWritingDirection());
+  multicol_container_builder.SetIsNewFormattingContext(true);
+  multicol_container_builder.SetInitialFragmentGeometry(fragment_geometry);
+  multicol_container_builder.SetIsBlockFragmentationContextRoot();
+
+  return multicol_container_builder;
+}
+
+NGConstraintSpace CreateConstraintSpaceForMulticol(
+    const NGBlockNode& multicol) {
+  WritingDirectionMode writing_direction_mode =
+      multicol.Style().GetWritingDirection();
+  NGConstraintSpaceBuilder space_builder(
+      writing_direction_mode.GetWritingMode(), writing_direction_mode,
+      /* is_new_fc */ true);
   return space_builder.ToConstraintSpace();
 }
 

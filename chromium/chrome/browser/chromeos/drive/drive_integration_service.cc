@@ -23,13 +23,14 @@
 #include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/time/default_clock.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/drive/drivefs_native_message_host.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/drive/drive_notification_manager_factory.h"
@@ -39,7 +40,6 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/drivefs/drivefs_bootstrap.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "components/drive/drive_api_util.h"
 #include "components/drive/drive_notification_manager.h"
@@ -388,7 +388,18 @@ class DriveIntegrationService::PreferenceWatcher
   }
 
   void AddNetworkPortalDetectorObserver() {
-    chromeos::network_portal_detector::GetInstance()->AddAndFireObserver(this);
+    if (chromeos::network_portal_detector::IsInitialized()) {
+      chromeos::network_portal_detector::GetInstance()->AddAndFireObserver(
+          this);
+    } else {
+      // The NetworkPortalDetector instance still not ready. Postpone even more.
+      base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&DriveIntegrationService::PreferenceWatcher::
+                             AddNetworkPortalDetectorObserver,
+                         weak_ptr_factory_.GetWeakPtr()),
+          base::TimeDelta::FromSeconds(5));
+    }
   }
 
   // chromeos::NetworkPortalDetector::Observer
@@ -765,7 +776,7 @@ drivefs::mojom::DriveFs* DriveIntegrationService::GetDriveFsInterface() const {
 }
 
 void DriveIntegrationService::AddBackDriveMountPoint(
-    const base::Callback<void(bool)>& callback,
+    base::OnceCallback<void(bool)> callback,
     FileError error) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(callback);
@@ -774,12 +785,12 @@ void DriveIntegrationService::AddBackDriveMountPoint(
 
   if (error != FILE_ERROR_OK || !enabled_) {
     // Failed to reset, or Drive was disabled during the reset.
-    callback.Run(false);
+    std::move(callback).Run(false);
     return;
   }
 
   AddDriveMountPoint();
-  callback.Run(true);
+  std::move(callback).Run(true);
 }
 
 void DriveIntegrationService::AddDriveMountPoint() {

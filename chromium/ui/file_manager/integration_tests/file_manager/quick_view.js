@@ -630,7 +630,7 @@
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
       // Check: the content of text file should be shown.
-      if (!text || !text[0].includes('I like chocolate and chips.')) {
+      if (!text || !text[0] || !text[0].includes('chocolate and chips')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -766,7 +766,7 @@
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
       // Check: the content of ENTRIES.utf8Text should be shown.
-      if (!text || !text[0].includes('їсти मुझे |∊☀✌✂♁ 🙂\n')) {
+      if (!text || !text[0] || !text[0].includes('їсти मुझे |∊☀✌✂♁ 🙂\n')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -860,6 +860,63 @@
 
     // Open the file in Quick View.
     await openQuickView(appId, ENTRIES.tallPdf.nameText);
+
+    // Wait for the Quick View <webview> to load and display its content.
+    function checkWebViewPdfLoaded(elements) {
+      let haveElements = Array.isArray(elements) && elements.length === 1;
+      if (haveElements) {
+        haveElements = elements[0].styles.display.includes('block');
+      }
+      if (!haveElements || !elements[0].attributes.src) {
+        return pending(caller, 'Waiting for <webview> to load.');
+      }
+      return;
+    }
+    await repeatUntil(async () => {
+      return checkWebViewPdfLoaded(await remoteCall.callRemoteTestUtil(
+          'deepQueryAllElements', appId, [webView, ['display']]));
+    });
+
+    // Get the <webview> embed type attribute.
+    function checkPdfEmbedType(type) {
+      const haveElements = Array.isArray(type) && type.length === 1;
+      if (!haveElements || !type[0].toString().includes('pdf')) {
+        return pending(caller, 'Waiting for plugin <embed> type.');
+      }
+      return type[0];
+    }
+    const type = await repeatUntil(async () => {
+      const getType = 'window.document.querySelector("embed").type';
+      return checkPdfEmbedType(await remoteCall.callRemoteTestUtil(
+          'deepExecuteScriptInWebView', appId, [webView, getType]));
+    });
+
+    // Check: the <webview> embed type should be PDF mime type.
+    chrome.test.assertEq('application/pdf', type);
+
+    // Check: the correct mimeType should be displayed.
+    const mimeType = await getQuickViewMetadataBoxField(appId, 'Type');
+    chrome.test.assertEq('application/pdf', mimeType);
+  };
+
+  /**
+   * Tests opening Quick View on a PDF document that opens a popup JS dialog.
+   */
+  testcase.openQuickViewPdfPopup = async () => {
+    const caller = getCaller();
+
+    /**
+     * The PDF <webview> resides in the #quick-view shadow DOM, as a child of
+     * the #dialog element.
+     */
+    const webView = ['#quick-view', '#dialog[open] webview.content'];
+
+    // Open Files app on Downloads containing ENTRIES.popupPdf.
+    const appId = await setupAndWaitUntilReady(
+        RootPath.DOWNLOADS, [ENTRIES.popupPdf], []);
+
+    // Open the file in Quick View.
+    await openQuickView(appId, ENTRIES.popupPdf.nameText);
 
     // Wait for the Quick View <webview> to load and display its content.
     function checkWebViewPdfLoaded(elements) {
@@ -1791,7 +1848,7 @@
       const getTextContent = 'window.document.body.textContent';
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
-      if (!text || !text[0].includes('This is a sample file')) {
+      if (!text || !text[0] || !text[0].includes('This is a sample file')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -1806,7 +1863,7 @@
       const getTextContent = 'window.document.body.textContent';
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
-      if (!text || !text[0].includes('42 tall text')) {
+      if (!text || !text[0] || !text[0].includes('42 tall text')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -1858,7 +1915,7 @@
       const getTextContent = 'window.document.body.textContent';
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
-      if (!text || !text[0].includes('This is a sample file')) {
+      if (!text || !text[0] || !text[0].includes('This is a sample file')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -1873,7 +1930,7 @@
       const getTextContent = 'window.document.body.textContent';
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
-      if (!text || !text[0].includes('42 tall text')) {
+      if (!text || !text[0] || !text[0].includes('42 tall text')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -2272,7 +2329,7 @@
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
       // Check: the content of ENTRIES.hello should be shown.
-      if (!text || !text[0].includes('This is a sample file')) {
+      if (!text || !text[0] || !text[0].includes('This is a sample file')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -2288,7 +2345,7 @@
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
       // Check: the content of ENTRIES.tallText should be shown.
-      if (!text || !text[0].includes('42 tall text')) {
+      if (!text || !text[0] || !text[0].includes('42 tall text')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -2362,7 +2419,7 @@
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
       // Check: the content of ENTRIES.hello should be shown.
-      if (!text || !text[0].includes('This is a sample file')) {
+      if (!text || !text[0] || !text[0].includes('This is a sample file')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });
@@ -2378,7 +2435,7 @@
       const text = await remoteCall.callRemoteTestUtil(
           'deepExecuteScriptInWebView', appId, [webView, getTextContent]);
       // Check: the content of ENTRIES.tallText should be shown.
-      if (!text || !text[0].includes('42 tall text')) {
+      if (!text || !text[0] || !text[0].includes('42 tall text')) {
         return pending(caller, 'Waiting for <webview> content.');
       }
     });

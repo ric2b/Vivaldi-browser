@@ -44,10 +44,10 @@
 #elif defined(OS_MAC)
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/login/quick_unlock/auth_token.h"
-#include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
-#include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/login/quick_unlock/auth_token.h"
+#include "chrome/browser/ash/login/quick_unlock/quick_unlock_factory.h"
+#include "chrome/browser/ash/login/quick_unlock/quick_unlock_storage.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chromeos/login/auth/password_visibility_utils.h"
 #include "components/user_manager/user.h"
 #endif
@@ -241,9 +241,9 @@ bool PasswordsPrivateDelegateImpl::ChangeSavedPassword(
 
 void PasswordsPrivateDelegateImpl::RemoveSavedPasswords(
     const std::vector<int>& ids) {
-  ExecuteFunction(
-      base::Bind(&PasswordsPrivateDelegateImpl::RemoveSavedPasswordsInternal,
-                 base::Unretained(this), ids));
+  ExecuteFunction(base::BindOnce(
+      &PasswordsPrivateDelegateImpl::RemoveSavedPasswordsInternal,
+      base::Unretained(this), ids));
 }
 
 void PasswordsPrivateDelegateImpl::RemoveSavedPasswordsInternal(
@@ -254,7 +254,7 @@ void PasswordsPrivateDelegateImpl::RemoveSavedPasswordsInternal(
 
 void PasswordsPrivateDelegateImpl::RemovePasswordExceptions(
     const std::vector<int>& ids) {
-  ExecuteFunction(base::Bind(
+  ExecuteFunction(base::BindOnce(
       &PasswordsPrivateDelegateImpl::RemovePasswordExceptionsInternal,
       base::Unretained(this), ids));
 }
@@ -266,7 +266,7 @@ void PasswordsPrivateDelegateImpl::RemovePasswordExceptionsInternal(
 }
 
 void PasswordsPrivateDelegateImpl::UndoRemoveSavedPasswordOrException() {
-  ExecuteFunction(base::Bind(
+  ExecuteFunction(base::BindOnce(
       &PasswordsPrivateDelegateImpl::UndoRemoveSavedPasswordOrExceptionInternal,
       base::Unretained(this)));
 }
@@ -592,14 +592,13 @@ PasswordsPrivateDelegateImpl::GetPasswordIdGeneratorForTesting() {
   return password_id_generator_;
 }
 
-void PasswordsPrivateDelegateImpl::ExecuteFunction(
-    const base::Closure& callback) {
+void PasswordsPrivateDelegateImpl::ExecuteFunction(base::OnceClosure callback) {
   if (is_initialized_) {
-    callback.Run();
+    std::move(callback).Run();
     return;
   }
 
-  pre_initialization_callbacks_.push_back(callback);
+  pre_initialization_callbacks_.emplace_back(std::move(callback));
 }
 
 void PasswordsPrivateDelegateImpl::InitializeIfNecessary() {
@@ -609,8 +608,8 @@ void PasswordsPrivateDelegateImpl::InitializeIfNecessary() {
 
   is_initialized_ = true;
 
-  for (const base::Closure& callback : pre_initialization_callbacks_)
-    callback.Run();
+  for (base::OnceClosure& callback : pre_initialization_callbacks_)
+    std::move(callback).Run();
   pre_initialization_callbacks_.clear();
 }
 

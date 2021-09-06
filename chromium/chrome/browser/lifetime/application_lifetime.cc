@@ -44,8 +44,8 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -53,7 +53,7 @@
 #endif
 
 #if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/profile_picker.h"
 #endif
 
 #if defined(OS_WIN)
@@ -247,7 +247,7 @@ void AttemptUserExit() {
   // Reset the restart bit that might have been set in cancelled restart
   // request.
 #if !defined(OS_ANDROID)
-  UserManager::Hide();
+  ProfilePicker::Hide();
 #endif
   PrefService* pref_service = g_browser_process->local_state();
   pref_service->SetBoolean(prefs::kRestartLastSessionOnShutdown, false);

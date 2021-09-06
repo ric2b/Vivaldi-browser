@@ -13,7 +13,18 @@ namespace extensions {
 
 class AutoUpdateAPI {
  public:
-  static void Init();
+static void Init() {
+#ifdef OS_WIN
+    InitUpgradeDetection();
+#endif
+  }
+
+  static void Shutdown() {
+#ifdef OS_WIN
+    ShutdownUpgradeDetection();
+#endif
+  }
+
   static void SendDidFindValidUpdate(const std::string& url);
   static void SendWillDownloadUpdate();
   static void SendDidDownloadUpdate();
@@ -25,6 +36,7 @@ class AutoUpdateAPI {
  private:
 #ifdef OS_WIN
   static void InitUpgradeDetection();
+  static void ShutdownUpgradeDetection();
 #endif
 };
 
@@ -36,6 +48,8 @@ class AutoUpdateCheckForUpdatesFunction : public ExtensionFunction {
 
  private:
   ~AutoUpdateCheckForUpdatesFunction() override = default;
+  void DeliverResult();
+
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateCheckForUpdatesFunction);
@@ -49,6 +63,8 @@ class AutoUpdateIsUpdateNotifierEnabledFunction : public ExtensionFunction {
 
  private:
   ~AutoUpdateIsUpdateNotifierEnabledFunction() override = default;
+  void DeliverResult(bool enabled);
+
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateIsUpdateNotifierEnabledFunction);
@@ -62,6 +78,8 @@ class AutoUpdateEnableUpdateNotifierFunction : public ExtensionFunction {
 
  private:
   ~AutoUpdateEnableUpdateNotifierFunction() override = default;
+  void DeliverResult(bool success);
+
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateEnableUpdateNotifierFunction);
@@ -75,6 +93,8 @@ class AutoUpdateDisableUpdateNotifierFunction : public ExtensionFunction {
 
  private:
   ~AutoUpdateDisableUpdateNotifierFunction() override = default;
+  void DeliverResult(bool success);
+
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateDisableUpdateNotifierFunction);

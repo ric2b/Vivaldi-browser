@@ -84,6 +84,7 @@ class CORE_EXPORT InspectorPageAgent final
     kWebSocketResource,
     kManifestResource,
     kSignedExchangeResource,
+    kPingResource,
     kOtherResource
   };
 
@@ -140,6 +141,12 @@ class CORE_EXPORT InspectorPageAgent final
   protocol::Response setDocumentContent(const String& frame_id,
                                         const String& html) override;
   protocol::Response setBypassCSP(bool enabled) override;
+
+  protocol::Response getPermissionsPolicyState(
+      const String& frame_id,
+      std::unique_ptr<
+          protocol::Array<protocol::Page::PermissionsPolicyFeatureState>>*)
+      override;
 
   protocol::Response startScreencast(Maybe<String> format,
                                      Maybe<int> quality,

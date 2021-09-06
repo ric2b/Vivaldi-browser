@@ -44,6 +44,7 @@ source_set("google_services") {
     "//components/prefs",
     "//components/safe_browsing/core:features",
     "//components/safe_browsing/core/common:safe_browsing_prefs",
+    "//components/signin/ios/browser",
     "//components/signin/public/identity_manager",
     "//components/signin/public/identity_manager/objc",
     "//components/strings",
@@ -136,6 +137,7 @@ source_set("eg2_tests") {
   testonly = true
   sources = [
     "accounts_table_egtest.mm",
+    "accounts_table_mice_egtest.mm",
     "google_services_settings_egtest.mm",
   ]
   deps = [
@@ -145,6 +147,7 @@ source_set("eg2_tests") {
     "//components/password_manager/core/common",
     "//components/safe_browsing/core:features",
     "//components/safe_browsing/core/common:safe_browsing_prefs",
+    "//components/signin/ios/browser:features",
     "//components/signin/public/base",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui:feature_flags",

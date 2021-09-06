@@ -909,7 +909,6 @@ TEST_F(ArcVmClientAdapterTest,
 TEST_F(ArcVmClientAdapterTest,
        UpgradeArc_StartArcVmPostVmStartServicesFailure) {
   SetValidUserInfo();
-  EnableAdbOverUsbForTesting();
   StartMiniArc();
 
   // Inject failure to FakeUpstartClient.
@@ -1238,6 +1237,28 @@ TEST_F(ArcVmClientAdapterTest, StartUpgradeArc_DisableMediaStoreMaintenance) {
   EXPECT_TRUE(
       base::Contains(GetTestConciergeClient()->start_arc_vm_request().params(),
                      "androidboot.disable_media_store_maintenance=1"));
+}
+
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_EnablePaiGeneration) {
+  StartParams start_params(GetPopulatedStartParams());
+  start_params.arc_generate_play_auto_install = true;
+  SetValidUserInfo();
+  StartMiniArcWithParams(true, std::move(start_params));
+  EXPECT_TRUE(
+      base::Contains(GetTestConciergeClient()->start_arc_vm_request().params(),
+                     "androidboot.arc_generate_pai=1"));
+}
+
+TEST_F(ArcVmClientAdapterTest, StartMiniArc_PaiGenerationDefaultDisabled) {
+  SetValidUserInfo();
+  StartMiniArcWithParams(true, GetPopulatedStartParams());
+  // No androidboot property should be generated.
+  EXPECT_FALSE(
+      base::Contains(GetTestConciergeClient()->start_arc_vm_request().params(),
+                     "androidboot.arc_generate_pai=1"));
+  EXPECT_FALSE(
+      base::Contains(GetTestConciergeClient()->start_arc_vm_request().params(),
+                     "androidboot.arc_generate_pai=0"));
 }
 
 // Tests that StartArcVm() is called with valid parameters.
@@ -1642,6 +1663,45 @@ TEST_P(ArcVmClientAdapterDalvikMemoryProfileTest, Profile) {
     // Not expected any arc_dalvik_memory_profile.
     for (const auto& param : request.params())
       EXPECT_EQ(std::string::npos, param.find("arc_dalvik_memory_profile"));
+  }
+}
+
+struct UsapProfileTestParam {
+  // Requested profile.
+  StartParams::UsapProfile profile;
+  // Name of profile that is expected.
+  const char* profile_name;
+};
+
+constexpr UsapProfileTestParam kUsapProfileTestCases[] = {
+    {StartParams::UsapProfile::DEFAULT, nullptr},
+    {StartParams::UsapProfile::M4G, "4G"},
+    {StartParams::UsapProfile::M8G, "8G"},
+    {StartParams::UsapProfile::M16G, "16G"}};
+
+class ArcVmClientAdapterUsapProfileTest
+    : public ArcVmClientAdapterTest,
+      public testing::WithParamInterface<UsapProfileTestParam> {};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         ArcVmClientAdapterUsapProfileTest,
+                         ::testing::ValuesIn(kUsapProfileTestCases));
+
+TEST_P(ArcVmClientAdapterUsapProfileTest, Profile) {
+  const auto& test_param = GetParam();
+  StartParams start_params(GetPopulatedStartParams());
+  start_params.usap_profile = test_param.profile;
+  SetValidUserInfo();
+  StartMiniArcWithParams(true, std::move(start_params));
+  auto request = GetTestConciergeClient()->start_arc_vm_request();
+  if (test_param.profile_name) {
+    EXPECT_TRUE(base::Contains(
+        GetTestConciergeClient()->start_arc_vm_request().params(),
+        std::string("androidboot.usap_profile=") + test_param.profile_name));
+  } else {
+    // Not expected any arc_dalvik_memory_profile.
+    for (const auto& param : request.params())
+      EXPECT_EQ(std::string::npos, param.find("usap_profile"));
   }
 }
 

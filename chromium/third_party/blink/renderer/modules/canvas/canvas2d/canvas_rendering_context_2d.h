@@ -31,6 +31,7 @@
 
 #include "base/macros.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_formatted_text.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_rendering_context_2d_settings.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
@@ -39,6 +40,7 @@
 #include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_client.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_formatted_text.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/identifiability_study_helper.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -68,8 +70,8 @@ class HitTestCanvasResult;
 class Path2D;
 class TextMetrics;
 
-typedef CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmapOrOffscreenCanvas
-    CanvasImageSourceUnion;
+using CanvasImageSourceUnion =
+    CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmapOrOffscreenCanvasOrVideoFrame;
 
 class MODULES_EXPORT CanvasRenderingContext2D final
     : public CanvasRenderingContext,
@@ -142,6 +144,11 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   CanvasRenderingContext2DSettings* getContextAttributes() const;
 
+  void fillFormattedText(CanvasFormattedText* formatted_text,
+                         double x,
+                         double y,
+                         double wrap_width);
+
   void drawFocusIfNeeded(Element*);
   void drawFocusIfNeeded(Path2D*, Element*);
 
@@ -166,8 +173,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   String GetIdFromControl(const Element*) override;
 
   // SVGResourceClient implementation
-  void ResourceContentChanged(InvalidationModeMask) override;
-  void ResourceElementChanged() override;
+  void ResourceContentChanged(SVGResource*) override;
 
   void UpdateFilterReferences(const FilterOperations&);
   void ClearFilterReferences();
@@ -293,10 +299,12 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   LostContextMode context_lost_mode_;
   bool context_restorable_;
   unsigned try_restore_context_attempt_count_;
-  TaskRunnerTimer<CanvasRenderingContext2D> dispatch_context_lost_event_timer_;
-  TaskRunnerTimer<CanvasRenderingContext2D>
+  HeapTaskRunnerTimer<CanvasRenderingContext2D>
+      dispatch_context_lost_event_timer_;
+  HeapTaskRunnerTimer<CanvasRenderingContext2D>
       dispatch_context_restored_event_timer_;
-  TaskRunnerTimer<CanvasRenderingContext2D> try_restore_context_event_timer_;
+  HeapTaskRunnerTimer<CanvasRenderingContext2D>
+      try_restore_context_event_timer_;
 
   FilterOperations filter_operations_;
   HashMap<String, FontDescription> fonts_resolved_using_current_style_;

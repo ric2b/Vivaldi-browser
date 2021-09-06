@@ -94,6 +94,7 @@ class WebAppInstallFinalizer final : public InstallFinalizer {
 
   WebAppRegistrar& GetWebAppRegistrar() const;
 
+  // Used for legacy Bookmark Apps.
   std::unique_ptr<InstallFinalizer> legacy_finalizer_;
 
   Profile* const profile_;

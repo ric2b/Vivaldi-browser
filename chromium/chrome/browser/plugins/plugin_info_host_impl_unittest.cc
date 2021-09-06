@@ -32,9 +32,9 @@ using testing::Eq;
 
 namespace {
 
-void PluginsLoaded(const base::Closure& callback,
+void PluginsLoaded(base::OnceClosure callback,
                    const std::vector<content::WebPluginInfo>& plugins) {
-  callback.Run();
+  std::move(callback).Run();
 }
 
 class FakePluginServiceFilter : public content::PluginServiceFilter {
@@ -100,6 +100,7 @@ class PluginInfoHostImplTest : public ::testing::Test {
     foo_plugin.type = content::WebPluginInfo::PLUGIN_TYPE_PEPPER_IN_PROCESS;
     PluginService::GetInstance()->Init();
     PluginService::GetInstance()->RegisterInternalPlugin(foo_plugin, false);
+    PluginService::GetInstance()->RefreshPlugins();
 
     content::WebPluginInfo bar_plugin(base::ASCIIToUTF16("Bar Plugin"),
                                       bar_plugin_path_, base::ASCIIToUTF16("1"),

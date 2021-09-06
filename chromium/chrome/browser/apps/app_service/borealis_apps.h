@@ -60,7 +60,11 @@ class BorealisApps
   void Launch(const std::string& app_id,
               int32_t event_flags,
               apps::mojom::LaunchSource launch_source,
-              int64_t display_id) override;
+              apps::mojom::WindowInfoPtr window_info) override;
+  void Uninstall(const std::string& app_id,
+                 apps::mojom::UninstallSource uninstall_source,
+                 bool clear_site_data,
+                 bool report_abuse) override;
   void GetMenuModel(const std::string& app_id,
                     apps::mojom::MenuType menu_type,
                     int64_t display_id,

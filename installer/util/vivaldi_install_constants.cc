@@ -16,11 +16,14 @@ const wchar_t kVivaldiInstallerInstallType[] = L"InstallType";
 const wchar_t kVivaldiInstallerDefaultBrowser[] = L"DefaultBrowser";
 const wchar_t kVivaldiInstallerRegisterBrowser[] = L"RegisterBrowser";
 const wchar_t kVivaldiInstallerAdvancedMode[] = L"AdvancedMode";
+const wchar_t kVivaldiInstallerDisableStandaloneAutoupdate[] =
+    L"DisableStandaloneAutoupdate";
 
 // Vivaldi paths and filenames
 
 // Marker file which existence indicates a standalone installation.
 const wchar_t kStandaloneMarkerFile[] = L"stp.viv";
+const wchar_t kSystemMarkerFile[] = L"sys.viv";
 const wchar_t kVivaldiUpdateNotifierExe[] = L"update_notifier.exe";
 const wchar_t kVivaldiUpdateNotifierOldExe[] = L"update_notifier.old";
 
@@ -47,7 +50,9 @@ const char kVivaldiUpdate[] = "vivaldi-update";
 
 #if !defined(OFFICIAL_BUILD)
 
-const char kVivaldiDebugCopyExe[] = "vivaldi-debug-copy-exe";
+// Pointer to the real exe to copy or use as a base path when the current
+// executable is a development build unrelated to the installation.
+const char kVivaldiDebugTargetExe[] = "vivaldi-debug-target-exe";
 
 #endif
 

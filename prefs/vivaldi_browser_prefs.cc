@@ -24,8 +24,8 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
-#include "prefs/vivaldi_pref_names.h"
 #include "prefs/vivaldi_browser_prefs_util.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
@@ -144,7 +144,15 @@ bool IsMergeableListPreference(base::StringPiece name) {
   return false;
 }
 
+constexpr int kDefaultLanguageListSize = 26;
+constexpr const char* kDefaultLanguageList[kDefaultLanguageListSize] = {
+    "ar", "cs", "de", "en", "es", "fa", "fi",      "fr",     "hi",
+    "hu", "id", "is", "it", "ja", "ko", "nl",      "no",     "pl",
+    "pt", "ru", "sv", "tr", "uk", "ur", "zh-Hans", "zh-Hant"};
+
 void RegisterLocalState(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiAutoUpdateStandalone,
+                                true);
   registry->RegisterStringPref(vivaldiprefs::kVivaldiUniqueUserId, "");
   registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextDailyPing,
                              base::Time());
@@ -156,6 +164,15 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsExtraPingTime,
                              base::Time());
   registry->RegisterListPref(vivaldiprefs::kVivaldiProfileImagePath);
+  registry->RegisterTimePref(
+      vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate, base::Time());
+
+  std::vector<base::Value> args;
+  for (int i = 0; i < kDefaultLanguageListSize; i++) {
+    args.push_back(base::Value(kDefaultLanguageList[i]));
+  }
+  registry->RegisterListPref(vivaldiprefs::kVivaldiTranslateLanguageList,
+                             base::ListValue(std::move(args)));
 }
 
 namespace {
@@ -373,12 +390,12 @@ void AddChromiumProperties(base::Value* value,
   for (const auto& pref : chromium_prefs->DictItems()) {
     if (!pref.second.is_dict()) {
       LOG(FATAL) << "Expected a dictionary at '" << current_path << "."
-                  << pref.first << "'";
+                 << pref.first << "'";
     }
     std::string* pref_path = pref.second.FindStringKey("path");
     if (!pref_path) {
       LOG(FATAL) << "Expected a string at '" << current_path << "."
-                  << pref.first << ".path'";
+                 << pref.first << ".path'";
     }
 
     PrefProperties properties;
@@ -455,19 +472,17 @@ base::Value ReadPrefsJson() {
 
   base::MemoryMappedFile::Region prefs_region;
   int prefs_fd =
-      base::android::OpenApkAsset(prefs_definition_file.value(),
-                                  &prefs_region);
+      base::android::OpenApkAsset(prefs_definition_file.value(), &prefs_region);
   LOG_IF(FATAL, prefs_fd < 0)
       << "No preference definitions file in APK assets: "
       << prefs_definition_file.value();
-  std::unique_ptr<base::MemoryMappedFile>
-      mapped_file(new base::MemoryMappedFile());
+  std::unique_ptr<base::MemoryMappedFile> mapped_file(
+      new base::MemoryMappedFile());
   if (mapped_file->Initialize(base::File(prefs_fd), prefs_region)) {
     prefs_definitions_content.assign(
-        reinterpret_cast<char*>(mapped_file->data()),
-        mapped_file->length());
+        reinterpret_cast<char*>(mapped_file->data()), mapped_file->length());
   }
-#else  // defined(OS_ANDROID)
+#else   // defined(OS_ANDROID)
   GetDeveloperFilePath(kPrefsDefinitionFileName, &prefs_definition_file);
   if (prefs_definition_file.empty() ||
       !base::PathExists(prefs_definition_file)) {
@@ -491,10 +506,9 @@ base::Value ReadPrefsJson() {
   return std::move(*prefs_definitions);
 }
 
-}  //namespace
+}  // namespace
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
-
   // This pref is obsolete.
   registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
 

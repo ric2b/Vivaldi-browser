@@ -24,5 +24,27 @@ void ConversationControllerProxy::SendTextQuery(
                                                  conversation_id);
 }
 
+void ConversationControllerProxy::StartEditReminderInteraction(
+    const std::string& client_id) {
+  conversation_controller_remote_->StartEditReminderInteraction(client_id);
+}
+
+void ConversationControllerProxy::RetrieveNotification(
+    const AssistantNotification& notification,
+    int32_t action_index) {
+  conversation_controller_remote_->RetrieveNotification(notification,
+                                                        action_index);
+}
+
+void ConversationControllerProxy::DismissNotification(
+    const AssistantNotification& notification) {
+  conversation_controller_remote_->DismissNotification(notification);
+}
+
+void ConversationControllerProxy::SendAssistantFeedback(
+    const AssistantFeedback& feedback) {
+  conversation_controller_remote_->SendAssistantFeedback(feedback);
+}
+
 }  // namespace assistant
 }  // namespace chromeos

@@ -46,6 +46,7 @@ update_target("//chrome/browser:browser") {
   if (is_android) {
     sources += [
       "//vivaldi/browser/android/first_run_android.cc",
+      "//vivaldi/browser/android/vivaldi_tab_android.cc",
       "//vivaldi/browser/android/adblock/adblock_manager.h",
       "//vivaldi/browser/android/adblock/adblock_manager.cc",
       "//vivaldi/browser/android/capture/capture_handler.cpp",
@@ -54,6 +55,7 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/android/capture/capture_thumbnail_handler.h",
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.h",
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.cc",
+      "//vivaldi/browser/android/prefs/vivaldi_relaunch_utils.cc",
     ]
   }
 }

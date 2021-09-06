@@ -16,6 +16,10 @@ import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 
+// Vivaldi
+import org.chromium.base.BuildConfig;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
+
 /**
  * This class is responsible for reacting to events from the outside world, interacting with other
  * coordinators, running most of the business logic associated with the bottom controls component,
@@ -152,6 +156,9 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
     private void updateCompositedViewVisibility() {
         final boolean isCompositedViewVisible = isCompositedViewVisible();
         mModel.set(BottomControlsProperties.COMPOSITED_VIEW_VISIBLE, isCompositedViewVisible);
+        // Note(david@vivaldi.com): The bottom controls height will be set in the
+        // |VivaldiTopToolbarCoordinator|
+        if (!BuildConfig.IS_VIVALDI)
         mBrowserControlsSizer.setBottomControlsHeight(
                 isCompositedViewVisible ? mBottomControlsHeight : 0,
                 mBrowserControlsSizer.getBottomControlsMinHeight());
@@ -169,6 +176,12 @@ class BottomControlsMediator implements BrowserControlsStateProvider.Observer,
      * non-zero.
      */
     private void updateAndroidViewVisibility() {
+        // Note(david@vivaldi.com): Don't show android view when controls are off screen.
+        if (BrowserControlsUtils.areBrowserControlsOffScreen(mBrowserControlsSizer)) {
+            mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE, false);
+            return;
+        }
+
         mModel.set(BottomControlsProperties.ANDROID_VIEW_VISIBLE,
                 isCompositedViewVisible() && !mIsOverlayPanelShowing && !mIsInSwipeLayout
                         && mBrowserControlsSizer.getBottomControlOffset() == 0);

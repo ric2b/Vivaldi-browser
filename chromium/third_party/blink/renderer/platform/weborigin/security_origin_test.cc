@@ -33,7 +33,10 @@
 #include <stdint.h>
 
 #include "base/stl_util.h"
+#include "base/test/scoped_command_line.h"
 #include "net/base/url_util.h"
+#include "services/network/public/cpp/is_potentially_trustworthy_unittest.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/mojom/cors.mojom-blink.h"
 #include "services/network/public/mojom/cors_origin_pattern.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -96,169 +99,23 @@ TEST_F(SecurityOriginTest, LocalAccess) {
   EXPECT_FALSE(file2->CanAccess(file1.get()));
 }
 
-TEST_F(SecurityOriginTest, IsPotentiallyTrustworthy) {
-  struct TestCase {
-    bool is_potentially_trustworthy;
-    bool is_localhost;
-    const char* url;
-  };
-
-  // TODO(crbug.com/1153336): Merge SecurityOrigin::IsPotentiallyTrustworthy
-  // into network::IsOriginPotentiallyTrustworthy.
-  // https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
-  TestCase inputs[] = {
-      // Access is granted to webservers running on localhost.
-      {true, true, "http://localhost"},
-      {true, true, "http://localhost."},
-      {true, true, "http://LOCALHOST"},
-      {true, true, "http://localhost:100"},
-      {true, true, "http://a.localhost"},
-      {true, true, "http://a.b.localhost"},
-      {true, true, "http://127.0.0.1"},
-      {true, true, "http://127.0.0.2"},
-      {true, true, "http://127.1.0.2"},
-      {true, true, "http://0177.00.00.01"},
-      {true, true, "http://[::1]"},
-      {true, true, "http://[0:0::1]"},
-      {true, true, "http://[0:0:0:0:0:0:0:1]"},
-      {true, true, "http://[::1]:21"},
-      {true, true, "http://127.0.0.1:8080"},
-      {true, true, "ftp://127.0.0.1"},
-      {true, true, "ftp://127.0.0.1:443"},
-      {true, true, "ws://127.0.0.1"},
-
-      // Non-localhost over HTTP
-      {false, false, "http://[1::]"},
-      {false, false, "http://[::2]"},
-      {false, false, "http://[1::1]"},
-      {false, false, "http://[1:2::3]"},
-      {false, false, "http://[::127.0.0.1]"},
-      {false, false, "http://a.127.0.0.1"},
-      {false, false, "http://127.0.0.1.b"},
-      {false, false, "http://localhost.a"},
-
-      // loopback resolves to localhost on Windows, but not
-      // recognized generically here.
-      {false, false, "http://loopback"},
-
-      // IPv4 mapped IPv6 literals for 127.0.0.1.
-      {false, false, "http://[::ffff:127.0.0.1]"},
-      {false, false, "http://[::ffff:7f00:1]"},
-
-      // IPv4 compatible IPv6 literal for 127.0.0.1.
-      {false, false, "http://[::127.0.0.1]"},
-
-      // Legacy localhost names.
-      {false, false, "http://localhost.localdomain"},
-      {false, false, "http://localhost6"},
-      {false, false, "ftp://localhost6.localdomain6"},
-
-      // Secure transports are considered trustworthy.
-      {true, false, "https://foobar.com"},
-      {true, false, "wss://foobar.com"},
-      {true, false, "quic-transport://example.com/counter"},
-
-      // Insecure transports are not considered trustworthy.
-      {false, false, "ftp://foobar.com"},
-      {false, false, "http://foobar.com"},
-      {false, false, "http://foobar.com:443"},
-      {false, false, "ws://foobar.com"},
-      {false, false, "custom-scheme://example.com"},
-
-      // Local files are considered trustworthy.
-      {true, false, "file:///home/foobar/index.html"},
-
-      // blob: URLs must look to the inner URL's origin, and apply the same
-      // rules as above. Spot check some of them
-      {true, true,
-       "blob:http://localhost:1000/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {true, false,
-       "blob:https://foopy:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {false, false, "blob:http://baz:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {false, false, "blob:ftp://evil:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {false, false, "blob:data:text/html,Hello"},
-      {false, false, "blob:about:blank"},
-      {false, false,
-       "blob:blob:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
-
-      // filesystem: URLs work the same as blob: URLs, and look to the inner
-      // URL for security origin.
-      {true, true, "filesystem:http://localhost:1000/foo"},
-      {true, false, "filesystem:https://foopy:99/foo"},
-      {false, false, "filesystem:http://baz:99/foo"},
-      {false, false, "filesystem:ftp://evil:99/foo"},
-      {false, false, "filesystem:data:text/html,Hello"},
-      {false, false, "filesystem:about:blank"},
-      {false, false,
-       "filesystem:blob:https://example.com/"
-       "578223a1-8c13-17b3-84d5-eca045ae384a"},
-
-      // about: and data: URLs.
-      {false, false, "about:blank"},
-      {false, false, "about:srcdoc"},
-      {false, false, "data:text/html,Hello"},
-  };
-
-  for (size_t i = 0; i < base::size(inputs); ++i) {
-    SCOPED_TRACE(inputs[i].url);
-    scoped_refptr<const SecurityOrigin> origin =
-        SecurityOrigin::CreateFromString(inputs[i].url);
-    String error_message;
-    EXPECT_EQ(inputs[i].is_potentially_trustworthy,
-              origin->IsPotentiallyTrustworthy());
-    EXPECT_EQ(inputs[i].is_localhost, origin->IsLocalhost());
-
-    GURL test_gurl(inputs[i].url);
-    if (!(test_gurl.SchemeIsBlob() || test_gurl.SchemeIsFileSystem())) {
-      // Check that the origin's notion of localhost matches //net's notion of
-      // localhost. This is skipped for blob: and filesystem: URLs since
-      // SecurityOrigin uses their inner URL's origin.
-      EXPECT_EQ(net::IsLocalhost(GURL(inputs[i].url)), origin->IsLocalhost());
-    }
-  }
-
-  // Anonymous opaque origins are not considered secure.
-  scoped_refptr<SecurityOrigin> opaque_origin =
-      SecurityOrigin::CreateUniqueOpaque();
-  EXPECT_FALSE(opaque_origin->IsPotentiallyTrustworthy());
-}
-
 TEST_F(SecurityOriginTest, IsSecure) {
   struct TestCase {
     bool is_secure;
     const char* url;
   } inputs[] = {
-      // TODO(crbug.com/1153336): Should SecurityOrigin::IsSecure be aligned
-      // with network::IsURLPotentiallyTrustworthy?
       // https://w3c.github.io/webappsec-secure-contexts/#is-url-trustworthy
-      {false, "blob:ftp://evil:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {false, "blob:http://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
+      // TODO(crbug.com/1153336 and crbug.com/1164416): Fix product behavior, so
+      // that blink::SecurityOrigin::IsSecure(const KURL&) is compatible with
+      // network::IsUrlPotentiallyTrustworthy(const GURL&) and then move the
+      // tests below to the AbstractTrustworthinessTest.UrlFromString test case
+      // in //services/network/public/cpp/is_potentially_trustworthy_unittest.
+      // See also IsPotentiallyTrustworthy.Url test.
       {false, "file:///etc/passwd"},
-      {false, "ftp://example.com/"},
-      {false, "http://example.com/"},
-      {false, "ws://example.com/"},
-      {true, "blob:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {true, "https://example.com/"},
-      {true, "wss://example.com/"},
-      {true, "about:blank"},
-      {true, "about:srcdoc"},
-      {true, "about:about"},
-      {true, "data:text/html,Hello"},
-      {false,
-       "filesystem:http://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {true,
-       "filesystem:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {true, "blob:data:text/html,Hello"},
-      {true, "blob:about:blank"},
+      {false, "blob:data:text/html,Hello"},
+      {false, "blob:about:blank"},
       {false, "filesystem:data:text/html,Hello"},
       {false, "filesystem:about:blank"},
-      {false,
-       "blob:blob:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {false,
-       "filesystem:blob:https://example.com/"
-       "578223a1-8c13-17b3-84d5-eca045ae384a"},
-      {false, "custom-scheme://example.com"},
-      {true, "quic-transport://example.com/counter"},
       {false, ""},
       {false, "\0"},
   };
@@ -268,48 +125,6 @@ TEST_F(SecurityOriginTest, IsSecure) {
         << "URL: '" << test.url << "'";
 
   EXPECT_FALSE(SecurityOrigin::IsSecure(NullURL()));
-}
-
-// Tests the trustworthiness of an URL and origin whose scheme was added to the
-// custom sets of standard and secure schemes. A scheme must be added to both
-// to be considered trustworthy.
-TEST_F(SecurityOriginTest, CustomScheme) {
-  const char* custom_scheme = "custom-scheme";
-  const char* custom_scheme_example = "custom-scheme://example.com";
-  KURL url = KURL(custom_scheme_example);
-  {
-    EXPECT_FALSE(SecurityOrigin::IsSecure(url));
-    scoped_refptr<const SecurityOrigin> origin =
-        SecurityOrigin::CreateFromString(custom_scheme_example);
-    EXPECT_FALSE(origin->IsPotentiallyTrustworthy());
-  }
-  {
-    url::ScopedSchemeRegistryForTests scoped_registry;
-    url::AddSecureScheme(custom_scheme);
-    // TODO(crbug.com/1153336): Should SecurityOrigin::IsSecure always consider
-    // non-standard schemes as insecure?
-    EXPECT_TRUE(SecurityOrigin::IsSecure(url));
-    scoped_refptr<const SecurityOrigin> origin =
-        SecurityOrigin::CreateFromString(custom_scheme_example);
-    EXPECT_FALSE(origin->IsPotentiallyTrustworthy());
-  }
-  {
-    url::ScopedSchemeRegistryForTests scoped_registry;
-    url::AddStandardScheme(custom_scheme, url::SchemeType::SCHEME_WITH_HOST);
-    EXPECT_FALSE(SecurityOrigin::IsSecure(url));
-    scoped_refptr<const SecurityOrigin> origin =
-        SecurityOrigin::CreateFromString(custom_scheme_example);
-    EXPECT_FALSE(origin->IsPotentiallyTrustworthy());
-  }
-  {
-    url::ScopedSchemeRegistryForTests scoped_registry;
-    url::AddStandardScheme(custom_scheme, url::SchemeType::SCHEME_WITH_HOST);
-    url::AddSecureScheme(custom_scheme);
-    EXPECT_TRUE(SecurityOrigin::IsSecure(url));
-    scoped_refptr<const SecurityOrigin> origin =
-        SecurityOrigin::CreateFromString(custom_scheme_example);
-    EXPECT_TRUE(origin->IsPotentiallyTrustworthy());
-  }
 }
 
 TEST_F(SecurityOriginTest, IsSecureViaTrustworthy) {
@@ -323,16 +138,26 @@ TEST_F(SecurityOriginTest, IsSecureViaTrustworthy) {
   for (const char* test : urls) {
     KURL url(test);
     EXPECT_FALSE(SecurityOrigin::IsSecure(url));
-    SecurityPolicy::AddOriginToTrustworthySafelist(
-        SecurityOrigin::CreateFromString(url)->ToRawString());
-    EXPECT_TRUE(SecurityOrigin::IsSecure(url));
+    {
+      base::test::ScopedCommandLine scoped_command_line;
+      base::CommandLine* command_line =
+          scoped_command_line.GetProcessCommandLine();
+      command_line->AppendSwitchASCII(
+          network::switches::kUnsafelyTreatInsecureOriginAsSecure, test);
+      network::SecureOriginAllowlist::GetInstance().ResetForTesting();
+      EXPECT_TRUE(SecurityOrigin::IsSecure(url));
+    }
   }
 }
 
 TEST_F(SecurityOriginTest, IsSecureViaTrustworthyHostnamePattern) {
   KURL url("http://bar.foo.com");
   EXPECT_FALSE(SecurityOrigin::IsSecure(url));
-  SecurityPolicy::AddOriginToTrustworthySafelist("*.foo.com");
+  base::test::ScopedCommandLine scoped_command_line;
+  base::CommandLine* command_line = scoped_command_line.GetProcessCommandLine();
+  command_line->AppendSwitchASCII(
+      network::switches::kUnsafelyTreatInsecureOriginAsSecure, "*.foo.com");
+  network::SecureOriginAllowlist::GetInstance().ResetForTesting();
   EXPECT_TRUE(SecurityOrigin::IsSecure(url));
 }
 
@@ -340,7 +165,11 @@ TEST_F(SecurityOriginTest, IsSecureViaTrustworthyHostnamePattern) {
 TEST_F(SecurityOriginTest, IsSecureViaTrustworthyHostnamePatternEmptyHostname) {
   KURL url("file://foo");
   EXPECT_FALSE(SecurityOrigin::IsSecure(url));
-  SecurityPolicy::AddOriginToTrustworthySafelist("*.foo.com");
+  base::test::ScopedCommandLine scoped_command_line;
+  base::CommandLine* command_line = scoped_command_line.GetProcessCommandLine();
+  command_line->AppendSwitchASCII(
+      network::switches::kUnsafelyTreatInsecureOriginAsSecure, "*.foo.com");
+  network::SecureOriginAllowlist::GetInstance().ResetForTesting();
   EXPECT_FALSE(SecurityOrigin::IsSecure(url));
 }
 
@@ -628,24 +457,6 @@ TEST_F(SecurityOriginTest, PunycodeNotUnicode) {
       network::mojom::CorsOriginAccessMatchPriority::kLowPriority);
   EXPECT_FALSE(origin->CanRequest(punycode_url));
   EXPECT_FALSE(origin->CanRequest(unicode_url));
-}
-
-TEST_F(SecurityOriginTest, Port) {
-  struct TestCase {
-    uint16_t port;
-    const char* origin;
-  } cases[] = {
-      {80, "http://example.com"},       {80, "http://example.com:80"},
-      {81, "http://example.com:81"},    {443, "https://example.com"},
-      {443, "https://example.com:443"}, {444, "https://example.com:444"},
-      {0, "https://example.com:0"},     {0, "file:///"},
-  };
-
-  for (const auto& test : cases) {
-    scoped_refptr<const SecurityOrigin> origin =
-        SecurityOrigin::CreateFromString(test.origin);
-    EXPECT_EQ(test.port, origin->Port());
-  }
 }
 
 TEST_F(SecurityOriginTest, CreateFromTuple) {
@@ -962,29 +773,6 @@ TEST_F(SecurityOriginTest, ToTokenForFastCheck) {
   }
 }
 
-// See also OriginTest.ConstructFromGURL_OpaqueOrigin and
-// NavigationUrlRewriteBrowserTest.RewriteToNoAccess.
-TEST_F(SecurityOriginTest, StandardNoAccessScheme) {
-  url::ScopedSchemeRegistryForTests scoped_registry;
-  url::AddStandardScheme("std-no-access", url::SCHEME_WITH_HOST);
-  url::AddNoAccessScheme("std-no-access");
-  url::AddStandardScheme("std", url::SCHEME_WITH_HOST);
-
-  scoped_refptr<const SecurityOrigin> custom_standard_noaccess_origin =
-      SecurityOrigin::CreateFromString("std-no-access://host");
-  EXPECT_TRUE(custom_standard_noaccess_origin->IsOpaque());
-
-  scoped_refptr<const SecurityOrigin> custom_standard_origin =
-      SecurityOrigin::CreateFromString("std://host");
-  EXPECT_FALSE(custom_standard_origin->IsOpaque());
-}
-
-TEST_F(SecurityOriginTest, NonStandardScheme) {
-  scoped_refptr<const SecurityOrigin> origin =
-      SecurityOrigin::CreateFromString("cow://");
-  EXPECT_TRUE(origin->IsOpaque());
-}
-
 TEST_F(SecurityOriginTest, OpaqueIsolatedCopy) {
   scoped_refptr<const SecurityOrigin> origin =
       SecurityOrigin::CreateUniqueOpaque();
@@ -1277,29 +1065,77 @@ TEST_F(SecurityOriginTest, PercentEncodesHost) {
 // namespace as where the typed test suite was defined.
 namespace url {
 
-class BlinkSecurityOriginTestTraits final
-    : public url::OriginTraitsBase<scoped_refptr<blink::SecurityOrigin>> {
+class BlinkSecurityOriginTestTraits {
  public:
-  OriginType CreateOriginFromString(base::StringPiece s) const override {
-    return blink::SecurityOrigin::CreateFromString(
-        String(s.data(), s.length()));
+  using OriginType = scoped_refptr<blink::SecurityOrigin>;
+
+  static OriginType CreateOriginFromString(base::StringPiece s) {
+    return blink::SecurityOrigin::CreateFromString(String::FromUTF8(s));
   }
 
-  bool IsOpaque(const OriginType& origin) const override {
-    return origin->IsOpaque();
+  static OriginType CreateUniqueOpaqueOrigin() {
+    return blink::SecurityOrigin::CreateUniqueOpaque();
   }
 
-  std::string GetScheme(const OriginType& origin) const override {
+  static OriginType CreateWithReferenceOrigin(
+      base::StringPiece url,
+      const OriginType& reference_origin) {
+    return blink::SecurityOrigin::CreateWithReferenceOrigin(
+        blink::KURL(String::FromUTF8(url)), reference_origin.get());
+  }
+
+  static OriginType DeriveNewOpaqueOrigin(const OriginType& reference_origin) {
+    return reference_origin->DeriveNewOpaqueOrigin();
+  }
+
+  static bool IsOpaque(const OriginType& origin) { return origin->IsOpaque(); }
+
+  static std::string GetScheme(const OriginType& origin) {
     return origin->Protocol().Utf8();
   }
 
-  std::string GetHost(const OriginType& origin) const override {
+  static std::string GetHost(const OriginType& origin) {
     return origin->Host().Utf8();
   }
 
-  uint16_t GetPort(const OriginType& origin) const override {
-    return origin->Port();
+  static uint16_t GetPort(const OriginType& origin) { return origin->Port(); }
+
+  static SchemeHostPort GetTupleOrPrecursorTupleIfOpaque(
+      const OriginType& origin) {
+    const blink::SecurityOrigin* precursor =
+        origin->GetOriginOrPrecursorOriginIfOpaque();
+    if (!precursor)
+      return SchemeHostPort();
+    return SchemeHostPort(precursor->Protocol().Utf8(),
+                          precursor->Host().Utf8(), precursor->Port());
   }
+
+  static bool IsSameOrigin(const OriginType& a, const OriginType& b) {
+    return a->IsSameOriginWith(b.get());
+  }
+
+  static std::string Serialize(const OriginType& origin) {
+    return origin->ToString().Utf8();
+  }
+
+  static bool IsValidUrl(base::StringPiece str) {
+    return blink::KURL(String::FromUTF8(str)).IsValid();
+  }
+
+  static bool IsOriginPotentiallyTrustworthy(const OriginType& origin) {
+    return origin->IsPotentiallyTrustworthy();
+  }
+
+  static bool IsUrlPotentiallyTrustworthy(base::StringPiece str) {
+    return blink::SecurityOrigin::IsSecure(blink::KURL(String::FromUTF8(str)));
+  }
+
+  static bool IsOriginOfLocalhost(const OriginType& origin) {
+    return origin->IsLocalhost();
+  }
+
+  // Only static members = no constructors are needed.
+  BlinkSecurityOriginTestTraits() = delete;
 };
 
 INSTANTIATE_TYPED_TEST_SUITE_P(BlinkSecurityOrigin,
@@ -1307,3 +1143,15 @@ INSTANTIATE_TYPED_TEST_SUITE_P(BlinkSecurityOrigin,
                                BlinkSecurityOriginTestTraits);
 
 }  // namespace url
+
+// Apparently INSTANTIATE_TYPED_TEST_SUITE_P needs to be used in the same
+// namespace as where the typed test suite was defined.
+namespace network {
+namespace test {
+
+INSTANTIATE_TYPED_TEST_SUITE_P(BlinkSecurityOrigin,
+                               AbstractTrustworthinessTest,
+                               url::BlinkSecurityOriginTestTraits);
+
+}  // namespace test
+}  // namespace network

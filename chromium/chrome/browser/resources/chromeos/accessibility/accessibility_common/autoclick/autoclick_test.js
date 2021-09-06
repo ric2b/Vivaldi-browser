@@ -32,12 +32,13 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
 
   /** @override */
   testGenCppIncludes() {
+    super.testGenCppIncludes();
     GEN(`
 #include "ash/accessibility/accessibility_delegate.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "content/public/test/browser_test.h"
     `);
@@ -46,12 +47,12 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
   /** @override */
   testGenPreamble() {
     GEN(`
-  base::Closure load_cb =
-      base::Bind(&chromeos::AccessibilityManager::EnableAutoclick,
-          base::Unretained(chromeos::AccessibilityManager::Get()),
+  base::OnceClosure load_cb =
+      base::BindOnce(&ash::AccessibilityManager::EnableAutoclick,
+          base::Unretained(ash::AccessibilityManager::Get()),
           true);
-  WaitForExtension(extension_misc::kAccessibilityCommonExtensionId, load_cb);
     `);
+    super.testGenPreambleCommon('kAccessibilityCommonExtensionId');
   }
 
   /**

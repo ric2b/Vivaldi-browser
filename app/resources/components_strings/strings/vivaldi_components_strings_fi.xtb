@@ -62,9 +62,8 @@
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Kokeile yhteysdiagnostiikkaa<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">Sivulla on taulukko, jota ei ehkä voi lähettää turvallisesti. Muut voivat nähdä lähettämäsi tiedot siirrettäessä, tai hyökkääjä voi muuttaa niitä ennen kuin ne saapuvat palvelimelle.</translation>
 <translation id="3176929007561373547">Tarkista välityspalvelinasetukset tai ota yhteyttä verkon järjestelmänvalvojaan
-      varmistaaksesi, että välityspalvelin toimii. Jos välityspalvelimen ei pitäisi olla
+      varmistaaksesi, että välityspalvelin toimii. Ellei välityspalvelimen pitäisi olla
       käytössä:
-
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Lähetä tiedoston lataukseen tarvittavat tiedot uudelleen painamalla päivityspainiketta.</translation>
 <translation id="3227137524299004712">Mikrofoni</translation>

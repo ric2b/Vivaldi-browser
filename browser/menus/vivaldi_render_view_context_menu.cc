@@ -30,6 +30,7 @@
 #include "chrome/browser/renderer_context_menu/context_menu_content_type_factory.h"
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/common/url_constants.h"
 #include "chromium/content/public/browser/navigation_entry.h"
@@ -39,6 +40,7 @@
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/search_engines/template_url.h"
+#include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -48,13 +50,16 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "media/base/media_switches.h"
 #include "notes/notes_submenu_observer.h"
+#include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
-#include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/vivaldi_browser_window.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+// Comment out if original chrome menu behavior is needed.
+#define ENABLE_VIVALDI_CONTEXT_MENU
 
 namespace {
 
@@ -70,12 +75,12 @@ bool QRCodeGeneratorEnabled(content::WebContents* web_contents) {
 }
 
 bool DoesInputFieldTypeSupportEmoji(
-    blink::ContextMenuDataInputFieldType text_input_type) {
+    blink::mojom::ContextMenuDataInputFieldType text_input_type) {
   // Disable emoji for input types that definitely do not support emoji.
   switch (text_input_type) {
-    case blink::ContextMenuDataInputFieldType::kNumber:
-    case blink::ContextMenuDataInputFieldType::kTelephone:
-    case blink::ContextMenuDataInputFieldType::kOther:
+    case blink::mojom::ContextMenuDataInputFieldType::kNumber:
+    case blink::mojom::ContextMenuDataInputFieldType::kTelephone:
+    case blink::mojom::ContextMenuDataInputFieldType::kOther:
       return false;
     default:
       return true;
@@ -136,7 +141,7 @@ void SetLocalImageAsBackground(content::BrowserContext* browser_context,
   // resolved.
   VivaldiDataSourcesAPI::UpdateMapping(
       browser_context, 0,
-      VivaldiDataSourcesAPI::kStartpageImagePathCustom_Index, std::move(path),
+      VivaldiDataSourcesAPI::kThemeBackgroundUserImage_Index, std::move(path),
       base::DoNothing());
 }
 
@@ -147,6 +152,22 @@ WindowOpenDisposition GetNewTabDispostion(content::WebContents* web_contents) {
       profile->GetPrefs()->GetBoolean(vivaldiprefs::kTabsOpenNewInBackground);
   return open_in_background ? WindowOpenDisposition::NEW_BACKGROUND_TAB :
       WindowOpenDisposition::NEW_FOREGROUND_TAB;
+}
+
+// Same as RenderViewContextMenu::IsOpenLinkOTREnabled() except for no
+// IsOffTheRecord() test.
+bool CanOpenInPrivateWindow(content::BrowserContext* browser_context,
+                            const GURL& link_url) {
+  if (!link_url.is_valid())
+    return false;
+
+  if (!IsURLAllowedInIncognito(link_url, browser_context))
+    return false;
+
+  IncognitoModePrefs::Availability incognito_avail =
+      IncognitoModePrefs::GetAvailability(
+          user_prefs::UserPrefs::Get(browser_context));
+  return incognito_avail != IncognitoModePrefs::DISABLED;
 }
 
 }  // namespace
@@ -160,8 +181,10 @@ int VivaldiRenderViewContextMenu::active_id_counter_ = 0;
 // static
 VivaldiRenderViewContextMenu* VivaldiRenderViewContextMenu::Create(
     content::RenderFrameHost* render_frame_host,
-    const content::ContextMenuParams& params) {
-  return new VivaldiRenderViewContextMenu(render_frame_host, params);
+    const content::ContextMenuParams& params,
+    gfx::NativeView parent_view) {
+  return new VivaldiRenderViewContextMenu(render_frame_host, params,
+      parent_view);
 }
 
 // static
@@ -173,24 +196,48 @@ VivaldiRenderViewContextMenu* VivaldiRenderViewContextMenu::GetActive(int id) {
 // static
 bool VivaldiRenderViewContextMenu::Supports(
     const content::ContextMenuParams& params) {
+#if defined(ENABLE_VIVALDI_CONTEXT_MENU)
+  Browser* browser = chrome::FindBrowserWithActiveWindow();
+
+  // We do not (yet) support configurable menus in a progressive web app (PWA)
+  // We may want to test for Browser::app_controller() as well, but currently
+  // not needed.
+  if (browser && browser->is_type_app()) {
+    return false;
+  }
   // kVivaldiAppURLDomain match for areas in UI where we have no JS handler
   // and for editable fields in UI.
   if (params.page_url.GetOrigin() == GURL(vivaldi::kVivaldiAppURLDomain)) {
     return params.is_editable;
   }
-  // We leave devtools alone for chromion to set up.
+  // We leave devtools alone for chromion to set up except for the edit menu.
   if (params.page_url.SchemeIs(content::kChromeDevToolsScheme)) {
+    // TODO(espen): We want text field menus in dev tools to be configurable so
+    // that we can use actions as from regular document text fields (eg insert
+    // notes which by some are used to insert statements etc).
+    // The menu code as it is now depends on being inside a vivaldi browser
+    // window so we have to prevent configurability if that is not the case.
+    if (params.is_editable) {
+      if (browser && VivaldiBrowserWindow::FromBrowser(browser)) {
+        return true;
+      }
+    }
     return false;
   }
 
   return true;
+#else
+  return false;
+#endif
 }
 
 VivaldiRenderViewContextMenu::VivaldiRenderViewContextMenu(
     content::RenderFrameHost* render_frame_host,
-    const content::ContextMenuParams& params):
+    const content::ContextMenuParams& params,
+    gfx::NativeView parent_view):
   RenderViewContextMenu(render_frame_host, params),
   id_(active_id_counter_++),
+  parent_view_(parent_view),
   embedder_web_contents_(GetWebContentsToUse(source_web_contents_)) {
   active_controller_ = this;
 }
@@ -200,6 +247,11 @@ VivaldiRenderViewContextMenu::~VivaldiRenderViewContextMenu() {
   // destroying the old so a test is necessary.
   if (this == active_controller_) {
     active_controller_ = nullptr;
+  }
+  if (menu_delegate_) {
+    // This happens if we are destroyed while menu is open as a result of the
+    // parent view being destroyed.
+    menu_delegate_->OnDestroyed(this);
   }
 }
 
@@ -276,7 +328,7 @@ void VivaldiRenderViewContextMenu::InitMenu() {
         ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
   request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
       browser->tab_strip_model()->GetActiveWebContents());
-  request.support.sendpagetodevices =
+  request.support.sendlinktodevices =
     send_tab_to_self::ShouldOfferFeatureForLink(
         browser->tab_strip_model()->GetActiveWebContents(), params_.link_url);
   request.support.qrcode = QRCodeGeneratorEnabled(embedder_web_contents_);
@@ -486,7 +538,7 @@ bool VivaldiRenderViewContextMenu::IsCommandIdStatic(int command_id) const {
 
 bool VivaldiRenderViewContextMenu::IsCommandIdChecked(int command_id) const {
   // All items with a dynamic id will match here if checked.
-  if (delegate_ && delegate_->IsCommandIdChecked(command_id)) {
+  if (model_delegate_ && model_delegate_->IsCommandIdChecked(command_id)) {
     return true;
   }
 
@@ -494,13 +546,13 @@ bool VivaldiRenderViewContextMenu::IsCommandIdChecked(int command_id) const {
   switch (command_id) {
     case IDC_WRITING_DIRECTION_DEFAULT:
       return (params_.writing_direction_default &
-              blink::WebContextMenuData::kCheckableMenuItemChecked) != 0;
+              blink::ContextMenuData::kCheckableMenuItemChecked) != 0;
     case IDC_WRITING_DIRECTION_RTL:
       return (params_.writing_direction_right_to_left &
-              blink::WebContextMenuData::kCheckableMenuItemChecked) != 0;
+              blink::ContextMenuData::kCheckableMenuItemChecked) != 0;
     case IDC_WRITING_DIRECTION_LTR:
       return (params_.writing_direction_left_to_right &
-              blink::WebContextMenuData::kCheckableMenuItemChecked) != 0;
+              blink::ContextMenuData::kCheckableMenuItemChecked) != 0;
     default:
       if (RenderViewContextMenu::IsCommandIdChecked(command_id)) {
         return true;
@@ -516,7 +568,12 @@ bool VivaldiRenderViewContextMenu::IsCommandIdChecked(int command_id) const {
 }
 
 bool VivaldiRenderViewContextMenu::IsCommandIdVisible(int command_id) const {
-  // We remove content that is not visible in JS.
+  // We remove all content that is not visible in JS except extensions.
+  if (extensions_controller_ &&
+      extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(command_id)) {
+    return extensions_controller_->get_extension_items()->IsCommandIdVisible(
+      command_id);
+  }
   return true;
 }
 
@@ -527,6 +584,11 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
       image_profile_controller_->IsCommandIdEnabled(command_id, params_,
           &enabled)) {
     return enabled;
+  }
+  if (extensions_controller_ &&
+      extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(command_id)) {
+    return extensions_controller_->get_extension_items()->IsCommandIdEnabled(
+      command_id);
   }
 #if defined(OS_MAC)
   if (speech_controller_ &&
@@ -540,6 +602,25 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
   // share with chromium. The ids are defined in GetStaticIdForAction()
   if (IsCommandIdStatic(command_id)) {
     switch (command_id) {
+      // Other static commands that are vivaldi specific, have vivaldi specific
+      // behaviour and/or where we need to test for extra states.
+      case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
+        return !embedder_web_contents_->GetBrowserContext()->IsOffTheRecord()
+            && params_.media_type ==
+                blink::mojom::ContextMenuDataMediaType::kImage;
+      // For these two we prefer to modify the behaviour wrt chrome. That is,
+      // open in private window is enabled in a private window and open in new
+      // window is disabled. Chrome does it the other way around.
+      case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
+        return embedder_web_contents_->GetBrowserContext()->IsOffTheRecord() ?
+            false : RenderViewContextMenu::IsCommandIdEnabled(command_id);
+      case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
+        return embedder_web_contents_->GetBrowserContext()->IsOffTheRecord() ?
+          CanOpenInPrivateWindow(embedder_web_contents_->GetBrowserContext(),
+                                 params_.link_url) :
+          RenderViewContextMenu::IsCommandIdEnabled(command_id);
+      // Other static commands that are vivaldi specific and/or where we need to
+      // test for extra states.
       case IDC_VIV_OPEN_LINK_CURRENT_TAB:
       case IDC_VIV_OPEN_LINK_BACKGROUND_TAB:
         return params_.link_url.is_valid();
@@ -549,7 +630,6 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
       case IDC_VIV_OPEN_IMAGE_CURRENT_TAB:
       case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
       case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
-      case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
       case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
         return params_.media_type ==
             blink::mojom::ContextMenuDataMediaType::kImage;
@@ -578,20 +658,20 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
       // on top instead of mixing it in here.
       case IDC_WRITING_DIRECTION_DEFAULT:  // Provided to match OS defaults.
         return params_.writing_direction_default &
-              blink::WebContextMenuData::kCheckableMenuItemEnabled;
+               blink::ContextMenuData::kCheckableMenuItemEnabled;
       case IDC_WRITING_DIRECTION_RTL:
         return params_.writing_direction_right_to_left &
-               blink::WebContextMenuData::kCheckableMenuItemEnabled;
+               blink::ContextMenuData::kCheckableMenuItemEnabled;
       case IDC_WRITING_DIRECTION_LTR:
         return params_.writing_direction_left_to_right &
-             blink::WebContextMenuData::kCheckableMenuItemEnabled;
+               blink::ContextMenuData::kCheckableMenuItemEnabled;
       case IDC_CONTENT_CONTEXT_LOOK_UP:
         return true;
       default:
         return RenderViewContextMenu::IsCommandIdEnabled(command_id);
     }
   } else {
-    return delegate_ ? delegate_->IsCommandIdEnabled(command_id) :
+    return model_delegate_ ? model_delegate_->IsCommandIdEnabled(command_id) :
         false;
   }
 }
@@ -601,8 +681,8 @@ bool VivaldiRenderViewContextMenu::GetAcceleratorForCommandId(
     ui::Accelerator* accelerator) const {
 
   // Prefer accelerators from delegate as those can be configured in JS.
-  if (delegate_ &&
-      delegate_->GetAcceleratorForCommandId(command_id, accelerator)) {
+  if (model_delegate_ &&
+      model_delegate_->GetAcceleratorForCommandId(command_id, accelerator)) {
     return true;
   } else {
     // Accelerators that have to match hardcoded shortcuts in chromium.
@@ -625,16 +705,16 @@ void VivaldiRenderViewContextMenu::ExecuteCommand(int command_id,
     // Command id has been set up in api/JS.
     if (it->second == -1) {
       // With no fallback the command_id is a dynamic id that is sent to api/JS.
-      if (delegate_) {
-        delegate_->ExecuteCommand(command_id, event_flags);
+      if (model_delegate_) {
+        model_delegate_->ExecuteCommand(command_id, event_flags);
       }
     } else {
       // There is a fallback value. In this case command_id is a static (IDC_)
       // value and the fallback a dynamic id. A fixed command may require
       // handling in C++ before being handed over to api/JS.
       if (HandleCommand(command_id, event_flags) == ActionChain::kContinue) {
-        if (delegate_) {
-          delegate_->ExecuteCommand(it->second, event_flags);
+        if (model_delegate_) {
+          model_delegate_->ExecuteCommand(it->second, event_flags);
         }
       }
     }
@@ -645,15 +725,15 @@ void VivaldiRenderViewContextMenu::ExecuteCommand(int command_id,
 }
 
 void VivaldiRenderViewContextMenu::OnMenuWillShow(ui::SimpleMenuModel* source) {
-  if (delegate_) {
-    delegate_->OnMenuWillShow(source);
+  if (model_delegate_) {
+    model_delegate_->OnMenuWillShow(source);
   }
   RenderViewContextMenu::OnMenuWillShow(source);
 }
 
 void VivaldiRenderViewContextMenu::MenuClosed(ui::SimpleMenuModel* source) {
-  if (delegate_) {
-    delegate_->MenuClosed(source);
+  if (model_delegate_) {
+    model_delegate_->MenuClosed(source);
   }
   RenderViewContextMenu::MenuClosed(source);
 }

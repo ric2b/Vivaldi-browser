@@ -16,6 +16,7 @@
 #include "base/optional.h"
 #include "base/types/pass_key.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
@@ -29,11 +30,11 @@
 #include "chrome/common/channel_info.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/report_unrecoverable_error.h"
+#include "components/sync/model/client_tag_based_model_type_processor.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/mutable_data_batch.h"
-#include "components/sync/model_impl/client_tag_based_model_type_processor.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
 #include "url/gurl.h"
 
@@ -420,6 +421,13 @@ void WebAppSyncBridge::OnDataWritten(CommitCallback callback, bool success) {
   std::move(callback).Run(success);
 }
 
+void WebAppSyncBridge::WebAppUninstalled(const AppId& app, bool uninstalled) {
+  // In the case `uninstalled` is false, the AppId should still be removed from
+  // the set, since uninstall failures are not yet handled, and there are no
+  // uninstall retry attempts.
+  apps_in_sync_uninstall_.erase(app);
+}
+
 void WebAppSyncBridge::ReportErrorToChangeProcessor(
     const syncer::ModelError& error) {
   change_processor()->ReportError(error);
@@ -561,8 +569,14 @@ void WebAppSyncBridge::ApplySyncChangesToRegistrar(
   if (!apps_unregistered.empty()) {
     // TODO(https://crbug.com/1162349): Instead of calling this now, have this
     // call occur after OS hooks are uninstalled.
-    install_delegate_->UninstallWebAppsAfterSync(std::move(apps_unregistered),
-                                                 base::DoNothing());
+    for (const auto& web_app : apps_unregistered) {
+      apps_in_sync_uninstall_.insert(web_app->app_id());
+    }
+
+    install_delegate_->UninstallWebAppsAfterSync(
+        std::move(apps_unregistered),
+        base::BindRepeating(&WebAppSyncBridge::WebAppUninstalled,
+                            weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -647,6 +661,10 @@ std::string WebAppSyncBridge::GetClientTag(
 std::string WebAppSyncBridge::GetStorageKey(
     const syncer::EntityData& entity_data) {
   return GetClientTag(entity_data);
+}
+
+const std::set<AppId>& WebAppSyncBridge::GetAppsInSyncUninstallForTest() {
+  return apps_in_sync_uninstall_;
 }
 
 void WebAppSyncBridge::MaybeInstallAppsInSyncInstall() {

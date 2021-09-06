@@ -15,6 +15,7 @@
 #include "base/containers/contains.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -101,10 +102,11 @@ size_t AutocompleteResult::GetMaxMatches(bool is_zero_suggest) {
 
 // static
 size_t AutocompleteResult::GetDynamicMaxMatches() {
+  if (!base::FeatureList::IsEnabled(omnibox::kDynamicMaxAutocomplete))
+    return AutocompleteResult::GetMaxMatches();
   return base::GetFieldTrialParamByFeatureAsInt(
       omnibox::kDynamicMaxAutocomplete,
-      OmniboxFieldTrial::kDynamicMaxAutocompleteIncreasedLimitParam,
-      AutocompleteResult::GetMaxMatches());
+      OmniboxFieldTrial::kDynamicMaxAutocompleteIncreasedLimitParam, 10);
 }
 
 AutocompleteResult::AutocompleteResult() {
@@ -169,6 +171,17 @@ void AutocompleteResult::TransferOldMatches(
   old_matches->BuildProviderToMatchesMove(&old_matches_per_provider);
   for (auto& pair : old_matches_per_provider) {
     MergeMatchesByProvider(&pair.second, matches_per_provider[pair.first]);
+  }
+
+  // Make sure previous matches adhere to |input.prevent_inline_autocomplete()|.
+  // Previous matches are demoted in |MergeMatchesByProvider()| anyways, making
+  // them unlikely to be default; however, without this safeguard, they may
+  // still be deduped with a higher-relevance yet not-allowed-to-be-default
+  // match later, resulting in a default match with autocompletion when
+  // |prevent_inline_autocomplete| is false.
+  for (auto& m : matches_) {
+    if (input.prevent_inline_autocomplete() && m.from_previous)
+      m.SetAllowedToBeDefault(input);
   }
 
   SortAndCull(input, template_url_service);
@@ -268,8 +281,6 @@ void AutocompleteResult::SortAndCull(
     LimitNumberOfURLsShown(GetMaxMatches(is_zero_suggest), max_url_count,
                            comparing_object);
 
-  GroupAndDemoteMatchesWithHeaders();
-
   // Limit total matches accounting for suggestions score <= 0, sub matches, and
   // feature configs such as OmniboxUIExperimentMaxAutocompleteMatches,
   // OmniboxMaxZeroSuggestMatches, and OmniboxDynamicMaxAutocomplete.
@@ -298,6 +309,12 @@ void AutocompleteResult::SortAndCull(
     if (base::FeatureList::IsEnabled(omnibox::kBubbleUrlSuggestions))
       BubbleURLSuggestions(next, begin_url, matches_);
   }
+
+  // Grouping and Demoting Matches with Headers needs to be done only after
+  // matches are grouped by Search and URL type to ensure that URLs don't sink
+  // to the bottom of the suggestions list, and surface below the Matches with
+  // headers.
+  GroupAndDemoteMatchesWithHeaders();
 
   // If we have a default match, run some sanity checks. Skip these checks if
   // the default match has no |destination_url|. An example of this is the
@@ -480,6 +497,7 @@ void AutocompleteResult::AttachPedalsToMatches(
 void AutocompleteResult::ConvertOpenTabMatches(
     AutocompleteProviderClient* client,
     const AutocompleteInput* input) {
+  base::TimeTicks start_time = base::TimeTicks::Now();
   for (auto& match : matches_) {
     // If already converted this match, don't re-search through open tabs and
     // possibly re-change the description.
@@ -490,6 +508,11 @@ void AutocompleteResult::ConvertOpenTabMatches(
       match.has_tab_match = true;
     }
   }
+
+  base::TimeDelta time_delta = base::TimeTicks::Now() - start_time;
+  UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+      "Omnibox.TabMatchTime", time_delta, base::TimeDelta::FromMicroseconds(1),
+      base::TimeDelta::FromMilliseconds(5), 50);
 }
 
 bool AutocompleteResult::HasCopiedMatches() const {
@@ -539,33 +562,6 @@ const AutocompleteMatch* AutocompleteResult::default_match() const {
     return &(*begin());
 
   return nullptr;
-}
-
-bool AutocompleteResult::TopMatchIsStandaloneVerbatimMatch() const {
-  if (empty() || !match_at(0).IsVerbatimType())
-    return false;
-
-  // Skip any copied matches, under the assumption that they'll be expired and
-  // disappear.  We don't want this disappearance to cause the visibility of the
-  // top match to change.
-  for (auto i(begin() + 1); i != end(); ++i) {
-    if (!i->from_previous)
-      return !i->IsVerbatimType();
-  }
-  return true;
-}
-
-void AutocompleteResult::GroupSuggestionsBySearchVsURL(int first_index,
-                                                       int last_index) const {
-  const int num_elements = matches_.size();
-  DCHECK_GE(first_index, 0);
-  DCHECK_LT(first_index, num_elements);
-  DCHECK_GT(last_index, 0);
-  DCHECK_LE(last_index, num_elements);
-  DCHECK_LT(first_index, last_index);
-  auto range_start = const_cast<ACMatches&>(matches_).begin();
-  GroupSuggestionsBySearchVsURL(range_start + first_index,
-                                range_start + last_index);
 }
 
 // static

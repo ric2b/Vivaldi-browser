@@ -91,7 +91,8 @@ void BuiltInChromeOsApps::Connect(
   }
   mojo::Remote<apps::mojom::Subscriber> subscriber(
       std::move(subscriber_remote));
-  subscriber->OnApps(std::move(apps));
+  subscriber->OnApps(std::move(apps), apps::mojom::AppType::kBuiltIn,
+                     true /* should_notify_initialized */);
 
   // Unlike other apps::mojom::Publisher implementations, we don't need to
   // retain the subscriber (e.g. add it to a
@@ -121,7 +122,7 @@ void BuiltInChromeOsApps::LoadIcon(const std::string& app_id,
 void BuiltInChromeOsApps::Launch(const std::string& app_id,
                                  int32_t event_flags,
                                  apps::mojom::LaunchSource launch_source,
-                                 int64_t display_id) {
+                                 apps::mojom::WindowInfoPtr window_info) {
   if (app_id == ash::kInternalAppIdKeyboardShortcutViewer) {
     ash::ToggleKeyboardShortcutViewer();
   }

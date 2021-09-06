@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
-import {ProfileTabs, Tab, TabSearchApiProxyImpl, TabSearchAppElement, TabSearchSearchField} from 'chrome://tab-search/tab_search.js';
+import {ProfileData, Tab, TabSearchApiProxyImpl, TabSearchAppElement, TabSearchSearchField} from 'chrome://tab-search.top-chrome/tab_search.js';
 
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
 import {flushTasks, waitAfterNextRender} from '../../test_util.m.js';
@@ -38,12 +38,12 @@ suite('TabSearchAppTest', () => {
   }
 
   /**
-   * @param {ProfileTabs} sampleData
+   * @param {ProfileData} sampleData
    * @param {Object=} loadTimeOverriddenData
    */
   async function setupTest(sampleData, loadTimeOverriddenData) {
     testProxy = new TestTabSearchApiProxy();
-    testProxy.setProfileTabs(sampleData);
+    testProxy.setProfileData(sampleData);
     TabSearchApiProxyImpl.instance_ = testProxy;
 
     initLoadTimeDataWithDefaults(loadTimeOverriddenData);
@@ -196,8 +196,7 @@ suite('TabSearchAppTest', () => {
   test('refresh on tabs changed', async () => {
     await setupTest(sampleData());
     verifyTabIds(queryRows(), [1, 5, 6, 2, 3, 4]);
-    testProxy.setProfileTabs({windows: []});
-    testProxy.getCallbackRouterRemote().tabsChanged();
+    testProxy.getCallbackRouterRemote().tabsChanged({windows: []});
     await flushTasks();
     verifyTabIds(queryRows(), []);
     assertEquals(-1, tabSearchApp.getSelectedIndex());
@@ -212,14 +211,13 @@ suite('TabSearchAppTest', () => {
     keyDownOn(searchField, 0, [], 'ArrowDown');
     assertEquals(1, tabSearchApp.getSelectedIndex());
 
-    testProxy.setProfileTabs({windows: [testData.windows[0]]});
-    testProxy.getCallbackRouterRemote().tabsChanged();
+    testProxy.getCallbackRouterRemote().tabsChanged(
+        {windows: [testData.windows[0]]});
     await flushTasks();
     assertEquals(1, tabSearchApp.getSelectedIndex());
 
-    testProxy.setProfileTabs(
+    testProxy.getCallbackRouterRemote().tabsChanged(
         {windows: [{active: true, tabs: [testData.windows[0].tabs[0]]}]});
-    testProxy.getCallbackRouterRemote().tabsChanged();
     await flushTasks();
     assertEquals(0, tabSearchApp.getSelectedIndex());
   });
@@ -237,7 +235,7 @@ suite('TabSearchAppTest', () => {
       tabId: 1,
       title: 'Example',
       url: 'https://example.com',
-      lastActiveTimeTicks: {internalValue: BigInt(1)},
+      lastActiveTimeTicks: {internalValue: BigInt(5)},
     });
     testProxy.getCallbackRouterRemote().tabUpdated(updatedTab);
     await flushTasks();
@@ -259,42 +257,55 @@ suite('TabSearchAppTest', () => {
     verifyTabIds(queryRows(), [5, 6, 3, 4]);
   });
 
-  test('Verify initial tab render time is logged correctly', async () => {
-    // |metricNames| tracks thow many times recordTime() has been called for
-    // a metric.
-    const metricNames = {};
-    chrome.metricsPrivate.recordTime = (...args) => {
-      if ( args[0] in metricNames ) {
-        metricNames[args[0]] += 1;
-      } else {
-        metricNames[args[0]] = 1;
-      }
-    };
-
+  test('Verify visibilitychange triggers data fetch', async () => {
     await setupTest(sampleData());
-    await testProxy.whenCalled('showUI');
-    await waitAfterNextRender(tabSearchApp);
+    assertEquals(1, testProxy.getCallCount('getProfileData'));
 
-    // Make sure that tab data has been received.
-    verifyTabIds(queryRows(), [ 1, 5, 6, 2, 3, 4 ]);
+    // When hidden visibilitychange should not trigger the data callback.
+    Object.defineProperty(
+        document, 'visibilityState', {value: 'hidden', writable: true});
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushTasks();
+    assertEquals(1, testProxy.getCallCount('getProfileData'));
 
-    // Ensure that |chrome.metricsPrivate.recordTime()| has been called
-    // once for InitialTabsRenderTime after initial tab data has been
-    // recieved.
-    assertEquals(1, metricNames['Tabs.TabSearch.WebUI.InitialTabsRenderTime']);
+    // When visible visibilitychange should trigger the data callback.
+    Object.defineProperty(
+        document, 'visibilityState', {value: 'visible', writable: true});
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushTasks();
+    assertEquals(2, testProxy.getCallCount('getProfileData'));
+  });
 
-    // Force a change to filtered tab data that would result in a
-    // re-render.
+  test('Verify hiding document resets selection and search text', async () => {
+    await setupTest(sampleData());
+    assertEquals(1, testProxy.getCallCount('getProfileData'));
+
     const searchField = /** @type {!TabSearchSearchField} */
         (tabSearchApp.shadowRoot.querySelector('#searchField'));
-    searchField.setValue('bing');
+    searchField.setValue('Apple');
     await flushTasks();
-    await waitAfterNextRender(tabSearchApp);
-    verifyTabIds(queryRows(), [ 2 ]);
+    verifyTabIds(queryRows(), [6, 4]);
+    keyDownOn(searchField, 0, [], 'ArrowDown');
+    assertEquals('Apple', tabSearchApp.getSearchTextForTesting());
+    assertEquals(1, tabSearchApp.getSelectedIndex());
 
-    // |chrome.metricsPrivate.recordTime()| should still have only been
-    // called once for InitialTabsRenderTime.
-    assertEquals(1, metricNames['Tabs.TabSearch.WebUI.InitialTabsRenderTime']);
+    // When hidden visibilitychange should reset selection and search text.
+    Object.defineProperty(
+        document, 'visibilityState', {value: 'hidden', writable: true});
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushTasks();
+    verifyTabIds(queryRows(), [1, 5, 6, 2, 3, 4]);
+    assertEquals('', tabSearchApp.getSearchTextForTesting());
+    assertEquals(0, tabSearchApp.getSelectedIndex());
+
+    // State should match that of the hidden state when visible again.
+    Object.defineProperty(
+        document, 'visibilityState', {value: 'visible', writable: true});
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flushTasks();
+    verifyTabIds(queryRows(), [1, 5, 6, 2, 3, 4]);
+    assertEquals('', tabSearchApp.getSearchTextForTesting());
+    assertEquals(0, tabSearchApp.getSelectedIndex());
   });
 
   test('Verify tab switch is logged correctly', async () => {

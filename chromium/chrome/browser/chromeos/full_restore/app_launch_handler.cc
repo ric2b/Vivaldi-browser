@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/full_restore/app_launch_handler.h"
 
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -13,10 +14,13 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/full_restore/app_launch_info.h"
 #include "components/full_restore/full_restore_read_handler.h"
 #include "components/full_restore/full_restore_save_handler.h"
+#include "components/full_restore/full_restore_utils.h"
 #include "components/full_restore/restore_data.h"
 #include "components/services/app_service/public/cpp/app_update.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -64,7 +68,7 @@ void AppLaunchHandler::OnAppRegistryCacheWillBeDestroyed(
   apps::AppRegistryCache::Observer::Observe(nullptr);
 }
 
-void AppLaunchHandler::LauncherBrowserWhenReady() {
+void AppLaunchHandler::LaunchBrowserWhenReady() {
   // If the restore data has been loaded, and the user has chosen to restore,
   // launch the browser.
   if (should_restore_ && restore_data_) {
@@ -83,6 +87,10 @@ void AppLaunchHandler::SetShouldRestore() {
   MaybePostRestore();
 }
 
+void AppLaunchHandler::SetForceLaunchBrowserForTesting() {
+  force_launch_browser_ = true;
+}
+
 void AppLaunchHandler::OnGetRestoreData(
     std::unique_ptr<::full_restore::RestoreData> restore_data) {
   restore_data_ = std::move(restore_data);
@@ -91,6 +99,13 @@ void AppLaunchHandler::OnGetRestoreData(
   // restore file to save the new restore data.
   ::full_restore::FullRestoreSaveHandler::GetInstance()->Flush(
       profile_->GetPath());
+
+  if (ProfileHelper::Get()->GetUserByProfile(profile_) ==
+      user_manager::UserManager::Get()->GetPrimaryUser()) {
+    // In Multi-Profile mode, only set for the primary user. For other users,
+    // active profile path is set when switch users.
+    ::full_restore::SetActiveProfilePath(profile_->GetPath());
+  }
 
   MaybePostRestore();
 }
@@ -140,6 +155,15 @@ void AppLaunchHandler::MaybeRestore() {
 }
 
 void AppLaunchHandler::LaunchBrowser() {
+  // If the browser is not launched before reboot, don't launch browser during
+  // the startup phase.
+  const auto& launch_list = restore_data_->app_id_to_launch_list();
+  if (launch_list.find(extension_misc::kChromeAppId) == launch_list.end() &&
+      !force_launch_browser_) {
+    return;
+  }
+
+  restore_data_->RemoveApp(extension_misc::kChromeAppId);
   UserSessionManager::GetInstance()->LaunchBrowser(profile_);
   UserSessionManager::GetInstance()->MaybeLaunchSettings(profile_);
 }
@@ -151,7 +175,6 @@ void AppLaunchHandler::LaunchApp(apps::mojom::AppType app_type,
   // For the Chrome browser, the browser session restore is used to restore the
   // web pages, so we don't need to launch the app.
   if (app_id == extension_misc::kChromeAppId) {
-    restore_data_->RemoveApp(app_id);
     return;
   }
 
@@ -164,11 +187,16 @@ void AppLaunchHandler::LaunchApp(apps::mojom::AppType app_type,
 
   switch (app_type) {
     case apps::mojom::AppType::kArc:
-      // TODO(crbug.com/1146900): Handle ARC apps
+      LaunchArcApp(app_id, it->second);
       break;
     case apps::mojom::AppType::kExtension:
+      ::full_restore::FullRestoreReadHandler::GetInstance()
+          ->SetNextRestoreWindowIdForChromeApp(profile_->GetPath(), app_id);
+      // Deliberately fall through to apps::mojom::AppType::kWeb to launch the
+      // app.
+      FALLTHROUGH;
     case apps::mojom::AppType::kWeb:
-      LaunchWebAppOrExtension(app_id, it->second);
+      LaunchSystemWebAppOrChromeApp(app_id, it->second);
       break;
     case apps::mojom::AppType::kBuiltIn:
     case apps::mojom::AppType::kCrostini:
@@ -184,7 +212,7 @@ void AppLaunchHandler::LaunchApp(apps::mojom::AppType app_type,
   restore_data_->RemoveApp(app_id);
 }
 
-void AppLaunchHandler::LaunchWebAppOrExtension(
+void AppLaunchHandler::LaunchSystemWebAppOrChromeApp(
     const std::string& app_id,
     const ::full_restore::RestoreData::LaunchList& launch_list) {
   auto* launcher = apps::AppServiceProxyFactory::GetForProfile(profile_)
@@ -201,12 +229,36 @@ void AppLaunchHandler::LaunchWebAppOrExtension(
         app_id,
         static_cast<apps::mojom::LaunchContainer>(it.second->container.value()),
         static_cast<WindowOpenDisposition>(it.second->disposition.value()),
+        apps::mojom::AppLaunchSource::kSourceChromeInternal,
         it.second->display_id.value(),
         it.second->file_paths.has_value() ? it.second->file_paths.value()
                                           : std::vector<base::FilePath>{},
         it.second->intent.has_value() ? it.second->intent.value() : intent);
     params.restore_id = it.first;
     launcher->LaunchAppWithParams(std::move(params));
+  }
+}
+
+void AppLaunchHandler::LaunchArcApp(
+    const std::string& app_id,
+    const ::full_restore::RestoreData::LaunchList& launch_list) {
+  auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
+  DCHECK(proxy);
+
+  for (const auto& it : launch_list) {
+    DCHECK(it.second->event_flag.has_value());
+    apps::mojom::WindowInfoPtr window_info = it.second->GetAppWindowInfo();
+    window_info->window_id = it.first;
+    if (it.second->intent.has_value()) {
+      proxy->LaunchAppWithIntent(app_id, it.second->event_flag.value(),
+                                 std::move(it.second->intent.value()),
+                                 apps::mojom::LaunchSource::kFromFullRestore,
+                                 std::move(window_info));
+    } else {
+      proxy->Launch(app_id, it.second->event_flag.value(),
+                    apps::mojom::LaunchSource::kFromFullRestore,
+                    std::move(window_info));
+    }
   }
 }
 

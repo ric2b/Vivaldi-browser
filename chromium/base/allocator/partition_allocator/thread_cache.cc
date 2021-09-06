@@ -5,12 +5,14 @@
 #include "base/allocator/partition_allocator/thread_cache.h"
 
 #include <sys/types.h>
+#include <algorithm>
 #include <atomic>
 #include <vector>
 
 #include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 
 namespace base {
 
@@ -27,11 +29,27 @@ BASE_EXPORT PartitionTlsKey g_thread_cache_key;
 namespace {
 // Since |g_thread_cache_key| is shared, make sure that no more than one
 // PartitionRoot can use it.
-static std::atomic<bool> g_has_instance;
+static std::atomic<PartitionRoot<ThreadSafe>*> g_thread_cache_root;
 
+#if defined(OS_WIN)
+void OnDllProcessDetach() {
+  // Very late allocations do occur (see crbug.com/1159411#c7 for instance),
+  // including during CRT teardown. This is problematic for the thread cache
+  // which relies on the CRT for TLS access for instance. This cannot be
+  // mitigated inside the thread cache (since getting to it requires querying
+  // TLS), but the PartitionRoot associated wih the thread cache can be made to
+  // not use the thread cache anymore.
+  g_thread_cache_root.load(std::memory_order_relaxed)->with_thread_cache =
+      false;
+}
+#endif
+
+static bool g_thread_cache_key_created = false;
 }  // namespace
 
-constexpr base::TimeDelta ThreadCacheRegistry::kPurgeInterval;
+constexpr base::TimeDelta ThreadCacheRegistry::kMinPurgeInterval;
+constexpr base::TimeDelta ThreadCacheRegistry::kMaxPurgeInterval;
+constexpr base::TimeDelta ThreadCacheRegistry::kDefaultPurgeInterval;
 
 // static
 ThreadCacheRegistry& ThreadCacheRegistry::Instance() {
@@ -62,12 +80,13 @@ void ThreadCacheRegistry::UnregisterThreadCache(ThreadCache* cache) {
 
 void ThreadCacheRegistry::DumpStats(bool my_thread_only,
                                     ThreadCacheStats* stats) {
+  ThreadCache::EnsureThreadSpecificDataInitialized();
   memset(reinterpret_cast<void*>(stats), 0, sizeof(ThreadCacheStats));
 
   PartitionAutoLock scoped_locker(GetLock());
   if (my_thread_only) {
     auto* tcache = ThreadCache::Get();
-    if (!tcache)
+    if (!ThreadCache::IsValid(tcache))
       return;
     tcache->AccumulateStats(stats);
   } else {
@@ -90,6 +109,7 @@ void ThreadCacheRegistry::PurgeAll() {
     PartitionAutoLock scoped_locker(GetLock());
     ThreadCache* tcache = list_head_;
     while (tcache) {
+      PA_DCHECK(ThreadCache::IsValid(tcache));
       // Cannot purge directly, need to ask the other thread to purge "at some
       // point".
       // Note that this will not work if the other thread is sleeping forever.
@@ -101,30 +121,63 @@ void ThreadCacheRegistry::PurgeAll() {
   }
 
   // May take a while, don't hold the lock while purging.
-  if (current_thread_tcache)
+  if (ThreadCache::IsValid(current_thread_tcache))
     current_thread_tcache->Purge();
 }
 
+void ThreadCacheRegistry::ForcePurgeAllThreadAfterForkUnsafe() {
+  PartitionAutoLock scoped_locker(GetLock());
+  ThreadCache* tcache = list_head_;
+  while (tcache) {
+#if DCHECK_IS_ON()
+    // Before fork(), locks are acquired in the parent process. This means that
+    // a concurrent allocation in the parent which must be filled by the central
+    // allocator (i.e. the thread cache bucket is empty) will block inside the
+    // thread cache waiting for the lock to be released.
+    //
+    // In the child process, this allocation will never complete since this
+    // thread will not be resumed. However, calling |Purge()| triggers the
+    // reentrancy guard since the parent process thread was suspended from
+    // within the thread cache.
+    // Clear the guard to prevent this from crashing.
+    tcache->is_in_thread_cache_ = false;
+#endif
+    tcache->Purge();
+    tcache = tcache->next_;
+  }
+}
+
 void ThreadCacheRegistry::StartPeriodicPurge() {
+  ThreadCache::EnsureThreadSpecificDataInitialized();
+
   // Can be called several times, don't post multiple tasks.
-  if (!has_pending_purge_task_)
-    PostDelayedPurgeTask();
+  if (periodic_purge_running_)
+    return;
+
+  periodic_purge_running_ = true;
+  PostDelayedPurgeTask();
 }
 
 void ThreadCacheRegistry::PostDelayedPurgeTask() {
-  PA_DCHECK(!has_pending_purge_task_);
   ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ThreadCacheRegistry::PeriodicPurge,
                      base::Unretained(this)),
-      kPurgeInterval);
-  has_pending_purge_task_ = true;
+      purge_interval_);
 }
 
 void ThreadCacheRegistry::PeriodicPurge() {
-  has_pending_purge_task_ = false;
+  // To stop periodic purge for testing.
+  if (!periodic_purge_running_)
+    return;
+
   ThreadCache* tcache = ThreadCache::Get();
-  PA_DCHECK(tcache);
+  // Can run when there is no thread cache, in which case there is nothing to
+  // do, and the task should not be rescheduled. This would typically indicate a
+  // case where the thread cache was never enabled, or got disabled.
+  if (!ThreadCache::IsValid(tcache))
+    return;
+
   uint64_t allocations = tcache->stats_.alloc_count;
   uint64_t allocations_since_last_purge =
       allocations - allocations_at_last_purge_;
@@ -133,69 +186,69 @@ void ThreadCacheRegistry::PeriodicPurge() {
   // assume that the main thread is a reasonable proxy for the process activity,
   // where the main thread is the current one.
   //
-  // If we didn't see enough allocations since the last purge, don't schedule a
-  // new one, and ask the thread cache to notify us of deallocations. This makes
-  // the next |kMinMainThreadAllocationsForPurging| deallocations slightly
-  // slower.
+  // If there were not enough allocations since the last purge, back off. On the
+  // other hand, if there were many allocations, make purge more frequent, but
+  // always in a set frequency range.
   //
-  // Once the threshold is reached, reschedule a purge task. We count
-  // deallocations rather than allocations because these are the ones that fill
-  // the cache, and also because we already have a check on the deallocation
-  // path, not on the allocation one that we don't want to slow down.
-  bool enough_allocations =
-      allocations_since_last_purge >= kMinMainThreadAllocationsForPurging;
-  tcache->SetNotifiesRegistry(!enough_allocations);
-  deallocations_ = 0;
+  // There is a potential drawback: a process that was idle for a long time and
+  // suddenly becomes very actve will take some time to go back to regularly
+  // scheduled purge with a small enough interval. This is the case for instance
+  // of a renderer moving to foreground. To mitigate that, if the number of
+  // allocations since the last purge was very large, make a greater leap to
+  // faster purging.
+  if (allocations_since_last_purge > 10 * kMinMainThreadAllocationsForPurging) {
+    purge_interval_ = std::min(kDefaultPurgeInterval, purge_interval_ / 2);
+  } else if (allocations_since_last_purge >
+             2 * kMinMainThreadAllocationsForPurging) {
+    purge_interval_ = std::max(kMinPurgeInterval, purge_interval_ / 2);
+  } else if (allocations_since_last_purge <
+             kMinMainThreadAllocationsForPurging) {
+    purge_interval_ = std::min(kMaxPurgeInterval, purge_interval_ * 2);
+  }
+
   PurgeAll();
 
-  if (enough_allocations) {
-    allocations_at_last_purge_ = allocations;
-    PostDelayedPurgeTask();
-  }
-}
-
-void ThreadCacheRegistry::OnDeallocation() {
-  deallocations_++;
-  if (deallocations_ > kMinMainThreadAllocationsForPurging) {
-    ThreadCache* tcache = ThreadCache::Get();
-    PA_DCHECK(tcache);
-
-    deallocations_ = 0;
-    tcache->SetNotifiesRegistry(false);
-
-    if (has_pending_purge_task_)
-      return;
-
-    // This is called from the thread cache, which is called from the central
-    // allocator. This means that any allocation made by task posting will make
-    // it reentrant, unless we disable the thread cache.
-    tcache->Disable();
-    PostDelayedPurgeTask();
-    tcache->Enable();
-  }
+  allocations_at_last_purge_ = allocations;
+  PostDelayedPurgeTask();
 }
 
 void ThreadCacheRegistry::ResetForTesting() {
-  PA_CHECK(!has_pending_purge_task_);
   allocations_at_last_purge_ = 0;
-  deallocations_ = 0;
+  purge_interval_ = kDefaultPurgeInterval;
+  periodic_purge_running_ = false;
+}
+
+// static
+void ThreadCache::EnsureThreadSpecificDataInitialized() {
+  // Using the registry lock to protect from concurrent initialization without
+  // adding a special-pupose lock.
+  PartitionAutoLock scoped_locker(ThreadCacheRegistry::Instance().GetLock());
+  if (g_thread_cache_key_created)
+    return;
+
+  bool ok = PartitionTlsCreate(&g_thread_cache_key, Delete);
+  PA_CHECK(ok);
+  g_thread_cache_key_created = true;
 }
 
 // static
 void ThreadCache::Init(PartitionRoot<ThreadSafe>* root) {
   PA_CHECK(root->buckets[kBucketCount - 1].slot_size == kSizeThreshold);
 
-  bool ok = PartitionTlsCreate(&g_thread_cache_key, Delete);
-  PA_CHECK(ok);
+  EnsureThreadSpecificDataInitialized();
 
   // Make sure that only one PartitionRoot wants a thread cache.
-  bool expected = false;
-  if (!g_has_instance.compare_exchange_strong(expected, true,
-                                              std::memory_order_seq_cst,
-                                              std::memory_order_seq_cst)) {
+  PartitionRoot<ThreadSafe>* expected = nullptr;
+  if (!g_thread_cache_root.compare_exchange_strong(expected, root,
+                                                   std::memory_order_seq_cst,
+                                                   std::memory_order_seq_cst)) {
     PA_CHECK(false)
         << "Only one PartitionRoot is allowed to have a thread cache";
   }
+
+#if defined(OS_WIN)
+  PartitionTlsSetOnDllProcessDetach(OnDllProcessDetach);
+#endif
 }
 
 // static
@@ -208,7 +261,7 @@ ThreadCache* ThreadCache::Create(PartitionRoot<internal::ThreadSafe>* root) {
   //
   // This also means that deallocation must use RawFreeStatic(), hence the
   // operator delete() implementation below.
-  size_t utilized_slot_size;
+  size_t usable_size;
   bool already_zeroed;
 
   auto* bucket =
@@ -216,7 +269,7 @@ ThreadCache* ThreadCache::Create(PartitionRoot<internal::ThreadSafe>* root) {
                           sizeof(ThreadCache));
   void* buffer =
       root->RawAlloc(bucket, PartitionAllocZeroFill, sizeof(ThreadCache),
-                     &utilized_slot_size, &already_zeroed);
+                     &usable_size, &already_zeroed);
   ThreadCache* tcache = new (buffer) ThreadCache(root);
 
   // This may allocate.
@@ -227,12 +280,12 @@ ThreadCache* ThreadCache::Create(PartitionRoot<internal::ThreadSafe>* root) {
 
 ThreadCache::ThreadCache(PartitionRoot<ThreadSafe>* root)
     : buckets_(),
+      should_purge_(false),
       stats_(),
       root_(root),
-      registry_(&ThreadCacheRegistry::Instance()),
       next_(nullptr),
       prev_(nullptr) {
-  registry_->RegisterThreadCache(this);
+  ThreadCacheRegistry::Instance().RegisterThreadCache(this);
 
   for (int index = 0; index < kBucketCount; index++) {
     const auto& root_bucket = root->buckets[index];
@@ -263,7 +316,7 @@ ThreadCache::ThreadCache(PartitionRoot<ThreadSafe>* root)
 }
 
 ThreadCache::~ThreadCache() {
-  registry_->UnregisterThreadCache(this);
+  ThreadCacheRegistry::Instance().UnregisterThreadCache(this);
   Purge();
 }
 
@@ -273,6 +326,14 @@ void ThreadCache::Delete(void* tcache_ptr) {
   auto* root = tcache->root_;
   reinterpret_cast<ThreadCache*>(tcache_ptr)->~ThreadCache();
   root->RawFree(tcache_ptr);
+
+#if defined(OS_WIN)
+  // On Windows, allocations do occur during thread/process teardown, make sure
+  // they don't resurrect the thread cache.
+  //
+  // TODO(lizeb): Investigate whether this is needed on POSIX as well.
+  PartitionTlsSet(g_thread_cache_key, reinterpret_cast<void*>(kTombstone));
+#endif
 }
 
 void ThreadCache::FillBucket(size_t bucket_index) {
@@ -308,7 +369,7 @@ void ThreadCache::FillBucket(size_t bucket_index) {
   Bucket& bucket = buckets_[bucket_index];
   int count = bucket.limit / kBatchFillRatio;
 
-  size_t utilized_slot_size;
+  size_t usable_size;
   bool is_already_zeroed;
 
   PA_DCHECK(!root_->buckets[bucket_index].CanStoreRawSize());
@@ -329,8 +390,8 @@ void ThreadCache::FillBucket(size_t bucket_index) {
     void* ptr = root_->AllocFromBucket(
         &root_->buckets[bucket_index],
         PartitionAllocFastPathOrReturnNull | PartitionAllocReturnNull,
-        root_->buckets[bucket_index].slot_size /* raw_size */,
-        &utilized_slot_size, &is_already_zeroed);
+        root_->buckets[bucket_index].slot_size /* raw_size */, &usable_size,
+        &is_already_zeroed);
 
     // Either the previous allocation would require a slow path allocation, or
     // the central allocator is out of memory. If the bucket was filled with
@@ -364,22 +425,6 @@ void ThreadCache::ClearBucket(ThreadCache::Bucket& bucket, size_t limit) {
   PA_DCHECK(bucket.count == limit);
 }
 
-void ThreadCache::HandleNonNormalMode() {
-  switch (mode_.load(std::memory_order_relaxed)) {
-    case Mode::kPurge:
-      PurgeInternal();
-      mode_.store(Mode::kNormal, std::memory_order_relaxed);
-      break;
-
-    case Mode::kNotifyRegistry:
-      registry_->OnDeallocation();
-      break;
-
-    default:
-      break;
-  }
-}
-
 void ThreadCache::ResetForTesting() {
   stats_.alloc_count = 0;
   stats_.alloc_hits = 0;
@@ -398,7 +443,7 @@ void ThreadCache::ResetForTesting() {
   stats_.metadata_overhead = 0;
 
   Purge();
-  mode_.store(Mode::kNormal, std::memory_order_relaxed);
+  should_purge_.store(false, std::memory_order_relaxed);
 }
 
 void ThreadCache::AccumulateStats(ThreadCacheStats* stats) const {
@@ -423,22 +468,7 @@ void ThreadCache::AccumulateStats(ThreadCacheStats* stats) const {
 }
 
 void ThreadCache::SetShouldPurge() {
-  // Purge may be triggered by an external event, in which case it should not
-  // take precedence over the notification mode, otherwise we risk disabling
-  // periodic purge entirely.
-  //
-  // Also, no other thread can set this to notification mode.
-  if (mode_.load(std::memory_order_relaxed) != Mode::kNormal)
-    return;
-
-  // We don't need any synchronization, and don't really care if the purge is
-  // carried out "right away", hence relaxed atomics.
-  mode_.store(Mode::kPurge, std::memory_order_relaxed);
-}
-
-void ThreadCache::SetNotifiesRegistry(bool enabled) {
-  mode_.store(enabled ? Mode::kNotifyRegistry : Mode::kNormal,
-              std::memory_order_relaxed);
+  should_purge_.store(true, std::memory_order_relaxed);
 }
 
 void ThreadCache::Purge() {
@@ -447,16 +477,9 @@ void ThreadCache::Purge() {
 }
 
 void ThreadCache::PurgeInternal() {
+  should_purge_.store(false, std::memory_order_relaxed);
   for (auto& bucket : buckets_)
     ClearBucket(bucket, 0);
-}
-
-void ThreadCache::Disable() {
-  root_->with_thread_cache = false;
-}
-
-void ThreadCache::Enable() {
-  root_->with_thread_cache = true;
 }
 
 }  // namespace internal

@@ -332,7 +332,6 @@ ContentSettingsContentSettingGetResourceIdentifiersFunction::Run() {
   if (content_type != ContentSettingsType::DEPRECATED_PLUGINS) {
     return RespondNow(NoArguments());
   }
-
 #if BUILDFLAG(ENABLE_PLUGINS)
   return RespondNow(
       Error(content_settings_api_constants::

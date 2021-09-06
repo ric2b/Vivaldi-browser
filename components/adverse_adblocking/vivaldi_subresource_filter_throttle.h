@@ -15,6 +15,10 @@
 #include "components/subresource_filter/core/common/activation_list.h"
 #include "content/public/browser/navigation_throttle.h"
 
+namespace content {
+class BrowserContext;
+}
+
 using subresource_filter::SubresourceFilterClient;
 using subresource_filter::SubresourceFilterSafeBrowsingClient;
 using subresource_filter::Configuration;

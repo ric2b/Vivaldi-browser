@@ -1,3 +1,5 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved.
+
 #include "renderer/vivaldi_render_frame_observer.h"
 
 #include "content/public/renderer/render_frame.h"
@@ -11,6 +13,7 @@
 #include "third_party/blink/public/web/web_input_method_controller.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -25,7 +28,6 @@
 
 using blink::WebDocument;
 using blink::WebLocalFrame;
-using blink::WebRect;
 using blink::WebView;
 
 namespace vivaldi {
@@ -124,7 +126,7 @@ void VivaldiRenderFrameObserver::OnGetSpatialNavigationRects() {
   blink::WebElementCollection all_elements = frame->GetDocument().All();
   for (blink::WebElement element = all_elements.FirstItem(); !element.IsNull();
     element = all_elements.NextItem()) {
-    blink::WebRect rect =
+    gfx::Rect rect =
       RevertDeviceScaling(element.BoundsInViewport(), scale);
     if (IsInViewport(document, rect, window->innerHeight()) &&
       IsNavigableElement(element) && IsVisible(element) &&
@@ -135,14 +137,11 @@ void VivaldiRenderFrameObserver::OnGetSpatialNavigationRects() {
 
   std::vector<VivaldiViewMsg_NavigationRect> navigation_rects;
   for (auto& element : spatnav_elements) {
-    blink::WebRect rect = element.BoundsInViewport();
+    gfx::Rect rect = element.BoundsInViewport();
     if (element.IsLink()) {
       blink::IntRect r = FindImageElementRect(element);
       if (!r.IsEmpty()) {
-        rect.x = r.X();
-        rect.y = r.Y();
-        rect.width = r.Width();
-        rect.height = r.Height();
+        rect.SetRect(r.X(), r.Y(), r.Width(), r.Height());
       }
     }
     rect = RevertDeviceScaling(rect, scale);
@@ -151,10 +150,10 @@ void VivaldiRenderFrameObserver::OnGetSpatialNavigationRects() {
       href = element.GetAttribute("href").Utf8();
     }
     VivaldiViewMsg_NavigationRect navigation_rect;
-    navigation_rect.x = rect.x;
-    navigation_rect.y = rect.y;
-    navigation_rect.width = rect.width;
-    navigation_rect.height = rect.height;
+    navigation_rect.x = rect.x();
+    navigation_rect.y = rect.y();
+    navigation_rect.width = rect.width();
+    navigation_rect.height = rect.height();
     navigation_rect.href = href;
     navigation_rect.path = ElementPath(element);
     navigation_rects.push_back(navigation_rect);
@@ -246,7 +245,7 @@ void VivaldiRenderFrameObserver::OnAccessKeyAction(std::string access_key) {
   String wtf_key(access_key.c_str());
   blink::Element* elem = document->GetElementByAccessKey(wtf_key);
   if (elem) {
-    elem->AccessKeyAction(false);
+    elem->AccessKeyAction(blink::SimulatedClickCreationScope::kFromUserAgent);
   }
 }
 

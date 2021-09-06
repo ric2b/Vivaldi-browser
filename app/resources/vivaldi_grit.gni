@@ -1,35 +1,37 @@
+import("//build/config/locales.gni")
 import("//tools/grit/grit_rule.gni")
 import("//vivaldi/app/resources/untranslated.gni")
+import("//vivaldi/gn/config/locales.gni")
 
-template("single_grit_action") {
+template("vivaldi_strings_grit_action") {
   assert(defined(invoker.source))
-  forward_variables_from(invoker,
-                         [
-                           "have_strings",
-                         ])
-
-  if (!defined(have_strings)) {
-    have_strings = false
-  }
   deps_list = []
 
-  if (have_strings && generate_untranslated) {
+  source = invoker.source
+  source_dir = get_path_info(source, "dir")
+  source_name = get_path_info(source, "name")
+  output_header = "grit/$source_name.h"
+  source_translations = "${source_dir}/strings/${source_name}_"
+  if (generate_untranslated) {
     name = "Extract_strings_$target_name"
     deps_list += [ ":" + name ]
-    vivaldi_extract_untranslated(name) {
-      source = invoker.source
-      source_translations = invoker.source_translations
-    }
+    vivaldi_extract_untranslated(name) { }
   }
 
   name = "grit_$target_name"
   deps_list += [ ":" + name ]
+  inputs = []
+  foreach(locale, locales + vivaldi_pending_locales - ["en-US"]) {
+    inputs += [ "$source_translations$locale.xtb" ]
+  }
+  outputs = [ output_header ]
+  foreach(locale, locales_with_fake_bidi + vivaldi_pending_locales) {
+    outputs += [ "${source_name}_$locale.pak" ]
+  }
   grit(name) {
     forward_variables_from(invoker, [
-                             "inputs",
+                             "defines",
                              "output_dir",
-                             "outputs",
-                             "source",
                              "resource_ids",
                            ])
   }

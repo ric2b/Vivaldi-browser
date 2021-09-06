@@ -43,6 +43,19 @@ class RuntimePrivateExitFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(RuntimePrivateExitFunction);
 };
 
+class RuntimePrivateRestartFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("runtimePrivate.restart", RUNTIME_RESTART_VIVALDI)
+
+  RuntimePrivateRestartFunction() = default;
+
+ private:
+  ~RuntimePrivateRestartFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(RuntimePrivateRestartFunction);
+};
+
 class RuntimePrivateGetAllFeatureFlagsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("runtimePrivate.getAllFeatureFlags",

@@ -52,7 +52,8 @@ class PLATFORM_EXPORT ResourceLoadObserver
                                const ResourceRequest&,
                                const ResourceResponse& redirect_response,
                                ResourceType,
-                               const FetchInitiatorInfo&) = 0;
+                               const FetchInitiatorInfo&,
+                               RenderBlockingBehavior) = 0;
 
   // Called when the priority of the request changes.
   virtual void DidChangePriority(uint64_t identifier,
@@ -96,15 +97,6 @@ class PLATFORM_EXPORT ResourceLoadObserver
                               const ResourceError&,
                               int64_t encoded_data_length,
                               IsInternalRequest) = 0;
-
-  // Evict the page from BackForwardCache. Should be called when handling an
-  // event which can't proceed if the page is in BackForwardCache and can't be
-  // easily deferred to handle later, for example network redirect handling.
-  virtual void EvictFromBackForwardCache(mojom::RendererEvictionReason) {}
-
-  virtual void DidBufferLoadWhileInBackForwardCache(size_t num_bytes) {}
-
-  virtual bool CanContinueBufferingWhileInBackForwardCache() { return true; }
 
   virtual void Trace(Visitor*) const {}
 };

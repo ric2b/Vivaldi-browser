@@ -64,7 +64,7 @@ SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
     case RG_88:
       return kR8G8_unorm_SkColorType;
     case BGRX_8888:
-
+      return kRGB_888x_SkColorType;
     case RGBA_F16:
       return kRGBA_F16_SkColorType;
   }
@@ -154,7 +154,7 @@ unsigned int GLDataType(ResourceFormat format) {
       GL_UNSIGNED_SHORT,                   // R16_EXT
       GL_UNSIGNED_SHORT,                   // RG16_EXT
       GL_UNSIGNED_BYTE,                    // RGBX_8888
-      GL_ZERO,                             // BGRX_8888
+      GL_UNSIGNED_BYTE,                    // BGRX_8888
       GL_UNSIGNED_INT_2_10_10_10_REV_EXT,  // RGBA_1010102
       GL_UNSIGNED_INT_2_10_10_10_REV_EXT,  // BGRA_1010102
       GL_ZERO,                             // YVU_420
@@ -185,7 +185,7 @@ unsigned int GLDataFormat(ResourceFormat format) {
       GL_RED_EXT,    // R16_EXT
       GL_RG_EXT,     // RG16_EXT
       GL_RGB,        // RGBX_8888
-      GL_ZERO,       // BGRX_8888
+      GL_RGB,        // BGRX_8888
       GL_RGBA,       // RGBA_1010102
       GL_RGBA,       // BGRA_1010102
       GL_ZERO,       // YVU_420
@@ -206,8 +206,6 @@ unsigned int GLInternalFormat(ResourceFormat format) {
   switch (format) {
     case R16_EXT:
       return GL_R16_EXT;
-    case RG_88:
-      return GL_RG8_EXT;
     case RG16_EXT:
       return GL_RG16_EXT;
     case ETC1:
@@ -343,8 +341,9 @@ unsigned int TextureStorageFormat(ResourceFormat format) {
     case YVU_420:
     case YUV_420_BIPLANAR:
       return GL_RGB8_OES;
-    case BGR_565:
     case BGRX_8888:
+      return GL_RGB8_OES;
+    case BGR_565:
       break;
   }
   NOTREACHED();
@@ -356,7 +355,6 @@ bool IsGpuMemoryBufferFormatSupported(ResourceFormat format) {
     case BGRA_8888:
     case RED_8:
     case R16_EXT:
-    case RG16_EXT:
     case RGBA_4444:
     case RGBA_8888:
     case RGBA_1010102:
@@ -372,6 +370,7 @@ bool IsGpuMemoryBufferFormatSupported(ResourceFormat format) {
     case LUMINANCE_F16:
     case BGR_565:
     case RG_88:
+    case RG16_EXT:
     case RGBX_8888:
     case BGRX_8888:
     case YVU_420:

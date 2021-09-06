@@ -132,7 +132,7 @@ ShapingLineBreaker::BreakOpportunity ShapingLineBreaker::Hyphenate(
   const String& text = GetText();
   unsigned word_end = break_iterator_->NextBreakOpportunity(offset);
   if (word_end != offset && IsBreakableSpace(text[word_end - 1]))
-    word_end = std::max(start + 1, FindNonHangableEnd(text, word_end - 1));
+    word_end = std::max(offset, FindNonHangableEnd(text, word_end - 1));
   if (word_end == offset) {
     DCHECK(IsBreakableSpace(text[offset]) ||
            offset == break_iterator_->PreviousBreakOpportunity(offset, start));
@@ -380,6 +380,10 @@ scoped_refptr<const ShapeResultView> ShapingLineBreaker::ShapeLine(
   if (first_safe != start) {
     if (first_safe >= break_opportunity.offset) {
       // There is no safe-to-break, reshape the whole range.
+      if (!is_break_after_any_space && break_opportunity.non_hangable_run_end) {
+        break_opportunity.offset =
+            std::max(start + 1, *break_opportunity.non_hangable_run_end);
+      }
       SetBreakOffset(break_opportunity, text, result_out);
       CheckBreakOffset(result_out->break_offset, start, range_end);
       return ShapeResultView::Create(

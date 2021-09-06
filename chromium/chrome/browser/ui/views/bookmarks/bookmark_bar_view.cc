@@ -73,6 +73,7 @@
 #include "extensions/common/extension_set.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
@@ -116,12 +117,13 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 
-using bookmarks::BookmarkModel;
-using bookmarks::BookmarkNode;
-using views::LabelButtonBorder;
-using views::MenuButton;
-
 namespace {
+
+using ::bookmarks::BookmarkModel;
+using ::bookmarks::BookmarkNode;
+using ::ui::mojom::DragOperation;
+using ::views::LabelButtonBorder;
+using ::views::MenuButton;
 
 // Margin around the content.
 constexpr int kBookmarkBarHorizontalMargin = 8;
@@ -429,7 +431,7 @@ struct BookmarkBarView::DropLocation {
   base::Optional<size_t> index;
 
   // Drop constants.
-  int operation = ui::DragDropTypes::DRAG_NONE;
+  DragOperation operation = DragOperation::kNone;
 
   // If true, the user is dropping on a folder.
   bool on = false;
@@ -743,7 +745,7 @@ gfx::Size BookmarkBarView::GetMinimumSize() const {
     gfx::Size size = apps_page_shortcut_->GetPreferredSize();
     width += size.width() + bookmark_bar_button_padding;
   }
-  if (read_later_button_) {
+  if (read_later_button_ && read_later_button_->GetVisible()) {
     gfx::Size separator_size = read_later_separator_view_->GetPreferredSize();
     gfx::Size size = read_later_button_->GetPreferredSize();
     width +=
@@ -801,10 +803,16 @@ void BookmarkBarView::Layout() {
 
   int max_x = kBookmarkBarHorizontalMargin + width - overflow_pref.width() -
               bookmarks_separator_pref.width();
-  if (other_bookmarks_button_->GetVisible())
-    max_x -= other_bookmarks_pref.width() + bookmark_bar_button_padding;
+  if (other_bookmarks_button_->GetVisible()) {
+    max_x -= other_bookmarks_pref.width();
+    // Additional spacing is only needed for this button if it is the last
+    // button in the bookmark bar. When the read later button exists this is no
+    // longer the last button.
+    if (!read_later_button_ || !read_later_button_->GetVisible())
+      max_x -= bookmark_bar_button_padding;
+  }
 
-  if (read_later_button_) {
+  if (read_later_button_ && read_later_button_->GetVisible()) {
     if (bookmarks_separator_view_->GetVisible())
       max_x -= bookmarks_separator_pref.width();
     max_x -= read_later_button_->GetPreferredSize().width() +
@@ -881,11 +889,15 @@ void BookmarkBarView::Layout() {
   if (other_bookmarks_button_->GetVisible()) {
     other_bookmarks_button_->SetBounds(x, y, other_bookmarks_pref.width(),
                                        button_height);
-    x += other_bookmarks_pref.width() + bookmark_bar_button_padding;
+    x += other_bookmarks_pref.width();
+    // Additional spacing is only needed for the last button in the bookmark
+    // bar. When the read later button exists this is no longer the last button.
+    if (!read_later_button_ || !read_later_button_->GetVisible())
+      x += bookmark_bar_button_padding;
   }
 
   // Read-later button and separator.
-  if (read_later_button_) {
+  if (read_later_button_ && read_later_button_->GetVisible()) {
     gfx::Size read_later_separator_pref =
         read_later_separator_view_->GetPreferredSize();
     gfx::Size read_later_pref = read_later_button_->GetPreferredSize();
@@ -919,7 +931,7 @@ void BookmarkBarView::PaintChildren(const views::PaintInfo& paint_info) {
   View::PaintChildren(paint_info);
 
   if (drop_info_.get() && drop_info_->valid &&
-      drop_info_->location.operation != 0 &&
+      drop_info_->location.operation != DragOperation::kNone &&
       drop_info_->location.index.has_value() &&
       drop_info_->location.button_type != DROP_OVERFLOW &&
       !drop_info_->location.on) {
@@ -996,7 +1008,7 @@ int BookmarkBarView::OnDragUpdated(const ui::DropTargetEvent& event) {
   if (drop_info_->valid &&
       (drop_info_->x == event.x() && drop_info_->y == event.y())) {
     // The location of the mouse didn't change, return the last operation.
-    return drop_info_->location.operation;
+    return static_cast<int>(drop_info_->location.operation);
   }
 
   drop_info_->x = event.x();
@@ -1009,7 +1021,7 @@ int BookmarkBarView::OnDragUpdated(const ui::DropTargetEvent& event) {
     // The position we're going to drop didn't change, return the last drag
     // operation we calculated. Copy of the operation in case it changed.
     drop_info_->location.operation = location.operation;
-    return drop_info_->location.operation;
+    return static_cast<int>(drop_info_->location.operation);
   }
 
   StopShowFolderDropMenuTimer();
@@ -1040,7 +1052,7 @@ int BookmarkBarView::OnDragUpdated(const ui::DropTargetEvent& event) {
     StartShowFolderDropMenuTimer(node);
   }
 
-  return drop_info_->location.operation;
+  return static_cast<int>(drop_info_->location.operation);
 }
 
 void BookmarkBarView::OnDragExited() {
@@ -1058,14 +1070,15 @@ void BookmarkBarView::OnDragExited() {
   drop_info_.reset();
 }
 
-int BookmarkBarView::OnPerformDrop(const ui::DropTargetEvent& event) {
+DragOperation BookmarkBarView::OnPerformDrop(const ui::DropTargetEvent& event) {
   StopShowFolderDropMenuTimer();
 
   if (bookmark_drop_menu_)
     bookmark_drop_menu_->Cancel();
 
-  if (!drop_info_.get() || !drop_info_->location.operation)
-    return ui::DragDropTypes::DRAG_NONE;
+  if (!drop_info_.get() ||
+      drop_info_->location.operation == DragOperation::kNone)
+    return DragOperation::kNone;
 
   const BookmarkNode* root =
       (drop_info_->location.button_type == DROP_OTHER_FOLDER)
@@ -1091,7 +1104,7 @@ int BookmarkBarView::OnPerformDrop(const ui::DropTargetEvent& event) {
   }
   const bookmarks::BookmarkNodeData data = drop_info_->data;
   DCHECK(data.is_valid());
-  bool copy = drop_info_->location.operation == ui::DragDropTypes::DRAG_COPY;
+  bool copy = drop_info_->location.operation == DragOperation::kCopy;
   drop_info_.reset();
 
   base::RecordAction(base::UserMetricsAction("BookmarkBar_DragEnd"));
@@ -1385,6 +1398,8 @@ void BookmarkBarView::ShowContextMenuForViewImpl(
   } else if (source == managed_bookmarks_button_) {
     parent = managed_->managed_node();
     nodes.push_back(parent);
+  } else if (source == read_later_button_) {
+    // Do nothing here for now.
   } else if (source != this && source != apps_page_shortcut_) {
     // User clicked on one of the bookmark buttons, find which one they
     // clicked on, except for the apps page shortcut, which must behave as if
@@ -1435,6 +1450,7 @@ void BookmarkBarView::Init() {
         AddChildView(std::make_unique<ButtonSeparatorView>());
     read_later_button_ =
         AddChildView(std::make_unique<ReadLaterButton>(browser_));
+    read_later_button_->set_context_menu_controller(this);
   }
 
   profile_pref_registrar_.Init(browser_->profile()->GetPrefs());
@@ -1443,12 +1459,23 @@ void BookmarkBarView::Init() {
       base::BindRepeating(
           &BookmarkBarView::OnAppsPageShortcutVisibilityPrefChanged,
           base::Unretained(this)));
+  if (read_later_button_) {
+    profile_pref_registrar_.Add(
+        bookmarks::prefs::kShowReadingListInBookmarkBar,
+        base::BindRepeating(
+            &BookmarkBarView::OnReadingListVisibilityPrefChanged,
+            base::Unretained(this)));
+  }
   profile_pref_registrar_.Add(
       bookmarks::prefs::kShowManagedBookmarksInBookmarkBar,
       base::BindRepeating(&BookmarkBarView::OnShowManagedBookmarksPrefChanged,
                           base::Unretained(this)));
   apps_page_shortcut_->SetVisible(
       chrome::ShouldShowAppsShortcutInBookmarkBar(browser_->profile()));
+  if (read_later_button_) {
+    read_later_button_->SetVisible(
+        chrome::ShouldShowReadingListInBookmarkBar(browser_->profile()));
+  }
 
   bookmarks_separator_view_ =
       AddChildView(std::make_unique<ButtonSeparatorView>());
@@ -1829,7 +1856,7 @@ void BookmarkBarView::CalculateDropLocation(
                                            .get();
     location->operation = chrome::GetBookmarkDropOperation(
         profile, event, data, parent, parent->children().size());
-    if (!location->operation && !data.has_single_url() &&
+    if (location->operation != DragOperation::kNone && !data.has_single_url() &&
         data.GetFirstNode(model_, profile->GetPath()) == parent) {
       // Don't open a menu if the node being dragged is the menu to open.
       location->on = false;
@@ -1989,6 +2016,18 @@ void BookmarkBarView::OnAppsPageShortcutVisibilityPrefChanged() {
     return;
   apps_page_shortcut_->SetVisible(visible);
   UpdateBookmarksSeparatorVisibility();
+  LayoutAndPaint();
+}
+
+void BookmarkBarView::OnReadingListVisibilityPrefChanged() {
+  DCHECK(read_later_button_);
+  bool visible =
+      chrome::ShouldShowReadingListInBookmarkBar(browser_->profile());
+  if (read_later_button_->GetVisible() == visible)
+    return;
+  read_later_button_->CloseBubble();
+  read_later_button_->SetVisible(visible);
+  read_later_separator_view_->SetVisible(visible);
   LayoutAndPaint();
 }
 

@@ -45,6 +45,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
+#include "components/federated_learning/features/features.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
 #include "components/invalidation/impl/fcm_invalidation_service.h"
@@ -65,7 +66,7 @@
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/engine/sync_engine_switches.h"
-#include "components/sync/engine_impl/sync_scheduler_impl.h"
+#include "components/sync/engine/sync_scheduler_impl.h"
 #include "components/sync/invalidations/switches.h"
 #include "components/sync/invalidations/sync_invalidations_service_impl.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -83,14 +84,14 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/components/account_manager/account_manager.h"
+#include "ash/components/account_manager/account_manager_factory.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "chrome/browser/sync/test/integration/printers_helper.h"
 #include "chrome/browser/sync/test/integration/sync_arc_package_helper.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
-#include "chromeos/components/account_manager/account_manager.h"
-#include "chromeos/components/account_manager/account_manager_factory.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/arc/arc_util.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -108,13 +109,8 @@
 
 using syncer::ProfileSyncService;
 
-namespace switches {
-const char kPasswordFileForTest[] = "password-file-for-test";
-const char kSyncUserForTest[] = "sync-user-for-test";
-const char kSyncPasswordForTest[] = "sync-password-for-test";
-}  // namespace switches
-
 namespace {
+
 // Sender ID coming from the Firebase console.
 const char kInvalidationGCMSenderId[] = "8181035976";
 
@@ -126,9 +122,9 @@ void SetURLLoaderFactoryForTest(
   signin_client->SetURLLoaderFactoryForTest(url_loader_factory);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::AccountManagerFactory* factory =
+  auto* factory =
       g_browser_process->platform_part()->GetAccountManagerFactory();
-  chromeos::AccountManager* account_manager =
+  auto* account_manager =
       factory->GetAccountManager(profile->GetPath().value());
   account_manager->SetUrlLoaderFactoryForTests(url_loader_factory);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -236,6 +232,10 @@ instance_id::InstanceIDDriver* GetOrCreateInstanceIDDriver(
 
 }  // namespace
 
+const char switches::kPasswordFileForTest[] = "password-file-for-test";
+const char switches::kSyncUserForTest[] = "sync-user-for-test";
+const char switches::kSyncPasswordForTest[] = "sync-password-for-test";
+
 SyncTest::FakeInstanceID::FakeInstanceID(const std::string& app_id,
                                          gcm::GCMDriver* gcm_driver)
     : instance_id::InstanceID(app_id, gcm_driver),
@@ -309,6 +309,11 @@ SyncTest::SyncTest(TestType test_type)
       server_type_(SERVER_TYPE_UNDECIDED),
       previous_profile_(nullptr),
       num_clients_(-1) {
+  // TODO(crbug.com/1153297): This is a workaround to mitigate flakiness. Remove
+  // once the issue is resolved.
+  feature_list_.InitAndDisableFeature(
+      federated_learning::kFlocIdComputedEventLogging);
+
   sync_datatype_helper::AssociateWithTest(this);
   switch (test_type_) {
     case SINGLE_CLIENT: {

@@ -1,0 +1,238 @@
+[
+  {
+    "type": "ads",
+    "languages": [
+      "id",
+      "ms"
+    ],
+    "title": "ABPindo+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/abpindo+easylist.txt",
+    "homepage": "http://abpindo.blogspot.com/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "vi"
+    ],
+    "title": "ABPVN List+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/abpvn+easylist.txt",
+    "homepage": "http://abpvn.com/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "bg"
+    ],
+    "title": "Bulgarian list+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/bulgarian_list+easylist.txt",
+    "homepage": "https://stanev.org/abp/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "no",
+      "nb",
+      "nn",
+      "da",
+      "is",
+      "fo",
+      "kl"
+    ],
+    "title": "Dandelion Sprout's Nordic Filters+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/dandelion_sprouts_nordic_filters+easylist.txt",
+    "homepage": "https://github.com/DandelionSprout/adfilt"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "en"
+    ],
+    "title": "EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "zh"
+    ],
+    "title": "EasyList China+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistchina+easylist.txt",
+    "homepage": "http://abpchina.org/forum/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "cs",
+      "sk"
+    ],
+    "title": "EasyList Czech and Slovak+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistczechslovak+easylist.txt",
+    "homepage": "https://adblock.sk/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "nl"
+    ],
+    "title": "EasyList Dutch+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistdutch+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "de"
+    ],
+    "title": "EasyList Germany+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistgermany+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "he"
+    ],
+    "title": "EasyList Hebrew+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/israellist+easylist.txt",
+    "homepage": "https://github.com/easylist/EasyListHebrew"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "it"
+    ],
+    "title": "EasyList Italy+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistitaly+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "lt"
+    ],
+    "title": "EasyList Lithuania+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistlithuania+easylist.txt",
+    "homepage": "http://margevicius.lt/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "pl"
+    ],
+    "title": "EasyList Polish+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistpolish+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "pt"
+    ],
+    "title": "EasyList Portuguese+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistportuguese+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "es"
+    ],
+    "title": "EasyList Spanish+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/easylistspanish+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "bn",
+      "gu",
+      "hi",
+      "pa",
+      "as",
+      "mr",
+      "ml",
+      "te",
+      "kn",
+      "or",
+      "ne",
+      "si"
+    ],
+    "title": "IndianList+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/indianlist+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "ko"
+    ],
+    "title": "KoreanList+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/koreanlist+easylist.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "lv"
+    ],
+    "title": "Latvian List+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/latvianlist+easylist.txt",
+    "homepage": "https://notabug.org/latvian-list/adblock-latvian"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "ar"
+    ],
+    "title": "Liste AR+Liste FR+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/liste_ar+liste_fr+easylist.txt",
+    "homepage": "https://code.google.com/p/liste-ar-adblock/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "fr"
+    ],
+    "title": "Liste FR+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/liste_fr+easylist.txt",
+    "homepage": "https://forums.lanik.us/viewforum.php?f"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "ro"
+    ],
+    "title": "ROList+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/rolist+easylist.txt",
+    "homepage": "https://zoso.ro/rolist/"
+  },
+  {
+    "type": "ads",
+    "languages": [
+      "ru",
+      "uk"
+    ],
+    "title": "RuAdList+EasyList",
+    "url": "https://easylist-downloads.adblockplus.org/ruadlist+easylist.txt",
+    "homepage": "https://forums.lanik.us/viewforum.php?f"
+  },
+  {
+    "type": "circumvention",
+    "title": "ABP filters",
+    "url": "https://easylist-downloads.adblockplus.org/abp-filters-anti-cv.txt",
+    "homepage": "https://github.com/abp-filters/abp-filters-anti-cv"
+  },
+  {
+    "type": "privacy",
+    "title": "EasyPrivacy",
+    "url": "https://easylist-downloads.adblockplus.org/easyprivacy.txt",
+    "homepage": "https://easylist.to/"
+  },
+  {
+    "type": "social",
+    "title": "Fanboy's Social Blocking List",
+    "url": "https://easylist-downloads.adblockplus.org/fanboy-social.txt",
+    "homepage": "https://easylist.to/"
+  }
+]

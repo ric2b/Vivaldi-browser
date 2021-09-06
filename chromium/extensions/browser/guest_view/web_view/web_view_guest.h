@@ -21,6 +21,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "extensions/browser/script_executor.h"
+#include "extensions/common/mojom/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 
 #ifdef VIVALDI_BUILD
@@ -158,6 +159,9 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
                  base::OnceClosure callback);
 
   ScriptExecutor* script_executor() { return script_executor_.get(); }
+  WebViewPermissionHelper* web_view_permission_helper() {
+    return web_view_permission_helper_.get();
+  }
 
   // Enables or disables spatial navigation.
   void SetSpatialNavigationEnabled(bool enabled);
@@ -166,8 +170,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   bool IsSpatialNavigationEnabled() const;
 
  private:
-  friend class WebViewPermissionHelper;
-
   explicit WebViewGuest(content::WebContents* owner_web_contents);
 
   ~WebViewGuest() override;
@@ -329,6 +331,8 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void ApplyAttributes(const base::DictionaryValue& params);
 
   void SetTransparency();
+
+  extensions::mojom::LocalFrame* GetLocalFrame();
 
   // Identifies the set of rules registries belonging to this guest.
   int rules_registry_id_;

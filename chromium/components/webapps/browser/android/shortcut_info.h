@@ -61,6 +61,8 @@ struct ShortcutInfo {
   // This enum is used to back a UMA histogram, and must be treated as
   // append-only.
   // A Java counterpart will be generated for this enum.
+  // Some enum values are duplicated in
+  // org.chromium.webapk.lib.common.WebApkConstants.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.webapps
   // GENERATED_JAVA_CLASS_NAME_OVERRIDE: ShortcutSource
   enum Source {
@@ -70,7 +72,8 @@ struct ShortcutInfo {
     // Used for legacy PWAs added via the banner.
     SOURCE_APP_BANNER = 2,
     SOURCE_BOOKMARK_NAVIGATOR_WIDGET = 3,
-    SOURCE_BOOKMARK_SHORTCUT_WIDGET = 4,
+    // unused
+    // SOURCE_BOOKMARK_SHORTCUT_WIDGET = 4,
 
     // Used for legacy and WebAPKs launched from a notification.
     SOURCE_NOTIFICATION = 5,

@@ -10,6 +10,7 @@ import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.artifacts.ResolvedModuleVersion
 import org.gradle.api.artifacts.component.ComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
+import org.gradle.api.logging.Logger
 import org.gradle.maven.MavenModule
 import org.gradle.maven.MavenPomArtifact
 
@@ -43,6 +44,14 @@ class ChromiumDepGraph {
             licenseName: "MIT"),
         'com_github_kevinstern_software_and_algorithms': new PropertyOverride(
             licenseUrl: "https://raw.githubusercontent.com/KevinStern/software-and-algorithms/master/LICENSE"),
+        'com_google_android_datatransport_transport_api': new PropertyOverride(
+            description: "Interfaces for data logging in GmsCore SDKs."),
+        'com_google_android_datatransport_transport_backend_cct': new PropertyOverride(
+            exclude: true),  // We're not using datatransport functionality.
+        'com_google_android_datatransport_transport_runtime': new PropertyOverride(
+            exclude: true),  // We're not using datatransport functionality.
+        'com_google_android_gms_play_services_cloud_messaging': new PropertyOverride(
+            description: "Firebase Cloud Messaging library that interfaces with GmsCore."),
         'com_google_auto_auto_common': new PropertyOverride(
             licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
             licenseName: "Apache 2.0"),
@@ -68,6 +77,30 @@ class ChromiumDepGraph {
             url: "https://errorprone.info/",
             licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
             licenseName: "Apache 2.0"),
+        'com_google_firebase_firebase_annotations': new PropertyOverride(
+            description: "Common annotations for Firebase SKDs."),
+        'com_google_firebase_firebase_common': new PropertyOverride(
+            description: "Common classes for Firebase SDKs."),
+        'com_google_firebase_firebase_components': new PropertyOverride(
+            description: "Provides dependency management for Firebase SDKs."),
+        'com_google_firebase_firebase_datatransport': new PropertyOverride(
+            exclude: true),  // We're not using datatransport functionality.
+        'com_google_firebase_firebase_encoders_json': new PropertyOverride(
+            description: "JSON encoders used in Firebase SDKs."),
+        'com_google_firebase_firebase_encoders': new PropertyOverride(
+            description: "Commonly used encoders for Firebase SKDs."),
+        'com_google_firebase_firebase_iid_interop': new PropertyOverride(
+            description: "Interface library for Firebase IID SDK."),
+        'com_google_firebase_firebase_iid': new PropertyOverride(
+            description: "Firebase IID SDK to get access to Instance IDs."),
+        'com_google_firebase_firebase_installations_interop': new PropertyOverride(
+            description: "Interface library for Firebase Installations SDK."),
+        'com_google_firebase_firebase_installations': new PropertyOverride(
+            description: "Firebase Installations SDK containing the client libraries to manage FIS."),
+        'com_google_firebase_firebase_measurement_connector': new PropertyOverride(
+            description: "Bridge interfaces for Firebase analytics into GmsCore."),
+        'com_google_firebase_firebase_messaging': new PropertyOverride(
+            description: "Firebase Cloud Messaging SDK to send and receive push messages via FCM."),
         'com_google_googlejavaformat_google_java_format': new PropertyOverride(
             url: "https://github.com/google/google-java-format",
             licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
@@ -281,29 +314,37 @@ class ChromiumDepGraph {
             licenseName: "MIT"),
     ]
 
-    Project project
+    Project[] projects
+    Logger logger
     boolean skipLicenses
 
     void collectDependencies() {
-        def compileConfig = project.configurations.getByName('compile').resolvedConfiguration
-        def compileListenableFutureConfig = project.configurations.getByName(
-            'compileListenableFuture').resolvedConfiguration
-        def buildCompileConfig = project.configurations.getByName('buildCompile').resolvedConfiguration
-        def testCompileConfig = project.configurations.getByName('testCompile').resolvedConfiguration
-        def androidTestCompileConfig = project.configurations.getByName(
-            'androidTestCompile').resolvedConfiguration
-        List<String> topLevelIds = []
         Set<ResolvedConfiguration> deps = []
-        deps += compileConfig.firstLevelModuleDependencies
-        deps += compileListenableFutureConfig.firstLevelModuleDependencies
-        deps += buildCompileConfig.firstLevelModuleDependencies
-        deps += testCompileConfig.firstLevelModuleDependencies
-        deps += androidTestCompileConfig.firstLevelModuleDependencies
-
-        compileListenableFutureConfig.firstLevelModuleDependencies.each { dependency ->
-            lowerVersionOverride.add(makeModuleId(dependency.module))
+        Set<ResolvedDependency> firstLevelModuleDependencies = []
+        Map<String, List<ResolvedArtifact>> resolvedArtifacts = new HashMap<>()
+        String[] configNames = [
+            'compile',
+            'compileListenableFuture',
+            'buildCompile',
+            'testCompile',
+            'androidTestCompile'
+        ]
+        for (Project project : projects) {
+            for (String configName : configNames) {
+                def config = project.configurations.getByName(configName).resolvedConfiguration
+                deps += config.firstLevelModuleDependencies
+                if (!resolvedArtifacts.containsKey(configName)) {
+                  resolvedArtifacts[configName] = []
+                }
+                resolvedArtifacts[configName].addAll(config.resolvedArtifacts)
+          }
         }
 
+        resolvedArtifacts['compileListenableFuture'].each { artifact ->
+            lowerVersionOverride.add(makeModuleId(artifact))
+        }
+
+        List<String> topLevelIds = []
         deps.each { dependency ->
             topLevelIds.add(makeModuleId(dependency.module))
             collectDependenciesInternal(dependency)
@@ -311,29 +352,29 @@ class ChromiumDepGraph {
 
         topLevelIds.each { id -> dependencies.get(id).visible = true }
 
-        testCompileConfig.resolvedArtifacts.each { artifact ->
+        resolvedArtifacts['testCompile'].each { artifact ->
             def id = makeModuleId(artifact)
             def dep = dependencies.get(id)
             assert dep != null : "No dependency collected for artifact ${artifact.name}"
             dep.testOnly = true
         }
 
-        androidTestCompileConfig.resolvedArtifacts.each { artifact ->
+        resolvedArtifacts['androidTestCompile'].each { artifact ->
             def dep = dependencies.get(makeModuleId(artifact))
             assert dep != null : "No dependency collected for artifact ${artifact.name}"
             dep.supportsAndroid = true
             dep.testOnly = true
         }
 
-        buildCompileConfig.resolvedArtifacts.each { artifact ->
+        resolvedArtifacts['buildCompile'].each { artifact ->
             def id = makeModuleId(artifact)
             def dep = dependencies.get(id)
             assert dep != null : "No dependency collected for artifact ${artifact.name}"
             dep.testOnly = false
         }
 
-        def compileResolvedArtifacts = compileConfig.resolvedArtifacts
-        compileResolvedArtifacts += compileListenableFutureConfig.resolvedArtifacts
+        def compileResolvedArtifacts = resolvedArtifacts['compile']
+        compileResolvedArtifacts += resolvedArtifacts['compileListenableFuture']
         compileResolvedArtifacts.each { artifact ->
             def id = makeModuleId(artifact)
             def dep = dependencies.get(id)
@@ -349,19 +390,24 @@ class ChromiumDepGraph {
                 if (dep != null) {
                     dep.isShipped = fallbackProperties.isShipped
                 } else {
-                    project.logger.warn("PROPERTY_OVERRIDES has stale dep: " + id)
+                    logger.warn("PROPERTY_OVERRIDES has stale dep: " + id)
                 }
             }
         }
     }
 
     private ResolvedArtifactResult getPomFromArtifact(ComponentIdentifier componentId) {
-        def component = project.dependencies.createArtifactResolutionQuery()
-                .forComponents(componentId)
-                .withArtifacts(MavenModule, MavenPomArtifact)
-                .execute()
-                .resolvedComponents[0]
-        return component.getArtifacts(MavenPomArtifact)[0]
+        for (Project project : projects) {
+          def component = project.dependencies.createArtifactResolutionQuery()
+                  .forComponents(componentId)
+                  .withArtifacts(MavenModule, MavenPomArtifact)
+                  .execute()
+                  .resolvedComponents[0]
+          if (component != null) {
+            return component.getArtifacts(MavenPomArtifact)[0]
+          }
+       }
+       return null
     }
 
     private void collectDependenciesInternal(ResolvedDependency dependency) {
@@ -472,15 +518,27 @@ class ChromiumDepGraph {
 
     private customizeDep(DependencyDescription dep) {
         if (dep.id?.startsWith("com_google_android_")) {
-            project.logger.debug("Using Android license for ${dep.id}")
+            logger.debug("Using Android license for ${dep.id}")
+            dep.licenseName = "Android Software Development Kit License"
             dep.licenseUrl = ""
             // This should match fetch_all._ANDROID_SDK_LICENSE_PATH.
             dep.licensePath = "licenses/Android_SDK_License-December_9_2016.txt"
-            if (dep.url?.isEmpty()) {
+            if (!dep.url) {
                 dep.url = "https://developers.google.com/android/guides/setup"
             }
+        } else if (dep.id?.startsWith("com_google_firebase_")) {
+            // Use proper Android license file.
+            if (dep.licenseUrl?.equals("https://developer.android.com/studio/terms.html")) {
+                logger.debug("Using Android license for ${dep.id}")
+                dep.licenseUrl = ""
+                dep.licensePath = "licenses/Android_SDK_License-December_9_2016.txt"
+            }
+            // Some firebase dependencies don't set their URL.
+            if (!dep.url) {
+                dep.url = "https://firebase.google.com"
+            }
         } else if (dep.licenseUrl?.equals("http://openjdk.java.net/legal/gplv2+ce.html")) {
-            project.logger.debug("Detected GPL v2 /w classpath license for ${dep.id}")
+            logger.debug("Detected GPL v2 /w classpath license for ${dep.id}")
             // This avoids using html in a LICENSE file.
             dep.licenseUrl = ""
             dep.licenseName = "GPL v2 with the classpath exception"
@@ -489,7 +547,10 @@ class ChromiumDepGraph {
 
         def fallbackProperties = PROPERTY_OVERRIDES.get(dep.id)
         if (fallbackProperties != null) {
-            project.logger.debug("Using fallback properties for ${dep.id}")
+            logger.debug("Using fallback properties for ${dep.id}")
+            if (fallbackProperties.description != null) {
+              dep.description = fallbackProperties.description
+            }
             if (fallbackProperties.licenseName != null) {
               dep.licenseName = fallbackProperties.licenseName
             }

@@ -33,34 +33,6 @@ bool deleteFile(base::FilePath file_path,
   return base::DeleteFile(file_path);
 }
 
-bool Rename(base::FilePath file_path,
-            base::FilePath::StringType old_file_name,
-            base::FilePath::StringType new_file_name) {
-  base::FilePath new_file_path = file_path;
-
-  if (old_file_name.length() > 0) {
-    file_path = file_path.Append(old_file_name);
-  }
-
-  if (new_file_name.length() > 0) {
-    new_file_path = new_file_path.Append(new_file_name);
-  }
-
-  if (!file_path.IsAbsolute()) {
-    return false;
-  }
-
-  if (!new_file_path.IsAbsolute()) {
-    return false;
-  }
-
-  if (!base::PathExists(file_path)) {
-    return false;
-  }
-
-  return base::Move(file_path, new_file_path);
-}
-
 base::FilePath::StringType FilePathAsString(const base::FilePath& path) {
 #if defined(OS_WIN)
   return path.value();
@@ -106,9 +78,9 @@ namespace extensions {
 
 namespace mail = vivaldi::mail_private;
 
-ExtensionFunction::ResponseAction MailPrivateGetPathsFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::GetPaths::Params> params(
-      vivaldi::mail_private::GetPaths::Params::Create(*args_));
+ExtensionFunction::ResponseAction MailPrivateGetFilePathsFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::GetFilePaths::Params> params(
+      vivaldi::mail_private::GetFilePaths::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::FilePath file_path = base::FilePath::FromUTF8Unsafe(params->path);
@@ -127,19 +99,19 @@ ExtensionFunction::ResponseAction MailPrivateGetPathsFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&FindMailFiles, file_path),
-      base::BindOnce(&MailPrivateGetPathsFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateGetFilePathsFunction::OnFinished, this));
 
   return RespondLater();
 }
 
-void MailPrivateGetPathsFunction::OnFinished(
+void MailPrivateGetFilePathsFunction::OnFinished(
     const std::vector<base::FilePath::StringType>& results) {
   std::vector<std::string> string_paths;
   for (const auto& result : results) {
     string_paths.push_back(StringTypeToString(result));
   }
-  Respond(
-      ArgumentList(extensions::vivaldi::mail_private::GetPaths::Results::Create(
+  Respond(ArgumentList(
+      extensions::vivaldi::mail_private::GetFilePaths::Results::Create(
           string_paths)));
 }
 
@@ -189,9 +161,9 @@ bool SaveBuffer(base::FilePath file_path,
                          data.size()) != -1;
 }
 
-GetDataDirectoryResult CreateDirectory(base::FilePath file_path,
-                                       std::string directory) {
-  GetDataDirectoryResult result;
+GetDirectoryResult CreateDirectory(base::FilePath file_path,
+                                   std::string directory) {
+  GetDirectoryResult result;
 
   file_path = file_path.Append(kMailDirectory);
   file_path = file_path.AppendASCII(directory);
@@ -208,9 +180,10 @@ GetDataDirectoryResult CreateDirectory(base::FilePath file_path,
   return result;
 }
 
-ExtensionFunction::ResponseAction MailPrivateSaveFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::Save::Params> params(
-      vivaldi::mail_private::Save::Params::Create(*args_));
+ExtensionFunction::ResponseAction
+MailPrivateWriteTextToMessageFileFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::WriteTextToMessageFile::Params> params(
+      vivaldi::mail_private::WriteTextToMessageFile::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<base::FilePath::StringType> string_paths;
@@ -227,11 +200,12 @@ ExtensionFunction::ResponseAction MailPrivateSaveFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Save, file_path, string_paths, file_name, data),
-      base::BindOnce(&MailPrivateSaveFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateWriteTextToMessageFileFunction::OnFinished,
+                     this));
 
   return RespondLater();
 }
-void MailPrivateSaveFunction::OnFinished(bool result) {
+void MailPrivateWriteTextToMessageFileFunction::OnFinished(bool result) {
   if (result == true) {
     Respond(NoArguments());
   } else {
@@ -239,9 +213,11 @@ void MailPrivateSaveFunction::OnFinished(bool result) {
   }
 }
 
-ExtensionFunction::ResponseAction MailPrivateSaveBufferFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::SaveBuffer::Params> params(
-      vivaldi::mail_private::SaveBuffer::Params::Create(*args_));
+ExtensionFunction::ResponseAction
+MailPrivateWriteBufferToMessageFileFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::WriteBufferToMessageFile::Params>
+      params(vivaldi::mail_private::WriteBufferToMessageFile::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<base::FilePath::StringType> string_paths;
@@ -258,11 +234,12 @@ ExtensionFunction::ResponseAction MailPrivateSaveBufferFunction::Run() {
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&SaveBuffer, file_path, string_paths, file_name,
                      params->raw),
-      base::BindOnce(&MailPrivateSaveBufferFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateWriteBufferToMessageFileFunction::OnFinished,
+                     this));
 
   return RespondLater();
 }
-void MailPrivateSaveBufferFunction::OnFinished(bool result) {
+void MailPrivateWriteBufferToMessageFileFunction::OnFinished(bool result) {
   if (result == true) {
     Respond(NoArguments());
   } else {
@@ -274,9 +251,9 @@ bool Delete(base::FilePath file_path, base::FilePath::StringType file_name) {
   return deleteFile(file_path, file_name);
 }
 
-ExtensionFunction::ResponseAction MailPrivateDeleteFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::Delete::Params> params(
-      vivaldi::mail_private::Delete::Params::Create(*args_));
+ExtensionFunction::ResponseAction MailPrivateDeleteMessageFileFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::DeleteMessageFile::Params> params(
+      vivaldi::mail_private::DeleteMessageFile::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<std::string>& string_paths = params->paths;
@@ -297,12 +274,12 @@ ExtensionFunction::ResponseAction MailPrivateDeleteFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Delete, file_path, file_name),
-      base::BindOnce(&MailPrivateDeleteFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateDeleteMessageFileFunction::OnFinished, this));
 
   return RespondLater();
 }
 
-void MailPrivateDeleteFunction::OnFinished(bool result) {
+void MailPrivateDeleteMessageFileFunction::OnFinished(bool result) {
   if (result == true) {
     Respond(NoArguments());
   } else {
@@ -329,9 +306,9 @@ ReadFileResult Read(base::FilePath file_path) {
   return result;
 }
 
-ExtensionFunction::ResponseAction MailPrivateReadFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::Read::Params> params(
-      vivaldi::mail_private::Read::Params::Create(*args_));
+ExtensionFunction::ResponseAction MailPrivateReadFileToBufferFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::ReadFileToBuffer::Params> params(
+      vivaldi::mail_private::ReadFileToBuffer::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::FilePath file_path = base::FilePath::FromUTF8Unsafe(params->file_name);
@@ -349,12 +326,12 @@ ExtensionFunction::ResponseAction MailPrivateReadFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Read, file_path),
-      base::BindOnce(&MailPrivateReadFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateReadFileToBufferFunction::OnFinished, this));
 
   return RespondLater();
 }
 
-void MailPrivateReadFunction::OnFinished(ReadFileResult result) {
+void MailPrivateReadFileToBufferFunction::OnFinished(ReadFileResult result) {
   if (result.success == true) {
     Respond(
         OneArgument(base::Value(base::as_bytes(base::make_span(result.raw)))));
@@ -362,9 +339,11 @@ void MailPrivateReadFunction::OnFinished(ReadFileResult result) {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
 }
-ExtensionFunction::ResponseAction MailPrivateReadM3MessageFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::ReadM3Message::Params> params(
-      vivaldi::mail_private::ReadM3Message::Params::Create(*args_));
+ExtensionFunction::ResponseAction
+MailPrivateReadMessageFileToBufferFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::ReadMessageFileToBuffer::Params>
+      params(vivaldi::mail_private::ReadMessageFileToBuffer::Params::Create(
+          *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<std::string>& string_paths = params->paths;
@@ -389,12 +368,14 @@ ExtensionFunction::ResponseAction MailPrivateReadM3MessageFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Read, file_path),
-      base::BindOnce(&MailPrivateReadM3MessageFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateReadMessageFileToBufferFunction::OnFinished,
+                     this));
 
   return RespondLater();
 }
 
-void MailPrivateReadM3MessageFunction::OnFinished(ReadFileResult result) {
+void MailPrivateReadMessageFileToBufferFunction::OnFinished(
+    ReadFileResult result) {
   if (result.success == true) {
     Respond(
         OneArgument(base::Value(base::as_bytes(base::make_span(result.raw)))));
@@ -403,9 +384,9 @@ void MailPrivateReadM3MessageFunction::OnFinished(ReadFileResult result) {
   }
 }
 
-ExtensionFunction::ResponseAction MailPrivateReadFileFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::ReadFile::Params> params(
-      vivaldi::mail_private::ReadFile::Params::Create(*args_));
+ExtensionFunction::ResponseAction MailPrivateReadFileToTextFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::ReadFileToText::Params> params(
+      vivaldi::mail_private::ReadFileToText::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string path = params->path;
@@ -416,24 +397,24 @@ ExtensionFunction::ResponseAction MailPrivateReadFileFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Read, file_path),
-      base::BindOnce(&MailPrivateReadFileFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateReadFileToTextFunction::OnFinished, this));
 
   return RespondLater();
 }
 
-void MailPrivateReadFileFunction::OnFinished(ReadFileResult result) {
+void MailPrivateReadFileToTextFunction::OnFinished(ReadFileResult result) {
   if (result.success == true) {
     Respond(ArgumentList(
-        extensions::vivaldi::mail_private::ReadFile::Results::Create(
+        extensions::vivaldi::mail_private::ReadFileToText::Results::Create(
             result.raw)));
   } else {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
 }
 
-GetDataDirectoryResult GetDataDirectory(base::FilePath file_path) {
+GetDirectoryResult GetDirectory(base::FilePath file_path) {
   std::string path = "";
-  GetDataDirectoryResult result;
+  GetDirectoryResult result;
 
   if (!base::PathExists(file_path)) {
     result.success = false;
@@ -446,9 +427,9 @@ GetDataDirectoryResult GetDataDirectory(base::FilePath file_path) {
   return result;
 }
 
-ExtensionFunction::ResponseAction MailPrivateGetDataDirectoryFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::GetDataDirectory::Params> params(
-      vivaldi::mail_private::GetDataDirectory::Params::Create(*args_));
+ExtensionFunction::ResponseAction MailPrivateGetFileDirectoryFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::GetFileDirectory::Params> params(
+      vivaldi::mail_private::GetFileDirectory::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   base::FilePath::StringType hashed_account_id =
@@ -463,17 +444,17 @@ ExtensionFunction::ResponseAction MailPrivateGetDataDirectoryFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&GetDataDirectory, file_path),
-      base::BindOnce(&MailPrivateGetDataDirectoryFunction::OnFinished, this));
+      base::BindOnce(&GetDirectory, file_path),
+      base::BindOnce(&MailPrivateGetFileDirectoryFunction::OnFinished, this));
 
   return RespondLater();
 }
 
-void MailPrivateGetDataDirectoryFunction::OnFinished(
-    GetDataDirectoryResult result) {
+void MailPrivateGetFileDirectoryFunction::OnFinished(
+    GetDirectoryResult result) {
   if (result.success == true) {
     Respond(ArgumentList(
-        extensions::vivaldi::mail_private::GetDataDirectory::Results::Create(
+        extensions::vivaldi::mail_private::GetFileDirectory::Results::Create(
             StringTypeToString(result.path))));
   } else {
     Respond(Error("Directory not found"));
@@ -481,9 +462,11 @@ void MailPrivateGetDataDirectoryFunction::OnFinished(
 }
 
 ExtensionFunction::ResponseAction
-MailPrivateCreateDataDirectoryFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::CreateDataDirectory::Params> params(
-      vivaldi::mail_private::CreateDataDirectory::Params::Create(*args_));
+MailPrivateCreateFileDirectoryFunction::Run() {
+  std::unique_ptr<
+      extensions::vivaldi::mail_private::CreateFileDirectory::Params>
+      params(extensions::vivaldi::mail_private::CreateFileDirectory::Params::
+                 Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string hashed_account_id = params->hashed_account_id;
@@ -495,63 +478,20 @@ MailPrivateCreateDataDirectoryFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&CreateDirectory, file_path, hashed_account_id),
-      base::BindOnce(&MailPrivateCreateDataDirectoryFunction::OnFinished,
+      base::BindOnce(&MailPrivateCreateFileDirectoryFunction::OnFinished,
                      this));
 
   return RespondLater();
 }
 
-void MailPrivateCreateDataDirectoryFunction::OnFinished(
-    GetDataDirectoryResult result) {
+void MailPrivateCreateFileDirectoryFunction::OnFinished(
+    GetDirectoryResult result) {
   if (result.success == true) {
     Respond(ArgumentList(
-        extensions::vivaldi::mail_private::CreateDataDirectory::Results::Create(
+        extensions::vivaldi::mail_private::CreateFileDirectory::Results::Create(
             StringTypeToString(result.path))));
   } else {
     Respond(Error("Directory not created"));
   }
 }
-
-ExtensionFunction::ResponseAction MailPrivateRenameFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::Rename::Params> params(
-      vivaldi::mail_private::Rename::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  std::vector<base::FilePath::StringType> string_paths;
-  for (const auto& path : params->paths) {
-    string_paths.push_back(StringToStringType(path));
-  }
-
-  base::FilePath::StringType file_name = StringToStringType(params->file_name);
-  base::FilePath::StringType new_file_name =
-      StringToStringType(params->new_file_name);
-
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  base::FilePath file_path = profile->GetPath();
-
-  file_path = file_path.Append(kMailDirectory);
-
-  size_t count = string_paths.size();
-
-  for (size_t i = 0; i < count; i++) {
-    file_path = file_path.Append(string_paths[i]);
-  }
-
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&Rename, file_path, file_name, new_file_name),
-      base::BindOnce(&MailPrivateRenameFunction::OnFinished, this));
-
-  return RespondLater();
-}
-
-void MailPrivateRenameFunction::OnFinished(bool result) {
-  if (result == true) {
-    Respond(NoArguments());
-  } else {
-    Respond(Error(base::StringPrintf("Error renaming file")));
-  }
-}
-
 }  //  namespace extensions

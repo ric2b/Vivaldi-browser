@@ -9,13 +9,14 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/launch_utils.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -256,7 +257,8 @@ void LauncherControllerHelper::LaunchApp(const ash::ShelfID& id,
   // Launch apps with AppServiceProxy.Launch.
   if (proxy->AppRegistryCache().GetAppType(app_id) !=
       apps::mojom::AppType::kUnknown) {
-    proxy->Launch(app_id, event_flags, ConvertLaunchSource(source), display_id);
+    proxy->Launch(app_id, event_flags, ConvertLaunchSource(source),
+                  apps::MakeWindowInfo(display_id));
     return;
   }
 

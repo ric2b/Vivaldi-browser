@@ -55,9 +55,11 @@ class PLATFORM_EXPORT HeapAllocator {
 
   template <typename T, typename HashTable>
   static T* AllocateHashTableBacking(size_t size) {
+    static_assert(sizeof(T) == sizeof(typename HashTable::ValueType),
+                  "T must match ValueType.");
     return reinterpret_cast<T*>(
-        MakeGarbageCollected<HeapHashTableBacking<HashTable>>(
-            size / sizeof(typename HashTable::ValueType)));
+        MakeGarbageCollected<HeapHashTableBacking<HashTable>>(size /
+                                                              sizeof(T)));
   }
   template <typename T, typename HashTable>
   static T* AllocateZeroedHashTableBacking(size_t size) {
@@ -65,6 +67,13 @@ class PLATFORM_EXPORT HeapAllocator {
   }
   static void FreeHashTableBacking(void* address);
   static bool ExpandHashTableBacking(void*, size_t);
+
+  template <typename Traits>
+  static bool CanReuseHashTableDeletedBucket() {
+    if (Traits::kEmptyValueIsZero || !Traits::kCanTraceConcurrently)
+      return true;
+    return !ThreadState::Current()->IsMarkingInProgress();
+  }
 
   static bool IsAllocationAllowed() {
     return ThreadState::Current()->IsAllocationAllowed();
@@ -129,8 +138,9 @@ class PLATFORM_EXPORT HeapAllocator {
     MarkingVisitor::WriteBarrier(reinterpret_cast<void**>(slot));
   }
 
-  static void TraceBackingStoreIfMarked(const void* object) {
-    MarkingVisitor::RetraceObject(object);
+  template <typename T>
+  static void TraceBackingStoreIfMarked(T** slot) {
+    MarkingVisitor::RetraceObject(*slot);
   }
 
   template <typename T, typename Traits>
@@ -145,6 +155,14 @@ class PLATFORM_EXPORT HeapAllocator {
     MarkingVisitor::WriteBarrier(
         []() { return ThreadState::Current(); }, array, sizeof(T), len,
         TraceCollectionIfEnabled<WTF::kNoWeakHandling, T, Traits>::Trace);
+  }
+
+  static bool DeferTraceToMutatorThreadIfConcurrent(Visitor* visitor,
+                                                    const void* object,
+                                                    TraceCallback callback,
+                                                    size_t deferred_size) {
+    return visitor->DeferredTraceIfConcurrent({object, callback},
+                                              deferred_size);
   }
 
  private:

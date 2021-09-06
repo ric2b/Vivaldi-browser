@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -77,6 +78,16 @@ void OffsetComponentsExcludingScheme(url::Parsed* parts, int offset) {
   }
 }
 
+bool HasScheme(const base::string16& input, const char* scheme) {
+  std::string utf8_input(base::UTF16ToUTF8(input));
+  url::Component view_source_scheme;
+  if (url::FindAndCompareScheme(utf8_input, kViewSourceScheme,
+                                &view_source_scheme)) {
+    utf8_input.erase(0, view_source_scheme.end() + 1);
+  }
+  return url::FindAndCompareScheme(utf8_input, scheme, nullptr);
+}
+
 }  // namespace
 
 AutocompleteInput::AutocompleteInput()
@@ -89,31 +100,36 @@ AutocompleteInput::AutocompleteInput()
       keyword_mode_entry_method_(metrics::OmniboxEventProto::INVALID),
       want_asynchronous_matches_(true),
       should_use_https_as_default_scheme_(false),
-      added_default_scheme_to_typed_url_(false) {}
+      added_default_scheme_to_typed_url_(false),
+      https_port_for_testing_(0) {}
 
 AutocompleteInput::AutocompleteInput(
     const base::string16& text,
     metrics::OmniboxEventProto::PageClassification current_page_classification,
     const AutocompleteSchemeClassifier& scheme_classifier,
-    bool should_use_https_as_default_scheme)
+    bool should_use_https_as_default_scheme,
+    int https_port_for_testing)
     : AutocompleteInput(text,
                         std::string::npos,
                         current_page_classification,
                         scheme_classifier,
-                        should_use_https_as_default_scheme) {}
+                        should_use_https_as_default_scheme,
+                        https_port_for_testing) {}
 
 AutocompleteInput::AutocompleteInput(
     const base::string16& text,
     size_t cursor_position,
     metrics::OmniboxEventProto::PageClassification current_page_classification,
     const AutocompleteSchemeClassifier& scheme_classifier,
-    bool should_use_https_as_default_scheme)
+    bool should_use_https_as_default_scheme,
+    int https_port_for_testing)
     : AutocompleteInput(text,
                         cursor_position,
                         "",
                         current_page_classification,
                         scheme_classifier,
-                        should_use_https_as_default_scheme) {}
+                        should_use_https_as_default_scheme,
+                        https_port_for_testing) {}
 
 AutocompleteInput::AutocompleteInput(
     const base::string16& text,
@@ -121,12 +137,14 @@ AutocompleteInput::AutocompleteInput(
     const std::string& desired_tld,
     metrics::OmniboxEventProto::PageClassification current_page_classification,
     const AutocompleteSchemeClassifier& scheme_classifier,
-    bool should_use_https_as_default_scheme)
+    bool should_use_https_as_default_scheme,
+    int https_port_for_testing)
     : AutocompleteInput() {
   cursor_position_ = cursor_position;
   current_page_classification_ = current_page_classification;
   desired_tld_ = desired_tld;
   should_use_https_as_default_scheme_ = should_use_https_as_default_scheme;
+  https_port_for_testing_ = https_port_for_testing;
   Init(text, scheme_classifier);
 }
 
@@ -156,7 +174,7 @@ void AutocompleteInput::Init(
       !base::StartsWith(text_, scheme_, base::CompareCase::INSENSITIVE_ASCII) &&
       !url::HostIsIPAddress(canonicalized_url.host()) &&
       !net::IsHostnameNonUnique(base::UTF16ToUTF8(text)) &&
-      canonicalized_url.port().empty()) {
+      (canonicalized_url.port().empty() || https_port_for_testing_)) {
     // Use HTTPS as the default scheme for URLs that are typed without a scheme.
     // Inputs of type UNKNOWN can still be valid URLs, but these will be mainly
     // intranet hosts which we don't to upgrade to HTTPS so we only check the
@@ -174,6 +192,14 @@ void AutocompleteInput::Init(
     scheme_ = base::ASCIIToUTF16(url::kHttpsScheme);
     GURL::Replacements replacements;
     replacements.SetSchemeStr(url::kHttpsScheme);
+    // This needs to be in scope when ReplaceComponents() is called:
+    const std::string port_str = base::NumberToString(https_port_for_testing_);
+    if (https_port_for_testing_) {
+      // We'll only get here in tests. Tests should always have a non-default
+      // port on the input text.
+      DCHECK(!canonicalized_url.port().empty());
+      replacements.SetPortStr(port_str);
+    }
     canonicalized_url = canonicalized_url.ReplaceComponents(replacements);
     // We changed the scheme from http to https. Offset remaining components
     // by one.
@@ -597,12 +623,12 @@ int AutocompleteInput::NumNonHostComponents(const url::Parsed& parts) {
 
 // static
 bool AutocompleteInput::HasHTTPScheme(const base::string16& input) {
-  std::string utf8_input(base::UTF16ToUTF8(input));
-  url::Component scheme;
-  if (url::FindAndCompareScheme(utf8_input, kViewSourceScheme, &scheme)) {
-    utf8_input.erase(0, scheme.end() + 1);
-  }
-  return url::FindAndCompareScheme(utf8_input, url::kHttpScheme, nullptr);
+  return HasScheme(input, url::kHttpScheme);
+}
+
+// static
+bool AutocompleteInput::HasHTTPSScheme(const base::string16& input) {
+  return HasScheme(input, url::kHttpsScheme);
 }
 
 void AutocompleteInput::UpdateText(const base::string16& text,
@@ -633,6 +659,7 @@ void AutocompleteInput::Clear() {
   focus_type_ = OmniboxFocusType::DEFAULT;
   terms_prefixed_by_http_or_https_.clear();
   query_tile_id_.reset();
+  https_port_for_testing_ = false;
 }
 
 size_t AutocompleteInput::EstimateMemoryUsage() const {

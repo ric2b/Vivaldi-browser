@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "base/check.h"
-#include "chrome/browser/chromeos/settings/stats_reporting_controller.h"
+#include "chrome/browser/ash/settings/stats_reporting_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/crosapi/mojom/metrics_reporting.mojom.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -47,9 +47,10 @@ MetricsReportingAsh::MetricsReportingAsh(std::unique_ptr<Delegate> delegate,
   pref_change_registrar_.Init(local_state_);
   // base::Unretained() is safe because PrefChangeRegistrar removes all
   // observers when it is destroyed.
-  pref_change_registrar_.Add(metrics::prefs::kMetricsReportingEnabled,
-                             base::Bind(&MetricsReportingAsh::NotifyObservers,
-                                        base::Unretained(this)));
+  pref_change_registrar_.Add(
+      metrics::prefs::kMetricsReportingEnabled,
+      base::BindRepeating(&MetricsReportingAsh::NotifyObservers,
+                          base::Unretained(this)));
 }
 
 MetricsReportingAsh::~MetricsReportingAsh() = default;

@@ -30,7 +30,7 @@ enum Type {
   // set.
   kSync,
   kDefault,
-  kMaxValue = kDefault
+  kMaxValue = kDefault,
 };
 }  // namespace Source
 
@@ -47,7 +47,8 @@ enum Type {
   kUninstallationViaOsSettings,
   kFileHandlers,
   kProtocolHandlers,
-  kMaxValue = kProtocolHandlers,
+  kUrlHandlers,
+  kMaxValue = kUrlHandlers,
 };
 }  // namespace OsHookType
 
@@ -112,7 +113,7 @@ enum class InstallResultCode {
   kSuccessOfflineOnlyInstall = 23,
   kSuccessOfflineFallbackInstall = 24,
 
-  kMaxValue = kSuccessOfflineFallbackInstall
+  kMaxValue = kSuccessOfflineFallbackInstall,
 };
 
 // Checks if InstallResultCode is not a failure.
@@ -205,14 +206,25 @@ apps::mojom::LaunchContainer ConvertDisplayModeToAppLaunchContainer(
 
 // The operation mode for Run on OS Login.
 enum class RunOnOsLoginMode {
-  // kUndefined: The web app is not registered with the OS.
-  kUndefined = 0,
-  // kWindowed: The web app is registered with the OS and will be launched as
+  // kNotRun: The web app will not run during OS login.
+  kNotRun = 0,
+  // kWindowed: The web app will run during OS login and will be launched as
   // normal window. This is also the default launch mode for web apps.
   kWindowed = 1,
-  // kMinimized: The web app is registered with the OS and will be launched as a
+  // kMinimized: The web app will run during OS login and will be launched as a
   // minimized window.
-  kMinimized = 2
+  kMinimized = 2,
+};
+
+enum class RunOnOsLoginPolicy {
+  // kAllowed: User can configure an app to run on OS Login.
+  kAllowed = 0,
+  // kDisallow: Policy prevents users from configuring an app to run on OS
+  // Login.
+  kBlocked = 1,
+  // kRunWindowed: Policy requires an app to to run on OS Login as a normal
+  // window.
+  kRunWindowed = 2,
 };
 
 std::string RunOnOsLoginModeToString(RunOnOsLoginMode mode);
@@ -227,7 +239,7 @@ enum class InstallIphResult {
   kCanceled = 1,
   // Ignored IPH, didn't click install.
   kIgnored = 2,
-  kMaxValue = kIgnored
+  kMaxValue = kIgnored,
 };
 
 // Number of times IPH can be ignored for this app before it's muted.

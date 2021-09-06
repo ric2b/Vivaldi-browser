@@ -32,6 +32,8 @@
 #include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -42,6 +44,51 @@
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 namespace blink {
+
+namespace {
+
+media::GpuVideoAcceleratorFactories* GetGpuFactoriesOnMainThread() {
+  DCHECK(IsMainThread());
+  return Platform::Current()->GetGpuFactories();
+}
+
+void DecoderSupport_OnKnown(
+    VideoDecoderSupport* support,
+    std::unique_ptr<VideoDecoder::MediaConfigType> media_config,
+    ScriptPromiseResolver* resolver,
+    media::GpuVideoAcceleratorFactories* gpu_factories) {
+  DCHECK(gpu_factories->IsDecoderSupportKnown());
+  support->setSupported(
+      gpu_factories->IsDecoderConfigSupported(*media_config) ==
+      media::GpuVideoAcceleratorFactories::Supported::kTrue);
+  resolver->Resolve(support);
+}
+
+void DecoderSupport_OnGpuFactories(
+    VideoDecoderSupport* support,
+    std::unique_ptr<VideoDecoder::MediaConfigType> media_config,
+    ScriptPromiseResolver* resolver,
+    media::GpuVideoAcceleratorFactories* gpu_factories) {
+  if (!gpu_factories || !gpu_factories->IsGpuVideoAcceleratorEnabled()) {
+    support->setSupported(false);
+    resolver->Resolve(support);
+    return;
+  }
+
+  if (gpu_factories->IsDecoderSupportKnown()) {
+    DecoderSupport_OnKnown(support, std::move(media_config), resolver,
+                           gpu_factories);
+    return;
+  }
+
+  gpu_factories->NotifyDecoderSupportKnown(
+      ConvertToBaseOnceCallback(CrossThreadBindOnce(
+          &DecoderSupport_OnKnown, WrapCrossThreadPersistent(support),
+          std::move(media_config), WrapCrossThreadPersistent(resolver),
+          CrossThreadUnretained(gpu_factories))));
+}
+
+}  // namespace
 
 bool ParseCodecString(const String& codec_string,
                       media::VideoType& out_video_type,
@@ -69,6 +116,9 @@ bool ParseCodecString(const String& codec_string,
   return true;
 }
 
+// TODO(crbug.com/1179970): rename out_console_message.
+// TODO(crbug.com/1181443): Make this a pure virtual in DecoderTemplate, and
+// refactor its uses.
 bool IsValidConfig(const VideoDecoderConfig& config,
                    media::VideoType& out_video_type,
                    String& out_console_message) {
@@ -167,18 +217,9 @@ VideoDecoderConfig* CopyConfig(const VideoDecoderConfig& config) {
   copy->setCodec(config.codec());
 
   if (config.hasDescription()) {
-    DOMArrayBuffer* buffer_copy;
-    if (config.description().IsArrayBuffer()) {
-      DOMArrayBuffer* buffer = config.description().GetAsArrayBuffer();
-      buffer_copy =
-          DOMArrayBuffer::Create(buffer->Data(), buffer->ByteLength());
-    } else {
-      DCHECK(config.description().IsArrayBufferView());
-      DOMArrayBufferView* view =
-          config.description().GetAsArrayBufferView().Get();
-      buffer_copy =
-          DOMArrayBuffer::Create(view->BaseAddress(), view->byteLength());
-    }
+    DOMArrayPiece buffer(config.description());
+    DOMArrayBuffer* buffer_copy =
+        DOMArrayBuffer::Create(buffer.Data(), buffer.ByteLength());
     copy->setDescription(
         ArrayBufferOrArrayBufferView::FromArrayBuffer(buffer_copy));
   }
@@ -207,6 +248,9 @@ VideoDecoderConfig* CopyConfig(const VideoDecoderConfig& config) {
   if (config.hasDisplayHeight())
     copy->setDisplayHeight(config.displayHeight());
 
+  if (config.hasHardwareAcceleration())
+    copy->setHardwareAcceleration(config.hardwareAcceleration());
+
   return copy;
 }
 
@@ -218,6 +262,15 @@ VideoDecoderTraits::CreateDecoder(
     media::MediaLog* media_log) {
   return std::make_unique<VideoDecoderBroker>(execution_context, gpu_factories,
                                               media_log);
+}
+
+// static
+HardwarePreference VideoDecoder::GetHardwareAccelerationPreference(
+    const ConfigType& config) {
+  // The IDL defines a default value of "allow".
+  DCHECK(config.hasHardwareAcceleration());
+  return StringToHardwarePreference(
+      IDLEnumAsString(config.hardwareAcceleration()));
 }
 
 // static
@@ -238,7 +291,7 @@ void VideoDecoderTraits::UpdateDecoderLog(const MediaDecoderType& decoder,
   media_log->SetProperty<media::MediaLogProperty::kFrameTitle>(
       std::string("VideoDecoder(WebCodecs)"));
   media_log->SetProperty<media::MediaLogProperty::kVideoDecoderName>(
-      decoder.GetDisplayName());
+      decoder.GetDecoderType());
   media_log->SetProperty<media::MediaLogProperty::kIsPlatformVideoDecoder>(
       decoder.IsPlatformDecoder());
   media_log->SetProperty<media::MediaLogProperty::kVideoTracks>(
@@ -262,14 +315,20 @@ int VideoDecoderTraits::GetMaxDecodeRequests(const MediaDecoderType& decoder) {
 VideoDecoder* VideoDecoder::Create(ScriptState* script_state,
                                    const VideoDecoderInit* init,
                                    ExceptionState& exception_state) {
-  return MakeGarbageCollected<VideoDecoder>(script_state, init,
-                                            exception_state);
+  auto* result =
+      MakeGarbageCollected<VideoDecoder>(script_state, init, exception_state);
+  return exception_state.HadException() ? nullptr : result;
 }
 
 // static
 ScriptPromise VideoDecoder::isConfigSupported(ScriptState* script_state,
                                               const VideoDecoderConfig* config,
                                               ExceptionState& exception_state) {
+  HardwarePreference hw_pref = GetHardwareAccelerationPreference(*config);
+
+  if (hw_pref == HardwarePreference::kRequire)
+    return IsAcceleratedConfigSupported(script_state, config, exception_state);
+
   media::VideoType video_type;
   String console_message;
 
@@ -278,16 +337,73 @@ ScriptPromise VideoDecoder::isConfigSupported(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  // TODO(https://crbug.com/1164013): Add async checks for hardware support upon
-  // adding "acceleration" options to the config.
+  // Accept all supported configs if we are not requiring hardware only.
   VideoDecoderSupport* support = VideoDecoderSupport::Create();
   support->setSupported(media::IsSupportedVideoType(video_type));
   support->setConfig(CopyConfig(*config));
-
   return ScriptPromise::Cast(script_state, ToV8(support, script_state));
 }
 
+ScriptPromise VideoDecoder::IsAcceleratedConfigSupported(
+    ScriptState* script_state,
+    const VideoDecoderConfig* config,
+    ExceptionState& exception_state) {
+  String console_message;
+  auto media_config = std::make_unique<MediaConfigType>();
+  CodecConfigEval config_eval;
+
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  std::unique_ptr<media::H264ToAnnexBBitstreamConverter> h264_converter;
+  std::unique_ptr<media::mp4::AVCDecoderConfigurationRecord> h264_avcc;
+  config_eval = MakeMediaVideoDecoderConfig(
+      *config, *media_config, h264_converter, h264_avcc, console_message);
+#else
+  config_eval =
+      MakeMediaVideoDecoderConfig(*config, *media_config, console_message);
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+
+  if (config_eval != CodecConfigEval::kSupported) {
+    exception_state.ThrowTypeError(console_message);
+    return ScriptPromise();
+  }
+
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  ScriptPromise promise = resolver->Promise();
+  VideoDecoderSupport* support = VideoDecoderSupport::Create();
+  support->setConfig(CopyConfig(*config));
+
+  if (IsMainThread()) {
+    media::GpuVideoAcceleratorFactories* gpu_factories =
+        Platform::Current()->GetGpuFactories();
+    DecoderSupport_OnGpuFactories(support, std::move(media_config), resolver,
+                                  gpu_factories);
+  } else {
+    auto on_gpu_factories_cb = CrossThreadBindOnce(
+        &DecoderSupport_OnGpuFactories, WrapCrossThreadPersistent(support),
+        std::move(media_config), WrapCrossThreadPersistent(resolver));
+
+    Thread::MainThread()->GetTaskRunner()->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        ConvertToBaseOnceCallback(
+            CrossThreadBindOnce(&GetGpuFactoriesOnMainThread)),
+        ConvertToBaseOnceCallback(std::move(on_gpu_factories_cb)));
+  }
+
+  return promise;
+}
+
+HardwarePreference VideoDecoder::GetHardwarePreference(
+    const ConfigType& config) {
+  return GetHardwareAccelerationPreference(config);
+}
+
+void VideoDecoder::SetHardwarePreference(HardwarePreference preference) {
+  static_cast<VideoDecoderBroker*>(decoder())->SetHardwarePreference(
+      preference);
+}
+
 // static
+// TODO(crbug.com/1179970): rename out_console_message.
 CodecConfigEval VideoDecoder::MakeMediaVideoDecoderConfig(
     const ConfigType& config,
     MediaConfigType& out_media_config,
@@ -304,29 +420,14 @@ CodecConfigEval VideoDecoder::MakeMediaVideoDecoderConfig(
   // TODO(sandersd): Can we allow shared ArrayBuffers?
   std::vector<uint8_t> extra_data;
   if (config.hasDescription()) {
-    if (config.description().IsArrayBuffer()) {
-      DOMArrayBuffer* buffer = config.description().GetAsArrayBuffer();
-      uint8_t* start = static_cast<uint8_t*>(buffer->Data());
-      size_t size = buffer->ByteLength();
-      extra_data.assign(start, start + size);
-    } else {
-      DCHECK(config.description().IsArrayBufferView());
-      DOMArrayBufferView* view =
-          config.description().GetAsArrayBufferView().Get();
-      uint8_t* start = static_cast<uint8_t*>(view->BaseAddress());
-      size_t size = view->byteLength();
-      extra_data.assign(start, start + size);
-    }
+    DOMArrayPiece buffer(config.description());
+    uint8_t* start = static_cast<uint8_t*>(buffer.Data());
+    size_t size = buffer.ByteLength();
+    extra_data.assign(start, start + size);
   }
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-  if (video_type.codec == media::kCodecH264) {
-    if (extra_data.empty()) {
-      out_console_message =
-          "H.264 configuration must include an avcC description.";
-      return CodecConfigEval::kInvalid;
-    }
-
+  if (video_type.codec == media::kCodecH264 && !extra_data.empty()) {
     out_h264_avcc =
         std::make_unique<media::mp4::AVCDecoderConfigurationRecord>();
     out_h264_converter =

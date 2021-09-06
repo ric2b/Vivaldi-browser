@@ -145,16 +145,7 @@
                 "abridged": false
             }
         },
-        "executables": {
-            "media_perftests": {
-                "path": "media_perftests",
-                "arguments": [
-                    "--single-process-tests",
-                    "--test-launcher-retry-limit=0",
-                    "--isolated-script-test-filter=*::-*_unoptimized::*_unaligned::*unoptimized_aligned"
-                ]
-            }
-        }
+        "executables": {}
     },
     "8": {
         "benchmarks": {
@@ -347,6 +338,9 @@
                 "begin": 5,
                 "abridged": false
             },
+            "system_health.pcscan": {
+                "abridged": false
+            },
             "tab_switching.typical_25": {
                 "abridged": false
             },
@@ -361,6 +355,18 @@
     },
     "24": {
         "benchmarks": {
+            "blink_perf.webgl": {
+                "abridged": false
+            },
+            "blink_perf.webgl_fast_call": {
+                "abridged": false
+            },
+            "blink_perf.webgpu": {
+                "abridged": false
+            },
+            "blink_perf.webgpu_fast_call": {
+                "abridged": false
+            },
             "v8.browsing_desktop": {
                 "begin": 17,
                 "abridged": false

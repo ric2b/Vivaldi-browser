@@ -34,6 +34,7 @@ class MEDIA_EXPORT WMFAudioDecoder : public AudioDecoder {
   void Decode(scoped_refptr<DecoderBuffer> buffer,
               DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
+  AudioDecoderType GetDecoderType() const override;
 
  private:
   WMFDecoderImpl<DemuxerStream::AUDIO> impl_;

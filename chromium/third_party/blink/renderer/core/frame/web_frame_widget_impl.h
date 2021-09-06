@@ -134,8 +134,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   WebLocalFrameImpl* LocalRootImpl() const { return local_root_; }
 
   // Returns the bounding box of the block type node touched by the WebPoint.
-  WebRect ComputeBlockBound(const gfx::Point& point_in_root_frame,
-                            bool ignore_clipping) const;
+  gfx::Rect ComputeBlockBound(const gfx::Point& point_in_root_frame,
+                              bool ignore_clipping) const;
 
   virtual void BindLocalRoot(WebLocalFrame&);
 
@@ -171,7 +171,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   // dereferenced on the output |mutator_task_runner|.
   base::WeakPtr<AnimationWorkletMutatorDispatcherImpl>
   EnsureCompositorMutatorDispatcher(
-      scoped_refptr<base::SingleThreadTaskRunner>* mutator_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> mutator_task_runner);
 
   // TODO: consider merge the input and return value to be one parameter.
   // Creates or returns cached paint dispatcher. The returned WeakPtr must only
@@ -279,6 +279,8 @@ class CORE_EXPORT WebFrameWidgetImpl
                               int relative_cursor_pos) override;
   void ImeFinishComposingTextForPlugin(bool keep_selection) override;
   float GetCompositingScaleFactor() override;
+  const cc::LayerTreeDebugState& GetLayerTreeDebugState() override;
+  void SetLayerTreeDebugState(const cc::LayerTreeDebugState& state) override;
 
   // WebFrameWidget overrides.
   void InitializeNonCompositing(WebNonCompositedWidgetClient* client) override;
@@ -291,6 +293,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   bool ScrollFocusedEditableElementIntoView() override;
   void ApplyViewportChangesForTesting(
       const ApplyViewportChangesArgs& args) override;
+  void ApplyViewportIntersectionForTesting(
+      mojom::blink::ViewportIntersectionStatePtr intersection_state);
   void NotifySwapAndPresentationTime(
       WebReportTimeCallback swap_callback,
       WebReportTimeCallback presentation_callback) override;
@@ -311,7 +315,6 @@ class CORE_EXPORT WebFrameWidgetImpl
   void SetZoomLevelForTesting(double zoom_level) override;
   void ResetZoomLevelForTesting() override;
   void SetDeviceScaleFactorForTesting(float factor) override;
-  void ZoomToFindInPageRect(const WebRect& rect_in_root_frame) override;
   FrameWidgetTestHelper* GetFrameWidgetTestHelperForTesting() override;
 
   // Called when a drag-n-drop operation should begin.
@@ -332,7 +335,7 @@ class CORE_EXPORT WebFrameWidgetImpl
 
   // WebWidget overrides.
   void InitializeCompositing(
-      scheduler::WebThreadScheduler* main_thread_scheduler,
+      scheduler::WebAgentGroupScheduler& agent_group_scheduler,
       cc::TaskGraphRunner* task_graph_runner,
       const ScreenInfo& screen_info,
       std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory,
@@ -377,7 +380,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   void ShowContextMenu(ui::mojom::MenuSourceType source_type,
                        const gfx::Point& location) override;
   void SetViewportIntersection(
-      mojom::blink::ViewportIntersectionStatePtr intersection_state) override;
+      mojom::blink::ViewportIntersectionStatePtr intersection_state,
+      const base::Optional<VisualProperties>& visual_properties) override;
   void DragSourceEndedAt(const gfx::PointF& point_in_viewport,
                          const gfx::PointF& screen_point,
                          ui::mojom::blink::DragOperation) override;
@@ -464,8 +468,9 @@ class CORE_EXPORT WebFrameWidgetImpl
   // content (only clip it).
   void SetBrowserControlsParams(cc::BrowserControlsParams params);
 
-  cc::LayerTreeDebugState GetLayerTreeDebugState();
-  void SetLayerTreeDebugState(const cc::LayerTreeDebugState& state);
+  // This function provides zooming for find in page results when browsing with
+  // page autosize.
+  void ZoomToFindInPageRect(const gfx::Rect& rect_in_root_frame);
 
   // Return the compositor LayerTreeHost.
   cc::LayerTreeHost* LayerTreeHostForTesting() const;
@@ -808,6 +813,9 @@ class CORE_EXPORT WebFrameWidgetImpl
                          const gfx::Size& min_size_before_dsf,
                          const gfx::Size& max_size_before_dsf,
                          float device_scale_factor);
+
+  void ApplyViewportIntersection(
+      mojom::blink::ViewportIntersectionStatePtr intersection_state);
 
   // Called when a gesture event has been processed.
   void DidHandleGestureEvent(const WebGestureEvent& event);

@@ -257,9 +257,9 @@ class WaylandToplevel : public aura::WindowObserver {
       shell_surface_data_->shell_surface->Minimize();
   }
 
-  void SetDecorationMode(SurfaceFrameType type) {
+  void SetFrame(SurfaceFrameType type) {
     if (shell_surface_data_)
-      shell_surface_data_->shell_surface->SetDecorationMode(type);
+      shell_surface_data_->shell_surface->OnSetFrame(type);
   }
 
  private:
@@ -423,10 +423,10 @@ class WaylandXdgToplevelDecoration {
   void OnConfigure(uint32_t mode) {
     switch (mode) {
       case ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE:
-        top_level_->SetDecorationMode(SurfaceFrameType::NONE);
+        top_level_->SetFrame(SurfaceFrameType::NONE);
         break;
       case ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE:
-        top_level_->SetDecorationMode(SurfaceFrameType::NORMAL);
+        top_level_->SetFrame(SurfaceFrameType::NORMAL);
         break;
     }
     zxdg_toplevel_decoration_v1_send_configure(resource_, mode);
@@ -623,6 +623,9 @@ void xdg_surface_get_popup(wl_client* client,
   xdg_popup_send_configure(xdg_popup_resource, position.origin.x(),
                            position.origin.y(), position.size.width(),
                            position.size.height());
+  uint32_t serial = shell_surface_data->serial_tracker->GetNextSerial(
+      SerialTracker::EventType::OTHER_EVENT);
+  xdg_surface_send_configure(resource, serial);
 }
 
 void xdg_surface_set_window_geometry(wl_client* client,

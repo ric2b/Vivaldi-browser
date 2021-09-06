@@ -30,6 +30,12 @@ const UiElement = {
 };
 
 /**
+ * barcode format used by |BarcodeDetector|
+ * @private {string}
+ */
+const QR_CODE_FORMAT = 'qr_code';
+
+/**
  * Page in eSIM Setup flow that accepts activation code. User has option for
  * manual entry or scan a QR code.
  */
@@ -51,7 +57,10 @@ Polymer({
       observer: 'onShowErrorChanged_',
     },
 
-    showLoadingIndicator: {
+    /**
+     * Indicates the UI is busy with an operation and cannot be interacted with.
+     */
+    showBusy: {
       type: Boolean,
       value: false,
     },
@@ -67,10 +76,10 @@ Polymer({
     },
 
     /** @private */
-    hasMultipleCameras_: {
-      type: Boolean,
-      value: false,
-      observer: 'onHasMultipleCamerasChanged_',
+    cameraCount_: {
+      type: Number,
+      value: 0,
+      observer: 'onHasCameraCountChanged_',
     },
 
     /**
@@ -109,9 +118,25 @@ Polymer({
    */
   qrCodeDetectorTimer_: null,
 
+  /**
+   *  TODO(crbug.com/1093185): add type |BarcodeDetector| when externs
+   *  becomes available
+   *  @private
+   */
+  qrCodeDetector_: null,
+
+  /**
+   *  TODO(crbug.com/1093185): add type |BarcodeDetector| when externs
+   *  becomes available
+   *  @suppress {undefinedVars|missingProperties}
+   *  @private
+   */
+  barcodeDetectorClass_: BarcodeDetector,
+
   /** @override */
   ready() {
     this.setMediaDevices(navigator.mediaDevices);
+    this.initBarcodeDetector();
     this.state_ = PageState.INITIAL;
   },
 
@@ -124,7 +149,36 @@ Polymer({
       clearTimeout(this.qrCodeDetectorTimer_);
     }
     this.mediaDevices_.removeEventListener(
-        'devicechange', this.updateHasMultipleCameras_.bind(this));
+        'devicechange', this.updateCameraCount_.bind(this));
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isScanningAvailable_() {
+    return this.cameraCount_ > 0 && !!this.qrCodeDetector_;
+  },
+
+  /**
+   * TODO(crbug.com/1093185): Remove suppression when shape_detection extern
+   * definitions become available.
+   * @suppress {undefinedVars|missingProperties}
+   * @private
+   */
+  async initBarcodeDetector() {
+    const formats = await this.barcodeDetectorClass_.getSupportedFormats();
+
+    if (!formats || formats.length === 0) {
+      this.qrCodeDetector_ = null;
+      return;
+    }
+
+    const qrCodeFormat = formats.find(format => format === QR_CODE_FORMAT);
+    if (qrCodeFormat) {
+      this.qrCodeDetector_ =
+          new this.barcodeDetectorClass_({formats: [QR_CODE_FORMAT]});
+    }
   },
 
   /**
@@ -132,25 +186,42 @@ Polymer({
    */
   setMediaDevices(mediaDevices) {
     this.mediaDevices_ = mediaDevices;
+    this.updateCameraCount_();
     this.mediaDevices_.addEventListener(
-        'devicechange', this.updateHasMultipleCameras_.bind(this));
+        'devicechange', this.updateCameraCount_.bind(this));
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  computeActivationCodeClass_() {
+    return this.isScanningAvailable_() ? 'relative' : 'center width-92';
   },
 
   /** @private */
-  updateHasMultipleCameras_() {
-    this.mediaDevices_.enumerateDevices().then(devices => {
-      const numVideoInputDevices =
-          devices.filter(device => device.kind === 'videoinput').length;
-      this.hasMultipleCameras_ = numVideoInputDevices > 1;
-    });
+  updateCameraCount_() {
+    if (!this.mediaDevices_ || !this.mediaDevices_.enumerateDevices) {
+      this.cameraCount_ = 0;
+      return;
+    }
+
+    this.mediaDevices_.enumerateDevices()
+        .then(devices => {
+          this.cameraCount_ =
+              devices.filter(device => device.kind === 'videoinput').length;
+        })
+        .catch(e => {
+          this.cameraCount_ = 0;
+        });
   },
 
   /** @private */
-  onHasMultipleCamerasChanged_() {
+  onHasCameraCountChanged_() {
     // If the user was using an environment-facing camera and it was removed,
     // restart scanning with the user-facing camera.
     if ((this.state_ === PageState.SCANNING_ENVIRONMENT_FACING) &&
-        !this.hasMultipleCameras_) {
+        this.cameraCount_ === 1) {
       this.state_ = PageState.SWITCHING_CAM_ENVIRONMENT_TO_USER;
       this.startScanning_();
     }
@@ -176,8 +247,8 @@ Polymer({
         })
         .then(stream => {
           this.stream_ = stream;
-          if (stream) {
-            const video = this.$.video;
+          if (this.stream_) {
+            const video = this.$$('#video');
             video.srcObject = stream;
             video.play();
           }
@@ -190,7 +261,12 @@ Polymer({
               PageState.SCANNING_USER_FACING :
               PageState.SCANNING_ENVIRONMENT_FACING;
 
-          this.detectQrCode_(stream);
+          if (this.stream_) {
+            this.detectQrCode_();
+          }
+        })
+        .catch(e => {
+          this.state_ = PageState.FAILURE;
         });
   },
 
@@ -198,14 +274,13 @@ Polymer({
    * Continuously checks stream if it contains a QR code. If a QR code is
    * detected, activationCode is set to the QR code's value and the detection
    * stops.
-   * @param {MediaStream} stream
    * @private
    */
-  async detectQrCode_(stream) {
+  async detectQrCode_() {
     try {
       this.qrCodeDetectorTimer_ = setInterval(
           (async function() {
-            const capturer = new ImageCapture(stream.getVideoTracks()[0]);
+            const capturer = new ImageCapture(this.stream_.getVideoTracks()[0]);
             const frame = await capturer.grabFrame();
             const activationCode = await this.detectActivationCode_(frame);
             if (activationCode) {
@@ -215,8 +290,7 @@ Polymer({
           }).bind(this),
           QR_CODE_DETECTION_INTERVAL_MS);
     } catch (error) {
-      // TODO(crbug.com/1093185): Update the UI in response to the error.
-      console.log(error);
+      this.state_ = PageState.FAILURE;
     }
   },
 
@@ -229,12 +303,11 @@ Polymer({
    * @private
    */
   async detectActivationCode_(frame) {
-    const qrCodeDetector = new BarcodeDetector({
-      formats: [
-        'qr_code',
-      ]
-    });
-    const qrCodes = await qrCodeDetector.detect(frame);
+    if (!this.qrCodeDetector_) {
+      return null;
+    }
+
+    const qrCodes = await this.qrCodeDetector_.detect(frame);
     if (qrCodes.length > 0) {
       return qrCodes[0].rawValue;
     }
@@ -298,10 +371,10 @@ Polymer({
   /**
    * @param {UiElement} uiElement
    * @param {PageState} state
-   * @param {boolean} hasMultipleCameras
+   * @param {number} cameraCount
    * @private
    */
-  isUiElementHidden_(uiElement, state, hasMultipleCameras) {
+  isUiElementHidden_(uiElement, state, cameraCount) {
     switch (uiElement) {
       case UiElement.START_SCANNING:
         return state !== PageState.INITIAL;
@@ -311,7 +384,7 @@ Polymer({
       case UiElement.SWITCH_CAMERA:
         const isScanning = state === PageState.SCANNING_USER_FACING ||
             state === PageState.SCANNING_ENVIRONMENT_FACING;
-        return !(isScanning && hasMultipleCameras);
+        return !(isScanning && this.cameraCount_ > 1);
       case UiElement.SCAN_FINISH:
         return state !== PageState.SUCCESS && state !== PageState.FAILURE;
       case UiElement.SCAN_SUCCESS:
@@ -324,9 +397,13 @@ Polymer({
   /**
    * @param {UiElement} uiElement
    * @param {PageState} state
+   * @param {boolean} showBusy
    * @private
    */
-  isUiElementDisabled_(uiElement, state) {
+  isUiElementDisabled_(uiElement, state, showBusy) {
+    if (showBusy) {
+      return true;
+    }
     switch (uiElement) {
       case UiElement.SWITCH_CAMERA:
         return state === PageState.SWITCHING_CAM_USER_TO_ENVIRONMENT ||
@@ -336,8 +413,14 @@ Polymer({
     }
   },
 
-  /** @private */
+  /**
+   * @return {string}
+   * @private
+   */
   getDescription_() {
+    if (!this.isScanningAvailable_()) {
+      return this.i18n('scanQRCodeEnterActivationCode');
+    }
     return this.showNoProfilesMessage ? this.i18n('scanQRCodeNoProfiles') :
                                         this.i18n('scanQRCode');
   },

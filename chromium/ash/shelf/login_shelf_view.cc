@@ -39,7 +39,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/sequence_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "skia/ext/image_operations.h"
@@ -563,11 +562,12 @@ LoginShelfView::LoginShelfView(
                  ash::LoginAcceleratorAction::kStartEnrollment),
              IDS_ASH_ENTERPRISE_ENROLLMENT_BUTTON, chromeos::kEnterpriseIcon);
 
-  // Adds observers for states that affect the visiblity of different buttons.
-  tray_action_observer_.Add(Shell::Get()->tray_action());
-  shutdown_controller_observer_.Add(Shell::Get()->shutdown_controller());
-  lock_screen_action_background_observer_.Add(lock_screen_action_background);
-  login_data_dispatcher_observer_.Add(
+  // Adds observers for states that affect the visibility of different buttons.
+  tray_action_observation_.Observe(Shell::Get()->tray_action());
+  shutdown_controller_observation_.Observe(Shell::Get()->shutdown_controller());
+  lock_screen_action_background_observation_.Observe(
+      lock_screen_action_background);
+  login_data_dispatcher_observation_.Observe(
       Shell::Get()->login_screen_controller()->data_dispatcher());
   UpdateUi();
 }

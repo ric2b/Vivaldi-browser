@@ -21,7 +21,6 @@
     <output filename="ui_chromeos_strings_es-419.pak" type="data_package" lang="es-419" />
     <output filename="ui_chromeos_strings_et.pak" type="data_package" lang="et" />
     <output filename="ui_chromeos_strings_fa.pak" type="data_package" lang="fa" />
-    <output filename="ui_chromeos_strings_fake-bidi.pak" type="data_package" lang="fake-bidi" />
     <output filename="ui_chromeos_strings_fi.pak" type="data_package" lang="fi" />
     <output filename="ui_chromeos_strings_fil.pak" type="data_package" lang="fil" />
     <output filename="ui_chromeos_strings_fr.pak" type="data_package" lang="fr" />
@@ -31,6 +30,7 @@
     <output filename="ui_chromeos_strings_hr.pak" type="data_package" lang="hr" />
     <output filename="ui_chromeos_strings_hu.pak" type="data_package" lang="hu" />
     <output filename="ui_chromeos_strings_id.pak" type="data_package" lang="id" />
+    <output filename="ui_chromeos_strings_is.pak" type="data_package" lang="is" />
     <output filename="ui_chromeos_strings_it.pak" type="data_package" lang="it" />
     <output filename="ui_chromeos_strings_ja.pak" type="data_package" lang="ja" />
     <output filename="ui_chromeos_strings_kn.pak" type="data_package" lang="kn" />
@@ -62,6 +62,10 @@
     <output filename="ui_chromeos_strings_vi.pak" type="data_package" lang="vi" />
     <output filename="ui_chromeos_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
     <output filename="ui_chromeos_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+
+    <!-- Pseudolocales -->
+    <output filename="ui_chromeos_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
+    <output filename="ui_chromeos_strings_en-XA.pak" type="data_package" lang="en-XA" />
   </outputs>
   <translations>
     <file path="translations/ui_chromeos_strings_af.xtb" lang="af" />
@@ -146,7 +150,7 @@
     <file path="translations/ui_chromeos_strings_zh-TW.xtb" lang="zh-TW" />
     <file path="translations/ui_chromeos_strings_zu.xtb" lang="zu" />
   </translations>
-  <release seq="1" allow_pseudo="false">
+  <release seq="1">
     <messages fallback_to_english="true">
       <!-- Files app strings. It's shared with ARC++ (//components/arc). -->
       <part file="file_manager_strings.grdp" />

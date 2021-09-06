@@ -14,9 +14,9 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 
-import androidx.fragment.app.Fragment;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -25,6 +25,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.NavigateParams;
@@ -127,8 +128,7 @@ public class ExternalNavigationTest {
         private CallbackHelper mCallbackHelper = new CallbackHelper();
 
         @Override
-        public void interceptIntent(
-                Fragment fragment, Intent intent, int requestCode, Bundle options) {
+        public void interceptIntent(Intent intent, int requestCode, Bundle options) {
             mLastIntent = intent;
             mCallbackHelper.notifyCalled();
         }
@@ -731,6 +731,8 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.N, message = "https://crbug.com/1176658")
     public void testExternalIntentWithNoRedirectLaunched() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(ABOUT_BLANK_URL);
         IntentInterceptor intentInterceptor = new IntentInterceptor();
@@ -875,6 +877,8 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.N, message = "https://crbug.com/1176658")
     public void testExternalIntentAfterRedirectLaunched() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(ABOUT_BLANK_URL);
         IntentInterceptor intentInterceptor = new IntentInterceptor();
@@ -934,6 +938,8 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.N, message = "https://crbug.com/1176658")
     public void testExternalIntentInSameTabLaunchedOnLinkClick() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(ABOUT_BLANK_URL);
         IntentInterceptor intentInterceptor = new IntentInterceptor();
@@ -967,6 +973,8 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.N, message = "https://crbug.com/1176658")
     public void testExternalIntentInNewTabLaunchedOnLinkClick() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(ABOUT_BLANK_URL);
         IntentInterceptor intentInterceptor = new IntentInterceptor();
@@ -1035,6 +1043,8 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.N, message = "https://crbug.com/1176658")
     public void testExternalIntentWithFallbackUrlAfterRedirectLaunched() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(ABOUT_BLANK_URL);
         IntentInterceptor intentInterceptor = new IntentInterceptor();
@@ -1161,6 +1171,8 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.N, message = "https://crbug.com/1176658")
     public void testExternalIntentViaOnLoadLaunched() throws Throwable {
         String initialUrl = ABOUT_BLANK_URL;
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(initialUrl);
@@ -1196,6 +1208,8 @@ public class ExternalNavigationTest {
      */
     @Test
     @SmallTest
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.N, message = "https://crbug.com/1176658")
     public void testUserClicksLinkToPageWithExternalIntentLaunchedViaOnLoad() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(ABOUT_BLANK_URL);
         IntentInterceptor intentInterceptor = new IntentInterceptor();

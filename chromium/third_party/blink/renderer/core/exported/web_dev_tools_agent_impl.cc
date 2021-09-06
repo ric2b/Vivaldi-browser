@@ -35,7 +35,6 @@
 #include <utility>
 
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_scoped_page_pauser.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_settings.h"
@@ -279,7 +278,8 @@ void WebDevToolsAgentImpl::AttachSession(DevToolsSession* session,
 
   session->Append(MakeGarbageCollected<InspectorAuditsAgent>(
       network_agent,
-      &inspected_frames->Root()->GetPage()->GetInspectorIssueStorage()));
+      &inspected_frames->Root()->GetPage()->GetInspectorIssueStorage(),
+      inspected_frames));
 
   session->Append(MakeGarbageCollected<InspectorMediaAgent>(inspected_frames));
 
@@ -484,14 +484,9 @@ void WebDevToolsAgentImpl::DispatchBufferedTouchEvents() {
     it.value->DispatchBufferedTouchEvents();
 }
 
-void WebDevToolsAgentImpl::PageScrollStarted() {
+void WebDevToolsAgentImpl::SetPageIsScrolling(bool is_scrolling) {
   for (auto& it : overlay_agents_)
-    it.value->PageScrollStarted();
-}
-
-void WebDevToolsAgentImpl::PageScrollEnded() {
-  for (auto& it : overlay_agents_)
-    it.value->PageScrollEnded();
+    it.value->SetPageIsScrolling(is_scrolling);
 }
 
 WebInputEventResult WebDevToolsAgentImpl::HandleInputEvent(

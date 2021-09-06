@@ -39,8 +39,7 @@ class ScopedFreezeBlinkAXTreeSource {
 };
 
 class CONTENT_EXPORT BlinkAXTreeSource
-    : public ui::
-          AXTreeSource<blink::WebAXObject, ui::AXNodeData, ui::AXTreeData> {
+    : public ui::AXTreeSource<blink::WebAXObject> {
  public:
   BlinkAXTreeSource(RenderFrameImpl* render_frame, ui::AXMode mode);
   ~BlinkAXTreeSource() override;
@@ -143,21 +142,10 @@ class CONTENT_EXPORT BlinkAXTreeSource
                                              ui::AXNodeData* dst) const;
   void SerializeInlineTextBoxAttributes(blink::WebAXObject src,
                                         ui::AXNodeData* dst) const;
-  void SerializeMarkerAttributes(blink::WebAXObject src,
-                                 ui::AXNodeData* dst) const;
   void SerializeLiveRegionAttributes(blink::WebAXObject src,
                                      ui::AXNodeData* dst) const;
-  void SerializeChooserPopupAttributes(blink::WebAXObject src,
-                                       ui::AXNodeData* dst) const;
   void SerializeOtherScreenReaderAttributes(blink::WebAXObject src,
                                             ui::AXNodeData* dst) const;
-  void SerializeElementAttributes(blink::WebAXObject src,
-                                  blink::WebElement element,
-                                  ui::AXNodeData* dst) const;
-  void SerializeHTMLAttributes(blink::WebAXObject src,
-                               blink::WebElement element,
-                               ui::AXNodeData* dst) const;
-
   blink::WebAXObject ComputeRoot() const;
 
   // Max length for attributes such as aria-label.

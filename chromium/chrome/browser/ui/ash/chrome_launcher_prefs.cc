@@ -9,12 +9,14 @@
 #include <memory>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/values.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/crosapi/browser_util.h"
-#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -30,8 +32,6 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -237,7 +237,8 @@ bool IsSafeToApplyDefaultPinLayout(Profile* profile) {
       return false;
     }
   } else {
-    if (settings->GetSelectedTypes().Has(UserSelectableType::kApps) &&
+    if (sync_service->IsSyncFeatureEnabled() &&
+        settings->GetSelectedTypes().Has(UserSelectableType::kApps) &&
         !app_list::AppListSyncableServiceFactory::GetForProfile(profile)
              ->IsSyncing()) {
       return false;
@@ -254,7 +255,8 @@ bool IsSafeToApplyDefaultPinLayout(Profile* profile) {
       return false;
     }
   } else {
-    if (settings->GetSelectedTypes().Has(UserSelectableType::kPreferences) &&
+    if (sync_service->IsSyncFeatureEnabled() &&
+        settings->GetSelectedTypes().Has(UserSelectableType::kPreferences) &&
         !PrefServiceSyncableFromProfile(profile)->IsSyncing()) {
       return false;
     }

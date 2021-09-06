@@ -27,9 +27,9 @@ class GPURenderPassEncoder : public DawnObject<WGPURenderPassEncoder>,
  public:
   explicit GPURenderPassEncoder(GPUDevice* device,
                                 WGPURenderPassEncoder render_pass_encoder);
-  ~GPURenderPassEncoder() override;
 
   // gpu_render_pass_encoder.idl
+  void setBindGroup(uint32_t index, GPUBindGroup* bindGroup);
   void setBindGroup(uint32_t index,
                     GPUBindGroup* bindGroup,
                     const Vector<uint32_t>& dynamicOffsets);
@@ -85,6 +85,8 @@ class GPURenderPassEncoder : public DawnObject<WGPURenderPassEncoder>,
   void drawIndirect(GPUBuffer* indirectBuffer, uint64_t indirectOffset);
   void drawIndexedIndirect(GPUBuffer* indirectBuffer, uint64_t indirectOffset);
   void executeBundles(const HeapVector<Member<GPURenderBundle>>& bundles);
+  void beginOcclusionQuery(uint32_t queryIndex);
+  void endOcclusionQuery();
   void writeTimestamp(GPUQuerySet* querySet, uint32_t queryIndex);
   void endPass();
 

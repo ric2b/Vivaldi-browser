@@ -16,7 +16,6 @@
 #include "chrome/android/chrome_jni_headers/TranslateCompactInfoBar_jni.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "components/translate/content/android/translate_utils.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "components/translate/core/browser/translate_metrics_logger.h"
 #include "components/variations/variations_associated_data.h"
@@ -57,13 +56,13 @@ ScopedJavaLocalRef<jobject> TranslateCompactInfoBar::CreateRenderInfoBar(
     const ResourceIdMapper& resource_id_mapper) {
   translate::TranslateInfoBarDelegate* delegate = GetDelegate();
 
-  base::android::ScopedJavaLocalRef<jobjectArray> java_languages =
-      translate::TranslateUtils::GetJavaLanguages(env, delegate);
-  base::android::ScopedJavaLocalRef<jobjectArray> java_codes =
-      translate::TranslateUtils::GetJavaLanguageCodes(env, delegate);
-  base::android::ScopedJavaLocalRef<jintArray> java_hash_codes =
-      translate::TranslateUtils::GetJavaLanguageHashCodes(env, delegate);
-
+  translate::JavaLanguageInfoWrapper translate_languages =
+      translate::TranslateUtils::GetTranslateLanguagesInJavaFormat(env,
+                                                                   delegate);
+  // TODO(https://crbug.com/1173577): Refactor GetContentLanguagesInJavaFormat
+  // to only return languageCodes.
+  translate::JavaLanguageInfoWrapper content_languages =
+      translate::TranslateUtils::GetContentLanguagesInJavaFormat(env, delegate);
   ScopedJavaLocalRef<jstring> source_language_code =
       base::android::ConvertUTF8ToJavaString(
           env, delegate->original_language_code());
@@ -81,7 +80,9 @@ ScopedJavaLocalRef<jobject> TranslateCompactInfoBar::CreateRenderInfoBar(
       env, tab ? tab->GetJavaObject() : nullptr, delegate->translate_step(),
       source_language_code, target_language_code,
       delegate->ShouldAlwaysTranslate(), delegate->triggered_from_menu(),
-      java_languages, java_codes, java_hash_codes, TabDefaultTextColor());
+      translate_languages.java_languages, translate_languages.java_codes,
+      translate_languages.java_hash_codes, content_languages.java_codes,
+      TabDefaultTextColor());
 }
 
 void TranslateCompactInfoBar::ProcessButton(int action) {
@@ -200,6 +201,16 @@ jboolean TranslateCompactInfoBar::IsIncognito(
   if (!web_contents)
     return false;
   return web_contents->GetBrowserContext()->IsOffTheRecord();
+}
+
+base::android::ScopedJavaLocalRef<jobjectArray>
+TranslateCompactInfoBar::GetContentLanguagesCodes(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  std::vector<std::string> current_content_names;
+  translate::TranslateInfoBarDelegate* delegate = GetDelegate();
+  delegate->GetContentLanguagesCodes(&current_content_names);
+  return base::android::ToJavaArrayOfStrings(env, current_content_names);
 }
 
 int TranslateCompactInfoBar::GetParam(const std::string& paramName,

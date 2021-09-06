@@ -29,9 +29,6 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import java.util.HashSet;
 import java.util.List;
 
-import android.view.View;
-import android.widget.PopupMenu;
-
 import org.chromium.chrome.browser.ChromeApplication;
 
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;

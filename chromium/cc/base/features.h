@@ -11,6 +11,7 @@
 
 namespace features {
 
+CC_BASE_EXPORT extern const base::Feature kAnimatedImageResume;
 CC_BASE_EXPORT extern const base::Feature kImpulseScrollAnimations;
 CC_BASE_EXPORT extern const base::Feature kSynchronizedScrolling;
 
@@ -45,6 +46,9 @@ CC_BASE_EXPORT extern const base::Feature kWheelEventRegions;
 // When enabled, cc will show blink's Web-Vital metrics inside its heads up
 // display.
 CC_BASE_EXPORT extern const base::Feature kHudDisplayForPerformanceMetrics;
+
+// When enabled, some jank is injected to the animation/scrolling pipeline.
+CC_BASE_EXPORT extern const base::Feature kJankInjectionAblationFeature;
 
 }  // namespace features
 

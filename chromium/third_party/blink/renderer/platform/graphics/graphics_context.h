@@ -157,6 +157,12 @@ class PLATFORM_EXPORT GraphicsContext {
     return ImmutableState()->GetInterpolationQuality();
   }
 
+  SkSamplingOptions ImageSamplingOptions() const {
+    return SkSamplingOptions(
+        static_cast<SkFilterQuality>(ImageInterpolationQuality()),
+        SkSamplingOptions::kMedium_asMipmapLinear);
+  }
+
   // Specify the device scale factor which may change the way document markers
   // and fonts are rendered.
   void SetDeviceScaleFactor(float factor) { device_scale_factor_ = factor; }
@@ -380,6 +386,13 @@ class PLATFORM_EXPORT GraphicsContext {
   SkFilterQuality ComputeFilterQuality(Image*,
                                        const FloatRect& dest,
                                        const FloatRect& src) const;
+
+  SkSamplingOptions ComputeSamplingOptions(Image* image,
+                                           const FloatRect& dest,
+                                           const FloatRect& src) const {
+    return SkSamplingOptions(ComputeFilterQuality(image, dest, src),
+                             SkSamplingOptions::kMedium_asMipmapLinear);
+  }
 
   // Sets target URL of a clickable area.
   void SetURLForRect(const KURL&, const IntRect&);

@@ -90,6 +90,7 @@ PASS oldChildWindow.onauxclick is newChildWindow.onauxclick
 PASS oldChildWindow.onbeforeinstallprompt is newChildWindow.onbeforeinstallprompt
 PASS oldChildWindow.onbeforeprint is newChildWindow.onbeforeprint
 PASS oldChildWindow.onbeforeunload is newChildWindow.onbeforeunload
+PASS oldChildWindow.onbeforexrselect is newChildWindow.onbeforexrselect
 PASS oldChildWindow.onblur is newChildWindow.onblur
 PASS oldChildWindow.oncancel is newChildWindow.oncancel
 PASS oldChildWindow.oncanplay is newChildWindow.oncanplay
@@ -238,6 +239,8 @@ PASS oldChildWindow.screen.availTop is newChildWindow.screen.availTop
 PASS oldChildWindow.screen.availWidth is newChildWindow.screen.availWidth
 PASS oldChildWindow.screen.colorDepth is newChildWindow.screen.colorDepth
 PASS oldChildWindow.screen.height is newChildWindow.screen.height
+PASS oldChildWindow.screen.isExtended is newChildWindow.screen.isExtended
+PASS oldChildWindow.screen.onchange is newChildWindow.screen.onchange
 PASS oldChildWindow.screen.orientation.angle is newChildWindow.screen.orientation.angle
 PASS oldChildWindow.screen.orientation.onchange is newChildWindow.screen.orientation.onchange
 PASS oldChildWindow.screen.orientation.type is newChildWindow.screen.orientation.type

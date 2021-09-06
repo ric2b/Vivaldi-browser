@@ -25,17 +25,6 @@
 			name = All;
 			productName = All;
 		};
-		895C5DB924D75F370058A82D /* XCFramework */ = {
-			isa = PBXAggregateTarget;
-			buildConfigurationList = 895C5DBC24D75F370058A82D /* Build configuration list for PBXAggregateTarget "XCFramework" */;
-			buildPhases = (
-				895C5DBD24D75F590058A82D /* ShellScript */,
-			);
-			dependencies = (
-			);
-			name = XCFramework;
-			productName = Sparkle.xcframework;
-		};
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
@@ -285,10 +274,7 @@
 		767B61AC1972D488004E0C3C /* SUGuidedPackageInstaller.h in Headers */ = {isa = PBXBuildFile; fileRef = 767B61AA1972D488004E0C3C /* SUGuidedPackageInstaller.h */; };
 		767B61AD1972D488004E0C3C /* SUGuidedPackageInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 767B61AB1972D488004E0C3C /* SUGuidedPackageInstaller.m */; };
 		767B61AE1972D488004E0C3C /* SUGuidedPackageInstaller.m in Sources */ = {isa = PBXBuildFile; fileRef = 767B61AB1972D488004E0C3C /* SUGuidedPackageInstaller.m */; };
-		A3AD648C24D283F400058938 /* SUGlobalUpdateLock.m in Sources */ = {isa = PBXBuildFile; fileRef = A3AD648A24D283F400058938 /* SUGlobalUpdateLock.m */; };
-		A3AD648D24D283F400058938 /* SUGlobalUpdateLock.h in Headers */ = {isa = PBXBuildFile; fileRef = A3AD648B24D283F400058938 /* SUGlobalUpdateLock.h */; };
 		A5BF4F1D1BC7668B007A052A /* SUTestWebServer.m in Sources */ = {isa = PBXBuildFile; fileRef = A5BF4F1C1BC7668B007A052A /* SUTestWebServer.m */; };
-		B2D3F865245CEA24009BA78C /* URL+Hashing.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D3F864245CEA24009BA78C /* URL+Hashing.swift */; };
 		C23E885B1BE7B24F0050BB73 /* SparkleTestCodeSignApp.enc.dmg in Resources */ = {isa = PBXBuildFile; fileRef = C23E88591BE7AF890050BB73 /* SparkleTestCodeSignApp.enc.dmg */; };
 		C35E9496232FA1A1000EE622 /* Autoupdate.app in CopyFiles */ = {isa = PBXBuildFile; fileRef = 55C14BB7136EEF1500649790 /* Autoupdate.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E1545EC51E1D7E0200FAECE8 /* SUTouchBarButtonGroup.h in Headers */ = {isa = PBXBuildFile; fileRef = E1545EC31E1D7E0200FAECE8 /* SUTouchBarButtonGroup.h */; };
@@ -474,12 +460,12 @@
 			remoteGlobalIDString = 61B5F90109C4CEE200B25A18;
 			remoteInfo = "Sparkle Test App";
 		};
-		895C5DBE24D764DD0058A82D /* PBXContainerItemProxy */ = {
+		C35E9493232F9F5F000EE622 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0867D690FE84028FC02AAC07 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 895C5DB924D75F370058A82D;
-			remoteInfo = Sparkle.xcframework;
+			remoteGlobalIDString = 55C14BB6136EEF1500649790;
+			remoteInfo = Autoupdate;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -596,6 +582,8 @@
 		14950074195FDF5900BC5B5B /* SUUpdaterTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUUpdaterTest.m; sourceTree = "<group>"; usesTabs = 0; };
 		14958C6B19AEBC530061B14F /* signed-test-file.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "signed-test-file.txt"; sourceTree = "<group>"; };
 		14958C6C19AEBC610061B14F /* test-pubkey.pem */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "test-pubkey.pem"; sourceTree = "<group>"; };
+		149B78631B7D3A0C00D7D62C /* ConfigCommonCoverage.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigCommonCoverage.xcconfig; sourceTree = "<group>"; };
+		149B78641B7D3A4800D7D62C /* ConfigUnitTestCoverage.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigUnitTestCoverage.xcconfig; sourceTree = "<group>"; };
 		1A985A321C5C329C0001163A /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		1A985A331C5C329D0001163A /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		1A985A341C5C329E0001163A /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -938,6 +926,7 @@
 		729924711DF3478A00DBCDF5 /* SUUpdateValidator.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUUpdateValidator.h; sourceTree = "<group>"; };
 		729924721DF3478A00DBCDF5 /* SUUpdateValidator.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUUpdateValidator.m; sourceTree = "<group>"; };
 		729F10FD1C65A9B500DFCCC5 /* ConfigUITest.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigUITest.xcconfig; sourceTree = "<group>"; };
+		729F10FE1C65A9B500DFCCC5 /* ConfigUITestCoverage.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigUITestCoverage.xcconfig; sourceTree = "<group>"; };
 		729F10FF1C65A9B500DFCCC5 /* ConfigUITestDebug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigUITestDebug.xcconfig; sourceTree = "<group>"; };
 		729F11001C65A9B500DFCCC5 /* ConfigUITestRelease.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = ConfigUITestRelease.xcconfig; sourceTree = "<group>"; };
 		72A4A23F1BB6567D00E7820D /* SUFileManagerTest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SUFileManagerTest.swift; sourceTree = "<group>"; };
@@ -957,11 +946,8 @@
 		767B61AB1972D488004E0C3C /* SUGuidedPackageInstaller.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUGuidedPackageInstaller.m; sourceTree = "<group>"; };
 		8DC2EF5A0486A6940098B216 /* Sparkle-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "Sparkle-Info.plist"; sourceTree = "<group>"; };
 		8DC2EF5B0486A6940098B216 /* Sparkle.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Sparkle.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		A3AD648A24D283F400058938 /* SUGlobalUpdateLock.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUGlobalUpdateLock.m; sourceTree = "<group>"; };
-		A3AD648B24D283F400058938 /* SUGlobalUpdateLock.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUGlobalUpdateLock.h; sourceTree = "<group>"; };
 		A5BF4F1B1BC7668B007A052A /* SUTestWebServer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUTestWebServer.h; sourceTree = "<group>"; };
 		A5BF4F1C1BC7668B007A052A /* SUTestWebServer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUTestWebServer.m; sourceTree = "<group>"; };
-		B2D3F864245CEA24009BA78C /* URL+Hashing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+Hashing.swift"; sourceTree = "<group>"; };
 		C23E88591BE7AF890050BB73 /* SparkleTestCodeSignApp.enc.dmg */ = {isa = PBXFileReference; lastKnownFileType = file; path = SparkleTestCodeSignApp.enc.dmg; sourceTree = "<group>"; };
 		E1545EC31E1D7E0200FAECE8 /* SUTouchBarButtonGroup.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SUTouchBarButtonGroup.h; sourceTree = "<group>"; };
 		E1545EC41E1D7E0200FAECE8 /* SUTouchBarButtonGroup.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SUTouchBarButtonGroup.m; sourceTree = "<group>"; };
@@ -1338,7 +1324,6 @@
 				5AA96C571E0AE0DB00CA4346 /* main.swift */,
 				5AE13F771E0C9B12000D2C2C /* Signatures.swift */,
 				5A5AC5351E0C6CA300998119 /* Unarchive.swift */,
-				B2D3F864245CEA24009BA78C /* URL+Hashing.swift */,
 			);
 			path = generate_appcast;
 			sourceTree = "<group>";
@@ -1550,8 +1535,6 @@
 				61299A2E09CA2DAB00B7442F /* SUSignatureVerifier.m */,
 				729924711DF3478A00DBCDF5 /* SUUpdateValidator.h */,
 				729924721DF3478A00DBCDF5 /* SUUpdateValidator.m */,
-				A3AD648B24D283F400058938 /* SUGlobalUpdateLock.h */,
-				A3AD648A24D283F400058938 /* SUGlobalUpdateLock.m */,
 			);
 			name = Support;
 			sourceTree = "<group>";
@@ -1621,6 +1604,7 @@
 				5D06E8F20FD68D21005AE3F6 /* ConfigBinaryDeltaDebug.xcconfig */,
 				5D06E8F30FD68D21005AE3F6 /* ConfigBinaryDeltaRelease.xcconfig */,
 				FA1941D00D94A70100DD942E /* ConfigCommon.xcconfig */,
+				149B78631B7D3A0C00D7D62C /* ConfigCommonCoverage.xcconfig */,
 				FA1941CF0D94A70100DD942E /* ConfigCommonDebug.xcconfig */,
 				FA1941CC0D94A70100DD942E /* ConfigCommonRelease.xcconfig */,
 				722954C81D04E89500ECF9CA /* ConfigFileop.xcconfig */,
@@ -1643,9 +1627,11 @@
 				FA1941CB0D94A70100DD942E /* ConfigTestAppDebug.xcconfig */,
 				FA1941D20D94A70100DD942E /* ConfigTestAppRelease.xcconfig */,
 				729F10FD1C65A9B500DFCCC5 /* ConfigUITest.xcconfig */,
+				729F10FE1C65A9B500DFCCC5 /* ConfigUITestCoverage.xcconfig */,
 				729F10FF1C65A9B500DFCCC5 /* ConfigUITestDebug.xcconfig */,
 				729F11001C65A9B500DFCCC5 /* ConfigUITestRelease.xcconfig */,
 				FA3AAF3B1050B273004B3130 /* ConfigUnitTest.xcconfig */,
+				149B78641B7D3A4800D7D62C /* ConfigUnitTestCoverage.xcconfig */,
 				FA3AAF3A1050B273004B3130 /* ConfigUnitTestDebug.xcconfig */,
 				FA3AAF391050B273004B3130 /* ConfigUnitTestRelease.xcconfig */,
 				EA4311C9229D614300A5503D /* ed25519-Debug.xcconfig */,
@@ -1669,7 +1655,6 @@
 				611142E910FB1BE5009810AA /* bspatch.h in Headers */,
 				5AB8F185214D564C00A1187F /* ed25519.h in Headers */,
 				5AB8F184214D564C00A1187F /* fe.h in Headers */,
-				A3AD648D24D283F400058938 /* SUGlobalUpdateLock.h in Headers */,
 				5AB8F18A214D564C00A1187F /* fixedint.h in Headers */,
 				5AB8F18B214D564C00A1187F /* ge.h in Headers */,
 				5AB8F187214D564C00A1187F /* precomp_data.h in Headers */,
@@ -1767,7 +1752,6 @@
 				14732BCB1960F73500593899 /* PBXTargetDependency */,
 				1454BA1619637EDB00344E57 /* PBXTargetDependency */,
 				14732BCF1960F73500593899 /* PBXTargetDependency */,
-				895C5DBF24D764DD0058A82D /* PBXTargetDependency */,
 				1454BA1819637EE900344E57 /* PBXTargetDependency */,
 			);
 			name = Distribution;
@@ -2027,9 +2011,6 @@
 						LastSwiftMigration = 0800;
 						TestTargetID = 61B5F90109C4CEE200B25A18;
 					};
-					895C5DB924D75F370058A82D = {
-						CreatedOnToolsVersion = 12.0;
-					};
 					8DC2EF4F0486A6940098B216 = {
 						LastSwiftMigration = 0920;
 					};
@@ -2102,7 +2083,6 @@
 				14732BC51960F69300593899 /* Distribution */,
 				1420DF491962329200203BB0 /* Documentation */,
 				1495005F195FB89400BC5B5B /* All */,
-				895C5DB924D75F370058A82D /* XCFramework */,
 				726B2B5C1C645FC900388755 /* UI Tests */,
 				722954B31D04ADAF00ECF9CA /* fileop */,
 				5AA96C541E0AE0DB00CA4346 /* generate_appcast */,
@@ -2248,23 +2228,6 @@
 			shellScript = "ln -sfh \"pt_BR.lproj\" \"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/pt.lproj\"";
 			showEnvVarsInLog = 0;
 		};
-		895C5DBD24D75F590058A82D /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Deleting old products\nrm -rd \"$BUILT_PRODUCTS_DIR/Sparkle.xcarchive\"\nrm -rd \"$BUILT_PRODUCTS_DIR/Sparkle.xcframework\"\n\nxcodebuild archive -scheme Sparkle -archivePath \"$BUILT_PRODUCTS_DIR/Sparkle.xcarchive\" BUILD_LIBRARY_FOR_DISTRIBUTION=YES SKIP_INSTALL=NO\n\nif [ $XCODE_VERSION_MAJOR -ge \"1200\" ]; then\nxcodebuild -create-xcframework -framework \"$BUILT_PRODUCTS_DIR/Sparkle.xcarchive/Products/Library/Frameworks/Sparkle.framework\" -debug-symbols \"$BUILT_PRODUCTS_DIR/Sparkle.xcarchive/dSYMs/Sparkle.framework.dSYM\" -output \"$BUILT_PRODUCTS_DIR/Sparkle.xcframework\"\nelse\necho \"warning: Your Xcode version does not support bundling dSYMs in XCFrameworks directly. You should copy them manually into the XCFramework.\"\necho \"note: cp '$BUILT_PRODUCTS_DIR/Sparkle.xcarchive/dSYMs/Sparkle.framework.dSYM' '$BUILT_PRODUCTS_DIR/Sparkle.xcframework/your_architecture/dSYMs'\"\nxcodebuild -create-xcframework -framework \"$BUILT_PRODUCTS_DIR/Sparkle.xcarchive/Products/Library/Frameworks/Sparkle.framework\" -output \"$BUILT_PRODUCTS_DIR/Sparkle.xcframework\"\nfi\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -2312,7 +2275,6 @@
 				5A5AC5381E0C6D3000998119 /* FeedXML.swift in Sources */,
 				5AA96C581E0AE0DB00CA4346 /* main.swift in Sources */,
 				5AE13F781E0C9B12000D2C2C /* Signatures.swift in Sources */,
-				B2D3F865245CEA24009BA78C /* URL+Hashing.swift in Sources */,
 				5AE13FBA1E0DA389000D2C2C /* SUBinaryDeltaApply.m in Sources */,
 				5AAD00661E0C2D9B00AF411E /* SUBinaryDeltaCommon.m in Sources */,
 				5AAD00671E0C2D9B00AF411E /* SUBinaryDeltaCreate.m in Sources */,
@@ -2450,7 +2412,6 @@
 				6196CFFA09C72149000DC222 /* SUStatusController.m in Sources */,
 				61A2279D0D1CEE7600430CCD /* SUSystemProfiler.m in Sources */,
 				72316BE41E0E1C7F0039EFD9 /* SUSystemUpdateInfo.m in Sources */,
-				A3AD648C24D283F400058938 /* SUGlobalUpdateLock.m in Sources */,
 				E1545EC61E1D7E0200FAECE8 /* SUTouchBarButtonGroup.m in Sources */,
 				61B93A3D0DD02D7000DCD2F8 /* SUUIBasedUpdateDriver.m in Sources */,
 				61299A8E09CA790200B7442F /* SUUnarchiver.m in Sources */,
@@ -2596,10 +2557,10 @@
 			target = 61B5F90109C4CEE200B25A18 /* Sparkle Test App */;
 			targetProxy = 726B2B621C645FC900388755 /* PBXContainerItemProxy */;
 		};
-		895C5DBF24D764DD0058A82D /* PBXTargetDependency */ = {
+		C35E9494232F9F5F000EE622 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 895C5DB924D75F370058A82D /* XCFramework */;
-			targetProxy = 895C5DBE24D764DD0058A82D /* PBXContainerItemProxy */;
+			target = 55C14BB6136EEF1500649790 /* Autoupdate */;
+			targetProxy = C35E9493232F9F5F000EE622 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -2844,6 +2805,70 @@
 			};
 			name = Release;
 		};
+		149B785A1B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 149B78631B7D3A0C00D7D62C /* ConfigCommonCoverage.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
+		149B785B1B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = FA1941CA0D94A70100DD942E /* ConfigFrameworkDebug.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				DEFINES_MODULE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/Frameworks";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Coverage;
+		};
+		149B785C1B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = FA1941CB0D94A70100DD942E /* ConfigTestAppDebug.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
+		149B785D1B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 149B78641B7D3A4800D7D62C /* ConfigUnitTestCoverage.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
+		149B785E1B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5D06E8F20FD68D21005AE3F6 /* ConfigBinaryDeltaDebug.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
+		149B785F1B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = FA1941D30D94A70100DD942E /* ConfigRelaunchDebug.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
+		149B78601B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
+		149B78611B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
+		149B78621B7D398100D7D62C /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
 		1DEB91AE08733DA50010E9CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FA1941CA0D94A70100DD942E /* ConfigFrameworkDebug.xcconfig */;
@@ -2869,7 +2894,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FA1941CF0D94A70100DD942E /* ConfigCommonDebug.xcconfig */;
 			buildSettings = {
-				SWIFT_VERSION = 4.2;
 			};
 			name = Debug;
 		};
@@ -2878,7 +2902,6 @@
 			baseConfigurationReference = FA1941CC0D94A70100DD942E /* ConfigCommonRelease.xcconfig */;
 			buildSettings = {
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
-				SWIFT_VERSION = 4.2;
 			};
 			name = Release;
 		};
@@ -2906,6 +2929,15 @@
 			};
 			name = Debug;
 		};
+		5A5ADEDD214EDE4900DF0099 /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5AB8F1AA214DA85900A1187F /* ConfigGenerateKeysDebug.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Coverage;
+		};
 		5A5ADEDE214EDE4900DF0099 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 5AB8F1A9214DA85900A1187F /* ConfigGenerateKeysRelease.xcconfig */;
@@ -2922,6 +2954,14 @@
 				CODE_SIGN_STYLE = Automatic;
 			};
 			name = Debug;
+		};
+		5AA96C5A1E0AE0DC00CA4346 /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7205C4351E12CA7000E370AE /* ConfigGenerateAppcastDebug.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+			};
+			name = Coverage;
 		};
 		5AA96C5B1E0AE0DC00CA4346 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -2940,6 +2980,16 @@
 				SDKROOT = macosx;
 			};
 			name = Debug;
+		};
+		5AB8F1A5214DA72000A1187F /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5AB8F1AA214DA85900A1187F /* ConfigGenerateKeysDebug.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Coverage;
 		};
 		5AB8F1A6214DA72000A1187F /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -3002,6 +3052,15 @@
 			};
 			name = Debug;
 		};
+		722954B91D04ADAF00ECF9CA /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 722954C81D04E89500ECF9CA /* ConfigFileop.xcconfig */;
+			buildSettings = {
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Coverage;
+		};
 		722954BA1D04ADAF00ECF9CA /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 722954C81D04E89500ECF9CA /* ConfigFileop.xcconfig */;
@@ -3018,21 +3077,16 @@
 			};
 			name = Debug;
 		};
+		726B2B651C645FC900388755 /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 729F10FE1C65A9B500DFCCC5 /* ConfigUITestCoverage.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
 		726B2B661C645FC900388755 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 729F11001C65A9B500DFCCC5 /* ConfigUITestRelease.xcconfig */;
-			buildSettings = {
-			};
-			name = Release;
-		};
-		895C5DBA24D75F370058A82D /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-			};
-			name = Debug;
-		};
-		895C5DBB24D75F370058A82D /* Release */ = {
-			isa = XCBuildConfiguration;
 			buildSettings = {
 			};
 			name = Release;
@@ -3043,6 +3097,13 @@
 			buildSettings = {
 			};
 			name = Debug;
+		};
+		EA4311A3229D5FBC00A5503D /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = EA4311C9229D614300A5503D /* ed25519-Debug.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
 		};
 		EA4311A4229D5FBC00A5503D /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -3058,6 +3119,13 @@
 			};
 			name = Debug;
 		};
+		EA4311ED229D651300A5503D /* Coverage */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = EA4311FA229D656700A5503D /* bsdiff-Debug.xcconfig */;
+			buildSettings = {
+			};
+			name = Coverage;
+		};
 		EA4311EE229D651300A5503D /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = EA4311FB229D657A00A5503D /* bsdiff-Release.xcconfig */;
@@ -3072,6 +3140,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1420DF4B1962329200203BB0 /* Debug */,
+				149B78611B7D398100D7D62C /* Coverage */,
 				1420DF4C1962329200203BB0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3081,6 +3150,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				14732BC71960F69300593899 /* Debug */,
+				149B78601B7D398100D7D62C /* Coverage */,
 				14732BC81960F69300593899 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3090,6 +3160,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				14950061195FB89500BC5B5B /* Debug */,
+				149B78621B7D398100D7D62C /* Coverage */,
 				14950062195FB89500BC5B5B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3099,6 +3170,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1DEB91AE08733DA50010E9CD /* Debug */,
+				149B785B1B7D398100D7D62C /* Coverage */,
 				1DEB91AF08733DA50010E9CD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3108,6 +3180,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1DEB91B208733DA50010E9CD /* Debug */,
+				149B785A1B7D398100D7D62C /* Coverage */,
 				1DEB91B308733DA50010E9CD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3117,6 +3190,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				55C14BBB136EEF1500649790 /* Debug */,
+				149B785F1B7D398100D7D62C /* Coverage */,
 				55C14BBC136EEF1500649790 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3126,6 +3200,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5A5ADEDC214EDE4900DF0099 /* Debug */,
+				5A5ADEDD214EDE4900DF0099 /* Coverage */,
 				5A5ADEDE214EDE4900DF0099 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3135,6 +3210,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5AA96C591E0AE0DC00CA4346 /* Debug */,
+				5AA96C5A1E0AE0DC00CA4346 /* Coverage */,
 				5AA96C5B1E0AE0DC00CA4346 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3144,6 +3220,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5AB8F1A4214DA72000A1187F /* Debug */,
+				5AB8F1A5214DA72000A1187F /* Coverage */,
 				5AB8F1A6214DA72000A1187F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3153,6 +3230,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5D06E8D20FD68C7D005AE3F6 /* Debug */,
+				149B785E1B7D398100D7D62C /* Coverage */,
 				5D06E8D30FD68C7D005AE3F6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3162,6 +3240,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				612279DB0DB5470300AB99EA /* Debug */,
+				149B785D1B7D398100D7D62C /* Coverage */,
 				612279DC0DB5470300AB99EA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3171,6 +3250,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				61B5F90609C4CEE300B25A18 /* Debug */,
+				149B785C1B7D398100D7D62C /* Coverage */,
 				61B5F90709C4CEE300B25A18 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3180,6 +3260,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				722954B81D04ADAF00ECF9CA /* Debug */,
+				722954B91D04ADAF00ECF9CA /* Coverage */,
 				722954BA1D04ADAF00ECF9CA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3189,16 +3270,8 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				726B2B641C645FC900388755 /* Debug */,
+				726B2B651C645FC900388755 /* Coverage */,
 				726B2B661C645FC900388755 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		895C5DBC24D75F370058A82D /* Build configuration list for PBXAggregateTarget "XCFramework" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				895C5DBA24D75F370058A82D /* Debug */,
-				895C5DBB24D75F370058A82D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -3207,6 +3280,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				EA4311A2229D5FBC00A5503D /* Debug */,
+				EA4311A3229D5FBC00A5503D /* Coverage */,
 				EA4311A4229D5FBC00A5503D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
@@ -3216,6 +3290,7 @@
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				EA4311EC229D651300A5503D /* Debug */,
+				EA4311ED229D651300A5503D /* Coverage */,
 				EA4311EE229D651300A5503D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;

@@ -74,7 +74,10 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
   // contains a standard (scheme, host, port) tuple, |reference_origin| is
   // ignored. If |reference_origin| is provided and an opaque origin is returned
   // (for example, if |url| has the "data:" scheme), the opaque origin will be
-  // derived from |reference_origin|, retaining the precursor information.
+  // derived from |reference_origin|, retaining the precursor information.  If
+  // |url| is "about:blank", a copy of |reference_origin| is returned.  If no
+  // |reference_origin| has been provided, then "data:" and "about:blank" URLs
+  // will resolve into an opaque, unique origin.
   static scoped_refptr<SecurityOrigin> CreateWithReferenceOrigin(
       const KURL& url,
       const SecurityOrigin* reference_origin);
@@ -141,6 +144,10 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
   // Returns true if a given URL is secure, based either directly on its
   // own protocol, or, when relevant, on the protocol of its "inner URL"
   // Protocols like blob: and filesystem: fall into this latter category.
+  // This method is a stricter alternative to "potentially trustworthy url":
+  // https://w3c.github.io/webappsec-secure-contexts/#potentially-trustworthy-url
+  // TODO(crbug.com/1153336): Deprecated, to be removed. Please use
+  // network::IsUrlPotentiallyTrustworthy() instead.
   static bool IsSecure(const KURL&);
 
   // Returns true if this SecurityOrigin can script objects in the given
@@ -233,6 +240,7 @@ class PLATFORM_EXPORT SecurityOrigin : public RefCounted<SecurityOrigin> {
   bool CanAccessCacheStorage() const { return !IsOpaque(); }
   bool CanAccessLocks() const { return !IsOpaque(); }
   bool CanAccessSessionStorage() const { return !IsOpaque(); }
+  bool CanAccessStorageFoundation() const { return !IsOpaque(); }
 
   // The local SecurityOrigin is the most privileged SecurityOrigin.
   // The local SecurityOrigin can script any document, navigate to local

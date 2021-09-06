@@ -24,6 +24,7 @@
 #include "cc/trees/transform_node.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
+#include "ui/gfx/transform_util.h"
 
 namespace cc {
 
@@ -574,7 +575,7 @@ void TransformTree::SetRootScaleAndTransform(
     const gfx::Transform& device_transform) {
   device_scale_factor_ = device_scale_factor;
   gfx::Vector2dF device_transform_scale_components =
-      MathUtil::ComputeTransform2dScaleComponents(device_transform, 1.f);
+      gfx::ComputeTransform2dScaleComponents(device_transform, 1.f);
 
   // Not handling the rare case of different x and y device scale.
   device_transform_scale_factor_ =
@@ -589,8 +590,7 @@ void TransformTree::SetRootScaleAndTransform(
   gfx::Transform transform = device_transform;
   transform.Scale(device_scale_factor, device_scale_factor);
   gfx::Vector2dF screen_space_scale =
-      MathUtil::ComputeTransform2dScaleComponents(transform,
-                                                  device_scale_factor);
+      gfx::ComputeTransform2dScaleComponents(transform, device_scale_factor);
   DCHECK_NE(screen_space_scale.x(), 0.f);
   DCHECK_NE(screen_space_scale.y(), 0.f);
 
@@ -818,9 +818,8 @@ void EffectTree::UpdateSurfaceContentsScale(EffectNode* effect_node) {
     layer_scale_factor *= transform_tree.page_scale_factor();
 
   const gfx::Vector2dF old_scale = effect_node->surface_contents_scale;
-  effect_node->surface_contents_scale =
-      MathUtil::ComputeTransform2dScaleComponents(
-          transform_tree.ToScreen(transform_node->id), layer_scale_factor);
+  effect_node->surface_contents_scale = gfx::ComputeTransform2dScaleComponents(
+      transform_tree.ToScreen(transform_node->id), layer_scale_factor);
 
   // If surface contents scale changes, draw transforms are no longer valid.
   // Invalidates the draw transform cache and updates the clip for the surface.
@@ -2041,6 +2040,17 @@ std::string PropertyTrees::ToString() const {
   return value.ToFormattedJSON();
 }
 
+bool PropertyTrees::AnimationScaleCacheIsInvalid(int transform_id) const {
+  DCHECK(!is_main_thread);
+  // This doesn't check if |update_number| equals to
+  // |transform_tree_update_number| because the the latter is changed by the
+  // animation itself while we want to treat the scale as valid during the
+  // animation. |update_number| is reset to kInvalidUpdateNumber when a new
+  // property tree is pushed.
+  return cached_data_.animation_scales[transform_id].update_number ==
+         kInvalidUpdateNumber;
+}
+
 float PropertyTrees::MaximumAnimationToScreenScale(int transform_id) {
   return GetAnimationScaleData(transform_id).maximum_to_screen_scale;
 }
@@ -2051,6 +2061,8 @@ bool PropertyTrees::AnimationAffectedByInvalidScale(int transform_id) {
 
 const AnimationScaleData& PropertyTrees::GetAnimationScaleData(
     int transform_id) {
+  DCHECK(!is_main_thread);
+
   auto& animation_scale = cached_data_.animation_scales[transform_id];
   if (animation_scale.update_number ==
       cached_data_.transform_tree_update_number) {
@@ -2073,9 +2085,9 @@ const AnimationScaleData& PropertyTrees::GetAnimationScaleData(
       node_affected_by_animation_scale || ancestor_affected_by_animation_scale;
   animation_scale.affected_by_invalid_scale =
       (parent_node && parent_animation_scale->affected_by_invalid_scale) ||
-      // Computing maximum animated scale in the presence of
-      // non-scale/translation transforms isn't supported.
-      !node->to_parent.IsScaleOrTranslation() ||
+      // Computing maximum animated scale in the presence of perspective isn't
+      // supported.
+      node->to_parent.HasPerspective() ||
       (node->has_potential_animation &&
        node->maximum_animation_scale == kInvalidScale);
 
@@ -2093,15 +2105,14 @@ const AnimationScaleData& PropertyTrees::GetAnimationScaleData(
     // Will use the parent's maximum_to_screen_scale.
   } else if (!node->to_screen_is_potentially_animated) {
     // No transform animations. Calculate the current to_screen scale.
-    gfx::Vector2dF to_screen_scales =
-        MathUtil::ComputeTransform2dScaleComponents(
-            transform_tree.ToScreen(transform_id), kInvalidScale);
+    gfx::Vector2dF to_screen_scales = gfx::ComputeTransform2dScaleComponents(
+        transform_tree.ToScreen(transform_id), kInvalidScale);
     animation_scale.maximum_to_screen_scale =
         std::max(to_screen_scales.x(), to_screen_scales.y());
     return animation_scale;
   } else if (!node->has_potential_animation) {
     gfx::Vector2dF local_scales =
-        MathUtil::ComputeTransform2dScaleComponents(node->local, 1.0f);
+        gfx::ComputeTransform2dScaleComponents(node->local, 1.0f);
     local_maximum_scale = std::max(local_scales.x(), local_scales.y());
   } else {
     DCHECK_NE(node->maximum_animation_scale, kInvalidScale);
@@ -2188,7 +2199,7 @@ DrawTransformData& PropertyTrees::FetchDrawTransformsDataFromCache(
   // Add an entry to the cache.
   cached_data_.draw_transforms[transform_id].push_back(DrawTransformData());
   DrawTransformData& data = cached_data_.draw_transforms[transform_id].back();
-  data.update_number = -1;
+  data.update_number = kInvalidUpdateNumber;
   data.target_id = dest_id;
   return data;
 }
@@ -2198,7 +2209,8 @@ ClipRectData* PropertyTrees::FetchClipRectFromCache(int clip_id,
   ClipNode* clip_node = clip_tree.Node(clip_id);
   for (size_t i = 0; i < clip_node->cached_clip_rects->size(); ++i) {
     auto& data = clip_node->cached_clip_rects[i];
-    if (data.target_id == target_id || data.target_id == -1)
+    if (data.target_id == target_id ||
+        data.target_id == EffectTree::kInvalidNodeId)
       return &data;
   }
   clip_node->cached_clip_rects->emplace_back();
@@ -2274,13 +2286,13 @@ void PropertyTrees::ResetCachedData() {
   const auto transform_count = transform_tree.nodes().size();
   cached_data_.animation_scales.resize(transform_count);
   for (auto& animation_scale : cached_data_.animation_scales)
-    animation_scale.update_number = -1;
+    animation_scale.update_number = kInvalidUpdateNumber;
 
   cached_data_.draw_transforms.resize(transform_count,
                                       std::vector<DrawTransformData>(1));
   for (auto& draw_transforms_for_id : cached_data_.draw_transforms) {
     draw_transforms_for_id.resize(1);
-    draw_transforms_for_id[0].update_number = -1;
+    draw_transforms_for_id[0].update_number = kInvalidUpdateNumber;
     draw_transforms_for_id[0].target_id = EffectTree::kInvalidNodeId;
   }
 }

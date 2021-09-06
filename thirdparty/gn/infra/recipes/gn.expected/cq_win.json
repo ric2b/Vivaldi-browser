@@ -46,20 +46,6 @@
   {
     "cmd": [
       "git",
-      "rev-parse",
-      "HEAD"
-    ],
-    "cwd": "[START_DIR]\\gn",
-    "infra_step": true,
-    "name": "git.rev-parse",
-    "stdout": "/path/to/tmp/",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "git",
       "fetch",
       "https://gn.googlesource.com/gn",
       "refs/changes/56/123456/7"
@@ -74,12 +60,12 @@
   {
     "cmd": [
       "git",
-      "checkout",
+      "cherry-pick",
       "FETCH_HEAD"
     ],
     "cwd": "[START_DIR]\\gn",
     "infra_step": true,
-    "name": "git.checkout 123456/7",
+    "name": "git.cherry-pick 123456/7",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -176,7 +162,7 @@
   },
   {
     "cmd": [],
-    "name": "debug.windows-amd64",
+    "name": "debug.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -197,7 +183,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "debug.windows-amd64.generate",
+    "name": "debug.build.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -217,7 +203,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "debug.windows-amd64.build",
+    "name": "debug.build.ninja",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -226,7 +212,6 @@
     "cmd": [
       "[START_DIR]\\gn\\out\\gn_unittests"
     ],
-    "cwd": "[START_DIR]\\gn",
     "env": {
       "VSINSTALLDIR": "[CACHE]\\windows_sdk"
     },
@@ -235,9 +220,9 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "debug.windows-amd64.test",
+    "name": "debug.test",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
@@ -246,7 +231,7 @@
   },
   {
     "cmd": [],
-    "name": "release.windows-amd64",
+    "name": "release.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -268,7 +253,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "release.windows-amd64.generate",
+    "name": "release.build.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -288,7 +273,7 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "release.windows-amd64.build",
+    "name": "release.build.ninja",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -297,7 +282,6 @@
     "cmd": [
       "[START_DIR]\\gn\\out\\gn_unittests"
     ],
-    "cwd": "[START_DIR]\\gn",
     "env": {
       "VSINSTALLDIR": "[CACHE]\\windows_sdk"
     },
@@ -306,9 +290,9 @@
         "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
       ]
     },
-    "name": "release.windows-amd64.test",
+    "name": "release.test",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {

@@ -38,6 +38,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
+#include "components/autofill/core/common/dense_set.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/signatures.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -55,7 +56,6 @@ class AutofillProfile;
 class AutofillType;
 class CreditCard;
 class FormStructureBrowserTest;
-class LogManager;
 
 struct FormData;
 struct FormFieldData;
@@ -170,7 +170,7 @@ class AutofillManager : public AutofillHandler,
   // Returns true only if the previewed form should be cleared.
   bool ShouldClearPreviewedForm();
 
-  AutofillClient* client() { return client_; }
+  AutofillOfferManager* offer_manager() { return offer_manager_; }
 
   CreditCardAccessManager* credit_card_access_manager() {
     return credit_card_access_manager_.get();
@@ -361,7 +361,7 @@ class AutofillManager : public AutofillHandler,
   void OnBeforeProcessParsedForms() override;
   void OnFormProcessed(const FormData& form,
                        const FormStructure& form_structure) override;
-  void OnAfterProcessParsedForms(const std::set<FormType>& form_types) override;
+  void OnAfterProcessParsedForms(const DenseSet<FormType>& form_types) override;
 
   // Exposed for testing.
   FormData* pending_form_data() { return pending_form_data_.get(); }
@@ -596,9 +596,6 @@ class AutofillManager : public AutofillHandler,
                                std::vector<Suggestion>* suggestions,
                                SuggestionsContext* context);
 
-  // Retrieves the page language from |client_|
-  LanguageCode GetPageLanguage() const override;
-
   // For each submitted field in the |form_structure|, it determines whether
   // |ADDRESS_HOME_STATE| is a possible matching type.
   // This method is intended to run matching type detection on the browser UI
@@ -620,16 +617,9 @@ class AutofillManager : public AutofillHandler,
   void SetDataList(const std::vector<base::string16>& values,
                    const std::vector<base::string16>& labels);
 
-  std::unique_ptr<AutofillMetrics::FormInteractionsUkmLogger>
-  CreateFormInteractionsUkmLogger();
-
-  AutofillClient* const client_;
-
   // Delegate to perform external processing (display, selection) on
   // our behalf.
   std::unique_ptr<AutofillExternalDelegate> external_delegate_;
-
-  LogManager* log_manager_;
 
   std::string app_locale_;
 
@@ -684,7 +674,8 @@ class AutofillManager : public AutofillHandler,
   std::unique_ptr<CreditCardAccessManager> credit_card_access_manager_;
 
   // The autofill offer manager, used to to retrieve offers for card
-  // suggestions.
+  // suggestions. Initialized when AutofillManager is created. |offer_manager_|
+  // is never null.
   AutofillOfferManager* offer_manager_;
 
   // Collected information about the autofill form where a credit card will be

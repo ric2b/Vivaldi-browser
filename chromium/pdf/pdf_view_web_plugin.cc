@@ -15,13 +15,18 @@
 #include "base/location.h"
 #include "base/notreached.h"
 #include "base/thread_annotations.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "cc/paint/paint_canvas.h"
 #include "net/cookies/site_for_cookies.h"
+#include "pdf/accessibility_structs.h"
 #include "pdf/pdf_engine.h"
 #include "pdf/pdf_init.h"
 #include "pdf/pdfium/pdfium_engine.h"
+#include "pdf/post_message_receiver.h"
+#include "pdf/ppapi_migration/bitmap.h"
 #include "pdf/ppapi_migration/graphics.h"
 #include "pdf/ppapi_migration/url_loader.h"
 #include "ppapi/c/pp_errors.h"
@@ -29,7 +34,6 @@
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
@@ -41,7 +45,10 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/gfx/skia_util.h"
+#include "v8/include/v8.h"
 
 namespace chrome_pdf {
 
@@ -109,19 +116,12 @@ bool PdfViewWebPlugin::Initialize(blink::WebPluginContainer* container) {
     if (initial_params_.attribute_names[i] == "stream-url") {
       stream_url = initial_params_.attribute_values[i].Utf8();
     } else if (initial_params_.attribute_names[i] == "background-color") {
-      uint32_t background_color;
-      if (!base::HexStringToUInt(initial_params_.attribute_values[i].Utf8(),
-                                 &background_color)) {
+      SkColor background_color;
+      if (!base::StringToUint(initial_params_.attribute_values[i].Utf8(),
+                              &background_color)) {
         return false;
       }
       SetBackgroundColor(background_color);
-    } else if (initial_params_.attribute_names[i] == "top-toolbar-height") {
-      int toolbar_height;
-      if (!base::StringToInt(initial_params_.attribute_values[i].Utf8(),
-                             &toolbar_height)) {
-        return false;
-      }
-      set_top_toolbar_height_in_viewport_coords(toolbar_height);
     }
   }
 
@@ -131,6 +131,7 @@ bool PdfViewWebPlugin::Initialize(blink::WebPluginContainer* container) {
   PerProcessInitializer::GetInstance().Acquire();
   InitializeEngine(PDFiumFormFiller::ScriptOption::kNoJavaScript);
   LoadUrl(stream_url, /*is_print_preview=*/false);
+  post_message_sender_.set_container(container_);
   return true;
 }
 
@@ -143,6 +144,8 @@ void PdfViewWebPlugin::Destroy() {
   }
 
   container_ = nullptr;
+  post_message_sender_.set_container(nullptr);
+
   delete this;
 }
 
@@ -150,15 +153,28 @@ blink::WebPluginContainer* PdfViewWebPlugin::Container() const {
   return container_;
 }
 
+v8::Local<v8::Object> PdfViewWebPlugin::V8ScriptableObject(
+    v8::Isolate* isolate) {
+  if (scriptable_receiver_.IsEmpty()) {
+    // TODO(crbug.com/1123731): Messages should not be handled on the renderer
+    // main thread.
+    scriptable_receiver_.Reset(
+        isolate,
+        PostMessageReceiver::Create(isolate, weak_factory_.GetWeakPtr(),
+                                    base::SequencedTaskRunnerHandle::Get()));
+  }
+
+  return scriptable_receiver_.Get(isolate);
+}
+
 void PdfViewWebPlugin::UpdateAllLifecyclePhases(
     blink::DocumentUpdateReason reason) {}
 
-void PdfViewWebPlugin::Paint(cc::PaintCanvas* canvas,
-                             const blink::WebRect& rect) {}
+void PdfViewWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {}
 
-void PdfViewWebPlugin::UpdateGeometry(const blink::WebRect& window_rect,
-                                      const blink::WebRect& clip_rect,
-                                      const blink::WebRect& unobscured_rect,
+void PdfViewWebPlugin::UpdateGeometry(const gfx::Rect& window_rect,
+                                      const gfx::Rect& clip_rect,
+                                      const gfx::Rect& unobscured_rect,
                                       bool is_visible) {}
 
 void PdfViewWebPlugin::UpdateFocus(bool focused,
@@ -183,14 +199,11 @@ void PdfViewWebPlugin::DidFailLoading(const blink::WebURLError& error) {}
 
 void PdfViewWebPlugin::ProposeDocumentLayout(const DocumentLayout& layout) {}
 
-void PdfViewWebPlugin::Invalidate(const gfx::Rect& rect) {}
-
 void PdfViewWebPlugin::DidScroll(const gfx::Vector2d& offset) {}
 
 void PdfViewWebPlugin::ScrollToX(int x_in_screen_coords) {}
 
-void PdfViewWebPlugin::ScrollToY(int y_in_screen_coords,
-                                 bool compensate_for_toolbar) {}
+void PdfViewWebPlugin::ScrollToY(int y_in_screen_coords) {}
 
 void PdfViewWebPlugin::ScrollBy(const gfx::Vector2d& scroll_delta) {}
 
@@ -260,8 +273,7 @@ PdfViewWebPlugin::SearchString(const base::char16* string,
   return {};
 }
 
-void PdfViewWebPlugin::DocumentLoadComplete(
-    const PDFEngine::DocumentFeatures& document_features) {
+void PdfViewWebPlugin::DocumentLoadComplete() {
   NOTIMPLEMENTED();
 }
 
@@ -291,10 +303,6 @@ void PdfViewWebPlugin::SelectionChanged(const gfx::Rect& left,
                                         const gfx::Rect& right) {}
 
 void PdfViewWebPlugin::EnteredEditMode() {}
-
-float PdfViewWebPlugin::GetToolbarHeightInScreenCoords() {
-  return 0;
-}
 
 void PdfViewWebPlugin::DocumentFocusChanged(bool document_has_focus) {}
 
@@ -363,6 +371,10 @@ PdfViewWebPlugin::CreateAssociatedURLLoader(
       options);
 }
 
+void PdfViewWebPlugin::OnMessage(const base::Value& message) {
+  PdfViewPluginBase::HandleMessage(message);
+}
+
 base::WeakPtr<PdfViewPluginBase> PdfViewWebPlugin::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
@@ -389,17 +401,44 @@ void PdfViewWebPlugin::DidOpenPreview(std::unique_ptr<UrlLoader> loader,
   NOTIMPLEMENTED();
 }
 
-// TODO(https://crbug.com/1099020): To be implemented as a Pepper-free version
-// of `OutOfProcessInstance::DoPaint()`
-void PdfViewWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
-                               std::vector<PaintReadyRect>* ready,
-                               std::vector<gfx::Rect>* pending) {
-  NOTIMPLEMENTED_LOG_ONCE();
+void PdfViewWebPlugin::SendMessage(base::Value message) {
+  post_message_sender_.Post(std::move(message));
 }
 
-// TODO(https://crbug.com/1099020): To be implemented as a Pepper-free version
-// of `OutOfProcessInstance::OnGeometryChanged()`
-void PdfViewWebPlugin::OnGeometryChanged(double old_zoom,
-                                         float old_device_scale) {}
+void PdfViewWebPlugin::InitImageData(const gfx::Size& size) {
+  mutable_image_data() = CreateN32PremulSkBitmap(gfx::SizeToSkISize(size));
+}
+
+// TODO(https://crbug.com/1144444): Add a Pepper-free implementation to set
+// accessibility document information.
+void PdfViewWebPlugin::SetAccessibilityDocInfo(
+    const AccessibilityDocInfo& doc_info) {
+  NOTIMPLEMENTED();
+}
+
+// TODO(https://crbug.com/1144444): Add a Pepper-free implementation to set
+// accessibility page information.
+void PdfViewWebPlugin::SetAccessibilityPageInfo(
+    AccessibilityPageInfo page_info,
+    std::vector<AccessibilityTextRunInfo> text_runs,
+    std::vector<AccessibilityCharInfo> chars,
+    AccessibilityPageObjects page_objects) {
+  NOTIMPLEMENTED();
+}
+
+// TODO(https://crbug.com/1144444): Add a Pepper-free implementation to set
+// accessibility viewport information.
+void PdfViewWebPlugin::SetAccessibilityViewportInfo(
+    const AccessibilityViewportInfo& viewport_info) {
+  NOTIMPLEMENTED();
+}
+
+void PdfViewWebPlugin::OnViewportChanged(gfx::Rect view_rect,
+                                         float new_device_scale) {
+  UpdateGeometryOnViewChanged(view_rect, new_device_scale);
+
+  // TODO(http://crbug.com/1099020): Update scroll position for painting the
+  // print preview plugin.
+}
 
 }  // namespace chrome_pdf

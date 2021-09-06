@@ -189,6 +189,12 @@
     },
     "11": {
         "benchmarks": {
+            "blink_perf.webgl": {
+                "abridged": false
+            },
+            "blink_perf.webgl_fast_call": {
+                "abridged": false
+            },
             "system_health.memory_mobile": {
                 "begin": 6,
                 "end": 22,
@@ -218,6 +224,9 @@
         "benchmarks": {
             "system_health.memory_mobile": {
                 "begin": 68,
+                "abridged": false
+            },
+            "system_health.pcscan": {
                 "abridged": false
             },
             "system_health.webview_startup": {

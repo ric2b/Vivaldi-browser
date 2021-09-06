@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/components/audio/sounds.h"
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
@@ -20,12 +21,12 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/camera_presence_notifier.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
@@ -34,7 +35,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/audio/chromeos_sounds.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_manager.h"
@@ -49,12 +49,13 @@
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
-using content::BrowserThread;
-
 namespace chromeos {
 namespace settings {
-
 namespace {
+
+using ::ash::AccessibilityManager;
+using ::ash::PlaySoundOption;
+using ::content::BrowserThread;
 
 // Returns info about extensions for files we support as user images.
 ui::SelectFileDialog::FileTypeInfo GetUserImageFileTypeInfo() {
@@ -169,13 +170,13 @@ void ChangePictureHandler::HandleChooseFile(const base::ListValue* args) {
 void ChangePictureHandler::HandleDiscardPhoto(const base::ListValue* args) {
   DCHECK(args->empty());
   AccessibilityManager::Get()->PlayEarcon(
-      Sound::kObjectDelete, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
+      Sound::kObjectDelete, PlaySoundOption::kOnlyIfSpokenFeedbackEnabled);
 }
 
 void ChangePictureHandler::HandlePhotoTaken(const base::ListValue* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   AccessibilityManager::Get()->PlayEarcon(
-      Sound::kCameraSnap, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
+      Sound::kCameraSnap, PlaySoundOption::kOnlyIfSpokenFeedbackEnabled);
 
   std::string image_url;
   if (!args || args->GetSize() != 1 || !args->GetString(0, &image_url))

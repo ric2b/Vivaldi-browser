@@ -38,6 +38,7 @@
 #include "cc/base/switches.h"
 #include "cc/benchmarks/benchmark_instrumentation.h"
 #include "cc/debug/rendering_stats_instrumentation.h"
+#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/browser_controls_offset_manager.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/page_scale_animation.h"
@@ -202,7 +203,7 @@ void DidVisibilityChange(LayerTreeHostImpl* id, bool visible) {
   if (visible) {
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
         "cc,benchmark", "LayerTreeHostImpl::SetVisible", TRACE_ID_LOCAL(id),
-        "LayerTreeHostImpl", id);
+        "LayerTreeHostImpl", static_cast<void*>(id));
     return;
   }
 
@@ -354,6 +355,12 @@ LayerTreeHostImpl& LayerTreeHostImpl::GetImplDeprecated() {
 
 const LayerTreeHostImpl& LayerTreeHostImpl::GetImplDeprecated() const {
   return *this;
+}
+
+bool LayerTreeHostImpl::CanInjectJankOnMain() const {
+  return !!frame_trackers_.FrameSequenceTrackerActiveTypes() &&
+         compositor_frame_reporting_controller_
+             ->is_main_thread_driving_smoothness();
 }
 
 LayerTreeHostImpl::FrameData::FrameData() = default;
@@ -1123,7 +1130,7 @@ bool LayerTreeHostImpl::HasDamage() const {
 
   return root_surface_has_visible_damage ||
          active_tree_->property_trees()->effect_tree.HasCopyRequests() ||
-         hud_wants_to_draw_;
+         hud_wants_to_draw_ || active_tree_->HasDocumentTransitionRequests();
 }
 
 DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
@@ -1223,6 +1230,8 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   // Advance our de-jelly state. This is a no-op if de-jelly is not active.
   de_jelly_state_.AdvanceFrame(active_tree_.get());
 
+  if (settings_.enable_compositing_based_throttling)
+    throttle_decider_.Prepare();
   for (EffectTreeLayerListIterator it(active_tree());
        it.state() != EffectTreeLayerListIterator::State::END; ++it) {
     auto target_render_pass_id = it.target_render_surface()->render_pass_id();
@@ -1240,6 +1249,8 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
                 render_surface->EffectTreeIndex(),
                 &target_render_pass->copy_requests);
       }
+      if (settings_.enable_compositing_based_throttling && target_render_pass)
+        throttle_decider_.ProcessRenderPass(*target_render_pass);
     } else if (it.state() ==
                EffectTreeLayerListIterator::State::CONTRIBUTING_SURFACE) {
       RenderSurfaceImpl* render_surface = it.current_render_surface();
@@ -2020,22 +2031,13 @@ void LayerTreeHostImpl::DidReceiveCompositorFrameAck() {
 void LayerTreeHostImpl::DidPresentCompositorFrame(
     uint32_t frame_token,
     const viz::FrameTimingDetails& details) {
-  frame_trackers_.NotifyFramePresented(frame_token,
-                                       details.presentation_feedback);
-  PresentationTimeCallbackBuffer::PendingCallbacks activated =
+  PresentationTimeCallbackBuffer::PendingCallbacks activated_callbacks =
       presentation_time_callbacks_.PopPendingCallbacks(frame_token);
 
-  // The callbacks in |compositor_thread_callbacks| expect to be run on the
-  // compositor thread so we'll run them now.
-  for (LayerTreeHost::PresentationTimeCallback& callback :
-       activated.compositor_thread_callbacks) {
-    std::move(callback).Run(details.presentation_feedback);
-  }
-
-  // Send all the main-thread callbacks to the client in one batch. The client
-  // is in charge of posting them to the main thread.
+  // Send all tasks to the client so that it can decide which tasks
+  // should run on which thread.
   client_->DidPresentCompositorFrameOnImplThread(
-      frame_token, std::move(activated.main_thread_callbacks), details);
+      frame_token, std::move(activated_callbacks), details);
 
   // Send all pending lag events waiting on the frame pointed by |frame_token|.
   // It is posted as a task because LayerTreeHostImpl::DidPresentCompositorFrame
@@ -2217,6 +2219,9 @@ viz::CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() {
         delegated_ink_metadata->ToString());
     metadata.delegated_ink_metadata = std::move(delegated_ink_metadata);
   }
+
+  for (auto& request : active_tree_->TakeDocumentTransitionRequests())
+    metadata.transition_directives.push_back(request->ConstructDirective());
 
   return metadata;
 }
@@ -2413,6 +2418,12 @@ bool LayerTreeHostImpl::DrawLayers(FrameData* frame) {
   devtools_instrumentation::DidDrawFrame(id_);
   benchmark_instrumentation::IssueImplThreadRenderingStatsEvent(
       rendering_stats_instrumentation_->TakeImplThreadRenderingStats());
+
+  if (settings_.enable_compositing_based_throttling &&
+      throttle_decider_.HasThrottlingChanged()) {
+    client_->FrameSinksToThrottleUpdated(throttle_decider_.ids());
+  }
+
   return true;
 }
 
@@ -2479,11 +2490,30 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
       frame->deadline_in_frames.value_or(0u), CurrentBeginFrameArgs().interval,
       frame->use_default_lower_bound_deadline);
 
-  frame_rate_estimator_.WillDraw(CurrentBeginFrameArgs().frame_time);
-
+  constexpr auto kFudgeDelta = base::TimeDelta::FromMilliseconds(1);
+  constexpr auto kTwiceOfDefaultInterval =
+      viz::BeginFrameArgs::DefaultInterval() * 2;
+  constexpr auto kMinDelta = kTwiceOfDefaultInterval - kFudgeDelta;
   if (enable_frame_rate_throttling_) {
     metadata.preferred_frame_interval = viz::BeginFrameArgs::MaxInterval();
+  } else if (mutator_host_->MainThreadAnimationsCount() == 0 &&
+             mutator_host_->MinimumTickInterval() > kMinDelta) {
+    // All animations are impl-thread animations that tick at no more than
+    // half the default display compositing fps.
+    // Here and below with FrameRateEstimator::GetPreferredInterval(), the
+    // meta data's preferred_frame_interval is constrainted to either 0 or
+    // twice the default interval. The reason is because GPU process side
+    // viz::FrameRateDecider is optimized for when all the preferred frame
+    // rates are similar.
+    // In general it may cause an animation to be less smooth if its fps is
+    // less than 30 fps and it updates at 30 fps. However, the frame rate
+    // reduction optimization is only applied when a webpage has two or more
+    // videos, i.e., very likely a video conferencing scene. It doesn't apply
+    // to general webpages.
+    metadata.preferred_frame_interval = kTwiceOfDefaultInterval;
   } else {
+    // There are main-thread or high frequency impl-thread animations.
+    frame_rate_estimator_.WillDraw(CurrentBeginFrameArgs().frame_time);
     metadata.preferred_frame_interval =
         frame_rate_estimator_.GetPreferredInterval();
   }
@@ -3248,6 +3278,13 @@ void LayerTreeHostImpl::OnMemoryPressure(
   if (level != base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL)
     return;
 
+    // TODO(crbug.com/1189208): Unlocking decoded-image-tracker images causes
+    // flickering in visible trees if Out-Of-Process rasterization is enabled.
+#if defined(OS_FUCHSIA)
+  if (use_oop_rasterization() && visible())
+    return;
+#endif  // defined(OS_FUCHSIA)
+
   ReleaseTileResources();
   active_tree_->OnPurgeMemory();
   if (pending_tree_)
@@ -3262,6 +3299,7 @@ void LayerTreeHostImpl::OnMemoryPressure(
   }
   if (resource_pool_)
     resource_pool_->OnMemoryPressure(level);
+
   tile_manager_.decoded_image_tracker().UnlockAllImages();
 }
 
@@ -3925,6 +3963,8 @@ LayerTreeHostImpl::ProcessCompositorDeltas() {
   commit_data->page_scale_delta =
       active_tree_->page_scale_factor()->PullDeltaForMainThread();
   commit_data->is_pinch_gesture_active = active_tree_->PinchGestureActive();
+  commit_data->is_scroll_active =
+      input_delegate_ && GetInputHandler().IsCurrentlyScrolling();
   // We should never process non-unit page_scale_delta for an OOPIF subframe.
   // TODO(wjmaclean): Remove this DCHECK as a pre-condition to closing the bug.
   // https://crbug.com/845097
@@ -4418,7 +4458,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
     // fully filled by drawBitmap(), so we ensure they start empty. (See
     // crbug.com/642011 for an example.)
     scaled_canvas->clear(SK_ColorTRANSPARENT);
-    scaled_canvas->drawBitmap(source_bitmap, 0, 0);
+    scaled_canvas->drawImage(source_bitmap.asImage(), 0, 0);
 
     if (layer_tree_frame_sink_->context_provider()) {
       SkPixmap pixmap;
@@ -4778,11 +4818,6 @@ gfx::ScrollOffset LayerTreeHostImpl::GetScrollOffsetForAnimation(
   return gfx::ScrollOffset();
 }
 
-bool LayerTreeHostImpl::SupportsImplScrolling() const {
-  // Supported in threaded mode.
-  return task_runner_provider_->HasImplThread();
-}
-
 bool LayerTreeHostImpl::CommitToActiveTree() const {
   return settings_.commit_to_active_tree;
 }
@@ -4864,6 +4899,20 @@ void LayerTreeHostImpl::SetUkmSmoothnessDestination(
   ukm_smoothness_mapping_ = std::move(ukm_smoothness_data);
   dropped_frame_counter_.SetUkmSmoothnessDestination(
       ukm_smoothness_mapping_.GetMemoryAs<UkmSmoothnessDataShared>());
+}
+
+void LayerTreeHostImpl::NotifyDidPresentCompositorFrameOnImplThread(
+    uint32_t frame_token,
+    PresentationTimeCallbackBuffer::PendingCallbacks callbacks,
+    const viz::FrameTimingDetails& details) {
+  frame_trackers_.NotifyFramePresented(frame_token,
+                                       details.presentation_feedback);
+  // The callbacks in |compositor_thread_callbacks| expect to be run on the
+  // compositor thread so we'll run them now.
+  for (LayerTreeHost::PresentationTimeCallback& callback :
+       callbacks.compositor_thread_callbacks) {
+    std::move(callback).Run(details.presentation_feedback);
+  }
 }
 
 void LayerTreeHostImpl::AllocateLocalSurfaceId() {

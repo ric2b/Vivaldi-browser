@@ -21,6 +21,8 @@
 #include "components/translate/core/language_detection/chinese_script_classifier.h"
 #include "third_party/cld_3/src/src/nnet_language_identifier.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 // Similar language code list. Some languages are very similar and difficult
@@ -79,10 +81,10 @@ bool CanModelComplementSubCode(const std::string& page_language,
                           base::CompareCase::INSENSITIVE_ASCII);
 }
 
-// Given a detected language and whether that detection is reliable, returns the
-// ISO 639 language code of |utf8_text|. Returns
-// |translate::kUnknownLanguageCode| for unreliable, "unknown", and xx-Latn
-// predictions that are currently not supported.
+}  // namespace
+
+namespace translate {
+
 std::string FilterDetectedLanguage(const std::string& utf8_text,
                                    const std::string& detected_language,
                                    bool is_detection_reliable) {
@@ -90,6 +92,8 @@ std::string FilterDetectedLanguage(const std::string& utf8_text,
   // not supported.
   if (!is_detection_reliable)
     return translate::kUnknownLanguageCode;
+  // TODO(crbug.com/1178193): Determine if ar-Latn and hi-Latn need to be added
+  // for the TFLite-based detection model.
   if (detected_language == "bg-Latn" || detected_language == "el-Latn" ||
       detected_language == "ja-Latn" || detected_language == "ru-Latn" ||
       detected_language == "zh-Latn" ||
@@ -105,26 +109,31 @@ std::string FilterDetectedLanguage(const std::string& utf8_text,
     // The Classify function returns either "zh-Hant" or "zh-Hans".
     // Convert to the old-style language codes used by the Translate API.
     const std::string zh_classification = zh_classifier.Classify(utf8_text);
+    if (vivaldi::IsVivaldiRunning()) {
+      if (zh_classification == "zh-Hant" || zh_classification == "zh-Hans") {
+        return zh_classification;
+      }
+      return translate::kUnknownLanguageCode;
+    } else {
     if (zh_classification == "zh-Hant")
       return "zh-TW";
     if (zh_classification == "zh-Hans")
       return "zh-CN";
     return translate::kUnknownLanguageCode;
+    }
   }
   // The detection is reliable and none of the cases that are not handled by the
   // language detection model.
   return detected_language;
 }
 
-}  // namespace
-
-namespace translate {
-
 // Returns the ISO 639 language code of the specified |utf8_text|, or 'unknown'
 // if it failed. |is_model_reliable| will be set as true if CLD says the
-// detection is reliable.
+// detection is reliable and |model_reliability_score| will provide the model's
+// confidence in that prediction.
 std::string DetermineTextLanguage(const std::string& utf8_text,
-                                  bool* is_model_reliable) {
+                                  bool* is_model_reliable,
+                                  float& model_reliability_score) {
   // Make a prediction.
   base::TimeTicks lang_id_start = base::TimeTicks::Now();
   chrome_lang_id::NNetLanguageIdentifier lang_id;
@@ -133,6 +142,7 @@ std::string DetermineTextLanguage(const std::string& utf8_text,
   base::UmaHistogramTimes("Translate.CLD3.TopLanguageEvaluationDuration",
                           base::TimeTicks::Now() - lang_id_start);
   const bool is_detection_reliable = lang_id_result.is_reliable;
+  const float model_probability = lang_id_result.probability;
   const std::string& detected_language = lang_id_result.language;
 
   // Update histograms.
@@ -148,6 +158,7 @@ std::string DetermineTextLanguage(const std::string& utf8_text,
   if (is_model_reliable != nullptr) {
     *is_model_reliable = is_detection_reliable;
   }
+  model_reliability_score = model_probability;
   return FilterDetectedLanguage(utf8_text, detected_language,
                                 is_detection_reliable);
 }
@@ -156,16 +167,19 @@ std::string DeterminePageLanguage(const std::string& code,
                                   const std::string& html_lang,
                                   const base::string16& contents,
                                   std::string* model_detected_language,
-                                  bool* is_model_reliable) {
+                                  bool* is_model_reliable,
+                                  float& model_reliability_score) {
   // First determine the language for the text contents.
   bool is_reliable;
+  float model_score = 0.0;
   const std::string utf8_text(base::UTF16ToUTF8(contents));
   std::string detected_language =
-      DetermineTextLanguage(utf8_text, &is_reliable);
+      DetermineTextLanguage(utf8_text, &is_reliable, model_score);
   if (model_detected_language != nullptr)
     *model_detected_language = detected_language;
   if (is_model_reliable != nullptr)
     *is_model_reliable = is_reliable;
+  model_reliability_score = model_score;
   language::ToTranslateLanguageSynonym(&detected_language);
 
   return DeterminePageLanguage(code, html_lang, detected_language, is_reliable);

@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
+#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -461,6 +462,38 @@ void PasswordManager::OnPasswordFormSubmittedNoChecks(
     OnLoginSuccessful();
 }
 
+void PasswordManager::OnPasswordFormCleared(
+    PasswordManagerDriver* driver,
+    const autofill::FormData& form_data) {
+  PasswordFormManager* manager = GetMatchedManager(driver, form_data);
+  if (!manager || !manager->is_submitted() ||
+      !manager->GetSubmittedForm()->IsPossibleChangePasswordForm()) {
+    return;
+  }
+  // If a password form was cleared, login is successful.
+  if (form_data.is_form_tag &&
+      base::FeatureList::IsEnabled(
+          password_manager::features::kDetectFormSubmissionOnFormClear)) {
+    manager->UpdateSubmissionIndicatorEvent(
+        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
+    OnLoginSuccessful();
+    return;
+  }
+  // If password fields outside the <form> tag were cleared, it should be
+  // verified that fields are relevant.
+  FieldRendererId new_password_field_id =
+      manager->GetSubmittedForm()->new_password_element_renderer_id;
+  auto it = base::ranges::find(form_data.fields, new_password_field_id,
+                               &autofill::FormFieldData::unique_renderer_id);
+  if (it != form_data.fields.end() && it->value.empty() &&
+      base::FeatureList::IsEnabled(
+          features::kDetectFormSubmissionOnFormClear)) {
+    manager->UpdateSubmissionIndicatorEvent(
+        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
+    OnLoginSuccessful();
+  }
+}
+
 #if defined(OS_IOS)
 void PasswordManager::OnPasswordFormSubmittedNoChecksForiOS(
     PasswordManagerDriver* driver,
@@ -711,6 +744,9 @@ void PasswordManager::PresaveGeneratedPassword(
   if (form_manager) {
     form_manager->PresaveGeneratedPassword(driver, form, generated_password,
                                            generation_element);
+
+    form_manager->ProvisionallySave(
+        form, driver, base::OptionalOrNullptr(possible_username_));
   }
 }
 
@@ -1234,38 +1270,6 @@ void PasswordManager::ResetPendingCredentials() {
   for (auto& form_manager : form_managers_)
     form_manager->ResetState();
   owned_submitted_form_manager_.reset();
-}
-
-void PasswordManager::OnPasswordFormCleared(
-    PasswordManagerDriver* driver,
-    const autofill::FormData& form_data) {
-  PasswordFormManager* manager = GetMatchedManager(driver, form_data);
-  if (!manager || !manager->is_submitted() ||
-      !manager->GetSubmittedForm()->IsPossibleChangePasswordForm()) {
-    return;
-  }
-  // If a password form was cleared, login is successful.
-  if (form_data.is_form_tag &&
-      base::FeatureList::IsEnabled(
-          password_manager::features::kDetectFormSubmissionOnFormClear)) {
-    manager->UpdateSubmissionIndicatorEvent(
-        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
-    OnLoginSuccessful();
-    return;
-  }
-  // If password fields outside the <form> tag were cleared, it should be
-  // verified that fields are relevant.
-  FieldRendererId new_password_field_id =
-      manager->GetSubmittedForm()->new_password_element_renderer_id;
-  auto it = base::ranges::find(form_data.fields, new_password_field_id,
-                               &autofill::FormFieldData::unique_renderer_id);
-  if (it != form_data.fields.end() && it->value.empty() &&
-      base::FeatureList::IsEnabled(
-          features::kDetectFormSubmissionOnFormClear)) {
-    manager->UpdateSubmissionIndicatorEvent(
-        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
-    OnLoginSuccessful();
-  }
 }
 
 bool PasswordManager::IsFormManagerPendingPasswordUpdate() const {

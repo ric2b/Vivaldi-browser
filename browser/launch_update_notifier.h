@@ -11,12 +11,12 @@ namespace vivaldi {
 
 void LaunchUpdateNotifier(Profile* profile);
 
-#if defined(OS_WIN)
-// Get the command line to start the update notifier with common switches
-// reflecting the current settings.
-base::CommandLine GetCommonUpdateNotifierCommand(Profile* profile);
+#ifdef OS_WIN
+void DisableStandaloneAutoUpdate();
+void EnableStandaloneAutoUpdate();
+bool IsStandaloneAutoUpdateEnabled();
 #endif
 
 }  // namespace vivaldi
 
-#endif  // BROWSER_LAUNCH_UPDATE_NOTIFIER_H_
+#endif  // oROWSER_LAUNCH_UPDATE_NOTIFIER_H_

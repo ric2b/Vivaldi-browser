@@ -19,7 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/engine/engine_util.h"
-#include "components/sync/model/entity_data.h"
+#include "components/sync/engine/entity_data.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
@@ -120,8 +120,7 @@ bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data) {
 
 sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
     const vivaldi::NoteNode* node,
-    vivaldi::NotesModel* model,
-    bool include_guid) {
+    vivaldi::NotesModel* model) {
   sync_pb::EntitySpecifics specifics;
   sync_pb::NotesSpecifics* notes_specifics = specifics.mutable_notes();
   if (!node->is_folder() && !node->is_separator()) {
@@ -135,10 +134,7 @@ sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
   }
 
   DCHECK(node->guid().is_valid()) << "Actual: " << node->guid();
-
-  if (include_guid) {
-    notes_specifics->set_guid(node->guid().AsLowercaseString());
-  }
+  notes_specifics->set_guid(node->guid().AsLowercaseString());
 
   const std::string node_title = base::UTF16ToUTF8(node->GetTitle());
   notes_specifics->set_legacy_canonicalized_title(
@@ -282,14 +278,14 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
 }
 
 bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
+                         const syncer::ClientTagHash& client_tag_hash,
                          const std::string& originator_cache_guid,
                          const std::string& originator_client_item_id) {
   DCHECK(base::GUID::ParseLowercase(specifics.guid()).is_valid());
 
-  if (originator_client_item_id.empty()) {
-    // This could be a future note with a client tag instead of an
-    // originator client item ID.
-    NOTIMPLEMENTED();
+  // If the client tag hash matches, that should already be good enough.
+  if (syncer::ClientTagHash::FromUnhashed(
+          syncer::BOOKMARKS, specifics.guid()) == client_tag_hash) {
     return true;
   }
 

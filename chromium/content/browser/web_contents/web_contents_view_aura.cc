@@ -121,23 +121,20 @@ RenderWidgetHostViewAura* ToRenderWidgetHostViewAura(
 
 // Listens to all mouse drag events during a drag and drop and sends them to
 // the renderer.
-class WebDragSourceAura : public NotificationObserver {
+class WebDragSourceAura : public content::WebContentsObserver {
  public:
   WebDragSourceAura(aura::Window* window, WebContentsImpl* contents)
-      : window_(window),
-        contents_(contents) {
-    registrar_.Add(this,
-                   NOTIFICATION_WEB_CONTENTS_DISCONNECTED,
-                   Source<WebContents>(contents));
+      : WebContentsObserver(contents), window_(window) {}
+
+  // content::WebContentsObserver
+  void RenderProcessGone(base::TerminationStatus status) override {
+    CancelDrag();
   }
 
-  ~WebDragSourceAura() override {}
+  void WebContentsDestroyed() override { CancelDrag(); }
 
-  // NotificationObserver:
-  void Observe(int type,
-               const NotificationSource& source,
-               const NotificationDetails& details) override {
-    if (type != NOTIFICATION_WEB_CONTENTS_DISCONNECTED)
+  void CancelDrag() {
+    if (!window_)
       return;
 
     // Cancel the drag if it is still in progress.
@@ -147,15 +144,12 @@ class WebDragSourceAura : public NotificationObserver {
       dnd_client->DragCancel();
 
     window_ = nullptr;
-    contents_ = nullptr;
   }
 
   aura::Window* window() const { return window_; }
 
  private:
   aura::Window* window_;
-  WebContentsImpl* contents_;
-  NotificationRegistrar registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(WebDragSourceAura);
 };
@@ -193,12 +187,9 @@ void PrepareDragForDownload(const DropData& drop_data,
   std::string default_name =
       GetContentClient()->browser()->GetDefaultDownloadName();
   base::FilePath generated_download_file_name =
-      net::GenerateFileName(download_url,
-                            std::string(),
-                            std::string(),
-                            base::UTF16ToUTF8(file_name.value()),
-                            base::UTF16ToUTF8(mime_type),
-                            default_name);
+      net::GenerateFileName(download_url, std::string(), std::string(),
+                            base::WideToUTF8(file_name.value()),
+                            base::UTF16ToUTF8(mime_type), default_name);
 
   // http://crbug.com/332579
   base::ThreadRestrictions::ScopedAllowIO allow_file_operations;
@@ -789,10 +780,15 @@ void WebContentsViewAura::EndDrag(
 
 void WebContentsViewAura::InstallOverscrollControllerDelegate(
     RenderWidgetHostViewAura* view) {
+  if (!base::FeatureList::IsEnabled(features::kOverscrollHistoryNavigation))
+    return;
+
   if (!gesture_nav_simple_)
     gesture_nav_simple_ = std::make_unique<GestureNavSimple>(web_contents_);
-  if (view)
-    view->overscroll_controller()->set_delegate(gesture_nav_simple_.get());
+  if (view) {
+    view->overscroll_controller()->set_delegate(
+        gesture_nav_simple_->GetWeakPtr());
+  }
 }
 
 ui::TouchSelectionController* WebContentsViewAura::GetSelectionController()
@@ -1422,8 +1418,7 @@ aura::client::DragUpdateInfo WebContentsViewAura::OnDragUpdated(
                          weak_ptr_factory_.GetWeakPtr(), event,
                          std::move(drop_data)));
 
-  drag_info.drag_operation = ConvertFromDragOperationsMask(
-      static_cast<blink::DragOperationsMask>(current_drag_op_));
+  drag_info.drag_operation = static_cast<int>(current_drag_op_);
   return drag_info;
 }
 
@@ -1559,19 +1554,18 @@ void WebContentsViewAura::FinishOnPerformDropCallback(
   current_drop_data_.reset();
 }
 
-int WebContentsViewAura::OnPerformDrop(
+ui::mojom::DragOperation WebContentsViewAura::OnPerformDrop(
     const ui::DropTargetEvent& event,
     std::unique_ptr<ui::OSExchangeData> data) {
   if (web_contents_->ShouldIgnoreInputEvents())
-    return ui::DragDropTypes::DRAG_NONE;
+    return ui::mojom::DragOperation::kNone;
 
   VivaldiGetDragTarget(web_contents_,
           event.location_f(),
           base::BindOnce(&WebContentsViewAura::PerformDropCallback,
                          weak_ptr_factory_.GetWeakPtr(), event,
                          std::move(data)));
-  return ConvertFromDragOperationsMask(
-      static_cast<blink::DragOperationsMask>(current_drag_op_));
+  return current_drag_op_;
 }
 
 void WebContentsViewAura::CompleteDrop(RenderWidgetHostImpl* target_rwh,

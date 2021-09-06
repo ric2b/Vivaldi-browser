@@ -25,6 +25,8 @@ class ChromeWebappsClient : public WebappsClient {
       content::WebContents* web_contents) override;
   WebappInstallSource GetInstallSource(content::WebContents* web_contents,
                                        InstallTrigger trigger) override;
+  AppBannerManager* GetAppBannerManager(
+      content::WebContents* web_contents) override;
 #if defined(OS_ANDROID)
   bool IsInstallationInProgress(content::WebContents* web_contents,
                                 const GURL& manifest_url) override;
@@ -33,6 +35,8 @@ class ChromeWebappsClient : public WebappsClient {
       content::WebContents* web_contents) override;
   void InstallWebApk(content::WebContents* web_contents,
                      const AddToHomescreenParams& params) override;
+  void InstallShortcut(content::WebContents* web_contents,
+                       const AddToHomescreenParams& params) override;
 #endif
 
  private:

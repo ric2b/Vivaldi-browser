@@ -3,17 +3,18 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/borealis/borealis_task.h"
+
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/borealis/borealis_context.h"
 #include "chrome/browser/chromeos/borealis/borealis_util.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 

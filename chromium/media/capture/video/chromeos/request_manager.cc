@@ -17,6 +17,7 @@
 #include "base/posix/safe_strerror.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "media/capture/video/chromeos/camera_app_device_bridge_impl.h"
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
 #include "media/capture/video/chromeos/camera_metadata_utils.h"
 #include "media/capture/video/chromeos/video_capture_features_chromeos.h"
@@ -34,6 +35,7 @@ constexpr std::initializer_list<StreamType> kYUVReprocessStreams = {
 }  // namespace
 
 RequestManager::RequestManager(
+    const std::string& device_id,
     mojo::PendingReceiver<cros::mojom::Camera3CallbackOps>
         callback_ops_receiver,
     std::unique_ptr<StreamCaptureInterface> capture_interface,
@@ -41,9 +43,9 @@ RequestManager::RequestManager(
     VideoCaptureBufferType buffer_type,
     std::unique_ptr<CameraBufferFactory> camera_buffer_factory,
     BlobifyCallback blobify_callback,
-    scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner,
-    CameraAppDeviceImpl* camera_app_device)
-    : callback_ops_(this, std::move(callback_ops_receiver)),
+    scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner)
+    : device_id_(device_id),
+      callback_ops_(this, std::move(callback_ops_receiver)),
       capture_interface_(std::move(capture_interface)),
       device_context_(device_context),
       video_capture_use_gmb_(buffer_type ==
@@ -56,8 +58,7 @@ RequestManager::RequestManager(
       ipc_task_runner_(std::move(ipc_task_runner)),
       capturing_(false),
       partial_result_count_(1),
-      first_frame_shutter_time_(base::TimeTicks()),
-      camera_app_device_(std::move(camera_app_device)) {
+      first_frame_shutter_time_(base::TimeTicks()) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
   DCHECK(callback_ops_.is_bound());
   DCHECK(device_context_);
@@ -80,6 +81,16 @@ void RequestManager::SetUpStreamsAndBuffers(
     base::flat_map<ClientType, VideoCaptureParams> capture_params,
     const cros::mojom::CameraMetadataPtr& static_metadata,
     std::vector<cros::mojom::Camera3StreamPtr> streams) {
+  auto request_keys = GetMetadataEntryAsSpan<int32_t>(
+      static_metadata,
+      cros::mojom::CameraMetadataTag::ANDROID_REQUEST_AVAILABLE_REQUEST_KEYS);
+  zero_shutter_lag_supported_ = base::Contains(
+      request_keys,
+      static_cast<int32_t>(
+          cros::mojom::CameraMetadataTag::ANDROID_CONTROL_ENABLE_ZSL));
+  VLOG(1) << "Zero-shutter lag is "
+          << (zero_shutter_lag_supported_ ? "" : "not ") << "supported";
+
   // The partial result count metadata is optional; defaults to 1 in case it
   // is not set in the static metadata.
   const cros::mojom::CameraMetadataEntryPtr* partial_count = GetMetadataEntry(
@@ -291,13 +302,24 @@ void RequestManager::PrepareCaptureRequest() {
   // If there is no pending reprocess task, then check if there are pending
   // one-shot requests. And also try to put preview in the request.
   if (!is_reprocess_request) {
-    is_preview_request = TryPreparePreviewRequest(&stream_types, &settings);
+    if (!zero_shutter_lag_supported_) {
+      is_preview_request = TryPreparePreviewRequest(&stream_types, &settings);
 
-    // Order matters here. If the preview request and oneshot request are both
-    // added in single capture request, the settings will be overridden by the
-    // later.
-    is_oneshot_request =
-        TryPrepareOneShotRequest(&stream_types, &settings, &callback);
+      // Order matters here. If the preview request and oneshot request are both
+      // added in single capture request, the settings will be overridden by the
+      // later.
+      is_oneshot_request =
+          TryPrepareOneShotRequest(&stream_types, &settings, &callback);
+    } else {
+      // Zero-shutter lag could potentially give a frame from the past. Don't
+      // prepare a preview request when a one shot request has been prepared.
+      is_oneshot_request =
+          TryPrepareOneShotRequest(&stream_types, &settings, &callback);
+
+      if (!is_oneshot_request) {
+        is_preview_request = TryPreparePreviewRequest(&stream_types, &settings);
+      }
+    }
   }
 
   if (is_preview_request) {
@@ -680,8 +702,12 @@ void RequestManager::Notify(cros::mojom::Camera3NotifyMsgPtr message) {
       first_frame_shutter_time_ = reference_time;
     }
     pending_result.timestamp = reference_time - first_frame_shutter_time_;
-    if (camera_app_device_ && pending_result.still_capture_callback) {
-      camera_app_device_->OnShutterDone();
+
+    auto camera_app_device =
+        CameraAppDeviceBridgeImpl::GetInstance()->GetWeakCameraAppDevice(
+            device_id_);
+    if (camera_app_device && pending_result.still_capture_callback) {
+      camera_app_device->OnShutterDone();
     }
 
     TrySubmitPendingBuffers(frame_number);
@@ -775,8 +801,11 @@ void RequestManager::SubmitCaptureResult(
     observer->OnResultMetadataAvailable(frame_number, pending_result.metadata);
   }
 
-  if (camera_app_device_) {
-    camera_app_device_->OnResultMetadataAvailable(
+  auto camera_app_device =
+      CameraAppDeviceBridgeImpl::GetInstance()->GetWeakCameraAppDevice(
+          device_id_);
+  if (camera_app_device) {
+    camera_app_device->OnResultMetadataAvailable(
         pending_result.metadata,
         static_cast<cros::mojom::StreamType>(stream_type));
   }
@@ -870,21 +899,21 @@ void RequestManager::SubmitCapturedPreviewRecordingBuffer(
       auto translate_rotation = [](const int rotation) -> VideoRotation {
         switch (rotation) {
           case 0:
-            return VideoRotation::VIDEO_ROTATION_0;
+            return VIDEO_ROTATION_0;
           case 90:
-            return VideoRotation::VIDEO_ROTATION_90;
+            return VIDEO_ROTATION_90;
           case 180:
-            return VideoRotation::VIDEO_ROTATION_180;
+            return VIDEO_ROTATION_180;
           case 270:
-            return VideoRotation::VIDEO_ROTATION_270;
+            return VIDEO_ROTATION_270;
         }
-        return VideoRotation::VIDEO_ROTATION_0;
+        return VIDEO_ROTATION_0;
       };
-      metadata.rotation =
+      metadata.transformation =
           translate_rotation(device_context_->GetRotationForDisplay());
     } else {
       // All frames are pre-rotated to the display orientation.
-      metadata.rotation = VideoRotation::VIDEO_ROTATION_0;
+      metadata.transformation = VIDEO_ROTATION_0;
     }
     device_context_->SubmitCapturedVideoCaptureBuffer(
         client_type, std::move(*buffer), format, pending_result.reference_time,

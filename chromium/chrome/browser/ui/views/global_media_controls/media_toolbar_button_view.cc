@@ -31,6 +31,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/button/button_controller.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 MediaToolbarButtonView::MediaToolbarButtonView(BrowserView* browser_view)
     : ToolbarButton(base::BindRepeating(&MediaToolbarButtonView::ButtonPressed,
@@ -140,3 +141,6 @@ void MediaToolbarButtonView::ButtonPressed() {
       observer.OnMediaDialogOpened();
   }
 }
+
+BEGIN_METADATA(MediaToolbarButtonView, ToolbarButton)
+END_METADATA

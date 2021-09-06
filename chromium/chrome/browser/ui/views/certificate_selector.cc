@@ -30,11 +30,12 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/table/table_view.h"
 #include "ui/views/layout/grid_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
+#include "chrome/browser/ash/certificate_provider/certificate_provider_service.h"
+#include "chrome/browser/ash/certificate_provider/certificate_provider_service_factory.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_factory.h"
 #endif
@@ -118,6 +119,7 @@ CertificateSelector::CertificateSelector(net::ClientCertIdentityList identities,
                                          content::WebContents* web_contents)
     : web_contents_(web_contents) {
   SetCanResize(true);
+  SetModalType(ui::MODAL_TYPE_CHILD);
   CHECK(web_contents_);
 
   view_cert_button_ = SetExtraView(std::make_unique<views::MdTextButton>(
@@ -282,10 +284,6 @@ views::View* CertificateSelector::GetInitiallyFocusedView() {
   return table_;
 }
 
-ui::ModalType CertificateSelector::GetModalType() const {
-  return ui::MODAL_TYPE_CHILD;
-}
-
 void CertificateSelector::ViewCertButtonPressed() {
   net::ClientCertIdentity* const cert = GetSelectedCert();
   if (!cert)
@@ -302,5 +300,8 @@ void CertificateSelector::OnDoubleClick() {
   if (GetSelectedCert())
     AcceptDialog();
 }
+
+BEGIN_METADATA(CertificateSelector, views::DialogDelegateView)
+END_METADATA
 
 }  // namespace chrome

@@ -31,6 +31,8 @@
 <translation id="2486841023299517366">動物４</translation>
 <translation id="2612127540243995147">インストール準備ができました。Vivaldiを閉じて再起動します。</translation>
 <translation id="2613387515621326337">アップデートサイトを表示する</translation>
+<translation id="2647368062414805334">Edgeが起動しているため、Vivaldiへ設定をインポートすることができません。作業内容を保存し、Edgeのウィンドウを閉じてからもう一度やり直してください。</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">動物３</translation>
 <translation id="2873951654529031587">ごみ箱</translation>
 <translation id="292258461174562431">怪獣４</translation>
@@ -61,6 +63,7 @@
 <translation id="3732157130969736834">ブックマークにリンク先を追加</translation>
 <translation id="3732388226447288666">動物２</translation>
 <translation id="3732439195215136813">動物５</translation>
+<translation id="3795800845758778870">Braveブラウザが起動しているため、Vivaldiへ設定をインポートすることができません。作業内容を保存し、Braveブラウザのウィンドウを閉じてからもう一度やり直してください。</translation>
 <translation id="3832132597516774400">風景５</translation>
 <translation id="3914946330804881301">Operaからインポートしたもの</translation>
 <translation id="3921292902397893431">怪獣８</translation>
@@ -115,6 +118,8 @@
 <translation id="6551219277044048123">検索エンジンに追加... (&amp;G)</translation>
 <translation id="6630781781151951863">風景１８</translation>
 <translation id="6635049669875534328">リリースノート:</translation>
+<translation id="6693585104974197539">インポートするEdgeプロファイルフォルダを選択してください</translation>
+<translation id="6726279523566323394">インポートするBraveプロファイルフォルダを選択してください</translation>
 <translation id="6804831687363620480">残念ですが、Opera 15+の起動中は設定を利用できません。Vivaldiにこれらの設定をインポートするには、作業中の処理を保存して全てのOpera 15+のウィンドウを閉じ、継続をクリックしてください。</translation>
 <translation id="6892812721183419409"><ph name="USER" />でリンクを開く</translation>
 <translation id="6896758677409633944">コピー</translation>
@@ -160,5 +165,6 @@
 <translation id="912022491595344261"><ph name="USER" />で画像を開く</translation>
 <translation id="9157539936604258187">開く</translation>
 <translation id="9169060351863393881">Opera バージョン 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">風景１６</translation>
 </translationbundle>

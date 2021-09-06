@@ -338,11 +338,6 @@ bool Target::OnResolved(Err* err) {
   ScopedTrace trace(TraceItem::TRACE_ON_RESOLVED, label());
   trace.SetToolchain(settings()->toolchain_label());
 
-  // Check visibility for just this target's own configs, before dependents are
-  // added.
-  if (!CheckConfigVisibility(err))
-    return false;
-
   // Copy this target's own dependent and public configs to the list of configs
   // applying to it.
   configs_.Append(all_dependent_configs_.begin(), all_dependent_configs_.end());
@@ -435,16 +430,12 @@ bool Target::IsFinal() const {
          output_type_ == LOADABLE_MODULE || output_type_ == ACTION ||
          output_type_ == ACTION_FOREACH || output_type_ == COPY_FILES ||
          output_type_ == CREATE_BUNDLE || output_type_ == RUST_PROC_MACRO ||
-         (output_type_ == STATIC_LIBRARY && complete_static_lib_);
-}
-
-bool Target::IsDataOnly() const {
-  // BUNDLE_DATA exists only to declare inputs to subsequent CREATE_BUNDLE
-  // targets. Changing only contents of the bundle data target should not cause
-  // a binary to be re-linked. It should affect only the CREATE_BUNDLE steps
-  // instead. As a result, normal targets should treat this as a data
-  // dependency.
-  return output_type_ == BUNDLE_DATA;
+         (output_type_ == STATIC_LIBRARY &&
+          (complete_static_lib_ ||
+           // Rust static libraries may be used from C/C++ code and therefore
+           // require all dependencies to be linked in as we cannot link their
+           // (Rust) dependencies directly as we would for C/C++.
+           source_types_used_.RustSourceUsed()));
 }
 
 DepsIteratorRange Target::GetDeps(DepsIterationType type) const {
@@ -521,7 +512,8 @@ bool Target::GetOutputsAsSourceFiles(const LocationRange& loc_for_error,
       output_type() == Target::ACTION_FOREACH ||
       output_type() == Target::GENERATED_FILE) {
     action_values().GetOutputsAsSourceFiles(this, outputs);
-  } else if (output_type() == Target::CREATE_BUNDLE) {
+  } else if (output_type() == Target::CREATE_BUNDLE ||
+             output_type() == Target::GENERATED_FILE) {
     if (!bundle_data().GetOutputsAsSourceFiles(settings(), this, outputs, err))
       return false;
   } else if (IsBinary() && output_type() != Target::SOURCE_SET) {
@@ -546,7 +538,7 @@ bool Target::GetOutputsAsSourceFiles(const LocationRange& loc_for_error,
           output_file.AsSourceFile(settings()->build_settings()));
     }
   } else {
-    // Everything else (like a group or bundle_data) has a stamp output. The
+    // Everything else (like a group or something) has a stamp output. The
     // dependency output file should have computed what this is. This won't be
     // valid unless the build is complete.
     if (!build_complete) {
@@ -966,15 +958,6 @@ bool Target::CheckVisibility(Err* err) const {
   for (const auto& pair : GetDeps(DEPS_ALL)) {
     if (!Visibility::CheckItemVisibility(this, pair.ptr, err))
       return false;
-  }
-  return true;
-}
-
-bool Target::CheckConfigVisibility(Err* err) const {
-  for (ConfigValuesIterator iter(this); !iter.done(); iter.Next()) {
-    if (const Config* config = iter.GetCurrentConfig())
-      if (!Visibility::CheckItemVisibility(this, config, err))
-        return false;
   }
   return true;
 }

@@ -49,6 +49,7 @@ bool WebAppMenuModel::IsCommandIdEnabled(int command_id) const {
       return base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu) &&
              base::FeatureList::IsEnabled(
                  features::kDesktopPWAsElidedExtensionsMenu) &&
+             browser()->window()->GetExtensionsContainer() &&
              browser()->window()->GetExtensionsContainer()->HasAnyExtensions();
     default:
       return AppMenuModel::IsCommandIdEnabled(command_id);
@@ -83,9 +84,6 @@ void WebAppMenuModel::ExecuteCommand(int command_id, int event_flags) {
 }
 
 void WebAppMenuModel::Build() {
-  // TODO(crbug.com/897302): Expose UI for user opt out and reenable for the Run
-  // on OS Login feature.
-
   if (CreateActionToolbarOverflowMenu())
     AddSeparator(ui::UPPER_SEPARATOR);
   AddItemWithStringId(IDC_WEB_APP_MENU_APP_INFO,

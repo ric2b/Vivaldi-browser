@@ -45,26 +45,12 @@
   },
   {
     "cmd": [
-      "git",
-      "rev-parse",
-      "HEAD"
-    ],
-    "cwd": "[START_DIR]/gn",
-    "infra_step": true,
-    "name": "git.rev-parse",
-    "stdout": "/path/to/tmp/",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
       "cipd",
       "ensure",
       "-root",
       "[START_DIR]/cipd",
       "-ensure-file",
-      "infra/ninja/${platform} version:1.8.2\nfuchsia/third_party/clang/${platform} integration\n@Subdir sysroot\nfuchsia/third_party/sysroot/linux git_revision:c912d089c3d46d8982fdef76a50514cca79b6132",
+      "infra/ninja/${platform} version:1.8.2\nfuchsia/clang/${platform} git_revision:b920a7f65b13237dc4d5b2b836b29a954fff440a\n@Subdir sysroot\nfuchsia/sysroot/${platform} git_revision:a28dfa20af063e5ca00634024c85732e20220419",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -75,8 +61,8 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-integration-----\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/third_party/clang/resolved-platform\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:b92\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/clang/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }, @@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
       "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
@@ -85,8 +71,8 @@
       "@@@STEP_LOG_LINE@json.output@    ], @@@",
       "@@@STEP_LOG_LINE@json.output@    \"sysroot\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:c91\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/third_party/sysroot/linux\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:a28\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/sysroot/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -96,152 +82,11 @@
   },
   {
     "cmd": [],
-    "name": "rpmalloc"
-  },
-  {
-    "cmd": [
-      "git",
-      "init",
-      "[START_DIR]/rpmalloc"
-    ],
-    "name": "rpmalloc.init",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "git",
-      "fetch",
-      "--tags",
-      "https://fuchsia.googlesource.com/third_party/github.com/mjansson/rpmalloc",
-      "6bb6ca97a8d6a72d626153fd8431ef8477a21145"
-    ],
-    "cwd": "[START_DIR]/rpmalloc",
-    "infra_step": true,
-    "name": "rpmalloc.fetch",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "git",
-      "checkout",
-      "FETCH_HEAD"
-    ],
-    "cwd": "[START_DIR]/rpmalloc",
-    "infra_step": true,
-    "name": "rpmalloc.checkout",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [],
-    "name": "rpmalloc.build rpmalloc-linux-amd64",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "python",
-      "-u",
-      "[START_DIR]/rpmalloc/configure.py",
-      "-c",
-      "release",
-      "-a",
-      "x86-64",
-      "--lto"
-    ],
-    "cwd": "[START_DIR]/rpmalloc",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "rpmalloc.build rpmalloc-linux-amd64.configure",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "[START_DIR]/cipd/ninja",
-      "lib/linux/release/x86-64/librpmallocwrap.a"
-    ],
-    "cwd": "[START_DIR]/rpmalloc",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "rpmalloc.build rpmalloc-linux-amd64.ninja",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [],
-    "name": "rpmalloc.build rpmalloc-linux-arm64",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "python",
-      "-u",
-      "[START_DIR]/rpmalloc/configure.py",
-      "-c",
-      "release",
-      "-a",
-      "arm64",
-      "--lto"
-    ],
-    "cwd": "[START_DIR]/rpmalloc",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "rpmalloc.build rpmalloc-linux-arm64.configure",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "[START_DIR]/cipd/ninja",
-      "lib/linux/release/arm64/librpmallocwrap.a"
-    ],
-    "cwd": "[START_DIR]/rpmalloc",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "rpmalloc.build rpmalloc-linux-arm64.ninja",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [],
     "name": "debug"
   },
   {
     "cmd": [],
-    "name": "debug.linux-amd64",
+    "name": "debug.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -257,11 +102,11 @@
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
-    "name": "debug.linux-amd64.generate",
+    "name": "debug.build.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -276,11 +121,11 @@
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
-    "name": "debug.linux-amd64.build",
+    "name": "debug.build.ninja",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -289,17 +134,9 @@
     "cmd": [
       "[START_DIR]/gn/out/gn_unittests"
     ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "debug.linux-amd64.test",
+    "name": "debug.test",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
@@ -308,7 +145,7 @@
   },
   {
     "cmd": [],
-    "name": "release.linux-amd64",
+    "name": "release.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -319,18 +156,17 @@
       "-u",
       "[START_DIR]/gn/build/gen.py",
       "--use-lto",
-      "--use-icf",
-      "--link-lib=[START_DIR]/rpmalloc/lib/linux/release/x86-64/librpmallocwrap.a"
+      "--use-icf"
     ],
     "cwd": "[START_DIR]/gn",
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
-    "name": "release.linux-amd64.generate",
+    "name": "release.build.generate",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -345,11 +181,11 @@
     "env": {
       "AR": "[START_DIR]/cipd/bin/llvm-ar",
       "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
+      "CFLAGS": "--sysroot=[START_DIR]/cipd/sysroot",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
+      "LDFLAGS": "--sysroot=[START_DIR]/cipd/sysroot"
     },
-    "name": "release.linux-amd64.build",
+    "name": "release.build.ninja",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@2@@@"
     ]
@@ -358,24 +194,9 @@
     "cmd": [
       "[START_DIR]/gn/out/gn_unittests"
     ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "release.linux-amd64.test",
+    "name": "release.test",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [],
-    "name": "release.linux-amd64.upload",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
+      "@@@STEP_NEST_LEVEL@1@@@"
     ]
   },
   {
@@ -383,7 +204,7 @@
       "cipd",
       "pkg-build",
       "-pkg-def",
-      "{\"data\": [{\"file\": \"gn\"}, {\"version_file\": \".versions/gn.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/linux-amd64\", \"root\": \"[START_DIR]/gn/out\"}",
+      "{\"data\": [{\"file\": \"gn\"}, {\"version_file\": \".versions/gn.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/${platform}\", \"root\": \"[START_DIR]/gn/out\"}",
       "-out",
       "[CLEANUP]/gn.cipd",
       "-hash-algo",
@@ -391,21 +212,12 @@
       "-json-output",
       "/path/to/tmp/json"
     ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "release.linux-amd64.upload.build gn/gn/linux-amd64",
+    "name": "build gn/gn/${platform}",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@3@@@",
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
-      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-amd64\"@@@",
+      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
       "@@@STEP_LOG_END@json.output@@@"
@@ -413,25 +225,26 @@
   },
   {
     "cmd": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "cwd": "[START_DIR]/gn",
+    "name": "rev-parse",
+    "stdout": "/path/to/tmp/"
+  },
+  {
+    "cmd": [
       "cipd",
       "search",
-      "gn/gn/linux-amd64",
+      "gn/gn/${platform}",
       "-tag",
       "git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "-json-output",
       "/path/to/tmp/json"
     ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=x86_64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "release.linux-amd64.upload.cipd search gn/gn/linux-amd64 git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "cipd search gn/gn/${platform} git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@3@@@",
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": [@@@",
       "@@@STEP_LOG_LINE@json.output@    {@@@",
@@ -445,137 +258,7 @@
   },
   {
     "cmd": [],
-    "name": "release.linux-amd64.upload.Package is up-to-date",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@3@@@"
-    ]
-  },
-  {
-    "cmd": [],
-    "name": "release.linux-arm64",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@1@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "python",
-      "-u",
-      "[START_DIR]/gn/build/gen.py",
-      "--use-lto",
-      "--use-icf",
-      "--link-lib=[START_DIR]/rpmalloc/lib/linux/release/arm64/librpmallocwrap.a"
-    ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "release.linux-arm64.generate",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "[START_DIR]/cipd/ninja",
-      "-C",
-      "[START_DIR]/gn/out"
-    ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "release.linux-arm64.build",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [],
-    "name": "release.linux-arm64.upload",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@2@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "cipd",
-      "pkg-build",
-      "-pkg-def",
-      "{\"data\": [{\"file\": \"gn\"}, {\"version_file\": \".versions/gn.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/linux-arm64\", \"root\": \"[START_DIR]/gn/out\"}",
-      "-out",
-      "[CLEANUP]/gn.cipd",
-      "-hash-algo",
-      "sha256",
-      "-json-output",
-      "/path/to/tmp/json"
-    ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "release.linux-arm64.upload.build gn/gn/linux-arm64",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@3@@@",
-      "@@@STEP_LOG_LINE@json.output@{@@@",
-      "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
-      "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
-      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/linux-arm64\"@@@",
-      "@@@STEP_LOG_LINE@json.output@  }@@@",
-      "@@@STEP_LOG_LINE@json.output@}@@@",
-      "@@@STEP_LOG_END@json.output@@@"
-    ]
-  },
-  {
-    "cmd": [
-      "cipd",
-      "search",
-      "gn/gn/linux-arm64",
-      "-tag",
-      "git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "-json-output",
-      "/path/to/tmp/json"
-    ],
-    "cwd": "[START_DIR]/gn",
-    "env": {
-      "AR": "[START_DIR]/cipd/bin/llvm-ar",
-      "CC": "[START_DIR]/cipd/bin/clang",
-      "CFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot",
-      "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--target=aarch64-linux-gnu --sysroot=[START_DIR]/cipd/sysroot -static-libstdc++"
-    },
-    "name": "release.linux-arm64.upload.cipd search gn/gn/linux-arm64 git_revision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@3@@@",
-      "@@@STEP_LOG_LINE@json.output@{@@@",
-      "@@@STEP_LOG_LINE@json.output@  \"result\": [@@@",
-      "@@@STEP_LOG_LINE@json.output@    {@@@",
-      "@@@STEP_LOG_LINE@json.output@      \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
-      "@@@STEP_LOG_LINE@json.output@      \"package\": \"gn/gn/linux-arm64\"@@@",
-      "@@@STEP_LOG_LINE@json.output@    }@@@",
-      "@@@STEP_LOG_LINE@json.output@  ]@@@",
-      "@@@STEP_LOG_LINE@json.output@}@@@",
-      "@@@STEP_LOG_END@json.output@@@"
-    ]
-  },
-  {
-    "cmd": [],
-    "name": "release.linux-arm64.upload.Package is up-to-date",
-    "~followup_annotations": [
-      "@@@STEP_NEST_LEVEL@3@@@"
-    ]
+    "name": "Package is up-to-date"
   },
   {
     "jsonResult": null,

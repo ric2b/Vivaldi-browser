@@ -399,8 +399,8 @@ inline void ImageLoader::DispatchErrorEvent() {
       *GetElement()->GetDocument().GetTaskRunner(TaskType::kDOMManipulation),
       FROM_HERE,
       WTF::Bind(&ImageLoader::DispatchPendingErrorEvent, WrapPersistent(this),
-                WTF::Passed(std::make_unique<IncrementLoadEventDelayCount>(
-                    GetElement()->GetDocument()))));
+                std::make_unique<IncrementLoadEventDelayCount>(
+                    GetElement()->GetDocument())));
 }
 
 inline void ImageLoader::CrossSiteOrCSPViolationOccurred(
@@ -417,8 +417,7 @@ inline void ImageLoader::EnqueueImageLoadingMicroTask(
     network::mojom::ReferrerPolicy referrer_policy) {
   auto task = std::make_unique<Task>(this, update_behavior, referrer_policy);
   pending_task_ = task->GetWeakPtr();
-  Microtask::EnqueueMicrotask(
-      WTF::Bind(&Task::Run, WTF::Passed(std::move(task))));
+  Microtask::EnqueueMicrotask(WTF::Bind(&Task::Run, std::move(task)));
   delay_until_do_update_from_element_ =
       std::make_unique<IncrementLoadEventDelayCount>(element_->GetDocument());
 }
@@ -629,6 +628,10 @@ void ImageLoader::DoUpdateFromElement(
 void ImageLoader::UpdateFromElement(
     UpdateFromElementBehavior update_behavior,
     network::mojom::ReferrerPolicy referrer_policy) {
+  if (!element_->GetDocument().IsActive()) {
+    return;
+  }
+
   AtomicString image_source_url = element_->ImageSourceURL();
   suppress_error_events_ = (update_behavior == kUpdateSizeChanged);
   last_base_element_url_ =
@@ -663,6 +666,9 @@ void ImageLoader::UpdateFromElement(
     // a memory leak in case it's already created.
     delay_until_do_update_from_element_ = nullptr;
   }
+
+  // TODO(crbug.com/1175295): Remove this CHECK once the investigation is done.
+  CHECK(element_->GetDocument().GetExecutionContext());
 
   if (ShouldLoadImmediately(ImageSourceToKURL(image_source_url))) {
     DoUpdateFromElement(element_->GetExecutionContext()->GetCurrentWorld(),
@@ -824,13 +830,15 @@ void ImageLoader::ImageNotifyFinished(ImageResourceContent* content) {
     return;
   }
 
+  content->RecordDecodedImageType(&element_->GetDocument());
+
   CHECK(!pending_load_event_.IsActive());
   pending_load_event_ = PostCancellableTask(
       *GetElement()->GetDocument().GetTaskRunner(TaskType::kDOMManipulation),
       FROM_HERE,
       WTF::Bind(&ImageLoader::DispatchPendingLoadEvent, WrapPersistent(this),
-                WTF::Passed(std::make_unique<IncrementLoadEventDelayCount>(
-                    GetElement()->GetDocument()))));
+                std::make_unique<IncrementLoadEventDelayCount>(
+                    GetElement()->GetDocument())));
 }
 
 LayoutImageResource* ImageLoader::GetLayoutImageResource() {

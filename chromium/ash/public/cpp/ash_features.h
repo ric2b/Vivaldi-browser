@@ -169,10 +169,6 @@ ASH_PUBLIC_EXPORT extern const base::Feature kFullscreenAlertBubble;
 // Enables battery indicator for styluses in the palette tray
 ASH_PUBLIC_EXPORT extern const base::Feature kStylusBatteryStatus;
 
-// Enables sliders for setting mic gain levels in the more audio settings
-// section in the system tray.
-ASH_PUBLIC_EXPORT extern const base::Feature kSystemTrayMicGainSetting;
-
 // Enables special handling of Chrome tab drags from a WebUI tab strip.
 // These will be treated similarly to a window drag, showing split view
 // indicators in tablet mode, etc. The functionality is behind a flag
@@ -196,6 +192,9 @@ ASH_PUBLIC_EXPORT extern const base::Feature kDragUnpinnedAppToPin;
 
 // Enables the system tray to show more information in larger screen.
 ASH_PUBLIC_EXPORT extern const base::Feature kScalableStatusArea;
+
+// Enables the system tray to show date in sufficiently large screen.
+ASH_PUBLIC_EXPORT extern const base::Feature kShowDateInTrayButton;
 
 ASH_PUBLIC_EXPORT bool IsAllowAmbientEQEnabled();
 
@@ -257,8 +256,6 @@ ASH_PUBLIC_EXPORT bool IsFullscreenAlertBubbleEnabled();
 
 ASH_PUBLIC_EXPORT bool AreContextualNudgesEnabled();
 
-ASH_PUBLIC_EXPORT bool IsSystemTrayMicGainSettingEnabled();
-
 ASH_PUBLIC_EXPORT bool IsStylusBatteryStatusEnabled();
 
 ASH_PUBLIC_EXPORT bool IsDisplayIdentificationEnabled();
@@ -278,6 +275,8 @@ ASH_PUBLIC_EXPORT bool IsTemporaryHoldingSpacePreviewsEnabled();
 ASH_PUBLIC_EXPORT bool IsDragUnpinnedAppToPinEnabled();
 
 ASH_PUBLIC_EXPORT bool IsScalableStatusAreaEnabled();
+
+ASH_PUBLIC_EXPORT bool IsShowDateInTrayButtonEnabled();
 
 // These two functions are supposed to be temporary functions to set or get
 // whether "WebUITabStrip" feature is enabled from Chrome.

@@ -10,6 +10,8 @@
 #include <memory>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "base/bind.h"
@@ -50,7 +52,6 @@
 #include "chrome/browser/chromeos/file_manager/mount_test_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/smb_client/smb_service.h"
 #include "chrome/browser/chromeos/smb_client/smb_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -71,10 +72,9 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/drivefs/drivefs_host.h"
 #include "chromeos/components/drivefs/fake_drivefs.h"
+#include "chromeos/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/components/smbfs/smbfs_host.h"
 #include "chromeos/components/smbfs/smbfs_mounter.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -740,6 +740,7 @@ std::ostream& operator<<(std::ostream& out,
   PRINT_IF_NOT_DEFAULT(tablet_mode)
   PRINT_IF_NOT_DEFAULT(zip)
   PRINT_IF_NOT_DEFAULT(zip_no_nacl)
+  PRINT_IF_NOT_DEFAULT(enable_js_modules)
 
 #undef PRINT_IF_NOT_DEFAULT
 
@@ -1014,8 +1015,8 @@ class FakeTestVolume : public LocalTestVolume {
     // Revoke name() mount point first, then re-add its mount point.
     GetMountPoints()->RevokeFileSystem(name());
     const bool added = GetMountPoints()->RegisterFileSystem(
-        name(), storage::kFileSystemTypeNativeLocal,
-        storage::FileSystemMountOption(), root_path());
+        name(), storage::kFileSystemTypeLocal, storage::FileSystemMountOption(),
+        root_path());
     if (!added)
       return false;
 
@@ -1164,6 +1165,16 @@ class DriveFsTestVolume : public TestVolume {
     ASSERT_TRUE(UpdateModifiedTime(entry));
   }
 
+  void DisplayConfirmDialog(drivefs::mojom::DialogReasonPtr reason) {
+    fake_drivefs_helper_->fake_drivefs().DisplayConfirmDialog(
+        std::move(reason), base::BindOnce(&DriveFsTestVolume::OnDialogResult,
+                                          base::Unretained(this)));
+  }
+
+  drivefs::mojom::DialogResult last_dialog_result() {
+    return last_dialog_result_;
+  }
+
  private:
   base::RepeatingCallback<std::unique_ptr<drivefs::DriveFsBootstrapListener>()>
   CreateDriveFsBootstrapListener() {
@@ -1258,6 +1269,12 @@ class DriveFsTestVolume : public TestVolume {
   base::FilePath GetComputerPath(const std::string& computer_name) {
     return GetComputerGrandRoot().Append(computer_name);
   }
+
+  void OnDialogResult(drivefs::mojom::DialogResult result) {
+    last_dialog_result_ = result;
+  }
+
+  drivefs::mojom::DialogResult last_dialog_result_;
 
   // Profile associated with this volume: not owned.
   Profile* profile_ = nullptr;
@@ -1715,6 +1732,12 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
     disabled_features.push_back(ash::features::kTemporaryHoldingSpace);
   }
 
+  if (options.enable_js_modules) {
+    enabled_features.push_back(chromeos::features::kFilesJsModules);
+  } else {
+    disabled_features.push_back(chromeos::features::kFilesJsModules);
+  }
+
   if (command_line->HasSwitch("devtools-code-coverage") &&
       options.guest_mode != IN_INCOGNITO) {
     devtools_code_coverage_dir_ =
@@ -1749,9 +1772,9 @@ void FileManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
   if (GetOptions().guest_mode == IN_GUEST_MODE)
     return;
 
-  create_drive_integration_service_ =
-      base::Bind(&FileManagerBrowserTestBase::CreateDriveIntegrationService,
-                 base::Unretained(this));
+  create_drive_integration_service_ = base::BindRepeating(
+      &FileManagerBrowserTestBase::CreateDriveIntegrationService,
+      base::Unretained(this));
   service_factory_for_test_ = std::make_unique<
       drive::DriveIntegrationServiceFactory::ScopedFactoryForTest>(
       &create_drive_integration_service_);
@@ -2705,6 +2728,21 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
         ->DropFailedPluginVmDirectoryNotShared();
     return;
   }
+
+  if (name == "displayEnableDocsOfflineDialog") {
+    drive_volume_->DisplayConfirmDialog(drivefs::mojom::DialogReason::New(
+        drivefs::mojom::DialogReason::Type::kEnableDocsOffline,
+        base::FilePath()));
+    return;
+  }
+
+  if (name == "getLastDriveDialogResult") {
+    base::JSONWriter::Write(
+        base::Value(static_cast<int32_t>(drive_volume_->last_dialog_result())),
+        output);
+    return;
+  }
+
   FAIL() << "Unknown test message: " << name;
 }
 

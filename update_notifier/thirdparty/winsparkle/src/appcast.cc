@@ -23,8 +23,12 @@
  *
  */
 
-#include "appcast.h"
-#include "error.h"
+#include "update_notifier/thirdparty/winsparkle/src/appcast.h"
+
+#include "update_notifier/thirdparty/winsparkle/src/error.h"
+
+#include "base/strings/string_util_win.h"
+#include "base/strings/utf_string_conversions.h"
 
 #include <algorithm>
 #include <vector>
@@ -73,20 +77,8 @@ const char kOsMarker[] = "windows";
 // overflow.
 constexpr int kMaxXmlNestingDepth = 1000;
 
-std::string Utf16ToUtf8(const wchar_t* s, size_t length) {
-  int n = WideCharToMultiByte(CP_UTF8, /*dwFlags*/ 0, s, length,
-                              /*lpMultiByteStr=*/nullptr, /*cbMultiByte=*/0,
-                              /*lpDefaultChar=*/nullptr,
-                              /*lpUsedDefaultChar=*/nullptr);
-  if (n <= 0)
-    return std::string();
-  std::string utf8;
-  utf8.resize(n);
-  WideCharToMultiByte(CP_UTF8, /*dwFlags*/ 0, s, length,
-                      /*lpMultiByteStr=*/&utf8[0], n,
-                      /*lpDefaultChar=*/nullptr,
-                      /*lpUsedDefaultChar=*/nullptr);
-  return utf8;
+std::string WideToUTF8(const wchar_t* s, size_t length) {
+  return base::WideToUTF8(base::WStringPiece(s, length));
 }
 
 // context data for the parser
@@ -165,7 +157,7 @@ struct ContextData {
       if (FAILED(hr)) {
         message += "Failed WsGetErrorString()";
       } else {
-        message.append(Utf16ToUtf8(ws_message.chars, ws_message.length));
+        message.append(WideToUTF8(ws_message.chars, ws_message.length));
       }
     }
     error.set(Error::kFormat, message);
@@ -234,8 +226,8 @@ std::string WsTextToString(const WS_XML_TEXT* text) {
     }
     case WS_XML_TEXT_TYPE_UTF16: {
       const WS_XML_UTF16_TEXT* utf16Text = (const WS_XML_UTF16_TEXT*)text;
-      return Utf16ToUtf8(reinterpret_cast<const WCHAR*>(utf16Text->bytes),
-                         utf16Text->byteCount / sizeof(WCHAR));
+      return WideToUTF8(reinterpret_cast<const WCHAR*>(utf16Text->bytes),
+                        utf16Text->byteCount / sizeof(WCHAR));
     }
 #if 0
       // TODO(igor@vivaldi.com): Confirm that the rest of enum constatnts are
@@ -279,7 +271,7 @@ std::string WsTextToString(const WS_XML_TEXT* text) {
       RPC_WSTR w;
       if (UuidToString(&guidText->value, &w) != RPC_S_OK)
         break;
-      std::string s = Utf16ToUtf8(w);
+      std::string s = WideToUTF8(w);
       RpcStringFree(&w);
       return s;
     }
@@ -288,7 +280,7 @@ std::string WsTextToString(const WS_XML_TEXT* text) {
       RPC_WSTR w;
       if (UuidToString(&uniqueIdText->value, &w) != RPC_S_OK)
         break;
-      std::string s = Utf16ToUtf8(w);
+      std::string s = WideToUTF8(w);
       RpcStringFree(&w);
       return s;
     }

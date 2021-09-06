@@ -19,15 +19,18 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/isolation_info.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_constants.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
 #include "services/network/cookie_settings.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "url/gurl.h"
@@ -301,13 +304,17 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
       url, site_for_cookies.RepresentativeUrl(), top_frame_origin);
 
   std::vector<net::CookieWithAccessResult> result;
-  std::vector<net::CookieWithAccessResult> on_cookies_accessed_result;
+  std::vector<mojom::CookieOrLineWithAccessResultPtr>
+      on_cookies_accessed_result;
 
   // TODO(https://crbug.com/977040): Remove once samesite tightening up is
   // rolled out.
   for (const auto& cookie_and_access_result : excluded_cookies) {
     if (cookie_and_access_result.access_result.status.ShouldWarn()) {
-      on_cookies_accessed_result.push_back(cookie_and_access_result);
+      on_cookies_accessed_result.push_back(
+          mojom::CookieOrLineWithAccessResult::New(
+              mojom::CookieOrLine::NewCookie(cookie_and_access_result.cookie),
+              cookie_and_access_result.access_result));
     }
   }
 
@@ -339,13 +346,15 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
     } else {
       result.push_back(cookie_item);
     }
-    on_cookies_accessed_result.push_back({cookie, access_result});
+    on_cookies_accessed_result.push_back(
+        mojom::CookieOrLineWithAccessResult::New(
+            mojom::CookieOrLine::NewCookie(cookie), access_result));
   }
 
   if (cookie_observer_) {
     cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
         mojom::CookieAccessDetails::Type::kRead, url, site_for_cookies,
-        on_cookies_accessed_result, base::nullopt));
+        std::move(on_cookies_accessed_result), base::nullopt));
   }
 
   if (blocked) {
@@ -387,11 +396,15 @@ void RestrictedCookieManager::SetCanonicalCookie(
 
   if (!status.IsInclude()) {
     if (cookie_observer_) {
-      std::vector<net::CookieWithAccessResult> result_with_access_result = {
-          {cookie, net::CookieAccessResult(status)}};
+      std::vector<network::mojom::CookieOrLineWithAccessResultPtr>
+          result_with_access_result;
+      result_with_access_result.push_back(
+          mojom::CookieOrLineWithAccessResult::New(
+              mojom::CookieOrLine::NewCookie(cookie),
+              net::CookieAccessResult(status)));
       cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
           mojom::CookieAccessDetails::Type::kChange, url, site_for_cookies,
-          result_with_access_result, base::nullopt));
+          std::move(result_with_access_result), base::nullopt));
     }
     std::move(callback).Run(false);
     return;
@@ -418,10 +431,7 @@ void RestrictedCookieManager::SetCanonicalCookie(
   net::CookieOptions options = MakeOptionsForSet(
       role_, url, site_for_cookies, isolation_info_, cookie_settings(),
       cookie_store_->cookie_access_delegate());
-  // TODO(chlily): |url| is validated to be the same origin as |origin_|, but
-  // the path is not checked. If we ever decide to enforce the path constraint
-  // for setting a cookie, we would need to validate the path of |url| somehow
-  // and pass |url| instead of |origin_.GetURL()|.
+
   cookie_store_->SetCanonicalCookieAsync(
       std::move(sanitized_cookie), origin_url, options,
       base::BindOnce(&RestrictedCookieManager::SetCanonicalCookieResult,
@@ -436,7 +446,6 @@ void RestrictedCookieManager::SetCanonicalCookieResult(
     const net::CookieOptions& net_options,
     SetCanonicalCookieCallback user_callback,
     net::CookieAccessResult access_result) {
-  std::vector<net::CookieWithAccessResult> notify;
   // TODO(https://crbug.com/977040): Only report pure INCLUDE once samesite
   // tightening up is rolled out.
   DCHECK(!access_result.status.HasExclusionReason(
@@ -444,10 +453,12 @@ void RestrictedCookieManager::SetCanonicalCookieResult(
 
   if (access_result.status.IsInclude() || access_result.status.ShouldWarn()) {
     if (cookie_observer_) {
-      notify.push_back({cookie, access_result});
+      std::vector<mojom::CookieOrLineWithAccessResultPtr> notify;
+      notify.push_back(mojom::CookieOrLineWithAccessResult::New(
+          mojom::CookieOrLine::NewCookie(cookie), access_result));
       cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
           mojom::CookieAccessDetails::Type::kChange, url, site_for_cookies,
-          notify, base::nullopt));
+          std::move(notify), base::nullopt));
     }
   }
   std::move(user_callback).Run(access_result.status.IsInclude());
@@ -493,10 +504,22 @@ void RestrictedCookieManager::SetCookieFromString(
     SetCookieFromStringCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  net::CookieInclusionStatus status;
   std::unique_ptr<net::CanonicalCookie> parsed_cookie =
       net::CanonicalCookie::Create(url, cookie, base::Time::Now(),
-                                   base::nullopt /* server_time */);
+                                   base::nullopt /* server_time */, &status);
   if (!parsed_cookie) {
+    if (cookie_observer_) {
+      std::vector<network::mojom::CookieOrLineWithAccessResultPtr>
+          result_with_access_result;
+      result_with_access_result.push_back(
+          mojom::CookieOrLineWithAccessResult::New(
+              mojom::CookieOrLine::NewCookieString(cookie),
+              net::CookieAccessResult(status)));
+      cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
+          mojom::CookieAccessDetails::Type::kChange, url, site_for_cookies,
+          std::move(result_with_access_result), base::nullopt));
+    }
     std::move(callback).Run();
     return;
   }
@@ -604,6 +627,7 @@ bool RestrictedCookieManager::ValidateAccessToCookiesAt(
     base::debug::ScopedCrashKeyString scoped_key_string_url(
         url_origin, url::Origin::Create(url).GetDebugString());
 
+    NOTREACHED();
     base::debug::DumpWithoutCrashing();
     return false;
   }

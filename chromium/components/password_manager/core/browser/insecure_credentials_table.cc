@@ -22,8 +22,7 @@ std::vector<CompromisedCredentials> StatementToCompromisedCredentials(
     int parent_key = s->ColumnInt64(0);
     std::string signon_realm = s->ColumnString(1);
     base::string16 username = s->ColumnString16(2);
-    CompromiseType insecurity_type =
-        static_cast<CompromiseType>(s->ColumnInt64(3));
+    InsecureType insecurity_type = static_cast<InsecureType>(s->ColumnInt64(3));
     base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
         (base::TimeDelta::FromMicroseconds(s->ColumnInt64(4))));
     bool is_muted = !!s->ColumnInt64(5);
@@ -43,12 +42,12 @@ CompromisedCredentials::CompromisedCredentials() = default;
 CompromisedCredentials::CompromisedCredentials(std::string signon_realm,
                                                base::string16 username,
                                                base::Time create_time,
-                                               CompromiseType insecurity_type,
+                                               InsecureType insecurity_type,
                                                IsMuted is_muted)
     : signon_realm(std::move(signon_realm)),
       username(std::move(username)),
       create_time(create_time),
-      compromise_type(insecurity_type),
+      insecure_type(insecurity_type),
       is_muted(is_muted) {}
 
 CompromisedCredentials::CompromisedCredentials(
@@ -69,7 +68,7 @@ bool operator==(const CompromisedCredentials& lhs,
                 const CompromisedCredentials& rhs) {
   return lhs.signon_realm == rhs.signon_realm && lhs.username == rhs.username &&
          lhs.create_time == rhs.create_time &&
-         lhs.compromise_type == rhs.compromise_type &&
+         lhs.insecure_type == rhs.insecure_type &&
          *lhs.is_muted == *rhs.is_muted;
 }
 
@@ -88,7 +87,7 @@ bool InsecureCredentialsTable::AddRow(
   DCHECK(db_->DoesTableExist(kTableName));
 
   base::UmaHistogramEnumeration("PasswordManager.CompromisedCredentials.Add",
-                                compromised_credentials.compromise_type);
+                                compromised_credentials.insecure_type);
 
   // In case there is an error, expect it to be a constraint violation.
   db_->set_error_callback(base::BindRepeating([](int error, sql::Statement*) {
@@ -108,7 +107,7 @@ bool InsecureCredentialsTable::AddRow(
           kTableName)
           .c_str()));
 
-  s.BindInt(0, static_cast<int>(compromised_credentials.compromise_type));
+  s.BindInt(0, static_cast<int>(compromised_credentials.insecure_type));
   s.BindInt64(1, compromised_credentials.create_time.ToDeltaSinceWindowsEpoch()
                      .InMicroseconds());
   s.BindBool(2, compromised_credentials.is_muted.value());
@@ -123,7 +122,7 @@ bool InsecureCredentialsTable::AddRow(
 bool InsecureCredentialsTable::RemoveRow(
     const std::string& signon_realm,
     const base::string16& username,
-    RemoveCompromisedCredentialsReason reason) {
+    RemoveInsecureCredentialsReason reason) {
   DCHECK(db_);
   if (signon_realm.empty())
     return false;
@@ -139,7 +138,7 @@ bool InsecureCredentialsTable::RemoveRow(
     if (username == compromised_credential.username) {
       base::UmaHistogramEnumeration(
           "PasswordManager.CompromisedCredentials.Remove",
-          compromised_credential.compromise_type);
+          compromised_credential.insecure_type);
       base::UmaHistogramEnumeration(
           "PasswordManager.RemoveCompromisedCredentials.RemoveReason", reason);
     }
@@ -215,7 +214,7 @@ void InsecureCredentialsTable::ReportMetrics(BulkCheckDone bulk_check_done) {
                                         "WHERE insecurity_type = ? ",
                                         kTableName)
                          .c_str()));
-  s.BindInt(0, static_cast<int>(CompromiseType::kLeaked));
+  s.BindInt(0, static_cast<int>(InsecureType::kLeaked));
   if (s.Step()) {
     int count = s.ColumnInt(0);
     base::UmaHistogramCounts100(
@@ -228,7 +227,7 @@ void InsecureCredentialsTable::ReportMetrics(BulkCheckDone bulk_check_done) {
   }
 
   s.Reset(true);
-  s.BindInt(0, static_cast<int>(CompromiseType::kPhished));
+  s.BindInt(0, static_cast<int>(InsecureType::kPhished));
   if (s.Step()) {
     int count = s.ColumnInt(0);
     base::UmaHistogramCounts100(

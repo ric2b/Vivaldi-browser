@@ -66,9 +66,9 @@ class MockFrameConnector : public CrossProcessFrameConnector {
   }
 
   void SetViewportIntersection(
-      const blink::WebRect& viewport_intersection,
-      const blink::WebRect& main_frame_intersection,
-      const blink::WebRect& compositor_visible_rect,
+      const gfx::Rect& viewport_intersection,
+      const gfx::Rect& main_frame_intersection,
+      const gfx::Rect& compositor_visible_rect,
       blink::mojom::FrameOcclusionState occlusion_state) {
     intersection_state_.viewport_intersection = viewport_intersection;
     intersection_state_.main_frame_intersection = main_frame_intersection;
@@ -126,7 +126,8 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
     sink_ = &process_host_->sink();
 
     widget_host_ = RenderWidgetHostImpl::Create(
-        &delegate_, *agent_scheduling_group_host_, routing_id,
+        /*frame_tree=*/nullptr, &delegate_, *agent_scheduling_group_host_,
+        routing_id,
         /*hidden=*/false, /*renderer_initiated_creation=*/false,
         std::make_unique<FrameTokenMessageQueue>());
 
@@ -220,8 +221,8 @@ TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
 // Tests that the viewport intersection rect is dispatched to the RenderWidget
 // whenever screen rects are updated.
 TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
-  blink::WebRect intersection_rect(5, 5, 100, 80);
-  blink::WebRect main_frame_intersection(5, 10, 200, 200);
+  gfx::Rect intersection_rect(5, 5, 100, 80);
+  gfx::Rect main_frame_intersection(5, 10, 200, 200);
   blink::mojom::FrameOcclusionState occlusion_state =
       blink::mojom::FrameOcclusionState::kPossiblyOccluded;
 
@@ -244,7 +245,8 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
   FakeFrameWidget fake_frame_widget(std::move(blink_frame_widget_receiver));
 
   widget_host_->RendererWidgetCreated(/*for_frame_widget=*/true);
-
+  base::RunLoop().RunUntilIdle();
+  widget_.ClearScreenRects();
   base::RunLoop().RunUntilIdle();
 
   auto& intersection_state = fake_frame_widget.GetIntersectionState();

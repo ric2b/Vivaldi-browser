@@ -27,8 +27,6 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/reporting_util.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service_factory.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -49,10 +47,10 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #else
@@ -107,6 +105,27 @@ std::string MalwareRuleToThreatType(const std::string& rule_name) {
 bool IsClientValid(const std::string& dm_token,
                    policy::CloudPolicyClient* client) {
   return client && client->dm_token() == dm_token;
+}
+
+std::string DangerTypeToThreatType(download::DownloadDangerType danger_type) {
+  switch (danger_type) {
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+      return "DANGEROUS_FILE_TYPE";
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+      return "DANGEROUS_URL";
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+      return "DANGEROUS";
+    case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+      return "UNCOMMON";
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+      return "DANGEROUS_HOST";
+    case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+      return "POTENTIALLY_UNWANTED";
+    default:
+      // This can be reached when reporting an opened download that doesn't have
+      // a verdict yet.
+      return "UNKNOWN";
+  }
 }
 
 }  // namespace
@@ -281,6 +300,7 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadOpened(
     const std::string& file_name,
     const std::string& download_digest_sha256,
     const std::string& mime_type,
+    const download::DownloadDangerType danger_type,
     const int64_t content_size) {
   api::safe_browsing_private::DangerousDownloadInfo params;
   params.url = url.spec();
@@ -312,7 +332,7 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadOpened(
           [](const std::string& url, const std::string& file_name,
              const std::string& download_digest_sha256,
              const std::string& user_name, const std::string& mime_type,
-             const int64_t content_size) {
+             const std::string& threat_type, const int64_t content_size) {
             // Convert |params| to a real-time event dictionary and report it.
             base::Value event(base::Value::Type::DICTIONARY);
             event.SetStringKey(kKeyUrl, url);
@@ -330,10 +350,12 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadOpened(
                                safe_browsing::EventResultToString(
                                    safe_browsing::EventResult::BYPASSED));
             event.SetBoolKey(kKeyClickedThrough, true);
+            event.SetStringKey(kKeyThreatType, threat_type);
             return event;
           },
           params.url, params.file_name, params.download_digest_sha256,
-          params.user_name, mime_type, content_size));
+          params.user_name, mime_type, DangerTypeToThreatType(danger_type),
+          content_size));
 }
 
 void SafeBrowsingPrivateEventRouter::OnSecurityInterstitialShown(
@@ -710,6 +732,19 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadEvent(
     const GURL& url,
     const std::string& file_name,
     const std::string& download_digest_sha256,
+    const download::DownloadDangerType danger_type,
+    const std::string& mime_type,
+    const int64_t content_size,
+    safe_browsing::EventResult event_result) {
+  OnDangerousDownloadEvent(url, file_name, download_digest_sha256,
+                           DangerTypeToThreatType(danger_type), mime_type,
+                           content_size, event_result);
+}
+
+void SafeBrowsingPrivateEventRouter::OnDangerousDownloadEvent(
+    const GURL& url,
+    const std::string& file_name,
+    const std::string& download_digest_sha256,
     const std::string& threat_type,
     const std::string& mime_type,
     const int64_t content_size,
@@ -751,6 +786,18 @@ void SafeBrowsingPrivateEventRouter::OnDangerousDownloadEvent(
           },
           url.spec(), file_name, download_digest_sha256, GetProfileUserName(),
           threat_type, mime_type, content_size, event_result));
+}
+
+void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarningBypassed(
+    const GURL& url,
+    const std::string& file_name,
+    const std::string& download_digest_sha256,
+    const download::DownloadDangerType danger_type,
+    const std::string& mime_type,
+    const int64_t content_size) {
+  OnDangerousDownloadWarningBypassed(url, file_name, download_digest_sha256,
+                                     DangerTypeToThreatType(danger_type),
+                                     mime_type, content_size);
 }
 
 void SafeBrowsingPrivateEventRouter::OnDangerousDownloadWarningBypassed(
@@ -817,17 +864,22 @@ bool SafeBrowsingPrivateEventRouter::ShouldInitRealtimeReportingClient() {
 
 void SafeBrowsingPrivateEventRouter::SetBrowserCloudPolicyClientForTesting(
     policy::CloudPolicyClient* client) {
+  if (client == nullptr && browser_client_)
+    browser_client_->RemoveObserver(this);
+
   browser_client_ = client;
+  if (browser_client_)
+    browser_client_->AddObserver(this);
 }
 
 void SafeBrowsingPrivateEventRouter::SetProfileCloudPolicyClientForTesting(
     policy::CloudPolicyClient* client) {
-  profile_client_ = client;
-}
+  if (client == nullptr && profile_client_)
+    profile_client_->RemoveObserver(this);
 
-void SafeBrowsingPrivateEventRouter::SetBinaryUploadServiceForTesting(
-    safe_browsing::BinaryUploadService* binary_upload_service) {
-  binary_upload_service_ = binary_upload_service;
+  profile_client_ = client;
+  if (profile_client_)
+    profile_client_->AddObserver(this);
 }
 
 void SafeBrowsingPrivateEventRouter::SetIdentityManagerForTesting(
@@ -859,7 +911,7 @@ void SafeBrowsingPrivateEventRouter::InitRealtimeReportingClient(
 
   policy::CloudPolicyClient* client = nullptr;
   std::string policy_client_desc;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   auto desc_and_client = InitBrowserReportingClient(settings.dm_token);
 #else
   auto desc_and_client = settings.per_profile
@@ -884,7 +936,7 @@ SafeBrowsingPrivateEventRouter::InitBrowserReportingClient(
       g_browser_process->browser_policy_connector()
           ->device_management_service();
   std::string policy_client_desc;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   policy_client_desc = kPolicyClientDescription;
 #else
   policy_client_desc = kChromeBrowserCloudManagementClientDescription;
@@ -897,7 +949,7 @@ SafeBrowsingPrivateEventRouter::InitBrowserReportingClient(
 
   policy::CloudPolicyClient* client = nullptr;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   auto* user = GetChromeOSUser();
   if (user) {
     auto* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
@@ -933,7 +985,6 @@ SafeBrowsingPrivateEventRouter::InitBrowserReportingClient(
   // the uploaded reports, do the following:
   //     client->add_connector_url_params(base::FeatureList::IsEnabled(
   //        enterprise_connectors::kEnterpriseConnectorsEnabled));
-
   if (!client->is_registered()) {
     client->SetupRegistration(
         dm_token, client_id,
@@ -944,7 +995,7 @@ SafeBrowsingPrivateEventRouter::InitBrowserReportingClient(
   return {policy_client_desc, client};
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 std::pair<std::string, policy::CloudPolicyClient*>
 SafeBrowsingPrivateEventRouter::InitProfileReportingClient(
     const std::string& dm_token) {
@@ -972,7 +1023,7 @@ SafeBrowsingPrivateEventRouter::InitProfileReportingClient(
 
   return {kProfilePolicyClientDescription, client};
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 void SafeBrowsingPrivateEventRouter::OnCloudPolicyClientAvailable(
     const std::string& policy_client_desc,
@@ -1001,27 +1052,14 @@ SafeBrowsingPrivateEventRouter::GetReportingSettings() {
           enterprise_connectors::ReportingConnector::SECURITY_EVENT);
 }
 
-void SafeBrowsingPrivateEventRouter::IfAuthorized(
-    const std::string& dm_token,
-    base::OnceCallback<void(bool)> cont) {
-  if (!binary_upload_service_ && g_browser_process) {
-    binary_upload_service_ =
-        safe_browsing::BinaryUploadServiceFactory::GetForProfile(
-            Profile::FromBrowserContext(context_));
-  }
-
-  // TODO(crbug/1069049): Use reporting URL.
-  if (binary_upload_service_)
-    binary_upload_service_->IsAuthorized(
-        GURL(), std::move(cont), dm_token,
-        enterprise_connectors::AnalysisConnector::
-            ANALYSIS_CONNECTOR_UNSPECIFIED);
-}
-
 void SafeBrowsingPrivateEventRouter::ReportRealtimeEvent(
     const std::string& name,
     enterprise_connectors::ReportingSettings settings,
     EventBuilder event_builder) {
+  if (rejected_dm_token_timers_.contains(settings.dm_token)) {
+    return;
+  }
+
 #ifndef NDEBUG
   // Make sure that the event is included in the kAllEvents array.
   bool found = false;
@@ -1034,26 +1072,6 @@ void SafeBrowsingPrivateEventRouter::ReportRealtimeEvent(
   }
   DCHECK(found);
 #endif
-
-  // Copy the DM token since |settings| is about to move.
-  std::string dm_token = settings.dm_token;
-  IfAuthorized(dm_token,
-               base::BindOnce(
-                   &SafeBrowsingPrivateEventRouter::ReportRealtimeEventCallback,
-                   weak_ptr_factory_.GetWeakPtr(), name, std::move(settings),
-                   std::move(event_builder)));
-}
-
-void SafeBrowsingPrivateEventRouter::ReportRealtimeEventCallback(
-    const std::string& name,
-    enterprise_connectors::ReportingSettings settings,
-    EventBuilder event_builder,
-    bool authorized) {
-  // Ignore the event if we know we can't report it.
-  if (!authorized) {
-    DVLOG(2) << "Safe browsing real-time reporting is not authorized.";
-    return;
-  }
 
   // Make sure real-time reporting is initialized.
   InitRealtimeReportingClient(settings);
@@ -1129,6 +1147,11 @@ bool SafeBrowsingPrivateEventRouter::IsRealtimeReportingAvailable() {
 #endif
 }
 
+void SafeBrowsingPrivateEventRouter::RemoveDmTokenFromRejectedSet(
+    const std::string& dm_token) {
+  rejected_dm_token_timers_.erase(dm_token);
+}
+
 void SafeBrowsingPrivateEventRouter::OnClientError(
     policy::CloudPolicyClient* client) {
   base::Value error_value(base::Value::Type::DICTIONARY);
@@ -1137,6 +1160,22 @@ void SafeBrowsingPrivateEventRouter::OnClientError(
   error_value.SetIntKey("status", client->status());
   safe_browsing::WebUIInfoSingleton::GetInstance()->AddToReportingEvents(
       error_value);
+
+  // This is the status set when the server returned 403, which is what the
+  // reporting server returns when the customer is not allowed to report events.
+  if (client->status() == policy::DM_STATUS_SERVICE_MANAGEMENT_NOT_SUPPORTED) {
+    // This could happen if a second event was fired before the first one
+    // returned an error.
+    if (!rejected_dm_token_timers_.contains(client->dm_token())) {
+      rejected_dm_token_timers_[client->dm_token()] =
+          std::make_unique<base::OneShotTimer>();
+      rejected_dm_token_timers_[client->dm_token()]->Start(
+          FROM_HERE, base::TimeDelta::FromHours(24),
+          base::BindOnce(
+              &SafeBrowsingPrivateEventRouter::RemoveDmTokenFromRejectedSet,
+              weak_ptr_factory_.GetWeakPtr(), client->dm_token()));
+    }
+  }
 }
 
 }  // namespace extensions

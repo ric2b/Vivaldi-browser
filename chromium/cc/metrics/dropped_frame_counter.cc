@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
@@ -108,8 +109,10 @@ void DroppedFrameCounter::ResetPendingFrames(base::TimeTicks timestamp) {
       latest_sliding_window_start_ = args.frame_time;
       latest_sliding_window_interval_ = args.interval;
       bool was_dropped = sliding_window_.front().second;
-      if (was_dropped)
+      if (was_dropped) {
+        DCHECK_GT(dropped_frame_count_in_window_, 0u);
         --dropped_frame_count_in_window_;
+      }
       sliding_window_.pop();
       if (latest_sliding_window_start_ > report_until)
         break;
@@ -118,6 +121,9 @@ void DroppedFrameCounter::ResetPendingFrames(base::TimeTicks timestamp) {
           100.0);
       sliding_window_histogram_.AddPercentDroppedFrame(percent_dropped_frame,
                                                        /*count=*/1);
+    }
+    if (sliding_window_.empty()) {
+      DCHECK_EQ(dropped_frame_count_in_window_, 0u);
     }
 
     // Report no dropped frames for the sliding windows spanning the rest of the
@@ -138,9 +144,24 @@ void DroppedFrameCounter::ResetPendingFrames(base::TimeTicks timestamp) {
   frame_sorter_.Reset();
 }
 
-void DroppedFrameCounter::OnBeginFrame(const viz::BeginFrameArgs& args) {
-  if (fcp_received_)
+void DroppedFrameCounter::OnBeginFrame(const viz::BeginFrameArgs& args,
+                                       bool is_scroll_active) {
+  // Remember when scrolling starts/ends. Do this even if fcp has not happened
+  // yet.
+  if (!is_scroll_active) {
+    scroll_start_.reset();
+  } else if (!scroll_start_.has_value()) {
+    ScrollStartInfo info = {args.frame_time, args.frame_id};
+    scroll_start_ = info;
+  }
+
+  if (fcp_received_) {
     frame_sorter_.AddNewFrame(args);
+    if (is_scroll_active) {
+      DCHECK(scroll_start_.has_value());
+      scroll_start_per_frame_[args.frame_id] = *scroll_start_;
+    }
+  }
 }
 
 void DroppedFrameCounter::OnEndFrame(const viz::BeginFrameArgs& args,
@@ -152,6 +173,23 @@ void DroppedFrameCounter::OnEndFrame(const viz::BeginFrameArgs& args,
     if (fcp_received_)
       ++total_smoothness_dropped_;
     ReportFrames();
+  }
+  auto iter = scroll_start_per_frame_.find(args.frame_id);
+  if (iter != scroll_start_per_frame_.end()) {
+    ScrollStartInfo& scroll_start = iter->second;
+    if (args.frame_id.source_id == scroll_start.frame_id.source_id) {
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "Graphics.Smoothness.Diagnostic.DroppedFrameAfterScrollStart.Time",
+          (args.frame_time - scroll_start.timestamp),
+          base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromSeconds(4),
+          50);
+      UMA_HISTOGRAM_CUSTOM_COUNTS(
+          "Graphics.Smoothness.Diagnostic.DroppedFrameAfterScrollStart.Frames",
+          (args.frame_id.sequence_number -
+           scroll_start.frame_id.sequence_number),
+          1, 250, 50);
+    }
+    scroll_start_per_frame_.erase(iter);
   }
 
   if (fcp_received_)
@@ -177,18 +215,21 @@ void DroppedFrameCounter::ReportFrames() {
       sliding_window_95pct_percent_dropped,
       static_cast<uint32_t>(std::round(sliding_window_max_percent_dropped_)));
 
+  // Emit trace event with most recent smoothness calculation. This matches
+  // the smoothness metrics displayed on HeadsUpDisplay.
+  TRACE_EVENT2("cc,benchmark", "SmoothnessDroppedFrame::MostRecentCalculation",
+               "worst_smoothness", sliding_window_max_percent_dropped_,
+               "95_percentile_smoothness",
+               sliding_window_95pct_percent_dropped);
+
   if (ukm_smoothness_data_ && total_frames > 0) {
     UkmSmoothnessData smoothness_data;
     smoothness_data.avg_smoothness =
         static_cast<double>(total_smoothness_dropped_) * 100 / total_frames;
     smoothness_data.worst_smoothness = sliding_window_max_percent_dropped_;
     smoothness_data.percentile_95 = sliding_window_95pct_percent_dropped;
-
-    ukm_smoothness_data_->seq_lock.WriteBegin();
-    device::OneWriterSeqLock::AtomicWriterMemcpy(&ukm_smoothness_data_->data,
-                                                 &smoothness_data,
-                                                 sizeof(UkmSmoothnessData));
-    ukm_smoothness_data_->seq_lock.WriteEnd();
+    smoothness_data.time_max_delta = time_max_delta_;
+    ukm_smoothness_data_->Write(smoothness_data);
   }
 }
 
@@ -224,6 +265,7 @@ void DroppedFrameCounter::Reset() {
   sliding_window_histogram_.Clear();
   ring_buffer_.Clear();
   frame_sorter_.Reset();
+  time_max_delta_ = {};
 }
 
 base::TimeDelta DroppedFrameCounter::ComputeCurrentWindowSize() const {
@@ -260,8 +302,10 @@ void DroppedFrameCounter::NotifyFrameResult(const viz::BeginFrameArgs& args,
   while (ComputeCurrentWindowSize() > kSlidingWindowInterval) {
     const auto removed_args = sliding_window_.front().first;
     const auto removed_was_dropped = sliding_window_.front().second;
-    if (removed_was_dropped)
+    if (removed_was_dropped) {
+      DCHECK_GT(dropped_frame_count_in_window_, 0u);
       --dropped_frame_count_in_window_;
+    }
     sliding_window_.pop();
     DCHECK(!sliding_window_.empty());
 
@@ -283,8 +327,11 @@ void DroppedFrameCounter::NotifyFrameResult(const viz::BeginFrameArgs& args,
         std::min((dropped * 100.0) / total_frames_in_window_, 100.0);
     sliding_window_histogram_.AddPercentDroppedFrame(percent_dropped_frame,
                                                      count);
-    sliding_window_max_percent_dropped_ =
-        std::max(sliding_window_max_percent_dropped_, percent_dropped_frame);
+
+    if (percent_dropped_frame > sliding_window_max_percent_dropped_) {
+      time_max_delta_ = args.frame_time - time_fcp_received_;
+      sliding_window_max_percent_dropped_ = percent_dropped_frame;
+    }
 
     latest_sliding_window_start_ = last_timestamp;
     latest_sliding_window_interval_ = remaining_oldest_args.interval;
@@ -296,6 +343,7 @@ void DroppedFrameCounter::NotifyFrameResult(const viz::BeginFrameArgs& args,
 
 void DroppedFrameCounter::OnFcpReceived() {
   fcp_received_ = true;
+  time_fcp_received_ = base::TimeTicks::Now();
 }
 
 }  // namespace cc

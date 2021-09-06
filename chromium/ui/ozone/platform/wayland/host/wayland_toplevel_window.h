@@ -5,6 +5,7 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_TOPLEVEL_WINDOW_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_TOPLEVEL_WINDOW_H_
 
+#include "base/containers/circular_deque.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
@@ -48,6 +49,7 @@ class WaylandToplevelWindow : public WaylandWindow,
   void Minimize() override;
   void Restore() override;
   PlatformWindowState GetPlatformWindowState() const override;
+  void Activate() override;
   void SizeConstraintsChanged() override;
   std::string GetWindowUniqueId() const override;
   // SetUseNativeFrame and ShouldUseNativeFrame decide on
@@ -60,11 +62,13 @@ class WaylandToplevelWindow : public WaylandWindow,
 
  private:
   // WaylandWindow overrides:
-  void HandleSurfaceConfigure(int32_t width,
-                              int32_t height,
-                              bool is_maximized,
-                              bool is_fullscreen,
-                              bool is_activated) override;
+  void HandleToplevelConfigure(int32_t width,
+                               int32_t height,
+                               bool is_maximized,
+                               bool is_fullscreen,
+                               bool is_activated) override;
+  void HandleSurfaceConfigure(uint32_t serial) override;
+  void UpdateVisualSize(const gfx::Size& size_px) override;
   bool OnInitialize(PlatformWindowInitProperties properties) override;
   bool IsActive() const override;
   // Calls UpdateWindowShape, set_input_region and set_opaque_region
@@ -80,6 +84,8 @@ class WaylandToplevelWindow : public WaylandWindow,
   // WaylandExtension:
   void StartWindowDraggingSessionIfNeeded() override;
   void SetImmersiveFullscreenStatus(bool status) override;
+  void ShowSnapPreview(WaylandWindowSnapDirection snap) override;
+  void CommitSnap(WaylandWindowSnapDirection snap) override;
 
   void TriggerStateChanges();
   void SetWindowState(PlatformWindowState state);
@@ -98,8 +104,8 @@ class WaylandToplevelWindow : public WaylandWindow,
   // is available.
   void InitializeAuraShellSurface();
 
-  // Set decoration mode for a window.
-  void SetDecorationMode();
+  // Sets decoration mode for a window.
+  void OnDecorationModeChanged();
 
   // Wrappers around shell surface.
   std::unique_ptr<ShellToplevelWrapper> shell_toplevel_;
@@ -150,7 +156,25 @@ class WaylandToplevelWindow : public WaylandWindow,
   // e.g. lacros-taskmanager.
   bool use_native_frame_ = false;
 
-  base::Optional<std::vector<gfx::Rect>> window_shape_;
+  base::Optional<std::vector<gfx::Rect>> window_shape_in_dips_;
+
+  // Pending xdg-shell configures, once this window is drawn to |size_dip|,
+  // ack_configure with |serial| will be sent to the Wayland compositor.
+  struct PendingConfigure {
+    gfx::Size size_dip;
+    uint32_t serial;
+  };
+  base::circular_deque<PendingConfigure> pending_configures_;
+
+  // Tracks how many the window show state requests by made by the Browser
+  // are currently being processed by the Wayland Compositor. In practice,
+  // each individual increment corresponds to an explicit window show state
+  // change request, and gets a response by the Compositor.
+  //
+  // This mechanism allows Ozone/Wayland to filter out notifying the delegate
+  // (PlatformWindowDelegate) more than once, for the same window show state
+  // change.
+  uint32_t requested_window_show_state_count_ = 0;
 };
 
 }  // namespace ui

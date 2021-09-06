@@ -34,7 +34,9 @@ std::string ReplacePlaceholders(base::StringPiece format_string,
     if (*c == '{' && format_string.end() - c >= kPlaceHolderLength) {
       if (*(c + 1) == '{' && base::IsAsciiDigit(*(c + 2)) && *(c + 3) == '}' &&
           *(c + 4) == '}') {
-        result.append(replacements[*(c + 2) - '0']);
+        size_t replacement_index = *(c + 2) - '0';
+        if (replacement_index < replacements.size())
+          result.append(replacements[*(c + 2) - '0']);
         c += 5;
       }
     }

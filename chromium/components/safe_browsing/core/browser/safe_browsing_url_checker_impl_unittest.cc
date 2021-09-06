@@ -65,8 +65,8 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
     return false;
   }
 
-  bool CanCheckResourceType(
-      blink::mojom::ResourceType resource_type) const override {
+  bool CanCheckRequestDestination(
+      network::mojom::RequestDestination request_destination) const override {
     return true;
   }
 
@@ -136,7 +136,7 @@ class MockUrlCheckerDelegate : public UrlCheckerDelegate {
         threat_types_(
             SBThreatTypeSet({safe_browsing::SB_THREAT_TYPE_URL_PHISHING})) {}
 
-  MOCK_METHOD1(MaybeDestroyPrerenderContents,
+  MOCK_METHOD1(MaybeDestroyNoStatePrefetchContents,
                void(base::OnceCallback<content::WebContents*()>));
   MOCK_METHOD5(StartDisplayingBlockingPageHelper,
                void(const security_interstitials::UnsafeResource&,
@@ -152,6 +152,8 @@ class MockUrlCheckerDelegate : public UrlCheckerDelegate {
   MOCK_METHOD0(GetUIManager, BaseUIManager*());
 
   bool IsUrlAllowlisted(const GURL& url) override { return false; }
+  void SetPolicyAllowlistDomains(
+      const std::vector<std::string>& allowlist_domains) override {}
   const SBThreatTypeSet& GetThreatTypes() override { return threat_types_; }
   SafeBrowsingDatabaseManager* GetDatabaseManager() override {
     return database_manager_;
@@ -252,7 +254,7 @@ class SafeBrowsingUrlCheckerTest : public PlatformTest {
         mock_web_contents_getter;
     return std::make_unique<SafeBrowsingUrlCheckerImpl>(
         net::HttpRequestHeaders(), /*load_flags=*/0,
-        static_cast<blink::mojom::ResourceType>(ResourceType::kMainFrame),
+        network::mojom::RequestDestination::kDocument,
         /*has_user_gesture=*/false, url_checker_delegate_,
         mock_web_contents_getter.Get(), real_time_lookup_enabled,
         /*can_rt_check_subresource_url=*/false, can_check_safe_browsing_db,

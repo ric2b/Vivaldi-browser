@@ -6,8 +6,9 @@
 
 // Polymer BrowserTest fixture.
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
+
+GEN('#include "ash/constants/ash_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
-GEN('#include "chromeos/constants/chromeos_features.h"');
 
 // clang-format off
 [['CrPolicyNetworkBehaviorMojo', 'network/cr_policy_network_behavior_mojo_tests.m.js'],
@@ -35,7 +36,14 @@ GEN('#include "chromeos/constants/chromeos_features.h"');
 [['RoutineGroup', 'network_health/routine_group_test.m.js'],
 ].forEach(test => registerTest('NetworkHealth', 'connectivity-diagnostics', ...test));
 
-[['ActivationCodePage', 'cellular_setup/activation_code_page_test.m.js'],
+[
+ ['Integration', 'multidevice_setup/integration_test.m.js'],
+ ['SetupSucceededPage', 'multidevice_setup/setup_succeeded_page_test.m.js'],
+ ['StartSetupPage', 'multidevice_setup/start_setup_page_test.m.js'],
+].forEach(test => registerTest('MultiDeviceSetup', 'multidevice-setup', ...test));
+
+[
+ ['ActivationCodePage', 'cellular_setup/activation_code_page_test.m.js'],
  ['BasePage', 'cellular_setup/base_page_test.m.js'],
  ['ButtonBar', 'cellular_setup/button_bar_test.m.js'],
  ['CellularEidPopup', 'cellular_setup/cellular_eid_popup_test.m.js'],

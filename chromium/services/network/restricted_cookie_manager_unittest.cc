@@ -4,7 +4,6 @@
 
 #include "services/network/restricted_cookie_manager.h"
 
-#include <algorithm>
 #include <set>
 
 #include "base/bind.h"
@@ -22,6 +21,7 @@
 #include "net/base/isolation_info.h"
 #include "net/cookies/canonical_cookie_test_helpers.h"
 #include "net/cookies/cookie_constants.h"
+#include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_store_test_callbacks.h"
@@ -42,14 +42,30 @@ namespace network {
 class RecordingCookieObserver : public network::mojom::CookieAccessObserver {
  public:
   struct CookieOp {
-    bool get = false;
+    mojom::CookieAccessDetails::Type type;
     GURL url;
     GURL site_for_cookies;
-    // The vector is merely to permit use of MatchesCookieLine, there is always
-    // one thing.
-    std::vector<net::CanonicalCookie> cookie;
+    mojom::CookieOrLinePtr cookie_or_line;
     net::CookieInclusionStatus status;
-    base::Optional<std::string> devtools_request_id;
+
+    friend void PrintTo(const CookieOp& op, std::ostream* os) {
+      *os << "{type=" << op.type << ", url=" << op.url
+          << ", site_for_cookies=" << op.site_for_cookies
+          << ", cookie_or_line=(" << CookieOrLineToString(op.cookie_or_line)
+          << ", " << static_cast<int>(op.cookie_or_line->which()) << ")"
+          << ", status=" << op.status.GetDebugString() << "}";
+    }
+
+    static std::string CookieOrLineToString(
+        const mojom::CookieOrLinePtr& cookie_or_line) {
+      switch (cookie_or_line->which()) {
+        case mojom::CookieOrLine::Tag::COOKIE:
+          return net::CanonicalCookie::BuildCookieLine(
+              {cookie_or_line->get_cookie()});
+        case mojom::CookieOrLine::Tag::COOKIE_STRING:
+          return cookie_or_line->get_cookie_string();
+      }
+    }
   };
 
   RecordingCookieObserver() = default;
@@ -66,13 +82,12 @@ class RecordingCookieObserver : public network::mojom::CookieAccessObserver {
   void OnCookiesAccessed(mojom::CookieAccessDetailsPtr details) override {
     for (const auto& cookie_and_access_result : details->cookie_list) {
       CookieOp op;
-      op.get = details->type == mojom::CookieAccessDetails::Type::kRead;
+      op.type = details->type;
       op.url = details->url;
       op.site_for_cookies = details->site_for_cookies.RepresentativeUrl();
-      op.cookie.push_back(cookie_and_access_result.cookie);
-      op.status = cookie_and_access_result.access_result.status;
-      op.devtools_request_id = details->devtools_request_id;
-      recorded_activity_.push_back(op);
+      op.cookie_or_line = std::move(cookie_and_access_result->cookie_or_line);
+      op.status = cookie_and_access_result->access_result.status;
+      recorded_activity_.push_back(std::move(op));
     }
   }
 
@@ -94,7 +109,7 @@ class RestrictedCookieManagerSync {
   explicit RestrictedCookieManagerSync(
       mojom::RestrictedCookieManager* cookie_service)
       : cookie_service_(cookie_service) {}
-  ~RestrictedCookieManagerSync() {}
+  ~RestrictedCookieManagerSync() = default;
 
   // Wraps GetAllForUrl() but discards CookieAccessResult from returned cookies.
   std::vector<net::CanonicalCookie> GetAllForUrl(
@@ -156,6 +171,17 @@ class RestrictedCookieManagerSync {
     return result;
   }
 
+  void SetCookieFromString(const GURL& url,
+                           const net::SiteForCookies& site_for_cookies,
+                           const url::Origin& top_frame_origin,
+                           const std::string& cookie) {
+    base::RunLoop run_loop;
+    cookie_service_->SetCookieFromString(
+        url, site_for_cookies, top_frame_origin, cookie,
+        base::BindLambdaForTesting([&run_loop]() { run_loop.Quit(); }));
+    run_loop.Run();
+  }
+
   void AddChangeListener(
       const GURL& url,
       const GURL& site_for_cookies,
@@ -193,7 +219,7 @@ class RestrictedCookieManagerTest
     sync_service_ =
         std::make_unique<RestrictedCookieManagerSync>(service_remote_.get());
   }
-  ~RestrictedCookieManagerTest() override {}
+  ~RestrictedCookieManagerTest() override = default;
 
   void SetUp() override {
     mojo::SetDefaultProcessErrorHandler(base::BindRepeating(
@@ -340,9 +366,64 @@ INSTANTIATE_TEST_SUITE_P(
                     mojom::RestrictedCookieManagerRole::NETWORK));
 
 namespace {
-bool CompareCanonicalCookies(const net::CanonicalCookie& c1,
-                             const net::CanonicalCookie& c2) {
-  return c1.PartialCompare(c2);
+
+using testing::ElementsAre;
+using testing::IsEmpty;
+using testing::Not;
+using testing::UnorderedElementsAre;
+
+MATCHER_P5(MatchesCookieOp,
+           type,
+           url,
+           site_for_cookies,
+           cookie_or_line,
+           status,
+           "") {
+  return testing::ExplainMatchResult(
+      testing::AllOf(
+          testing::Field(&RecordingCookieObserver::CookieOp::type, type),
+          testing::Field(&RecordingCookieObserver::CookieOp::url, url),
+          testing::Field(&RecordingCookieObserver::CookieOp::site_for_cookies,
+                         site_for_cookies),
+          testing::Field(&RecordingCookieObserver::CookieOp::cookie_or_line,
+                         cookie_or_line),
+          testing::Field(&RecordingCookieObserver::CookieOp::status, status)),
+      arg, result_listener);
+}
+
+// Helper for checking that status.HasExactlyExclusionReasonsForTesting(reasons)
+// == true.
+MATCHER_P(HasExactlyExclusionReasonsForTesting, reasons, "") {
+  net::CookieInclusionStatus status = arg;
+  return testing::ExplainMatchResult(
+      true, status.HasExactlyExclusionReasonsForTesting(reasons),
+      result_listener);
+}
+
+MATCHER(IsInclude, "") {
+  net::CookieInclusionStatus status = arg;
+  return testing::ExplainMatchResult(true, status.IsInclude(), result_listener);
+}
+
+MATCHER(ShouldWarn, "") {
+  net::CookieInclusionStatus status = arg;
+  return testing::ExplainMatchResult(true, status.ShouldWarn(),
+                                     result_listener);
+}
+
+MATCHER_P2(MatchesCookieNameValue, name, value, "") {
+  return testing::ExplainMatchResult(
+      testing::AllOf(testing::Property(&net::CanonicalCookie::Name, name),
+                     testing::Property(&net::CanonicalCookie::Value, value)),
+      arg, result_listener);
+}
+
+MATCHER_P2(CookieOrLine, string, type, "") {
+  return type == arg->which() &&
+         testing::ExplainMatchResult(
+             string,
+             RecordingCookieObserver::CookieOp::CookieOrLineToString(arg),
+             result_listener);
 }
 
 }  // anonymous namespace
@@ -402,18 +483,13 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlBlankFilter) {
   auto options = mojom::CookieManagerGetOptions::New();
   options->name = "";
   options->match_type = mojom::CookieMatchType::STARTS_WITH;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-  ASSERT_THAT(cookies, testing::SizeIs(2));
-  std::sort(cookies.begin(), cookies.end(), &CompareCanonicalCookies);
-
-  EXPECT_EQ("cookie-name", cookies[0].Name());
-  EXPECT_EQ("cookie-value", cookies[0].Value());
-
-  EXPECT_EQ("cookie-name-2", cookies[1].Name());
-  EXPECT_EQ("cookie-value-2", cookies[1].Value());
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      UnorderedElementsAre(
+          MatchesCookieNameValue("cookie-name", "cookie-value"),
+          MatchesCookieNameValue("cookie-name-2", "cookie-value-2")));
 
   // Can also use the document.cookie-style API to get the same info.
   std::string cookies_out;
@@ -431,11 +507,11 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlEmptyFilter) {
   auto options = mojom::CookieManagerGetOptions::New();
   options->name = "";
   options->match_type = mojom::CookieMatchType::EQUALS;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-  ASSERT_THAT(cookies, testing::SizeIs(0));
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      IsEmpty());
 }
 
 TEST_P(RestrictedCookieManagerTest, GetAllForUrlEqualsMatch) {
@@ -445,14 +521,11 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlEqualsMatch) {
   auto options = mojom::CookieManagerGetOptions::New();
   options->name = "cookie-name";
   options->match_type = mojom::CookieMatchType::EQUALS;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-  ASSERT_THAT(cookies, testing::SizeIs(1));
-
-  EXPECT_EQ("cookie-name", cookies[0].Name());
-  EXPECT_EQ("cookie-value", cookies[0].Value());
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      ElementsAre(MatchesCookieNameValue("cookie-name", "cookie-value")));
 }
 
 TEST_P(RestrictedCookieManagerTest, GetAllForUrlStartsWithMatch) {
@@ -464,18 +537,13 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlStartsWithMatch) {
   auto options = mojom::CookieManagerGetOptions::New();
   options->name = "cookie-name-2";
   options->match_type = mojom::CookieMatchType::STARTS_WITH;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-  ASSERT_THAT(cookies, testing::SizeIs(2));
-  std::sort(cookies.begin(), cookies.end(), &CompareCanonicalCookies);
-
-  EXPECT_EQ("cookie-name-2", cookies[0].Name());
-  EXPECT_EQ("cookie-value-2", cookies[0].Value());
-
-  EXPECT_EQ("cookie-name-2b", cookies[1].Name());
-  EXPECT_EQ("cookie-value-2b", cookies[1].Value());
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      UnorderedElementsAre(
+          MatchesCookieNameValue("cookie-name-2", "cookie-value-2"),
+          MatchesCookieNameValue("cookie-name-2b", "cookie-value-2b")));
 }
 
 TEST_P(RestrictedCookieManagerTest, GetAllForUrlHttpOnly) {
@@ -491,16 +559,14 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlHttpOnly) {
       url::Origin::Create(GURL("https://example.com")), std::move(options));
 
   if (GetParam() == mojom::RestrictedCookieManagerRole::SCRIPT) {
-    ASSERT_THAT(cookies, testing::SizeIs(1));
-    EXPECT_EQ("cookie-name", cookies[0].Name());
-    EXPECT_EQ("cookie-value", cookies[0].Value());
+    EXPECT_THAT(cookies, UnorderedElementsAre(MatchesCookieNameValue(
+                             "cookie-name", "cookie-value")));
   } else {
-    ASSERT_THAT(cookies, testing::SizeIs(2));
-    EXPECT_EQ("cookie-name", cookies[0].Name());
-    EXPECT_EQ("cookie-value", cookies[0].Value());
-
-    EXPECT_EQ("cookie-name-http", cookies[1].Name());
-    EXPECT_EQ("cookie-value-2", cookies[1].Value());
+    EXPECT_THAT(
+        cookies,
+        UnorderedElementsAre(
+            MatchesCookieNameValue("cookie-name", "cookie-value"),
+            MatchesCookieNameValue("cookie-name-http", "cookie-value-2")));
   }
 }
 
@@ -514,12 +580,12 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlFromWrongOrigin) {
   options->name = "";
   options->match_type = mojom::CookieMatchType::STARTS_WITH;
   ExpectBadMessage();
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://not-example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://not-example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      IsEmpty());
   EXPECT_TRUE(received_bad_message());
-
-  ASSERT_THAT(cookies, testing::SizeIs(0));
 }
 
 TEST_P(RestrictedCookieManagerTest, GetAllForUrlFromOpaqueOrigin) {
@@ -533,12 +599,12 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlFromOpaqueOrigin) {
   options->name = "";
   options->match_type = mojom::CookieMatchType::STARTS_WITH;
   ExpectBadMessage();
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      IsEmpty());
   EXPECT_TRUE(received_bad_message());
-
-  ASSERT_THAT(cookies, testing::SizeIs(0));
 }
 
 TEST_P(RestrictedCookieManagerTest, GetCookieStringFromWrongOrigin) {
@@ -554,7 +620,7 @@ TEST_P(RestrictedCookieManagerTest, GetCookieStringFromWrongOrigin) {
       net::SiteForCookies::FromUrl(GURL("https://example.com")),
       url::Origin::Create(GURL("https://example.com")), &cookies_out));
   EXPECT_TRUE(received_bad_message());
-  EXPECT_TRUE(cookies_out.empty());
+  EXPECT_THAT(cookies_out, IsEmpty());
 }
 
 TEST_P(RestrictedCookieManagerTest, GetAllForUrlPolicy) {
@@ -568,22 +634,21 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlPolicy) {
     options->name = "cookie-name";
     options->match_type = mojom::CookieMatchType::STARTS_WITH;
 
-    std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-        GURL("https://example.com/test/"), GURL("https://notexample.com"),
-        url::Origin::Create(GURL("https://example.com")), std::move(options));
-    ASSERT_THAT(cookies, testing::SizeIs(1));
-    EXPECT_EQ("cookie-name", cookies[0].Name());
-    EXPECT_EQ("cookie-value", cookies[0].Value());
+    EXPECT_THAT(
+        sync_service_->GetAllForUrl(
+            GURL("https://example.com/test/"), GURL("https://notexample.com"),
+            url::Origin::Create(GURL("https://example.com")),
+            std::move(options)),
+        ElementsAre(MatchesCookieNameValue("cookie-name", "cookie-value")));
   }
 
-  ASSERT_EQ(1u, recorded_activity().size());
-  EXPECT_EQ(recorded_activity()[0].get, true);
-  EXPECT_EQ(recorded_activity()[0].url, "https://example.com/test/");
-  EXPECT_EQ(recorded_activity()[0].site_for_cookies, "https://notexample.com/");
-  EXPECT_THAT(recorded_activity()[0].cookie,
-              net::MatchesCookieLine("cookie-name=cookie-value"));
-  EXPECT_TRUE(recorded_activity()[0].status.IsInclude());
-  EXPECT_FALSE(recorded_activity()[0].status.ShouldWarn());
+  EXPECT_THAT(recorded_activity(),
+              ElementsAre(MatchesCookieOp(
+                  mojom::CookieAccessDetails::Type::kRead,
+                  "https://example.com/test/", "https://notexample.com/",
+                  CookieOrLine("cookie-name=cookie-value",
+                               mojom::CookieOrLine::Tag::COOKIE),
+                  testing::AllOf(IsInclude(), Not(ShouldWarn())))));
 
   // Disabing getting third-party cookies works correctly.
   cookie_settings_.set_block_third_party_cookies(true);
@@ -592,21 +657,26 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlPolicy) {
     options->name = "cookie-name";
     options->match_type = mojom::CookieMatchType::STARTS_WITH;
 
-    std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-        GURL("https://example.com/test/"), GURL("https://notexample.com"),
-        url::Origin::Create(GURL("https://example.com")), std::move(options));
-    ASSERT_THAT(cookies, testing::SizeIs(0));
+    EXPECT_THAT(
+        sync_service_->GetAllForUrl(
+            GURL("https://example.com/test/"), GURL("https://notexample.com"),
+            url::Origin::Create(GURL("https://example.com")),
+            std::move(options)),
+        IsEmpty());
   }
 
-  ASSERT_EQ(2u, recorded_activity().size());
-  EXPECT_EQ(recorded_activity()[1].get, true);
-  EXPECT_EQ(recorded_activity()[1].url, "https://example.com/test/");
-  EXPECT_EQ(recorded_activity()[1].site_for_cookies, "https://notexample.com/");
-  EXPECT_THAT(recorded_activity()[1].cookie,
-              net::MatchesCookieLine("cookie-name=cookie-value"));
-  EXPECT_TRUE(
-      recorded_activity()[1].status.HasExactlyExclusionReasonsForTesting(
-          {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
+  EXPECT_THAT(
+      recorded_activity(),
+      ElementsAre(
+          testing::_,
+          MatchesCookieOp(
+              mojom::CookieAccessDetails::Type::kRead,
+              "https://example.com/test/", "https://notexample.com/",
+              CookieOrLine("cookie-name=cookie-value",
+                           mojom::CookieOrLine::Tag::COOKIE),
+              HasExactlyExclusionReasonsForTesting(
+                  std::vector<net::CookieInclusionStatus::ExclusionReason>{
+                      net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}))));
 }
 
 TEST_P(RestrictedCookieManagerTest, GetAllForUrlPolicyWarnActual) {
@@ -637,22 +707,24 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlPolicyWarnActual) {
     options->name = "cookie-name";
     options->match_type = mojom::CookieMatchType::STARTS_WITH;
 
-    std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-        GURL("https://example.com/test/"), GURL("https://notexample.com"),
-        url::Origin::Create(GURL("https://example.com")), std::move(options));
-    EXPECT_TRUE(cookies.empty());
+    EXPECT_THAT(
+        sync_service_->GetAllForUrl(
+            GURL("https://example.com/test/"), GURL("https://notexample.com"),
+            url::Origin::Create(GURL("https://example.com")),
+            std::move(options)),
+        IsEmpty());
   }
 
-  ASSERT_EQ(1u, recorded_activity().size());
-
-  EXPECT_EQ(recorded_activity()[0].get, true);
-  EXPECT_EQ(recorded_activity()[0].url, "https://example.com/test/");
-  EXPECT_EQ(recorded_activity()[0].site_for_cookies, "https://notexample.com/");
-  EXPECT_THAT(recorded_activity()[0].cookie,
-              net::MatchesCookieLine("cookie-name=cookie-value"));
-  EXPECT_TRUE(
-      recorded_activity()[0].status.HasExactlyExclusionReasonsForTesting(
-          {net::CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE}));
+  EXPECT_THAT(recorded_activity(),
+              ElementsAre(MatchesCookieOp(
+                  mojom::CookieAccessDetails::Type::kRead,
+                  "https://example.com/test/", "https://notexample.com/",
+                  CookieOrLine("cookie-name=cookie-value",
+                               mojom::CookieOrLine::Tag::COOKIE),
+                  HasExactlyExclusionReasonsForTesting(
+                      std::vector<net::CookieInclusionStatus::ExclusionReason>{
+                          net::CookieInclusionStatus::
+                              EXCLUDE_SAMESITE_NONE_INSECURE}))));
 }
 
 TEST_P(SamePartyEnabledRestrictedCookieManagerTest, GetAllForUrlSameParty) {
@@ -663,14 +735,12 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest, GetAllForUrlSameParty) {
     options->name = "cookie-name";
     options->match_type = mojom::CookieMatchType::STARTS_WITH;
 
-    std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-        GURL("https://example.com/test/"), GURL("https://example.com"),
-        url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-    ASSERT_THAT(cookies, testing::SizeIs(1));
-
-    EXPECT_EQ("cookie-name", cookies[0].Name());
-    EXPECT_EQ("cookie-value", cookies[0].Value());
+    EXPECT_THAT(
+        sync_service_->GetAllForUrl(
+            GURL("https://example.com/test/"), GURL("https://example.com"),
+            url::Origin::Create(GURL("https://example.com")),
+            std::move(options)),
+        ElementsAre(MatchesCookieNameValue("cookie-name", "cookie-value")));
   }
   // Same Party. `party_context` contains fps site.
   {
@@ -685,14 +755,12 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest, GetAllForUrlSameParty) {
     options->name = "cookie-name";
     options->match_type = mojom::CookieMatchType::STARTS_WITH;
 
-    std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-        GURL("https://example.com/test/"), GURL(),
-        url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-    ASSERT_THAT(cookies, testing::SizeIs(1));
-
-    EXPECT_EQ("cookie-name", cookies[0].Name());
-    EXPECT_EQ("cookie-value", cookies[0].Value());
+    EXPECT_THAT(
+        sync_service_->GetAllForUrl(
+            GURL("https://example.com/test/"), GURL(),
+            url::Origin::Create(GURL("https://example.com")),
+            std::move(options)),
+        ElementsAre(MatchesCookieNameValue("cookie-name", "cookie-value")));
   }
 
   // Cross Party
@@ -709,17 +777,24 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest, GetAllForUrlSameParty) {
     options->name = "cookie-name";
     options->match_type = mojom::CookieMatchType::STARTS_WITH;
 
-    std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-        GURL("https://example.com/test/"), GURL(),
-        url::Origin::Create(GURL("https://example.com")), std::move(options));
+    EXPECT_THAT(sync_service_->GetAllForUrl(
+                    GURL("https://example.com/test/"), GURL(),
+                    url::Origin::Create(GURL("https://example.com")),
+                    std::move(options)),
+                IsEmpty());
 
-    EXPECT_THAT(cookies, testing::IsEmpty());
-
-    ASSERT_EQ(3u, recorded_activity().size());
-    EXPECT_TRUE(
-        recorded_activity()[2].status.HasExactlyExclusionReasonsForTesting(
-            {net::CookieInclusionStatus::
-                 EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT}));
+    EXPECT_THAT(
+        recorded_activity(),
+        ElementsAre(
+            testing::_, testing::_,
+            MatchesCookieOp(
+                testing::_ /* type */, testing::_ /* url */,
+                testing::_ /* site_for_cookies */,
+                testing::_ /* cookie_or_line */,
+                HasExactlyExclusionReasonsForTesting(
+                    std::vector<net::CookieInclusionStatus::ExclusionReason>{
+                        net::CookieInclusionStatus::
+                            EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT}))));
   }
 }
 
@@ -736,14 +811,11 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookie) {
   auto options = mojom::CookieManagerGetOptions::New();
   options->name = "new-name";
   options->match_type = mojom::CookieMatchType::EQUALS;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-  ASSERT_THAT(cookies, testing::SizeIs(1));
-
-  EXPECT_EQ("new-name", cookies[0].Name());
-  EXPECT_EQ("new-value", cookies[0].Value());
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      ElementsAre(MatchesCookieNameValue("new-name", "new-value")));
 }
 
 TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieHttpOnly) {
@@ -765,12 +837,10 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieHttpOnly) {
       url::Origin::Create(GURL("https://example.com")), std::move(options));
 
   if (GetParam() == mojom::RestrictedCookieManagerRole::SCRIPT) {
-    ASSERT_THAT(cookies, testing::SizeIs(0));
+    EXPECT_THAT(cookies, IsEmpty());
   } else {
-    ASSERT_THAT(cookies, testing::SizeIs(1));
-
-    EXPECT_EQ("new-name", cookies[0].Name());
-    EXPECT_EQ("new-value", cookies[0].Value());
+    EXPECT_THAT(cookies,
+                ElementsAre(MatchesCookieNameValue("new-name", "new-value")));
   }
 }
 
@@ -783,14 +853,11 @@ TEST_P(RestrictedCookieManagerTest, SetCookieFromString) {
   auto options = mojom::CookieManagerGetOptions::New();
   options->name = "new-name";
   options->match_type = mojom::CookieMatchType::EQUALS;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-  ASSERT_THAT(cookies, testing::SizeIs(1));
-
-  EXPECT_EQ("new-name", cookies[0].Name());
-  EXPECT_EQ("new-value", cookies[0].Value());
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      ElementsAre(MatchesCookieNameValue("new-name", "new-value")));
 }
 
 TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieFromWrongOrigin) {
@@ -859,13 +926,12 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookiePolicy) {
         url::Origin::Create(GURL("https://example.com"))));
   }
 
-  ASSERT_EQ(1u, recorded_activity().size());
-  EXPECT_EQ(recorded_activity()[0].get, false);
-  EXPECT_EQ(recorded_activity()[0].url, "https://example.com/");
-  EXPECT_EQ(recorded_activity()[0].site_for_cookies, "https://notexample.com/");
-  EXPECT_THAT(recorded_activity()[0].cookie, net::MatchesCookieLine("A=B"));
-  EXPECT_TRUE(recorded_activity()[0].status.IsInclude());
-  EXPECT_FALSE(recorded_activity()[0].status.ShouldWarn());
+  EXPECT_THAT(recorded_activity(),
+              ElementsAre(MatchesCookieOp(
+                  mojom::CookieAccessDetails::Type::kChange,
+                  "https://example.com/", "https://notexample.com/",
+                  CookieOrLine("A=B", mojom::CookieOrLine::Tag::COOKIE),
+                  testing::AllOf(IsInclude(), Not(ShouldWarn())))));
 
   service_->OverrideSiteForCookiesForTesting(
       net::SiteForCookies::FromUrl(GURL("https://otherexample.com")));
@@ -880,15 +946,17 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookiePolicy) {
         url::Origin::Create(GURL("https://example.com"))));
   }
 
-  ASSERT_EQ(2u, recorded_activity().size());
-  EXPECT_EQ(recorded_activity()[1].get, false);
-  EXPECT_EQ(recorded_activity()[1].url, "https://example.com/");
-  EXPECT_EQ(recorded_activity()[1].site_for_cookies,
-            "https://otherexample.com/");
-  EXPECT_THAT(recorded_activity()[1].cookie, net::MatchesCookieLine("A2=B2"));
-  EXPECT_TRUE(
-      recorded_activity()[1].status.HasExactlyExclusionReasonsForTesting(
-          {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
+  EXPECT_THAT(
+      recorded_activity(),
+      ElementsAre(
+          testing::_,
+          MatchesCookieOp(
+              mojom::CookieAccessDetails::Type::kChange, "https://example.com/",
+              "https://otherexample.com/",
+              CookieOrLine("A2=B2", mojom::CookieOrLine::Tag::COOKIE),
+              HasExactlyExclusionReasonsForTesting(
+                  std::vector<net::CookieInclusionStatus::ExclusionReason>{
+                      net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}))));
 
   // Read back, in first-party context
   auto options = mojom::CookieManagerGetOptions::New();
@@ -897,19 +965,20 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookiePolicy) {
 
   service_->OverrideSiteForCookiesForTesting(
       net::SiteForCookies::FromUrl(GURL("https://example.com")));
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      GURL("https://example.com/test/"), GURL("https://example.com/"),
-      url::Origin::Create(GURL("https://example.com")), std::move(options));
-  ASSERT_THAT(cookies, testing::SizeIs(1));
-  EXPECT_EQ("A", cookies[0].Name());
-  EXPECT_EQ("B", cookies[0].Value());
+  EXPECT_THAT(
+      sync_service_->GetAllForUrl(
+          GURL("https://example.com/test/"), GURL("https://example.com/"),
+          url::Origin::Create(GURL("https://example.com")), std::move(options)),
+      ElementsAre(MatchesCookieNameValue("A", "B")));
 
-  ASSERT_EQ(3u, recorded_activity().size());
-  EXPECT_EQ(recorded_activity()[2].get, true);
-  EXPECT_EQ(recorded_activity()[2].url, "https://example.com/test/");
-  EXPECT_EQ(recorded_activity()[2].site_for_cookies, "https://example.com/");
-  EXPECT_THAT(recorded_activity()[2].cookie, net::MatchesCookieLine("A=B"));
-  EXPECT_TRUE(recorded_activity()[2].status.IsInclude());
+  EXPECT_THAT(
+      recorded_activity(),
+      ElementsAre(
+          testing::_, testing::_,
+          MatchesCookieOp(mojom::CookieAccessDetails::Type::kRead,
+                          "https://example.com/test/", "https://example.com/",
+                          CookieOrLine("A=B", mojom::CookieOrLine::Tag::COOKIE),
+                          IsInclude())));
 }
 
 TEST_P(RestrictedCookieManagerTest, SetCanonicalCookiePolicyWarnActual) {
@@ -927,15 +996,34 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookiePolicyWarnActual) {
       *cookie, GURL("https://example.com"), GURL("https://notexample.com"),
       url::Origin::Create(GURL("https://example.com"))));
 
-  ASSERT_EQ(1u, recorded_activity().size());
-  EXPECT_EQ(recorded_activity()[0].get, false);
-  EXPECT_EQ(recorded_activity()[0].url, "https://example.com/");
-  EXPECT_EQ(recorded_activity()[0].site_for_cookies, "https://notexample.com/");
-  EXPECT_THAT(recorded_activity()[0].cookie, net::MatchesCookieLine("A=B"));
-  EXPECT_TRUE(
-      recorded_activity()[0].status.HasExactlyExclusionReasonsForTesting(
-          {net::CookieInclusionStatus::
-               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
+  EXPECT_THAT(recorded_activity(),
+              ElementsAre(MatchesCookieOp(
+                  mojom::CookieAccessDetails::Type::kChange,
+                  "https://example.com/", "https://notexample.com/",
+                  CookieOrLine("A=B", mojom::CookieOrLine::Tag::COOKIE),
+                  HasExactlyExclusionReasonsForTesting(
+                      std::vector<net::CookieInclusionStatus::ExclusionReason>{
+                          net::CookieInclusionStatus::
+                              EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}))));
+}
+
+TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
+       SetCookieFromString_SameParty_ReportsInvalid) {
+  // Invalid. Should be reported.
+  sync_service_->SetCookieFromString(
+      GURL("https://example.com/test/"), net::SiteForCookies(),
+      url::Origin::Create(GURL("https://example.com")), "name=value;SameParty");
+
+  EXPECT_THAT(
+      recorded_activity(),
+      ElementsAre(MatchesCookieOp(
+          mojom::CookieAccessDetails::Type::kChange,
+          GURL("https://example.com/test/"), GURL(),
+          CookieOrLine("name=value;SameParty",
+                       mojom::CookieOrLine::Tag::COOKIE_STRING),
+          HasExactlyExclusionReasonsForTesting(
+              std::vector<net::CookieInclusionStatus::ExclusionReason>{
+                  net::CookieInclusionStatus::EXCLUDE_INVALID_SAMEPARTY}))));
 }
 
 TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
@@ -964,14 +1052,11 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
     auto options = mojom::CookieManagerGetOptions::New();
     options->name = "new-name";
     options->match_type = mojom::CookieMatchType::EQUALS;
-    std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-        GURL("https://member1.com/test/"), GURL(),
-        url::Origin::Create(GURL("https://example.com")), std::move(options));
-
-    ASSERT_THAT(cookies, testing::SizeIs(1));
-
-    EXPECT_EQ("new-name", cookies[0].Name());
-    EXPECT_EQ("new-value", cookies[0].Value());
+    EXPECT_THAT(sync_service_->GetAllForUrl(
+                    GURL("https://member1.com/test/"), GURL(),
+                    url::Origin::Create(GURL("https://example.com")),
+                    std::move(options)),
+                ElementsAre(MatchesCookieNameValue("new-name", "new-value")));
   }
 
   // Cross Party
@@ -996,16 +1081,19 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
         GURL("https://example.com/test/"), GURL(),
         url::Origin::Create(GURL("https://example.com"))));
 
-    ASSERT_EQ(3u, recorded_activity().size());
-    EXPECT_EQ(recorded_activity()[2].get, false);
-    EXPECT_EQ(recorded_activity()[2].url, "https://example.com/test/");
-    EXPECT_EQ(recorded_activity()[2].site_for_cookies, GURL());
-    EXPECT_THAT(recorded_activity()[2].cookie,
-                net::MatchesCookieLine("new-name=new-value"));
-    EXPECT_TRUE(
-        recorded_activity()[2].status.HasExactlyExclusionReasonsForTesting(
-            {net::CookieInclusionStatus::
-                 EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT}));
+    EXPECT_THAT(
+        recorded_activity(),
+        ElementsAre(
+            testing::_, testing::_,
+            MatchesCookieOp(
+                mojom::CookieAccessDetails::Type::kChange,
+                "https://example.com/test/", GURL(),
+                CookieOrLine("new-name=new-value",
+                             mojom::CookieOrLine::Tag::COOKIE),
+                HasExactlyExclusionReasonsForTesting(
+                    std::vector<net::CookieInclusionStatus::ExclusionReason>{
+                        net::CookieInclusionStatus::
+                            EXCLUDE_SAMEPARTY_CROSS_PARTY_CONTEXT}))));
   }
 }
 
@@ -1076,9 +1164,9 @@ TEST_P(RestrictedCookieManagerTest, SameSiteCookiesSpecialScheme) {
   auto options = mojom::CookieManagerGetOptions::New();
   options->name = "";
   options->match_type = mojom::CookieMatchType::STARTS_WITH;
-  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
-      https_url, chrome_url, https_origin, std::move(options));
-  EXPECT_THAT(cookies, testing::SizeIs(2));
+  EXPECT_THAT(sync_service_->GetAllForUrl(https_url, chrome_url, https_origin,
+                                          std::move(options)),
+              testing::SizeIs(2));
 
   // Test if site_for_cookies is chrome, then SameSite cookies cannot be
   // set and gotten if the origin is not secure.
@@ -1102,9 +1190,9 @@ TEST_P(RestrictedCookieManagerTest, SameSiteCookiesSpecialScheme) {
   options = mojom::CookieManagerGetOptions::New();
   options->name = "";
   options->match_type = mojom::CookieMatchType::STARTS_WITH;
-  cookies = sync_service_->GetAllForUrl(http_url, chrome_url, http_origin,
-                                        std::move(options));
-  EXPECT_THAT(cookies, testing::SizeIs(0));
+  EXPECT_THAT(sync_service_->GetAllForUrl(http_url, chrome_url, http_origin,
+                                          std::move(options)),
+              IsEmpty());
 }
 
 namespace {
@@ -1112,7 +1200,7 @@ namespace {
 // Stashes the cookie changes it receives, for testing.
 class TestCookieChangeListener : public network::mojom::CookieChangeListener {
  public:
-  TestCookieChangeListener(
+  explicit TestCookieChangeListener(
       mojo::PendingReceiver<network::mojom::CookieChangeListener> receiver)
       : receiver_(this, std::move(receiver)) {}
   ~TestCookieChangeListener() override = default;
@@ -1166,8 +1254,8 @@ TEST_P(RestrictedCookieManagerTest, ChangeDispatch) {
   ASSERT_THAT(listener.observed_changes(), testing::SizeIs(1));
   EXPECT_EQ(net::CookieChangeCause::INSERTED,
             listener.observed_changes()[0].cause);
-  EXPECT_EQ("cookie-name", listener.observed_changes()[0].cookie.Name());
-  EXPECT_EQ("cookie-value", listener.observed_changes()[0].cookie.Value());
+  EXPECT_THAT(listener.observed_changes()[0].cookie,
+              MatchesCookieNameValue("cookie-name", "cookie-value"));
 }
 
 TEST_P(RestrictedCookieManagerTest, ChangeSettings) {
@@ -1182,12 +1270,12 @@ TEST_P(RestrictedCookieManagerTest, ChangeSettings) {
       std::move(listener_remote));
   TestCookieChangeListener listener(std::move(receiver));
 
-  ASSERT_THAT(listener.observed_changes(), testing::SizeIs(0));
+  EXPECT_THAT(listener.observed_changes(), IsEmpty());
 
   cookie_settings_.set_block_third_party_cookies(true);
   SetSessionCookie("cookie-name", "cookie-value", "example.com", "/");
   base::RunLoop().RunUntilIdle();
-  ASSERT_THAT(listener.observed_changes(), testing::SizeIs(0));
+  EXPECT_THAT(listener.observed_changes(), IsEmpty());
 }
 
 TEST_P(RestrictedCookieManagerTest, AddChangeListenerFromWrongOrigin) {
@@ -1212,21 +1300,21 @@ TEST_P(RestrictedCookieManagerTest, AddChangeListenerFromWrongOrigin) {
       std::move(good_listener_remote));
   TestCookieChangeListener good_listener(std::move(good_receiver));
 
-  ASSERT_THAT(bad_listener.observed_changes(), testing::SizeIs(0));
-  ASSERT_THAT(good_listener.observed_changes(), testing::SizeIs(0));
+  ASSERT_THAT(bad_listener.observed_changes(), IsEmpty());
+  ASSERT_THAT(good_listener.observed_changes(), IsEmpty());
 
   SetSessionCookie("other-cookie-name", "other-cookie-value", "not-example.com",
                    "/");
   SetSessionCookie("cookie-name", "cookie-value", "example.com", "/");
   good_listener.WaitForChange();
 
-  EXPECT_THAT(bad_listener.observed_changes(), testing::SizeIs(0));
+  EXPECT_THAT(bad_listener.observed_changes(), IsEmpty());
 
   ASSERT_THAT(good_listener.observed_changes(), testing::SizeIs(1));
   EXPECT_EQ(net::CookieChangeCause::INSERTED,
             good_listener.observed_changes()[0].cause);
-  EXPECT_EQ("cookie-name", good_listener.observed_changes()[0].cookie.Name());
-  EXPECT_EQ("cookie-value", good_listener.observed_changes()[0].cookie.Value());
+  EXPECT_THAT(good_listener.observed_changes()[0].cookie,
+              MatchesCookieNameValue("cookie-name", "cookie-value"));
 }
 
 TEST_P(RestrictedCookieManagerTest, AddChangeListenerFromOpaqueOrigin) {
@@ -1245,7 +1333,7 @@ TEST_P(RestrictedCookieManagerTest, AddChangeListenerFromOpaqueOrigin) {
   EXPECT_TRUE(received_bad_message());
 
   TestCookieChangeListener bad_listener(std::move(bad_receiver));
-  ASSERT_THAT(bad_listener.observed_changes(), testing::SizeIs(0));
+  ASSERT_THAT(bad_listener.observed_changes(), IsEmpty());
 }
 
 TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
@@ -1268,7 +1356,7 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
         std::move(listener_remote));
     TestCookieChangeListener listener(std::move(receiver));
 
-    ASSERT_THAT(listener.observed_changes(), testing::IsEmpty());
+    ASSERT_THAT(listener.observed_changes(), IsEmpty());
 
     SetSamePartyCookie("cookie-name", "cookie-value", "example.com", "/");
     listener.WaitForChange();
@@ -1276,8 +1364,8 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
     ASSERT_THAT(listener.observed_changes(), testing::SizeIs(1));
     EXPECT_EQ(net::CookieChangeCause::INSERTED,
               listener.observed_changes()[0].cause);
-    EXPECT_EQ("cookie-name", listener.observed_changes()[0].cookie.Name());
-    EXPECT_EQ("cookie-value", listener.observed_changes()[0].cookie.Value());
+    EXPECT_THAT(listener.observed_changes()[0].cookie,
+                MatchesCookieNameValue("cookie-name", "cookie-value"));
   }
   // Cross Party.
   {
@@ -1297,9 +1385,9 @@ TEST_P(SamePartyEnabledRestrictedCookieManagerTest,
         std::move(listener_remote));
     TestCookieChangeListener listener(std::move(receiver));
 
-    EXPECT_THAT(listener.observed_changes(), testing::IsEmpty());
+    EXPECT_THAT(listener.observed_changes(), IsEmpty());
     SetSamePartyCookie("cookie-name", "cookie-value", "example.com", "/");
-    EXPECT_THAT(listener.observed_changes(), testing::IsEmpty());
+    EXPECT_THAT(listener.observed_changes(), IsEmpty());
   }
 }
 
@@ -1330,7 +1418,7 @@ TEST_P(RestrictedCookieManagerTest, ChangeNotificationIncludesAccessSemantics) {
       std::move(listener_remote));
   TestCookieChangeListener listener(std::move(receiver));
 
-  ASSERT_THAT(listener.observed_changes(), testing::SizeIs(0));
+  ASSERT_THAT(listener.observed_changes(), IsEmpty());
 
   GURL cookie_url("https://example.com");
   auto cookie = net::CanonicalCookie::Create(

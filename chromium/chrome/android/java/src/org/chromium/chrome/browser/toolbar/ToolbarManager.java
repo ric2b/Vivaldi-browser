@@ -39,7 +39,6 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.TabLoadStatus;
-import org.chromium.chrome.browser.WindowDelegate;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -53,6 +52,7 @@ import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.findinpage.FindToolbarManager;
 import org.chromium.chrome.browser.findinpage.FindToolbarObserver;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -62,7 +62,6 @@ import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.homepage.HomepagePolicyManager;
 import org.chromium.chrome.browser.identity_disc.IdentityDiscController;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
-import org.chromium.chrome.browser.intent.IntentMetadata;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -70,10 +69,13 @@ import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.ntp.IncognitoNewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
+import org.chromium.chrome.browser.omnibox.BackKeyBehaviorDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
+import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.OverrideUrlLoadingDelegate;
+import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.previews.Previews;
@@ -86,7 +88,6 @@ import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -94,6 +95,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupUi;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.theme.ThemeColorProvider.ThemeColorObserver;
 import org.chromium.chrome.browser.theme.ThemeColorProvider.TintObserver;
@@ -124,6 +126,7 @@ import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
+import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.features.start_surface.StartSurfaceState;
@@ -144,8 +147,10 @@ import org.chromium.net.NetError;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.base.WindowDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.util.TokenHolder;
+import org.chromium.url.GURL;
 
 import java.util.List;
 
@@ -155,9 +160,11 @@ import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.toolbar.VivaldiTopToolbarCoordinator;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
+import org.vivaldi.browser.toolbar.bottom.BottomToolbarCoordinator;
 
 /**
  * Contains logic for managing the toolbar visual component.  This class manages the interactions
@@ -174,9 +181,11 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
     private final ToolbarControlContainer mControlContainer;
     private final BrowserControlsStateProvider.Observer mBrowserControlsObserver;
     private final FullscreenManager.Observer mFullscreenObserver;
-    private final ObservableSupplierImpl<Boolean> mHomeButtonVisibilitySupplier =
+    private final ObservableSupplierImpl<Boolean> mHomepageEnabledSupplier =
             new ObservableSupplierImpl<>();
     private final ObservableSupplierImpl<Boolean> mHomepageManagedByPolicySupplier =
+            new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<Boolean> mStartSurfaceAsHomepageSupplier =
             new ObservableSupplierImpl<>();
     private final ObservableSupplierImpl<Boolean> mIdentityDiscStateSupplier =
             new ObservableSupplierImpl<>();
@@ -261,7 +270,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
     private StartSurface.StateObserver mStartSurfaceStateObserver;
     private AppBarLayout.OnOffsetChangedListener mStartSurfaceHeaderOffsetChangeListener;
 
-    private OneshotSupplier<IntentMetadata> mIntentMetadataOneshotSupplier;
+    private OneshotSupplier<ToolbarIntentMetadata> mIntentMetadataOneshotSupplier;
     private OneshotSupplier<Boolean> mPromoShownOneshotSupplier;
     private OverlayPanelManagerObserver mOverlayPanelManagerObserver;
     private ObservableSupplierImpl<Boolean> mOverlayPanelVisibilitySupplier =
@@ -270,9 +279,9 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
     private TabGroupUi mTabGroupUi;
 
     // Vivaldi
-    private ObservableSupplier<ShareDelegate> mShareDelegateSupplier;
     private OnClickListener mTabSwitcherClickHandler;
     private OnClickListener mNewTabClickHandler;
+    private BottomToolbarCoordinator mBottomToolbarCoordinator;
 
     private static class TabObscuringCallback implements Callback<Boolean> {
         private final TabObscuringHandler mTabObscuringHandler;
@@ -356,7 +365,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
             OneshotSupplier<StartSurface> startSurfaceSupplier,
             ObservableSupplier<Boolean> omniboxFocusStateSupplier,
-            OneshotSupplier<IntentMetadata> intentMetadataOneshotSupplier,
+            OneshotSupplier<ToolbarIntentMetadata> intentMetadataOneshotSupplier,
             OneshotSupplier<Boolean> promoShownOneshotSupplier, WindowAndroid windowAndroid,
             Supplier<Boolean> isInOverviewModeSupplier, boolean isCustomTab,
             Supplier<ModalDialogManager> modalDialogManagerSupplier,
@@ -381,9 +390,6 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
         mStatusBarColorController = statusBarColorController;
         mUrlFocusChangedCallback = urlFocusChangedCallback;
 
-        // Vivaldi
-        mShareDelegateSupplier = shareDelegateSupplier;
-
         ToolbarLayout toolbarLayout = mActivity.findViewById(R.id.toolbar);
         NewTabPageDelegate ntpDelegate = createNewTabPageDelegate(toolbarLayout);
         mLocationBarModel = new LocationBarModel(activity, ntpDelegate,
@@ -399,7 +405,8 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                     public boolean isOfflinePage(Tab tab) {
                         return OfflinePageUtils.isOfflinePage(tab);
                     }
-                });
+                },
+                SearchEngineLogoUtils.getInstance());
         mControlContainer = controlContainer;
         assert mControlContainer != null;
 
@@ -445,10 +452,17 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
         mCustomTabThemeColorProvider = new SettableThemeColorProvider(/* context= */ mActivity);
 
         mActivityTabProvider = tabProvider;
+
+        // clang-format off
         mToolbarTabController = new ToolbarTabControllerImpl(mLocationBarModel::getTab,
                 () -> mShowStartSurfaceSupplier != null && mShowStartSurfaceSupplier.get(),
-                profileSupplier, mBottomControlsCoordinatorSupplier, ToolbarManager::homepageUrl,
+                () -> {
+                    Profile profile = profileSupplier.get();
+                    return profile != null ? TrackerFactory.getTrackerForProfile(profile) : null;
+                },
+                mBottomControlsCoordinatorSupplier, ToolbarManager::homepageUrl,
                 this::updateButtonStatus);
+        // clang-format on
 
         BrowserStateBrowserControlsVisibilityDelegate controlsVisibilityDelegate =
                 mBrowserControlsSizer.getBrowserVisibilityDelegate();
@@ -475,11 +489,16 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                 requestFocusRunnable, shouldShowUpdateBadge, isInOverviewModeSupplier,
                 overviewModeThemeColorProvider, R.id.none);
 
+        boolean isGridTabSwitcherEnabled = TabUiFeatureUtilities.isGridTabSwitcherEnabled();
+        boolean isTabToGtsAnimationEnabled = TabUiFeatureUtilities.isTabToGtsAnimationEnabled();
+        boolean isStartSurfaceEnabled = StartSurfaceConfiguration.isStartSurfaceEnabled();
+        boolean isTabGroupsAndroidContinuationEnabled =
+                TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled();
         mToolbar = createTopToolbarCoordinator(controlContainer, toolbarLayout, buttonDataProviders,
                 browsingModeThemeColorProvider, startSurfaceMenuButtonCoordinator,
                 mCompositorViewHolder.getInvalidator(), identityDiscController,
-                startSurfaceSupplier);
-
+                startSurfaceSupplier, isGridTabSwitcherEnabled, isTabToGtsAnimationEnabled,
+                isStartSurfaceEnabled, isTabGroupsAndroidContinuationEnabled);
         mActionModeController =
                 new ActionModeController(mActivity, mActionBarDelegate, toolbarActionModeCallback);
 
@@ -487,12 +506,12 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
 
         if (toolbarLayout instanceof CustomTabToolbar) {
             CustomTabToolbar customTabToolbar = ((CustomTabToolbar) toolbarLayout);
-            mLocationBar = customTabToolbar.createLocationBar(
-                    mLocationBarModel, mActionModeController.getActionModeCallback());
+            mLocationBar = customTabToolbar.createLocationBar(mLocationBarModel,
+                    mActionModeController.getActionModeCallback(), modalDialogManagerSupplier);
         } else {
             OverrideUrlLoadingDelegate overrideUrlLoadingDelegate =
                     (url, transition, postDataType, postData, incognito)
-                    -> ReturnToChromeExperimentsUtil.willHandleLoadUrlWithPostDataFromStartSurface(
+                    -> ReturnToChromeExperimentsUtil.handleLoadUrlWithPostDataFromStartSurface(
                             new LoadUrlParams(url, transition | PageTransition.FROM_ADDRESS_BAR),
                             postDataType, postData, incognito, startSurfaceParentTabSupplier.get());
             LocationBarCoordinator locationBarCoordinator = new LocationBarCoordinator(
@@ -500,7 +519,8 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                     mLocationBarModel, mActionModeController.getActionModeCallback(),
                     new WindowDelegate(mActivity.getWindow()), windowAndroid, mActivityTabProvider,
                     modalDialogManagerSupplier, shareDelegateSupplier, mIncognitoStateProvider,
-                    activityLifecycleDispatcher, overrideUrlLoadingDelegate);
+                    activityLifecycleDispatcher, overrideUrlLoadingDelegate,
+                    new BackKeyBehaviorDelegate() {}, SearchEngineLogoUtils.getInstance());
             toolbarLayout.setLocationBarCoordinator(locationBarCoordinator);
             mLocationBar = locationBarCoordinator;
         }
@@ -518,8 +538,8 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             mLocationBar.getFakeboxDelegate().addUrlFocusChangeListener(mLocationBarFocusHandler);
         }
 
-        mProgressBarCoordinator =
-                new LoadProgressCoordinator(mActivityTabSupplier, mToolbar.getProgressBar());
+        mProgressBarCoordinator = new LoadProgressCoordinator(
+                mActivityTabSupplier, mToolbar.getProgressBar(), isStartSurfaceEnabled);
         mToolbar.addUrlExpansionObserver(statusBarColorController);
 
         mActivityTabTabObserver = new ActivityTabProvider.ActivityTabTabObserver(
@@ -539,6 +559,23 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
 
                 refreshSelectedTab(tab);
                 onTabOrModelChanged();
+                maybeTriggerCacheRefreshForZeroSuggest(tab.getUrl());
+            }
+
+            @Override
+            public void onPageLoadFinished(Tab tab, GURL url) {
+                maybeTriggerCacheRefreshForZeroSuggest(url);
+            }
+
+            /**
+             * Trigger ZeroSuggest cache refresh in case user is accessing a new tab page.
+             * Avoid issuing multiple concurrent server requests for the same event to
+             * reduce server pressure.
+             */
+            private void maybeTriggerCacheRefreshForZeroSuggest(GURL url) {
+                if (url != null && UrlUtilities.isNTPUrl(url)) {
+                    mLocationBarModel.notifyZeroSuggestRefresh();
+                }
             }
 
             @Override
@@ -685,7 +722,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             }
         };
 
-        mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
+        mTabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
             public void onTabStateInitialized() {
                 mTabRestoreCompleted = true;
@@ -716,7 +753,8 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                 // |VivaldiTopToolbarCoordinator|.
                 if (!ChromeApplication.isVivaldi())
                 // Controls need to be offset to match the composited layer, which is
-                // anchored at the bottom of the controls container.
+                // anchored below the minimum height. In other words, the top of the toolbar
+                // composited layer is anchored at the bottom of the minimum height.
                 // https://crbug.com/1157859 wait until the background is cleared so that
                 // the height won't be measured by the background image.
                 if (mControlContainer.getBackground() == null) {
@@ -769,6 +807,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             @Override
             public void onStartedShowing(@LayoutType int layoutType, boolean showToolbar) {
                 if (layoutType == LayoutType.TAB_SWITCHER) {
+                    mLocationBarModel.setIsShowingTabSwitcher(true);
                     mToolbar.setTabSwitcherMode(true, showToolbar, false);
                     updateButtonStatus();
                     if (mLocationBarModel.shouldShowLocationBarInOverviewMode()) {
@@ -782,6 +821,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             public void onStartedHiding(
                     @LayoutType int layoutType, boolean showToolbar, boolean delayAnimation) {
                 if (layoutType == LayoutType.TAB_SWITCHER) {
+                    mLocationBarModel.setIsShowingTabSwitcher(false);
                     mToolbar.setTabSwitcherMode(false, showToolbar, delayAnimation);
                     updateButtonStatus();
                 }
@@ -810,6 +850,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             @Override
             public void onSceneChange(Layout layout) {
                 mToolbar.setContentAttached(layout.shouldDisplayContentOverlay());
+                maybeFocusOmnibox(layout, mActivityTabProvider.get());
             }
         };
 
@@ -854,13 +895,32 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
         TraceEvent.end("ToolbarManager.ToolbarManager");
     }
 
+    /**
+     * May set Omnibox focused if the Tab has the flag to require focusing the Omnibox.
+     */
+    private void maybeFocusOmnibox(Layout layout, Tab tab) {
+        if (StartSurfaceConfiguration.consumeFocusOnOmnibox(tab, layout)) {
+            if (mLocationBar.getFakeboxDelegate() == null
+                    || mLocationBar.getFakeboxDelegate().isUrlBarFocused()) {
+                return;
+            }
+            setUrlBarFocus(true, OmniboxFocusReason.FOCUS_ON_NEW_TAB);
+            if (shouldShowCursorInLocationBar()) {
+                mLocationBar.showUrlBarCursorWithoutFocusAnimations();
+            }
+            updateButtonStatus();
+        }
+    }
+
     private TopToolbarCoordinator createTopToolbarCoordinator(
             ToolbarControlContainer controlContainer, ToolbarLayout toolbarLayout,
             List<ButtonDataProvider> buttonDataProviders,
             ThemeColorProvider browsingModeThemeColorProvider,
             MenuButtonCoordinator startSurfaceMenuButtonCoordinator, Invalidator invalidator,
             IdentityDiscController identityDiscController,
-            OneshotSupplier<StartSurface> startSurfaceSupplier) {
+            OneshotSupplier<StartSurface> startSurfaceSupplier, boolean isGridTabSwitcherEnabled,
+            boolean isTabToGtsAnimationEnabled, boolean isStartSurfaceEnabled,
+            boolean isTabGroupsAndroidContinuationEnabled) {
         // clang-format off
         VivaldiTopToolbarCoordinator toolbar = new VivaldiTopToolbarCoordinator(mActivity,
                 controlContainer, toolbarLayout, mLocationBarModel, mToolbarTabController,
@@ -868,17 +928,26 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                 buttonDataProviders, mLayoutStateProviderSupplier, browsingModeThemeColorProvider,
                 mAppThemeColorProvider, mMenuButtonCoordinator, startSurfaceMenuButtonCoordinator,
                 mMenuButtonCoordinator.getMenuButtonHelperSupplier(), mTabModelSelectorSupplier,
-                mHomeButtonVisibilitySupplier, mIdentityDiscStateSupplier, (client) -> {
+                mHomepageEnabledSupplier, mStartSurfaceAsHomepageSupplier,
+                mHomepageManagedByPolicySupplier,
+                mIdentityDiscStateSupplier, (client) -> {
                     if (invalidator != null) {
                         invalidator.invalidate(client);
                     } else {
                         client.run();
                     }
                 }, () -> identityDiscController.getForStartSurface(mStartSurfaceState),
-                startSurfaceSupplier, mCompositorViewHolder::getResourceManager);
+                startSurfaceSupplier, mCompositorViewHolder::getResourceManager,
+                VrModuleProvider.getDelegate()::isInVr, isGridTabSwitcherEnabled,
+                isTabToGtsAnimationEnabled, isStartSurfaceEnabled,
+                isTabGroupsAndroidContinuationEnabled);
         // clang-format on
         mHomepageStateListener = () -> {
-            mHomeButtonVisibilitySupplier.set(HomepageManager.isHomepageEnabled());
+            mHomepageEnabledSupplier.set(HomepageManager.isHomepageEnabled());
+            // Whether to show start surface as homepage is affected by whether homepage URI is
+            // customized. So we add a supplier to observe homepage URI change.
+            mStartSurfaceAsHomepageSupplier.set(
+                    ReturnToChromeExperimentsUtil.shouldShowStartSurfaceAsTheHomePage());
             mHomepageManagedByPolicySupplier.set(HomepagePolicyManager.isHomepageManagedByPolicy());
         };
         HomepageManager.getInstance().addListener(mHomepageStateListener);
@@ -891,8 +960,8 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
         }
         HomeButton homeButton = toolbarLayout.getHomeButton();
         if (homeButton != null) {
-            homeButton.init(mHomeButtonVisibilitySupplier,
-                    HomepageManager.getInstance()::onMenuClick, mHomepageManagedByPolicySupplier);
+            homeButton.init(mHomepageEnabledSupplier, HomepageManager.getInstance()::onMenuClick,
+                    mHomepageManagedByPolicySupplier);
         }
         return toolbar;
     }
@@ -1056,27 +1125,23 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                 root.findViewById(R.id.bottom_container_slot), mAppThemeColorProvider,
                 mScrimCoordinator, mOmniboxFocusStateSupplier);
 
-        mBottomControlsCoordinatorSupplier.set(new BottomControlsCoordinator(mActivity,
-                mWindowAndroid, mLayoutManager, mCompositorViewHolder.getResourceManager(),
-                mBrowserControlsSizer, mFullscreenManager,
-                (ScrollingBottomViewResourceFrameLayout) root, mAppThemeColorProvider, mTabGroupUi,
-                mOverlayPanelVisibilitySupplier,
-                mToolbarTabController::openHomepage, // Vivaldi parameters from here.
-                mShareDelegateSupplier, mMenuButtonCoordinator.getMenuButtonHelperSupplier(),
-                mTopUiThemeColorProvider));
-
-        // Note(david@vivaldi.com): Post init to pass necessary handlers to
-        // BottomControlsCoordinator.
-        BottomControlsCoordinator bcc = mBottomControlsCoordinatorSupplier.get();
-        if (bcc != null) {
-            Runnable closeAllTabsAction = () -> {
-                mTabModelSelector.getModel(mIncognitoStateProvider.isIncognitoSelected())
-                        .closeAllTabs();
-            };
-            bcc.postInit(mActivity, mCompositorViewHolder.getResourceManager(),
-                    mCompositorViewHolder.getLayoutManager(), mTabSwitcherClickHandler,
-                    mNewTabClickHandler, mWindowAndroid, mTabCountProvider, mIncognitoStateProvider,
-                    mActivity.findViewById(R.id.control_container), closeAllTabsAction);
+        // Note(David@vivaldi.com): Create all necessary handlers for the bottom toolbar.
+        if (ChromeApplication.isVivaldi()) {
+            mBottomControlsCoordinatorSupplier.set(
+                    new BottomControlsCoordinator(mActivity, mWindowAndroid, mLayoutManager,
+                            mCompositorViewHolder.getResourceManager(), mBrowserControlsSizer,
+                            mFullscreenManager, (ScrollingBottomViewResourceFrameLayout) root,
+                            mAppThemeColorProvider, mTabGroupUi, mOverlayPanelVisibilitySupplier));
+            ((ScrollingBottomViewResourceFrameLayout) root)
+                    .setSwipeHandler(mLayoutManager.createToolbarSwipeHandler(false));
+            mBottomToolbarCoordinator = new BottomToolbarCoordinator((ChromeActivity) mActivity,
+                    root.findViewById(org.chromium.chrome.browser.toolbar.R.id.bottom_toolbar_stub),
+                    mAppThemeColorProvider, mTopUiThemeColorProvider,
+                    mToolbarTabController::openHomepage,
+                    mMenuButtonCoordinator.getMenuButtonHelperSupplier());
+            mBottomToolbarCoordinator.postInit(mTabSwitcherClickHandler, mNewTabClickHandler,
+                    mTabCountProvider, mIncognitoStateProvider,
+                    mActivity.findViewById(R.id.control_container));
             // Note(david@vivaldi.com) We need to update the |TopUiThemeColorProvider| in order to
             // apply the correct theme after recreating the activity.
             mTopUiThemeColorProvider.forceUpdateColor(mTabModelSelector.getCurrentTab());
@@ -1176,6 +1241,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
                 && !TextUtils.isEmpty(currentTab.getUrlString())) {
             mControlContainer.setReadyForBitmapCapture(true);
         }
+        maybeFocusOmnibox(mLayoutManager.getActiveLayout(), currentTab);
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOOLBAR_IPH_ANDROID)) {
             UserEducationHelper userEducationHelper = new UserEducationHelper(
@@ -1186,7 +1252,8 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             mHomeButtonCoordinator = new HomeButtonCoordinator(mActivity, homeButton,
                     userEducationHelper, mIncognitoStateProvider::isIncognitoSelected,
                     mIntentMetadataOneshotSupplier, mPromoShownOneshotSupplier,
-                    HomepageManager::isHomepageNonNtp, mActivityTabSupplier, tracker);
+                    HomepageManager::isHomepageNonNtp, FeedFeatures::isFeedEnabled,
+                    mActivityTabSupplier, tracker);
             ToggleTabStackButton toggleTabStackButton =
                     mControlContainer.findViewById(R.id.tab_switcher_button);
             mToggleTabStackButtonCoordinator = new ToggleTabStackButtonCoordinator(mActivity,
@@ -1440,6 +1507,11 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
             mControlsVisibilityDelegate.releasePersistentShowingToken(mFullscreenFocusToken);
         }
 
+        // Note(david@vivaldi.com): Apply the correct top margin for the location bar scrim view.
+        mLocationBarFocusHandler.setTopMargin(VivaldiUtils.isTopToolbarOn()
+                        ? mBrowserControlsSizer.getTopControlsMinHeight()
+                                + mBrowserControlsSizer.getTopControlsHeight()
+                        : 0);
         mUrlFocusChangedCallback.onResult(hasFocus);
     }
 
@@ -1511,14 +1583,7 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
      * @return The extra Y offset for the toolbar in pixels.
      */
     private int getToolbarExtraYOffset() {
-        return mBrowserControlsSizer.getTopControlsHeight()
-                - getControlContainerHeightWithoutShadow();
-    }
-
-    private int getControlContainerHeightWithoutShadow() {
-        final View toolbarShadow = mControlContainer.findViewById(R.id.toolbar_shadow);
-        final int shadowHeight = toolbarShadow != null ? toolbarShadow.getHeight() : 0;
-        return mControlContainer.getHeight() - shadowHeight;
+        return mBrowserControlsSizer.getTopControlsMinHeight();
     }
 
     /**
@@ -1636,19 +1701,24 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
         // Vivaldi
         boolean toolbarNavButtonsVisible = (mToolbar instanceof VivaldiTopToolbarCoordinator) &&
                 ((VivaldiTopToolbarCoordinator) mToolbar).areToolbarNavigationButtonsVisible();
-        if (!toolbarNavButtonsVisible && getBottomControlsCoordinator() != null) {
-            getBottomControlsCoordinator().updateBackButtonVisibility(currentTab != null &&
+        if (!toolbarNavButtonsVisible && mBottomToolbarCoordinator != null) {
+            mBottomToolbarCoordinator.updateBackButtonVisibility(currentTab != null &&
                     currentTab.canGoBack());
-            getBottomControlsCoordinator().updateForwardButtonVisibility(currentTab != null &&
+            mBottomToolbarCoordinator.updateForwardButtonVisibility(currentTab != null &&
                     currentTab.canGoForward());
             if (currentTab != null) {
                 NativePage nativePage = currentTab.getNativePage();
                 boolean showSearch = nativePage != null && (nativePage instanceof SpeedDialPage);
-                getBottomControlsCoordinator().updateCenterButton(showSearch);
+                if (mBottomToolbarCoordinator != null)
+                    mBottomToolbarCoordinator.updateCenterButton(showSearch);
             }
         } else {
-        mToolbar.updateBackButtonVisibility(currentTab != null && currentTab.canGoBack());
-        mToolbar.updateForwardButtonVisibility(currentTab != null && currentTab.canGoForward());
+            if (mBottomToolbarCoordinator != null) {
+                mBottomToolbarCoordinator.updateBackButtonVisibility(
+                        currentTab != null && currentTab.canGoBack());
+                mBottomToolbarCoordinator.updateForwardButtonVisibility(
+                        currentTab != null && currentTab.canGoForward());
+            }
         }
         updateReloadState(tabCrashed);
         updateBookmarkButtonStatus();
@@ -1860,6 +1930,11 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
         return mControlContainer.getView();
     }
 
+    @VisibleForTesting
+    public ToolbarTabController getToolbarTabControllerForTesting() {
+        return mToolbarTabController;
+    }
+
     /** Vivaldi */
     public void updateButtonStatusForSpeedDial() {
         updateButtonStatus();
@@ -1870,5 +1945,19 @@ public class ToolbarManager implements UrlFocusChangeListener, ThemeColorObserve
      */
     public BottomControlsCoordinator getBottomControlsCoordinator() {
         return mBottomControlsCoordinatorSupplier.get();
+    }
+
+    /** Vivaldi
+     * @return The overlay visibility supplier.
+     */
+    public ObservableSupplierImpl<Boolean> getOverlayVisibilitySupplier() {
+        return mOverlayPanelVisibilitySupplier;
+    }
+
+    /** Vivaldi
+     * @return The coordinator for the menu button if it exists.
+     */
+    public MenuButtonCoordinator getMenuButtonCoordinator() {
+        return mMenuButtonCoordinator;
     }
 }

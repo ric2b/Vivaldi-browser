@@ -227,15 +227,15 @@ public final class WebLayerImpl extends IWebLayer.Stub {
             notifyWebViewRunningInProcess(remoteContext.getClassLoader());
         }
 
+        Context appContext = minimalInitForContext(
+                ObjectWrapper.unwrap(appContextWrapper, Context.class), remoteContext);
+        GmsBridge.getInstance().checkClientAppContext(appContext);
+
         // Load library in the background since it may be expensive.
         // TODO(crbug.com/1146438): Look into enabling relro sharing in browser process. It seems to
         // crash when WebView is loaded in the same process.
-        new Thread(() -> {
-            LibraryLoader.getInstance().loadNowOverrideApplicationContext(remoteContext);
-        }).start();
+        new Thread(() -> LibraryLoader.getInstance().loadNow()).start();
 
-        Context appContext = minimalInitForContext(
-                ObjectWrapper.unwrap(appContextWrapper, Context.class), remoteContext);
         PackageInfo packageInfo = WebViewFactory.getLoadedPackageInfo();
 
         if (!CommandLine.isInitialized()) {
@@ -272,7 +272,7 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         SelectionPopupController.setMustUseWebContentsContext();
         SelectionPopupController.setShouldGetReadbackViewFromWindowAndroid();
 
-        ResourceBundle.setAvailablePakLocales(new String[] {}, ProductConfig.UNCOMPRESSED_LOCALES);
+        ResourceBundle.setAvailablePakLocales(ProductConfig.LOCALES);
         BundleUtils.setIsBundle(ProductConfig.IS_BUNDLE);
 
         setChildProcessCreationParams(appContext, packageInfo.packageName);
@@ -454,6 +454,12 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         ImageDecoder imageDecoder = new ImageDecoder();
         imageDecoder.initializeSandbox();
         return imageDecoder;
+    }
+
+    @Override
+    public IObjectWrapper createGooglePayDataCallbacksService() {
+        StrictModeWorkaround.apply();
+        return ObjectWrapper.wrap(GmsBridge.getInstance().createGooglePayDataCallbacksService());
     }
 
     @Override

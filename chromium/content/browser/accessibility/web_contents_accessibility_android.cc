@@ -939,6 +939,8 @@ void WebContentsAccessibilityAndroid::Click(JNIEnv* env,
                                             const JavaParamRef<jobject>& obj,
                                             jint unique_id) {
   BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
+  if (!node)
+    return;
 
   // If it's a heading consisting of only a link, click the link.
   if (node->IsHeadingLink()) {
@@ -946,7 +948,13 @@ void WebContentsAccessibilityAndroid::Click(JNIEnv* env,
         node->InternalChildrenBegin().get());
   }
 
-  if (node)
+  // Only perform the default action on a node that is enabled. Having the
+  // ACTION_CLICK action on the node is not sufficient, since TalkBack won't
+  // announce a control as disabled unless it's also marked as clickable, so
+  // disabled nodes are secretly clickable if we do not check here.
+  // Children of disabled controls/widgets will also have the click action, so
+  // ensure that parents/ancestry chain is enabled as well.
+  if (node->IsEnabled() && !node->IsDisabledDescendant())
     node->manager()->DoDefaultAction(*node);
 }
 
@@ -993,15 +1001,11 @@ void WebContentsAccessibilityAndroid::SetSelection(
     jint unique_id,
     jint start,
     jint end) {
-  using AXPlatformPositionInstance =
-      BrowserAccessibilityPosition::AXPositionInstance;
-  using AXPlatformRange = ui::AXRange<AXPlatformPositionInstance::element_type>;
-
   BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
   if (node) {
     node->manager()->SetSelection(
-        AXPlatformRange(node->CreatePositionForSelectionAt(start),
-                        node->CreatePositionForSelectionAt(end)));
+        BrowserAccessibility::AXRange(node->CreatePositionForSelectionAt(start),
+                                      node->CreatePositionForSelectionAt(end)));
   }
 }
 
@@ -1029,12 +1033,22 @@ jboolean WebContentsAccessibilityAndroid::AdjustSlider(
   if (max <= min)
     return false;
 
-  // To behave similarly to an Android SeekBar, move by an increment of
-  // approximately 5%.
+  // If this node has defined a step value, move by that amount. Otherwise, to
+  // behave similarly to an Android SeekBar, move by an increment of ~5%.
+  float delta;
+  if (node->HasFloatAttribute(ax::mojom::FloatAttribute::kStepValueForRange)) {
+    delta =
+        node->GetFloatAttribute(ax::mojom::FloatAttribute::kStepValueForRange);
+
+    // If delta from step value is too small, increase to our minimum amount.
+    float minimum_move = (max - min) * kMinimumPercentageMoveForSliders;
+    delta = std::max(delta, minimum_move);
+  } else {
+    delta = (max - min) / kDefaultNumberOfTicksForSliders;
+  }
+
+  // Add/Subtract based on |increment| boolean, then clamp to range.
   float original_value = value;
-  float delta = (max - min) / 20.0f;
-  // Slider does not move if the delta value is less than 1.
-  delta = ((delta < 1) ? 1 : delta);
   value += (increment ? delta : -delta);
   value = base::ClampToRange(value, min, max);
   if (value != original_value) {
@@ -1058,7 +1072,8 @@ jint WebContentsAccessibilityAndroid::FindElementType(
     const JavaParamRef<jobject>& obj,
     jint start_id,
     const JavaParamRef<jstring>& element_type_str,
-    jboolean forwards) {
+    jboolean forwards,
+    jboolean can_wrap_to_last_element) {
   BrowserAccessibilityAndroid* start_node = GetAXFromUniqueID(start_id);
   if (!start_node)
     return 0;
@@ -1081,9 +1096,7 @@ jint WebContentsAccessibilityAndroid::FindElementType(
                                : OneShotAccessibilityTreeSearch::BACKWARDS);
   tree_search.SetResultLimit(1);
   tree_search.SetImmediateDescendantsOnly(false);
-  // SetCanWrapToLastElement needs to be set as true after talkback pushes its
-  // corresponding change for b/29103330.
-  tree_search.SetCanWrapToLastElement(false);
+  tree_search.SetCanWrapToLastElement(can_wrap_to_last_element);
   tree_search.SetOnscreenOnly(false);
   tree_search.AddPredicate(predicate);
 

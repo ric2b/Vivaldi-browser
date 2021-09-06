@@ -58,6 +58,7 @@
 #include "gpu/command_buffer/service/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/wrapped_sk_image.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/vulkan/buildflags.h"
 #include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -612,13 +613,15 @@ class RasterDecoderImpl final : public RasterDecoder,
                                      GLint shm_id,
                                      GLuint shm_offset,
                                      GLuint pixels_offset,
+                                     GLint result_shm_id,
+                                     GLuint result_shm_offset,
                                      const volatile GLbyte* mailbox);
   void DoConvertYUVAMailboxesToRGBINTERNAL(GLenum yuv_color_space,
                                            GLenum plane_config,
                                            GLenum subsampling,
                                            const volatile GLbyte* mailboxes);
 
-  void DoLoseContextCHROMIUM(GLenum current, GLenum other) { NOTIMPLEMENTED(); }
+  void DoLoseContextCHROMIUM(GLenum current, GLenum other);
   void DoBeginRasterCHROMIUM(GLuint sk_color,
                              GLuint msaa_sample_count,
                              GLboolean can_use_lcd_text,
@@ -1948,7 +1951,8 @@ void RasterDecoderImpl::DoCopySubTextureINTERNAL(
     return;
   }
 
-  if (!shared_context_state_->GrContextIsGL()) {
+  if (!shared_context_state_->GrContextIsGL() ||
+      base::FeatureList::IsEnabled(features::kCanvasOopRasterization)) {
     // Use Skia to copy texture if raster's gr_context() is not using GL.
     DoCopySubTextureINTERNALSkia(xoffset, yoffset, x, y, width, height,
                                  unpack_flip_y, source_mailbox, dest_mailbox);
@@ -2290,6 +2294,8 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
   std::vector<GrBackendSemaphore> begin_semaphores;
   std::vector<GrBackendSemaphore> end_semaphores;
 
+  shared_context_state_->set_need_context_state_reset(true);
+
   // Allow uncleared access, as we manually handle clear tracking.
   std::unique_ptr<SharedImageRepresentationSkia::ScopedWriteAccess>
       dest_scoped_access = dest_shared_image->BeginScopedWriteAccess(
@@ -2370,7 +2376,8 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
     }
     paint.setBlendMode(SkBlendMode::kSrc);
     canvas->drawImageRect(source_image, gfx::RectToSkRect(source_rect),
-                          gfx::RectToSkRect(dest_rect), &paint);
+                          gfx::RectToSkRect(dest_rect), SkSamplingOptions(),
+                          &paint, SkCanvas::kStrict_SrcRectConstraint);
   }
 
   FlushAndSubmitIfNecessary(dest_scoped_access->surface(),
@@ -2621,6 +2628,8 @@ void RasterDecoderImpl::DoReadbackImagePixelsINTERNAL(
     GLint shm_id,
     GLuint shm_offset,
     GLuint pixels_offset,
+    GLint result_shm_id,
+    GLuint result_shm_offset,
     const volatile GLbyte* mailbox) {
   if (dst_sk_color_type > kLastEnum_SkColorType) {
     LOCAL_SET_GL_ERROR(GL_INVALID_ENUM, "ReadbackImagePixels",
@@ -2719,11 +2728,20 @@ void RasterDecoderImpl::DoReadbackImagePixelsINTERNAL(
     return;
   }
 
+  typedef cmds::ReadbackImagePixelsINTERNALImmediate::Result Result;
+  Result* result = nullptr;
+  if (result_shm_id != 0) {
+    result = GetSharedMemoryAs<Result*>(result_shm_id, result_shm_offset,
+                                        sizeof(*result));
+  }
+
   bool success =
       sk_image->readPixels(dst_info, shm_address, row_bytes, src_x, src_y);
   if (!success) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glReadbackImagePixels",
                        "Failed to read pixels from SkImage");
+  } else if (result != nullptr) {
+    *result = 1;
   }
 }
 
@@ -2870,6 +2888,10 @@ void RasterDecoderImpl::DoConvertYUVAMailboxesToRGBINTERNAL(
   if (!images[kDestIndex]->IsCleared() && drew_image) {
     images[kDestIndex]->SetCleared();
   }
+}
+
+void RasterDecoderImpl::DoLoseContextCHROMIUM(GLenum current, GLenum other) {
+  MarkContextLost(gles2::GetContextLostReasonFromResetStatus(current));
 }
 
 namespace {

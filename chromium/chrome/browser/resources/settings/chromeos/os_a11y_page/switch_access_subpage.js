@@ -15,9 +15,9 @@ const PREFIX = 'settings.a11y.switch_access.';
 
 /** @type {!Array<number>} */
 const AUTO_SCAN_SPEED_RANGE_MS = [
-  700,  800,  900,  1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800,
-  1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000,
-  3100, 3200, 3300, 3400, 3500, 3600, 3700, 3800, 3900, 4000
+  4000, 3900, 3800, 3700, 3600, 3500, 3400, 3300, 3200, 3100, 3000, 2900,
+  2800, 2700, 2600, 2500, 2400, 2300, 2200, 2100, 2000, 1900, 1800, 1700,
+  1600, 1500, 1400, 1300, 1200, 1100, 1000, 900,  800,  700
 ];
 
 /**
@@ -130,8 +130,14 @@ Polymer({
       ]),
     },
 
-    /** @private {boolean} */
+    /** @private */
     showSwitchAccessActionAssignmentDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private */
+    showSwitchAccessSetupGuideDialog_: {
       type: Boolean,
       value: false,
     },
@@ -175,6 +181,13 @@ Polymer({
   },
 
   /** @private */
+  onSetupGuideClick_() {
+    if (this.showSetupGuide_()) {
+      this.showSwitchAccessSetupGuideDialog_ = true;
+    }
+  },
+
+  /** @private */
   onSelectAssignClick_() {
     this.action_ = SwitchAccessCommand.SELECT;
     this.showSwitchAccessActionAssignmentDialog_ = true;
@@ -193,6 +206,12 @@ Polymer({
     this.action_ = SwitchAccessCommand.PREVIOUS;
     this.showSwitchAccessActionAssignmentDialog_ = true;
     this.focusAfterDialogClose_ = this.$.previousLinkRow;
+  },
+
+  /** @private */
+  onSwitchAccessSetupGuideDialogClose_() {
+    this.showSwitchAccessSetupGuideDialog_ = false;
+    this.$.setupGuideLink.focus();
   },
 
   /** @private */
@@ -260,6 +279,14 @@ Polymer({
     const autoScanEnabled = /** @type {boolean} */
         (this.getPref(PREFIX + 'auto_scan.enabled').value);
     return improvedTextInputEnabled && autoScanEnabled;
+  },
+
+  /**
+   * @return {boolean} Whether to show the Switch Access setup guide.
+   * @private
+   */
+  showSetupGuide_() {
+    return loadTimeData.getBoolean('showSwitchAccessSetupGuide');
   },
 
   /**

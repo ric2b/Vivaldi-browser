@@ -410,7 +410,9 @@ component("headless_non_renderer") {
     "//build:chromeos_buildflags",
     "//components/cookie_config",
     "//components/security_state/core",
+    "//content/public/browser",
     "//content/public/common",
+    "//services/cert_verifier/public/mojom",
     "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/base/clipboard",
@@ -574,7 +576,11 @@ if (!is_component_build) {
       "//v8",
     ]
     if (enable_basic_printing) {
-      deps += [ "//components/printing/renderer" ]
+      deps += [
+        "//components/printing/renderer",
+        "//components/services/print_compositor",
+        "//components/services/print_compositor/public/mojom",
+      ]
     }
   }
 } else {

@@ -17,7 +17,7 @@ SelectToSpeakE2ETest = class extends E2ETestBase {
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "content/public/test/browser_test.h"
 #include "ui/accessibility/accessibility_features.h"
@@ -28,14 +28,12 @@ SelectToSpeakE2ETest = class extends E2ETestBase {
   testGenPreamble() {
     super.testGenPreamble();
     GEN(`
-    //keyboard::SetRequestedKeyboardState(keyboard::KEYBOARD_STATE_ENABLED);
-    //ash::Shell::Get()->CreateKeyboard();
-    base::Closure load_cb =
-        base::Bind(&chromeos::AccessibilityManager::SetSelectToSpeakEnabled,
-            base::Unretained(chromeos::AccessibilityManager::Get()),
+    base::OnceClosure load_cb =
+        base::BindOnce(&ash::AccessibilityManager::SetSelectToSpeakEnabled,
+            base::Unretained(ash::AccessibilityManager::Get()),
             true);
-    WaitForExtension(extension_misc::kSelectToSpeakExtensionId, load_cb);
-      `);
+    `);
+    super.testGenPreambleCommon('kSelectToSpeakExtensionId');
   }
 
   /**

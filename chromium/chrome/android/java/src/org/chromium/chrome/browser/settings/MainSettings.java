@@ -231,6 +231,8 @@ public class MainSettings extends PreferenceFragmentCompat
             TemplateUrlServiceFactory.get().load();
         }
 
+        // Vivaldi should not alter this.
+        if (!ChromeApplication.isVivaldi())
         // Only show the Safety check section if the Safety check flag is on.
         if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SAFETY_CHECK_ANDROID)) {
             getPreferenceScreen().removePreference(findPreference(PREF_SAFETY_CHECK));

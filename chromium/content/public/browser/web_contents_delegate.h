@@ -451,7 +451,7 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Creates an info bar for the user to control the receiving of the SMS.
   virtual void CreateSmsPrompt(RenderFrameHost*,
-                               const url::Origin&,
+                               const std::vector<url::Origin>&,
                                const std::string& one_time_code,
                                base::OnceCallback<void()> on_confirm,
                                base::OnceCallback<void()> on_cancel);
@@ -531,7 +531,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // contents.
   virtual void RequestToLockMouse(WebContents* web_contents,
                                   bool user_gesture,
-                                  bool last_unlocked_by_target) {}
+                                  bool last_unlocked_by_target);
 
   // Notification that the page has lost the mouse lock.
   virtual void LostMouseLock() {}
@@ -539,7 +539,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Requests keyboard lock. Once the request is approved or rejected,
   // GotResponseToKeyboardLockRequest() will be called on |web_contents|.
   virtual void RequestKeyboardLock(WebContents* web_contents,
-                                   bool esc_key_locked) {}
+                                   bool esc_key_locked);
 
   // Notification that the keyboard lock request has been canceled.
   virtual void CancelKeyboardLockRequest(WebContents* web_contents) {}
@@ -579,15 +579,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void SetOverlayMode(bool use_overlay_mode) {}
 #endif
 
-  // Requests permission to access the PPAPI broker. The delegate must either
-  // call the passed in |callback| with the result, or call it with false
-  // to indicate that it does not support asking for permission.
-  virtual void RequestPpapiBrokerPermission(
-      WebContents* web_contents,
-      const GURL& url,
-      const base::FilePath& plugin_path,
-      base::OnceCallback<void(bool)> callback);
-
   // Returns the size for the new render view created for the pending entry in
   // |web_contents|; if there's no size, returns an empty size.
   // This is optional for implementations of WebContentsDelegate; if the
@@ -605,7 +596,9 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Called in response to a request to save a frame. If this returns true, the
   // default behavior is suppressed.
-  virtual bool SaveFrame(const GURL& url, const Referrer& referrer);
+  virtual bool SaveFrame(const GURL& url,
+                         const Referrer& referrer,
+                         content::RenderFrameHost* rfh);
 
   // Can be overridden by a delegate to return the security style of the
   // given |web_contents|, populating |security_style_explanations| to
@@ -669,9 +662,8 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Requests to print an out-of-process subframe for the specified WebContents.
   // |rect| is the rectangular area where its content resides in its parent
   // frame. |document_cookie| is a unique id for a printed document associated
-  // with
-  //                   a print job.
-  // |subframe_host| is the render frame host of the subframe to be printed.
+  // with a print job. |subframe_host| is the render frame host of the subframe
+  // to be printed.
   virtual void PrintCrossProcessSubframe(WebContents* web_contents,
                                          const gfx::Rect& rect,
                                          int document_cookie,
@@ -734,10 +726,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // eviction and displayed until a new frame is generated. If false, a white
   // solid color is displayed instead.
   virtual bool ShouldShowStaleContentOnEviction(WebContents* source);
-
-  // Determine if the frame is of a low priority.
-  virtual bool IsFrameLowPriority(WebContents* web_contents,
-                                  RenderFrameHost* render_frame_host);
 
   // Returns the user-visible WebContents that is responsible for the activity
   // in the provided WebContents. For example, this delegate may be aware that

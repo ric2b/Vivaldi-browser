@@ -426,6 +426,16 @@ be describing additional metrics about the same event.
       https://goo.gl/tr1oTZ for a detailed explanation. In milliseconds.
     </summary>
   </metric>
+  <metric
+      name="SubFrame.LayoutInstability.AverageCumulativeShiftScore.SessionWindow.Gap5000ms">
+    <summary>
+      Measures the average cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, in the AMP subframe. The gap between two
+      consecutive shifts in a window is not bigger than 5000ms. This metric's
+      integral value is 100x the fractional cumulative layout shift score
+      described in the explainer.
+    </summary>
+  </metric>
   <metric name="SubFrame.LayoutInstability.CumulativeShiftScore">
     <summary>
       Measures the cumulative layout shift (bit.ly/lsm-explainer) that has
@@ -441,6 +451,55 @@ be describing additional metrics about the same event.
       occurred in the AMP subframe, before any user input or document scroll.
       This metric's integral value is 100x the fractional cumulative layout
       shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="SubFrame.LayoutInstability.MaxCumulativeShiftScore.SessionWindow.Gap1000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, in the AMP subframe. The gap between two
+      consecutive shifts in a window is not bigger than 1000ms. This metric's
+      integral value is 100x the fractional cumulative layout shift score
+      described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="SubFrame.LayoutInstability.MaxCumulativeShiftScore.SessionWindow.Gap1000ms.Max5000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, in the AMP subframe. The gap between two
+      consecutive shifts in a window is not bigger than 1000ms and the maximum
+      window size is 5000ms. This metric's integral value is 100x the fractional
+      cumulative layout shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="SubFrame.LayoutInstability.MaxCumulativeShiftScore.SessionWindowByInputs.Gap1000ms.Max5000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, in the AMP subframe. The gap between two
+      consecutive shifts in a window is not bigger than 1000ms and the maximum
+      window size is 5000ms. We start a new window whenever there's a user
+      input. This metric's integral value is 100x the fractional cumulative
+      layout shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="SubFrame.LayoutInstability.MaxCumulativeShiftScore.SlidingWindow.Duration1000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a 1000ms sliding window, in the AMP subframe. This
+      metric's integral value is 100x the fractional cumulative layout shift
+      score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="SubFrame.LayoutInstability.MaxCumulativeShiftScore.SlidingWindow.Duration300ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a 300ms sliding window, in the AMP subframe. This metric's
+      integral value is 100x the fractional cumulative layout shift score
+      described in the explainer.
     </summary>
   </metric>
   <metric name="SubFrame.LayoutStability.JankScore">
@@ -530,6 +589,87 @@ be describing additional metrics about the same event.
       Note that most AMP documents are loaded in a subframe from a reader like
       Google Search; this metric measures usage of such readers.
     </summary>
+  </metric>
+</event>
+
+<event name="Android.MultiWindowChangeActivity">
+  <owner>gangwu@chromium.org</owner>
+  <owner>fgorski@chromium.org</owner>
+  <summary>
+    Records when the activity enter or exit Android N+ multi-window mode.
+  </summary>
+  <metric name="ActivityType" enum="AndroidMultiWindowActivityType">
+    <summary>
+      Enter or exit the multi-window mode.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="Android.MultiWindowState">
+  <owner>gangwu@chromium.org</owner>
+  <owner>fgorski@chromium.org</owner>
+  <summary>
+    Records the multi window state when the activity is shown.
+  </summary>
+  <metric name="WindowState" enum="AndroidMultiWindowState">
+    <summary>
+      The state of the multi-window mode, single or multi-window.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="Android.ScreenRotation">
+  <owner>gangwu@chromium.org</owner>
+  <owner>fgorski@chromium.org</owner>
+  <summary>
+    Records when a user rotates the device triggering a screen orientation
+    change.
+  </summary>
+  <metric name="TargetDeviceOrientation" enum="DeviceOrientation2">
+    <summary>
+      The orientation of the device rotated to.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="Android.UserRequestedUserAgentChange">
+  <owner>gangwu@chromium.org</owner>
+  <owner>fgorski@chromium.org</owner>
+  <summary>
+    Records when a user pressed 'Request Desktop Site' in the app menu.
+  </summary>
+  <metric name="UserAgentType" enum="UserAgentRequestType">
+    <summary>
+      An enum that records the type of user agent.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -1265,6 +1405,20 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Autofill.FormFillSuccessIOS">
+  <owner>kazinova@chromium.org</owner>
+  <summary>
+    Records whether the the form was successfully filled by Autofill on iOS. The
+    metric is used to measure silent renderer fails when the filling request is
+    executed successfully but the results reported in a callback are empty.
+  </summary>
+  <metric name="FormFillSuccess" enum="Boolean">
+    <summary>
+      A boolean indicating success or failure.
+    </summary>
+  </metric>
+</event>
+
 <event name="Autofill.FormSubmitted">
   <owner>jiahuiguo@google.com</owner>
   <summary>
@@ -1909,6 +2063,22 @@ be describing additional metrics about the same event.
         </statistics>
       </history>
     </aggregation>
+  </metric>
+</event>
+
+<event name="Blink.ContextMenu.ImageSelection">
+  <owner>benwgold@google.com</owner>
+  <owner>flackr@chromium.org</owner>
+  <summary>
+    Sent when a user long presses or right clicks a document (and that an image
+    is found). Requires that the `EnablePenetratingImageSelection` feature is
+    enabled together with a `logUkm` specific finch param.
+  </summary>
+  <metric name="Outcome" enum="ImageSelectionOutcome">
+    <summary>
+      Emits an integer id for a selection corresponding to the
+      ImageSelectionOutcome enum defined in Blink's context_menu_controller.h.
+    </summary>
   </metric>
 </event>
 
@@ -3800,8 +3970,14 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="ShopWithGoogleLensChip" enum="Boolean">
     <summary>
-      Recorded when the context menu is constructed and logged if the Lens chip
-      was displayed.
+      Recorded when the context menu is constructed and logged if the Lens
+      shopping chip was displayed.
+    </summary>
+  </metric>
+  <metric name="TranslateWithGoogleLensChip" enum="Boolean">
+    <summary>
+      Recorded when the context menu is constructed and logged if the Lens
+      translate chip was displayed.
     </summary>
   </metric>
 </event>
@@ -4246,6 +4422,9 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="Document.OutliveTimeAfterShutdown">
+  <obsolete>
+    Removed January 2021
+  </obsolete>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>keishi@chromium.org</owner>
   <summary>
@@ -4273,6 +4452,12 @@ be describing additional metrics about the same event.
   <metric name="IsCrossOriginFrame">
     <summary>
       Whether the document was in a cross origin iframe. This can either be 0 or
+      1.
+    </summary>
+  </metric>
+  <metric name="IsCrossSiteFrame">
+    <summary>
+      Whether the document was in a cross site iframe. This can either be 0 or
       1.
     </summary>
   </metric>
@@ -4728,6 +4913,20 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="LocalFontTotal">
+    <summary>
+      The count of total attempts (failed + succeeded) to match @font-face
+      src:local rules.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
   <metric name="SystemFontFamilyFailures">
     <summary>
       The count of system font family match attempts that failed.
@@ -4754,6 +4953,19 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="SystemFontFamilyTotal">
+    <summary>
+      Total count of system font family match attempts (succeeded + failed).
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
   <metric name="WebFontFamilyFailures">
     <summary>
       The count of web font family match attempts that failed.
@@ -4770,6 +4982,19 @@ be describing additional metrics about the same event.
   <metric name="WebFontFamilySuccesses">
     <summary>
       The count of web font family match attempts that succeeded.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="WebFontFamilyTotal">
+    <summary>
+      Total count of web font family match attempts (succeeded + failed).
     </summary>
     <aggregation>
       <history>
@@ -4854,7 +5079,7 @@ be describing additional metrics about the same event.
   </summary>
   <metric name="Activation">
     <summary>
-      The duration of the activation stage.
+      The duration of the activation stage, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -4868,7 +5093,7 @@ be describing additional metrics about the same event.
   <metric name="BeginImplFrameToSendBeginMainFrame">
     <summary>
       The time from when the Impl frame is started to when BeginMainFrame is
-      sent.
+      sent, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -4885,12 +5110,12 @@ be describing additional metrics about the same event.
     </obsolete>
     <summary>
       The time from when the event is created in the browser until the first
-      compositor stage after the event arrives in the renderer.
+      compositor stage after the event arrives in the renderer, in microseconds.
     </summary>
   </metric>
   <metric name="Commit">
     <summary>
-      The duration of the commit stage.
+      The duration of the commit stage, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -4904,7 +5129,7 @@ be describing additional metrics about the same event.
   <metric name="EndActivateToSubmitCompositorFrame">
     <summary>
       The time from when an activation is complete to the next
-      SubmitCompositorFrame.
+      SubmitCompositorFrame, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -4918,7 +5143,7 @@ be describing additional metrics about the same event.
   <metric name="EndCommitToActivation">
     <summary>
       The time from when a commit is complete to the beginning of the next
-      activation.
+      activation, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -4945,7 +5170,7 @@ be describing additional metrics about the same event.
   <metric name="GenerationToRendererCompositor">
     <summary>
       The time from when the event is created until it arrives in the renderer
-      compositor.
+      compositor, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -4959,9 +5184,10 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorFinishedToActivation">
     <summary>
       The time from when the event processing is finished on the renderer
-      compositor until the beginning of the activation. This metric is only
-      reported if the event is handled on the renderer compositor and the first
-      compositor step after that is the beginning of the activation.
+      compositor until the beginning of the activation, in microseconds. This
+      metric is only reported if the event is handled on the renderer compositor
+      and the first compositor step after that is the beginning of the
+      activation.
     </summary>
     <aggregation>
       <history>
@@ -4975,9 +5201,9 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorFinishedToBeginImplFrame">
     <summary>
       The time from when the event processing is finished on the renderer
-      compositor until the compositor frame is started. This metric is only
-      reported if the event is handled on the renderer compositor and compositor
-      frame is started after that.
+      compositor until the compositor frame is started, in microseconds. This
+      metric is only reported if the event is handled on the renderer compositor
+      and compositor frame is started after that.
     </summary>
     <aggregation>
       <history>
@@ -4991,9 +5217,9 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorFinishedToCommit">
     <summary>
       The time from when the event processing is finished on the renderer
-      compositor until the beginning of the commit. This metric is only reported
-      if the event is handled on the renderer compositor and the first
-      compositor step after that is the beginning of the commit.
+      compositor until the beginning of the commit, in microseconds. This metric
+      is only reported if the event is handled on the renderer compositor and
+      the first compositor step after that is the beginning of the commit.
     </summary>
     <aggregation>
       <history>
@@ -5007,9 +5233,9 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorFinishedToEndActivate">
     <summary>
       The time from when the event processing is finished on the renderer
-      compositor until the end of the activation. This metric is only reported
-      if the event is handled on the renderer compositor and the first
-      compositor step after that is the end of the activation.
+      compositor until the end of the activation, in microseconds. This metric
+      is only reported if the event is handled on the renderer compositor and
+      the first compositor step after that is the end of the activation.
     </summary>
     <aggregation>
       <history>
@@ -5023,9 +5249,9 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorFinishedToEndCommit">
     <summary>
       The time from when the event processing is finished on the renderer
-      compositor until the end of the commit. This metric is only reported if
-      the event is handled on the renderer compositor and the first compositor
-      step after that is the end of the commit.
+      compositor until the end of the commit, in microseconds. This metric is
+      only reported if the event is handled on the renderer compositor and the
+      first compositor step after that is the end of the commit.
     </summary>
     <aggregation>
       <history>
@@ -5039,9 +5265,9 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorFinishedToSendBeginMainFrame">
     <summary>
       The time from when the event processing is finished on the renderer
-      compositor until BeginMainFrame is sent. This metric is only reported if
-      the event is handled on the renderer compositor and the first compositor
-      step after that is SendBeginMainFrame.
+      compositor until BeginMainFrame is sent, in microseconds. This metric is
+      only reported if the event is handled on the renderer compositor and the
+      first compositor step after that is SendBeginMainFrame.
     </summary>
     <aggregation>
       <history>
@@ -5055,9 +5281,10 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorFinishedToSubmitCompositorFrame">
     <summary>
       The time from when the event processing is finished on the renderer
-      compositor until the compositor frame is submitted. This metric is only
-      reported if the event is handled on the renderer compositor and the first
-      compositor step after that is the submission of the compositor frame.
+      compositor until the compositor frame is submitted, in microseconds. This
+      metric is only reported if the event is handled on the renderer compositor
+      and the first compositor step after that is the submission of the
+      compositor frame.
     </summary>
     <aggregation>
       <history>
@@ -5070,9 +5297,9 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="RendererCompositorProcessing">
     <summary>
-      The time spent in the renderer compositor to process the event. This
-      metric won't be reported if the renderer compositor does not have a
-      dedicated thread.
+      The time spent in the renderer compositor to process the event, in
+      microseconds. This metric won't be reported if the renderer compositor
+      does not have a dedicated thread.
     </summary>
     <aggregation>
       <history>
@@ -5086,8 +5313,8 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorQueueingDelay">
     <summary>
       The time from when the event arrives in the renderer compositor until the
-      compositor starts processing it. This metric won't be reported if the
-      renderer compositor does not have a dedicated thread.
+      compositor starts processing it, in microseconds. This metric won't be
+      reported if the renderer compositor does not have a dedicated thread.
     </summary>
     <aggregation>
       <history>
@@ -5101,11 +5328,12 @@ be describing additional metrics about the same event.
   <metric name="RendererCompositorToMain">
     <summary>
       The time from when the processing of the event on the renderer compositor
-      is finished until the main thread starts processing the event. If the
-      renderer compositor does not have a dedicated thread, the processing of
-      the event on the renderer compositor is considered finished as soon as the
-      event arrives in the renderer compositor. This metric won't be reported if
-      the event is handled on the renderer compositor.
+      is finished until the main thread starts processing the event, in
+      microseconds. If the renderer compositor does not have a dedicated thread,
+      the processing of the event on the renderer compositor is considered
+      finished as soon as the event arrives in the renderer compositor. This
+      metric won't be reported if the event is handled on the renderer
+      compositor.
     </summary>
     <aggregation>
       <history>
@@ -5119,9 +5347,9 @@ be describing additional metrics about the same event.
   <metric name="RendererMainFinishedToActivation">
     <summary>
       The time from when the event processing is finished on the renderer main
-      until the beginning of the activation. This metric is only reported if the
-      event is handled on the renderer main and the first compositor step after
-      that is the beginning of the activation.
+      until the beginning of the activation, in microseconds. This metric is
+      only reported if the event is handled on the renderer main and the first
+      compositor step after that is the beginning of the activation.
     </summary>
     <aggregation>
       <history>
@@ -5135,9 +5363,9 @@ be describing additional metrics about the same event.
   <metric name="RendererMainFinishedToBeginImplFrame">
     <summary>
       The time from when the event processing is finished on the renderer main
-      until the compositor frame is started. This metric is only reported if the
-      event is handled on the renderer main and compositor frame is started
-      after that.
+      until the compositor frame is started, in microseconds. This metric is
+      only reported if the event is handled on the renderer main and compositor
+      frame is started after that.
     </summary>
     <aggregation>
       <history>
@@ -5151,9 +5379,9 @@ be describing additional metrics about the same event.
   <metric name="RendererMainFinishedToCommit">
     <summary>
       The time from when the event processing is finished on the renderer main
-      until the beginning of the commit. This metric is only reported if the
-      event is handled on the renderer main and the first compositor step after
-      that is the beginning of the commit.
+      until the beginning of the commit, in microseconds. This metric is only
+      reported if the event is handled on the renderer main and the first
+      compositor step after that is the beginning of the commit.
     </summary>
     <aggregation>
       <history>
@@ -5167,9 +5395,9 @@ be describing additional metrics about the same event.
   <metric name="RendererMainFinishedToEndActivate">
     <summary>
       The time from when the event processing is finished on the renderer main
-      until the end of the activation. This metric is only reported if the event
-      is handled on the renderer main and the first compositor step after that
-      is the end of the activation.
+      until the end of the activation, in microseconds. This metric is only
+      reported if the event is handled on the renderer main and the first
+      compositor step after that is the end of the activation.
     </summary>
     <aggregation>
       <history>
@@ -5183,9 +5411,9 @@ be describing additional metrics about the same event.
   <metric name="RendererMainFinishedToEndCommit">
     <summary>
       The time from when the event processing is finished on the renderer main
-      until the end of the commit. This metric is only reported if the event is
-      handled on the renderer main and the first compositor step after that is
-      the end of the commit.
+      until the end of the commit, in microseconds. This metric is only reported
+      if the event is handled on the renderer main and the first compositor step
+      after that is the end of the commit.
     </summary>
     <aggregation>
       <history>
@@ -5199,9 +5427,9 @@ be describing additional metrics about the same event.
   <metric name="RendererMainFinishedToSendBeginMainFrame">
     <summary>
       The time from when the event processing is finished on the renderer main
-      until BeginMainFrame is sent. This metric is only reported if the event is
-      handled on the renderer main and the first compositor step after that is
-      SendBeginMainFrame.
+      until BeginMainFrame is sent, in microseconds. This metric is only
+      reported if the event is handled on the renderer main and the first
+      compositor step after that is SendBeginMainFrame.
     </summary>
     <aggregation>
       <history>
@@ -5215,9 +5443,9 @@ be describing additional metrics about the same event.
   <metric name="RendererMainFinishedToSubmitCompositorFrame">
     <summary>
       The time from when the event processing is finished on the renderer main
-      until the compositor frame is submitted. This metric is only reported if
-      the event is handled on the renderer main and the first compositor step
-      after that is the submission of the compositor frame.
+      until the compositor frame is submitted, in microseconds. This metric is
+      only reported if the event is handled on the renderer main and the first
+      compositor step after that is the submission of the compositor frame.
     </summary>
     <aggregation>
       <history>
@@ -5230,8 +5458,9 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="RendererMainProcessing">
     <summary>
-      The time spent in the main thread to process the event. This metric won't
-      be reported if the renderer compositor handles the event.
+      The time spent in the main thread to process the event, in microseconds.
+      This metric won't be reported if the renderer compositor handles the
+      event.
     </summary>
     <aggregation>
       <history>
@@ -5257,7 +5486,161 @@ be describing additional metrics about the same event.
   <metric name="SendBeginMainFrameToCommit">
     <summary>
       The time from when the BeginMainFrame is sent to the beginning of the
-      commit.
+      commit, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.Animate">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on animations, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.BeginMainSentToStarted">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent before starting main
+      thread work, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.CompositeCommit">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on composite commit,
+      in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.CompositingAssignments">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on updating
+      compositing assignments, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.CompositingInputs">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on updating
+      compositing inputs, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.HandleInputEvents">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on handling input
+      events, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.LayoutUpdate">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on layout update, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.Paint">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on paint, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.Prepaint">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on prepaint, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.StyleUpdate">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on style update, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.UpdateLayers">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on updating layers,
+      in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5271,7 +5654,162 @@ be describing additional metrics about the same event.
   <metric name="SubmitCompositorFrameToPresentationCompositorFrame">
     <summary>
       The time from when a compositor frame is submitted to the display
-      compositor to when it is presented.
+      compositor to when it is presented, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.BufferAvailableToBufferReady">
+    <summary>
+      The time from when the target framebuffer is available to when the GPU has
+      finished drawing to it, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.BufferReadyToLatch">
+    <summary>
+      The time from when the target framebuffer is ready to be displayed to when
+      the buffer is latched on for presentation, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.LatchToSwapEnd">
+    <summary>
+      The time from when the target framebuffer is latched on to when the swap
+      ends, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.ReceivedCompositorFrameToStartDraw">
+    <summary>
+      The time from when a compositor frame is received to when it starts to
+      draw, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.StartDrawToSwapEnd">
+    <obsolete>
+      Deprecated 02/2020. Split into
+      SubmitCompositorFrameToPresentationCompositorFrame.StartDrawToSwapStart
+      and SubmitCompositorFrameToPresentationCompositorFrame.SwapStartToSwapEnd.
+    </obsolete>
+    <summary>
+      The time from when the a compositor frame is started to draw to when it
+      ends swap, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.StartDrawToSwapStart">
+    <summary>
+      The time from when a compositor frame is started to draw to when it starts
+      swap, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.SubmitToReceiveCompositorFrame">
+    <summary>
+      The time from when a compositor frame is submitted to when it is received,
+      in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.SwapEndToPresentationCompositorFrame">
+    <summary>
+      The time from when a compositor frame ends swap to when it is presented,
+      in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.SwapStartToBufferAvailable">
+    <summary>
+      The time from when the compositor frame starts to swap to when the target
+      framebuffer becomes available, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.SwapStartToSwapEnd">
+    <summary>
+      The time from when a compositor frame starts swap to when it ends swap, in
+      microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5285,7 +5823,7 @@ be describing additional metrics about the same event.
   <metric name="TotalLatency">
     <summary>
       The total time from when the event is created in the browser to when the
-      frame is presented.
+      frame is presented, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5299,7 +5837,7 @@ be describing additional metrics about the same event.
   <metric name="TotalLatencyToSwapBegin">
     <summary>
       The time from when the event is created in the browser to when the
-      gpu-swap is started, for scroll events.
+      gpu-swap is started, for scroll events, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5317,7 +5855,7 @@ be describing additional metrics about the same event.
     </obsolete>
     <summary>
       The time from when the event is created in the browser to when the
-      gpu-swap is completed, for scroll events.
+      gpu-swap is completed, for scroll events, in microseconds.
     </summary>
   </metric>
 </event>
@@ -5332,7 +5870,7 @@ be describing additional metrics about the same event.
   </summary>
   <metric name="Activation">
     <summary>
-      The duration of the activation stage.
+      The duration of the activation stage, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5346,7 +5884,7 @@ be describing additional metrics about the same event.
   <metric name="BeginImplFrameToSendBeginMainFrame">
     <summary>
       The time from when the Impl frame is started to when BeginMainFrame is
-      sent.
+      sent, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5364,7 +5902,7 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="Commit">
     <summary>
-      The duration of the commit stage.&quot;
+      The duration of the commit stage, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5383,7 +5921,7 @@ be describing additional metrics about the same event.
   <metric name="EndActivateToSubmitCompositorFrame">
     <summary>
       The time from when an activation is complete to the next
-      SubmitCompositorFrame.
+      SubmitCompositorFrame, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5397,7 +5935,7 @@ be describing additional metrics about the same event.
   <metric name="EndCommitToActivation">
     <summary>
       The time from when a commit is complete to the beginning of the next
-      activation.
+      activation, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5448,7 +5986,161 @@ be describing additional metrics about the same event.
   <metric name="SendBeginMainFrameToCommit">
     <summary>
       The time from when the BeginMainFrame is sent to the beginning of the
-      commit.
+      commit, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.Animate">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on animations, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.BeginMainSentToStarted">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent before starting main
+      thread work, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.CompositeCommit">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on composite commit,
+      in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.CompositingAssignments">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on updating
+      compositing assignments, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.CompositingInputs">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on updating
+      compositing inputs, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.HandleInputEvents">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on handling input
+      events, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.LayoutUpdate">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on layout update, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.Paint">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on paint, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.Prepaint">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on prepaint, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.StyleUpdate">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on style update, in
+      microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SendBeginMainFrameToCommit.UpdateLayers">
+    <summary>
+      The time portion of SendBeginMainFrameToCommit spent on updating layers,
+      in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5462,7 +6154,52 @@ be describing additional metrics about the same event.
   <metric name="SubmitCompositorFrameToPresentationCompositorFrame">
     <summary>
       The time from when the a compositor frame is submitted to the display
-      compositor to when it is presented.
+      compositor to when it is presented, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.BufferAvailableToBufferReady">
+    <summary>
+      The time from when the target framebuffer is available to when the GPU has
+      finished drawing to it, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.BufferReadyToLatch">
+    <summary>
+      The time from when the target framebuffer is ready to be displayed to when
+      the buffer is latched on for presentation, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.LatchToSwapEnd">
+    <summary>
+      The time from when the target framebuffer is latched on to when the swap
+      ends, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5477,7 +6214,7 @@ be describing additional metrics about the same event.
       name="SubmitCompositorFrameToPresentationCompositorFrame.ReceivedCompositorFrameToStartDraw">
     <summary>
       The time from when a compositor frame is received to when it starts to
-      draw.
+      draw, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5497,7 +6234,7 @@ be describing additional metrics about the same event.
     </obsolete>
     <summary>
       The time from when the a compositor frame is started to draw to when it
-      ends swap.
+      ends swap, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5512,7 +6249,7 @@ be describing additional metrics about the same event.
       name="SubmitCompositorFrameToPresentationCompositorFrame.StartDrawToSwapStart">
     <summary>
       The time from when a compositor frame is started to draw to when it starts
-      swap.
+      swap, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5526,8 +6263,8 @@ be describing additional metrics about the same event.
   <metric
       name="SubmitCompositorFrameToPresentationCompositorFrame.SubmitToReceiveCompositorFrame">
     <summary>
-      The time from when the a compositor frame is submitted to when it is
-      received.
+      The time from when a compositor frame is submitted to when it is received,
+      in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5542,7 +6279,22 @@ be describing additional metrics about the same event.
       name="SubmitCompositorFrameToPresentationCompositorFrame.SwapEndToPresentationCompositorFrame">
     <summary>
       The time from when the a compositor frame ends swap to when it is
-      presented.
+      presented, in microseconds.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric
+      name="SubmitCompositorFrameToPresentationCompositorFrame.SwapStartToBufferAvailable">
+    <summary>
+      The time from when the compositor frame starts to swap to when the target
+      framebuffer becomes available, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5556,7 +6308,8 @@ be describing additional metrics about the same event.
   <metric
       name="SubmitCompositorFrameToPresentationCompositorFrame.SwapStartToSwapEnd">
     <summary>
-      The time from when a compositor frame starts swap to when it ends swap.
+      The time from when a compositor frame starts swap to when it ends swap, in
+      microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5572,7 +6325,7 @@ be describing additional metrics about the same event.
       The total time starting from BeginImplFrame to when
       CompositorFramePresentation is done with updates from the MainThread (i.e.
       the time it takes for BeginImplFrame, BeginMainFrame, Commit, Activate,
-      SubmitCompositorFrame and PresentCompositorFrame).
+      SubmitCompositorFrame and PresentCompositorFrame), in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5590,7 +6343,7 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="Unknown">
     <summary>
-      The time within a stage not attributed to any system.
+      The time within a stage not attributed to any system, in microseconds.
     </summary>
     <aggregation>
       <history>
@@ -5663,6 +6416,18 @@ be describing additional metrics about the same event.
     <aggregation>
       <history>
         <index fields="profile.country"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="TimingSinceFCPWorstCase">
+    <summary>
+      The Time From FCP when the worst case happened
+    </summary>
+    <aggregation>
+      <history>
         <statistics>
           <quantiles type="std-percentiles"/>
         </statistics>
@@ -6206,6 +6971,16 @@ be describing additional metrics about the same event.
     metrics are recorded for history navigations, but not for same-document
     navigations.
   </summary>
+  <metric
+      name="AverageCumulativeShiftScoreAfterBackForwardCacheRestore.SessionWindow.Gap5000ms">
+    <summary>
+      Measures the average cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, after the page is restored from the
+      back-forward. The gap between two consecutive shifts in a window is not
+      bigger than 5000ms. This metric's integral value is 100x the fractional
+      cumulative layout shift score described in the explainer.
+    </summary>
+  </metric>
   <metric name="BackForwardCache.BlocklistedFeatures"
       enum="WebSchedulerTrackedFeature">
     <summary>
@@ -6280,6 +7055,57 @@ be describing additional metrics about the same event.
       Bitmask of features used by the main frames of the previous page load. See
       blink::SchedulingPolicy::Feature for the meaning for the individual
       features.
+    </summary>
+  </metric>
+  <metric
+      name="MaxCumulativeShiftScoreAfterBackForwardCacheRestore.SessionWindow.Gap1000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, after the page is restored from the
+      back-forward. The gap between two consecutive shifts in a window is not
+      bigger than 1000ms. This metric's integral value is 100x the fractional
+      cumulative layout shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="MaxCumulativeShiftScoreAfterBackForwardCacheRestore.SessionWindow.Gap1000ms.Max5000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, after the page is restored from the
+      back-forward. The gap between two consecutive shifts in a window is not
+      bigger than 1000ms and the maximum window size is 5000ms. This metric's
+      integral value is 100x the fractional cumulative layout shift score
+      described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="MaxCumulativeShiftScoreAfterBackForwardCacheRestore.SessionWindowByInputs.Gap1000ms.Max5000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window, after the page is restored from the
+      back-forward. The gap between two consecutive shifts in a window is not
+      bigger than 1000ms and the maximum window size is 5000ms. We start a new
+      window whenever there's a new user input. This metric's integral value is
+      100x the fractional cumulative layout shift score described in the
+      explainer.
+    </summary>
+  </metric>
+  <metric
+      name="MaxCumulativeShiftScoreAfterBackForwardCacheRestore.SlidingWindow.Duration1000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a 1000ms sliding window, after the page is restored from
+      the back-forward. This metric's integral value is 100x the fractional
+      cumulative layout shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="MaxCumulativeShiftScoreAfterBackForwardCacheRestore.SlidingWindow.Duration300ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a 300ms sliding window, after the page is restored from
+      the back-forward. This metric's integral value is 100x the fractional
+      cumulative layout shift score described in the explainer.
     </summary>
   </metric>
   <metric name="NavigatedToTheMostRecentEntryForDocument">
@@ -6573,8 +7399,8 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="IOS.URLMismatchInLegacyAndSlimNavigationManager">
-  <owner>eugenebut@chromium.org</owner>
-  <owner>danyao@chromium.org</owner>
+  <owner>ajuma@chromium.org</owner>
+  <owner>gambard@chromium.org</owner>
   <summary>
     Logged when LegacyNavigationManager and KWKBasedNavigationManager have
     different last committed URLs. This means that either old or new navigation
@@ -7091,8 +7917,9 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="AudioDecoderName">
     <summary>
-      Enumeration of audio decoder names, zero if none or unknown (Cast, HLS,
-      etc). See WatchTimeRecorder::AudioDecoderName enum for expected values.
+      Enumeration of audio decoder implementations, zero if none or unknown
+      (Cast, HLS, etc). See AudioDecoderType (media/base/decoder.h) for expected
+      values.
     </summary>
   </metric>
   <metric name="AudioEncryptionScheme">
@@ -7179,6 +8006,12 @@ be describing additional metrics about the same event.
       the number of rebuffering events.
     </summary>
   </metric>
+  <metric name="MediaStreamType" enum="MediaStreamType">
+    <summary>
+      Enum value indicating the type of MediaStream if the playback is from a
+      MediaStream, or kNonMediaStream otherwise.
+    </summary>
+  </metric>
   <metric name="PlayerID">
     <summary>
       ID which corresponds to a given WebMediaPlayerImpl instance. May be linked
@@ -7204,8 +8037,9 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="VideoDecoderName">
     <summary>
-      Enumeration of video decoder names, zero if none or unknown (Cast, HLS,
-      etc). See WatchTimeRecorder::VideoDecoderName enum for expected values.
+      Enumeration of video decoder implementations, zero if none or unknown
+      (Cast, HLS, etc). See VideoDecoderType (media/base/decoder.h) for expected
+      values.
     </summary>
   </metric>
   <metric name="VideoEncryptionScheme">
@@ -8482,6 +9316,11 @@ be describing additional metrics about the same event.
   <metric name="V8.Main.GlobalHandles">
     <summary>
       Measure of memory consumed by global handles in V8.
+    </summary>
+  </metric>
+  <metric name="V8.Main.GlobalHandles.AllocatedObjects">
+    <summary>
+      Measure of memory consumed by used global handles in V8.
     </summary>
   </metric>
   <metric name="V8.Main.Heap">
@@ -10013,6 +10852,44 @@ be describing additional metrics about the same event.
       different renderer process than the current document or not.
     </summary>
   </metric>
+  <metric name="IsExistingBookmark" enum="Boolean">
+    <summary>
+      Marked true if the page was already bookmarked when the navigation
+      committed.
+    </summary>
+  </metric>
+  <metric name="IsExistingPartOfTabGroup" enum="Boolean">
+    <summary>
+      Marked true if the page was already part of a tab group when the
+      navigation committed.
+    </summary>
+  </metric>
+  <metric name="IsNewBookmark" enum="Boolean">
+    <summary>
+      Roughly: measures if the page was newly bookmarked. Specifically: this is
+      marked true if the page was not bookmarked when the navigation committed,
+      and is bookmarked at the end of the page lifetime.
+
+      Note, this means this boolean is mutually exclusive with
+      IsExistingBookmark.
+
+      Also note, this means that a page that is bookmarked, and then
+      sebsequently un-bookmarked is counted as false.
+    </summary>
+  </metric>
+  <metric name="IsPlacedInTabGroup" enum="Boolean">
+    <summary>
+      Roughly: measures if the page was added to a tab group. Specifically: this
+      is marked true if the page was not part of a tab group when the navigation
+      committed, and is part of a tab group at the end of the page lifetime.
+
+      Note, this means this boolean is mutually exclusive with
+      IsExistingPartOfTabGroup.
+
+      Also note, this means that a page that is added, and then sebsequently
+      removed from a tab group is counted as false.
+    </summary>
+  </metric>
   <metric name="IsSignedExchangeInnerResponse">
     <obsolete>
       Migrated to the PageLoad.SignedExchange event. The presence of that event
@@ -10098,6 +10975,16 @@ be describing additional metrics about the same event.
       in a window is not bigger than 1000ms and the maximum window size is
       5000ms. This metric's integral value is 100x the fractional cumulative
       layout shift score described in the explainer.
+    </summary>
+  </metric>
+  <metric
+      name="LayoutInstability.MaxCumulativeShiftScore.SessionWindowByInputs.Gap1000ms.Max5000ms">
+    <summary>
+      Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that
+      has occurred in a session window. The gap between two consecutive shifts
+      in a window is not bigger than 1000ms or segmented by a user input. The
+      maximum window size is 5000ms. This metric's integral value is 100x the
+      fractional cumulative layout shift score described in the explainer.
     </summary>
   </metric>
   <metric
@@ -10388,6 +11275,12 @@ be describing additional metrics about the same event.
     <summary>
       The transport round trip time estimate for this page load, at the time the
       navigation for this page load was initiated.
+    </summary>
+  </metric>
+  <metric name="OmniboxUrlCopied" enum="Boolean">
+    <summary>
+      Marked true if the user copied the page's URL from the omnibox at any time
+      for this page load.
     </summary>
   </metric>
   <metric name="PageTiming.ForegroundDuration">
@@ -11380,6 +12273,13 @@ be describing additional metrics about the same event.
       An enum of type PermissionSourceUI. The UI surface for this action.
     </summary>
   </metric>
+  <metric name="TimeToDecision">
+    <summary>
+      Time (in milliseconds) taken by the user to make a decision on a
+      permission prompt after it was displayed, if at all. Ignoring a prompt
+      doesnt count as a decision.
+    </summary>
+  </metric>
 </event>
 
 <event name="Plugins.FlashInstance">
@@ -11521,6 +12421,174 @@ be describing additional metrics about the same event.
   <metric name="SourcePageSourceId">
     <summary>
       The UKM source ID of the postMessage event's source page, as an integer.
+    </summary>
+  </metric>
+</event>
+
+<event name="PowerUsageScenariosIntervalData">
+  <owner>fdoray@chromium.org</owner>
+  <owner>sebmarchand@chromium.org</owner>
+  <owner>chrome-catan@google.com</owner>
+  <summary>
+    Metrics to measure power consumption in key usage scenarios, as well as the
+    time spent in each scenario. These metrics are reported for a fixed interval
+    of time, the duration of this interval is recorded in the
+    IntervalDurationSeconds metric.
+
+    The events aren't tied to a specific URL, a timer independant of any load
+    event runs in Chrome and report these events at regular intervals. All the
+    metrics associated to this event are for the last interval. The URL attached
+    to the event is the one that has been visible for the longest time during
+    the interval, the exact visibility duration for this URL during the interval
+    is reported in the URLVisibilityTimeSeconds metric.
+
+    e.g., at T-0 an interval ends and this event is emitted, a new interval then
+    starts. During the interval the users spends 75% of his time watching a
+    fullscreen video on https://foo.com with 10 tabs opened in background. Just
+    before the end of the interval the user closes all the tabs but one. An
+    event will be emitted for https://foo.com at T+X with the following metrics:
+    IntervalDurationSeconds: X in seconds; URLVisibilityTimeSeconds: 0.75 * X in
+    seconds; FullscreenVideoSingleMonitorSeconds: 0.75 * X in seconds;
+    MaxTabCount: 10; TabClosed: 9; ... (not all metrics are listed here because
+    it'd be too long, but in practice all the metrics are reported for each
+    interval).
+
+    This is reported on Mac and Windows. See go/chrome_power_use_per_scenario
+    for more details.
+  </summary>
+  <metric name="BatteryDischargeMode" enum="BatteryDischargeMode">
+    <summary>
+      Battery discharge mode describing whether BatteryDischargeRate could be
+      reported or not, and why. Recorded as enum BatteryDischargeMode in
+      //tools/metrics/histograms/enums.xml.
+    </summary>
+  </metric>
+  <metric name="BatteryDischargeRate">
+    <summary>
+      Battery discharge rate per minute, with 1/10000 of full charge resolution,
+      example: - Battery capacity = 4000 mAh; - Battery charge at the beginning
+      of the interval: 3900 mAh; - Battery charge at the end of the interval:
+      3700 mAh; - Discharge proportion: (3900-3700) / 4000 = 0.05 - Reported
+      value: 500.
+    </summary>
+  </metric>
+  <metric name="BrowserShuttingDown" enum="Boolean">
+    <summary>
+      Indicates if the browser is shutting down when this event is reported.
+    </summary>
+  </metric>
+  <metric name="CPUTimeMs">
+    <summary>
+      The CPU time spent executing code, across all Chrome processes in the
+      interval. This can exceed 100% in multi-thread processes running on
+      multi-core systems.
+    </summary>
+  </metric>
+  <metric name="EnergyImpactScore">
+    <summary>
+      Sum of the energy impact score for all Chrome processes (Mac-only).
+    </summary>
+  </metric>
+  <metric name="FullscreenVideoSingleMonitorSeconds">
+    <summary>
+      Time spent playing video in fullscreen, single-monitor. In seconds. This
+      includes video for any tabs during the interval.
+    </summary>
+  </metric>
+  <metric name="IdleWakeUps">
+    <summary>
+      Sum of idle-wakeups for all Chrome processes (Mac-only).
+    </summary>
+  </metric>
+  <metric name="IntervalDurationSeconds">
+    <summary>
+      The interval duration, in seconds.
+    </summary>
+  </metric>
+  <metric name="MaxTabCount">
+    <summary>
+      The maximum number of tabs that existed at the same time during the
+      interval.
+    </summary>
+  </metric>
+  <metric name="MaxVisibleWindowCount">
+    <summary>
+      The maximum number of windows that have been visible at the same time.
+    </summary>
+  </metric>
+  <metric name="OriginVisibilityTimeSeconds">
+    <summary>
+      The visibility time for the origin of the URL associated with this event,
+      in seconds. This can differ from URLVisibilityTimeSeconds if there's
+      multiple tabs loaded with the same URL that are visible during the
+      interval. E.g. if there's one tab loaded with foo.com/a visible for 1
+      second during the interval and one loaded with foo.com/b visible for 2
+      seconds the report will have URLVisibilityTimeSeconds = 2 seconds and
+      OriginVisibilityTimeSeconds = 3 seconds. This can also exceed the interval
+      duration (e.g. 2 visibles tab with loaded the same origin during the
+      entire interval).
+    </summary>
+  </metric>
+  <metric name="PackageExits">
+    <summary>
+      Sum of package exits from all Chrome processes (Mac-only).
+    </summary>
+  </metric>
+  <metric name="PlayingAudioSeconds">
+    <summary>
+      The time spent playing audio in at least one tab, in seconds.
+    </summary>
+  </metric>
+  <metric name="TabClosed">
+    <summary>
+      The number of tabs that have been closed during the interval.
+    </summary>
+  </metric>
+  <metric name="TimePlayingVideoInVisibleTab">
+    <summary>
+      The time spent playing video in at least one visible tab, in seconds.
+    </summary>
+  </metric>
+  <metric name="TimeSinceInteractionWithBrowserSeconds">
+    <summary>
+      The time since the last interaction with the browser when this event gets
+      recorded, in seconds.
+    </summary>
+  </metric>
+  <metric name="TimeSinceInteractionWithSystemSeconds">
+    <summary>
+      The time since the last interaction with the system when this event gets
+      recorded, in seconds.
+    </summary>
+  </metric>
+  <metric name="TimeWithOpenWebRTCConnectionSeconds">
+    <summary>
+      The time spent with at least one opened WebRTC connection, in seconds.
+    </summary>
+  </metric>
+  <metric name="TopLevelNavigationEvents">
+    <summary>
+      Number of main frame different-document navigations.
+    </summary>
+  </metric>
+  <metric name="UptimeSeconds">
+    <summary>
+      Elapsed time since Chrome has started, in seconds.
+    </summary>
+  </metric>
+  <metric name="URLVisibilityTimeSeconds">
+    <summary>
+      The visibility time for the URL associated with this event, in seconds.
+    </summary>
+  </metric>
+  <metric name="UserInteractionCount">
+    <summary>
+      Number of user interaction (scroll, click or typing) during the interval.
+    </summary>
+  </metric>
+  <metric name="VideoCaptureSeconds">
+    <summary>
+      The time spent capturing video in at least one tab, in seconds.
     </summary>
   </metric>
 </event>
@@ -12025,6 +13093,60 @@ be describing additional metrics about the same event.
       Total bytes of images that were ineligible to be compressed due to other
       reasons not listed here, such as subframe images, non img element,
       javascript initiated image, etc.
+    </summary>
+  </metric>
+</event>
+
+<event name="PublicImageCompressionImageLoad">
+  <owner>rajendrant@chromium.org</owner>
+  <owner>mcrouse@chromium.org</owner>
+  <summary>
+    Records image loading and network data use metrics for https image
+    compression. Recorded when an image request completes with successful
+    compression or fails and fetches original image. The bytes are rounded down
+    to the exponential bucket with factor of 1.3.
+  </summary>
+  <metric name="CompressionPercentage">
+    <summary>
+      The compression percent of this image recorded if the image has been
+      compressed: (1-compressed_bytes/original_bytes)*100%
+    </summary>
+  </metric>
+  <metric name="NavigationToRequestSent">
+    <summary>
+      The duration in milliseconds from time of navigation start to the time the
+      image request was sent to the origin or compression server.
+    </summary>
+  </metric>
+  <metric name="NavigationToRequestStart">
+    <summary>
+      The duration in milliseconds from time of navigation start to the time the
+      image request started.
+    </summary>
+  </metric>
+  <metric name="NavigationToResponseReceived">
+    <summary>
+      The duration in milliseconds from time of navigation start to the time the
+      image response headers were received.
+    </summary>
+  </metric>
+  <metric name="OriginalBytes">
+    <summary>
+      The original size of the image before compression. For compressed images
+      this is the original size retrieved from response headers. For
+      non-compressed images this is the network bytes.
+    </summary>
+  </metric>
+  <metric name="RedirectResult" enum="SubresourceRedirectRedirectResult">
+    <summary>
+      Enumerates the different results possible for subresource redirection,
+      such as redirectable or different reasons of ineligibility.
+    </summary>
+  </metric>
+  <metric name="RobotsRulesFetchLatency">
+    <summary>
+      The duration in milliseconds to fetch the robots rules. Recorded for each
+      image that goes through the robots rules check.
     </summary>
   </metric>
 </event>
@@ -13919,6 +15041,22 @@ be describing additional metrics about the same event.
       The user's first interaction with the Translate UI.
     </summary>
   </metric>
+  <metric name="HTMLContentLanguage" semantic_type="ST_DEMOGRAPHIC_INFO"
+      enum="CLD3LanguageCode">
+    <summary>
+      The HTML language content attribute specified by the document. Note that
+      the semantic_type attribute is included in order to remain consistent with
+      the previous Translate UKM proto.
+    </summary>
+  </metric>
+  <metric name="HTMLDocumentLanguage" semantic_type="ST_DEMOGRAPHIC_INFO"
+      enum="CLD3LanguageCode">
+    <summary>
+      The HTML language attribute specified by the document. Note that the
+      semantic_type attribute is included in order to remain consistent with the
+      previous Translate UKM proto.
+    </summary>
+  </metric>
   <metric name="InitialSourceLanguage" semantic_type="ST_DEMOGRAPHIC_INFO"
       enum="CLD3LanguageCode">
     <summary>
@@ -13954,6 +15092,21 @@ be describing additional metrics about the same event.
     <summary>
       Across all translations during this page load, the maximum amount of time
       (in milliseconds) it took to translate the page.
+    </summary>
+  </metric>
+  <metric name="ModelDetectedLanguage" semantic_type="ST_DEMOGRAPHIC_INFO"
+      enum="CLD3LanguageCode">
+    <summary>
+      The language that was estimated by the language model based on the page's
+      content. Note that the semantic_type attribute is included in order to
+      remain consistent with the previous Translate UKM proto.
+    </summary>
+  </metric>
+  <metric name="ModelDetectionReliabilityScore">
+    <summary>
+      The score, or confidence, of the language detection model's prediction
+      about the language of the page content. The score is between 0 and 100,
+      higher means more confident.
     </summary>
   </metric>
   <metric name="NumReversions">
@@ -14086,6 +15239,70 @@ be describing additional metrics about the same event.
       are dispatched in parallel to remote and local frames. For renderer-
       initiated navigations this metric will only be filled in if we dispatched
       beforeunloads from the browser to remote frames which we had to wait on.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="BeforeUnloadToCommit.CrossProcess">
+    <summary>
+      Measures the time in milliseconds from when the browser sends the request
+      to dispatch before unload handlers (for browser-intitated navigations) or
+      from when the renderer started running before unload handlers (for
+      renderer-initiated navigations) to when the commit navigation was sent to
+      the renderer process. For cross-process navigations this represents the
+      total amount of time the navigation is blocked since it was initiated.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="BeforeUnloadToCommit.SameProcess">
+    <summary>
+      Measures the time in milliseconds from when the browser sends the request
+      to dispatch before unload handlers (for browser-intitated navigations) or
+      from when the renderer started running before unload handlers (for
+      renderer-initiated navigations) to when the navigation was committed. For
+      same-process navigations this represents the total amount of time the
+      navigation is blocked since it was initiated.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="UnloadDuration">
+    <summary>
+      Measures the time in milliseconds to run the unload handlers in the old
+      document where the navigation was committed. Only records for same-process
+      navigations since there are no unload handlers to be run in the new
+      process during a cross-process navigation.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="UnloadQueueingDuration">
+    <summary>
+      Measures the time in miliseconds from when the browser sends the commit
+      navigation request to the renderer to when the renderer dispatches unload
+      events. Only records for same-process navigations since unload handlers
+      are run in a different process for cross-process navigations.
     </summary>
     <aggregation>
       <history>

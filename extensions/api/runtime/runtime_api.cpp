@@ -27,7 +27,7 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
 #if defined(OS_MAC)
 #include "chrome/common/chrome_paths_internal.h"
@@ -39,6 +39,7 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/api/features/vivaldi_runtime_feature.h"
@@ -160,9 +161,19 @@ void RuntimeAPI::OnProfileAvatarChanged(Profile* profile) {
 
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
   // Free any open devtools if the user selects Exit from the menu.
-  DevtoolsConnectorAPI::CloseAllDevtools(browser_context());
+  DevtoolsConnectorAPI::CloseAllDevtools();
 
   chrome::CloseAllBrowsersAndQuit();
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction RuntimePrivateRestartFunction::Run() {
+  // Free any open devtools if the user selects Exit from the menu.
+  DevtoolsConnectorAPI::CloseAllDevtools();
+
+  LOG(INFO) << "Restarting Vivaldi";
+  chrome::AttemptRestart();
 
   return RespondNow(NoArguments());
 }
@@ -250,7 +261,8 @@ ExtensionFunction::ResponseAction
 RuntimePrivateCloseGuestSessionFunction::Run() {
   namespace Results = vivaldi::runtime_private::CloseGuestSession::Results;
 
-  profiles::CloseGuestProfileWindows();
+  Profile *profile = Profile::FromBrowserContext(browser_context());
+  profiles::CloseProfileWindows(profile);
 
   return RespondNow(ArgumentList(Results::Create(true)));
 }
@@ -263,10 +275,9 @@ RuntimePrivateOpenProfileSelectionWindowFunction::Run() {
   // If this is a guest session, close all the guest browser windows.
   Profile *profile = Profile::FromBrowserContext(browser_context());
   if (profile->IsGuestSession()) {
-    profiles::CloseGuestProfileWindows();
+    profiles::CloseProfileWindows(profile);
   } else {
-    UserManager::Show(base::FilePath(),
-                      profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
+    ProfilePicker::Show(ProfilePicker::EntryPoint::kBackgroundModeManager);
   }
   return RespondNow(ArgumentList(Results::Create(true)));
 }
@@ -284,8 +295,8 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
 
   // Find the active entry.
   Profile *profile = Profile::FromBrowserContext(browser_context());
-  ProfileAttributesEntry* active_entry = nullptr;
-  storage.GetProfileAttributesWithPath(profile->GetPath(), &active_entry);
+  ProfileAttributesEntry* active_entry =
+      storage.GetProfileAttributesWithPath(profile->GetPath());
 
   std::vector<vivaldi::runtime_private::UserProfile> profiles;
   bool has_custom_avatars = false;

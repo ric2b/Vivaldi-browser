@@ -109,28 +109,6 @@ void ResizeWebContentsView(Shell* shell, const gfx::Size& size,
   shell->ResizeWebContentForTests(size);
 }
 
-// Class to test that OverrideWebkitPrefs has been called for all relevant
-// RenderViewHosts.
-class NotifyPreferencesChangedTestContentBrowserClient
-    : public TestContentBrowserClient {
- public:
-  NotifyPreferencesChangedTestContentBrowserClient() = default;
-
-  void OverrideWebkitPrefs(RenderViewHost* render_view_host,
-                           blink::web_pref::WebPreferences* prefs) override {
-    override_webkit_prefs_rvh_set_.insert(render_view_host);
-  }
-
-  const std::unordered_set<RenderViewHost*>& override_webkit_prefs_rvh_set() {
-    return override_webkit_prefs_rvh_set_;
-  }
-
- private:
-  std::unordered_set<RenderViewHost*> override_webkit_prefs_rvh_set_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotifyPreferencesChangedTestContentBrowserClient);
-};
-
 class WebContentsImplBrowserTest : public ContentBrowserTest {
  public:
   WebContentsImplBrowserTest() {}
@@ -689,25 +667,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_EQ(4, delegate->loadingStateToDifferentDocumentCount());
 }
 
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       RenderViewCreatedForChildWindow) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  EXPECT_TRUE(
-      NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
-
-  WebContentsAddedObserver new_web_contents_observer;
-  ASSERT_TRUE(ExecuteScript(shell(),
-                            "var a = document.createElement('a');"
-                            "a.href='./title2.html';"
-                            "a.target = '_blank';"
-                            "document.body.appendChild(a);"
-                            "a.click();"));
-  WebContents* new_web_contents = new_web_contents_observer.GetWebContents();
-  EXPECT_TRUE(WaitForLoadStop(new_web_contents));
-  EXPECT_TRUE(new_web_contents_observer.RenderViewCreatedCalled());
-}
-
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ResourceLoadComplete) {
   ResourceLoadObserver observer(shell());
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1170,6 +1129,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, ChangeDisplayMode) {
   // Simulate widget is entering fullscreen (changing size is enough).
   shell()
       ->web_contents()
+      ->GetMainFrame()
       ->GetRenderViewHost()
       ->GetWidget()
       ->SynchronizeVisualProperties();
@@ -2981,32 +2941,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, DISABLED_UpdateLoadState) {
   a_response->Done();
 }
 
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, NotifyPreferencesChanged) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-  RenderFrameHost* main_frame = web_contents->GetMainFrame();
-
-  // Navigate to a site with two iframes in different origins.
-  GURL url = embedded_test_server()->GetURL(
-      "a.com", "/cross_site_iframe_factory.html?a(b,c)");
-  EXPECT_TRUE(NavigateToURL(shell(), url));
-
-  auto* main_frame_rvh = main_frame->GetRenderViewHost();
-
-  NotifyPreferencesChangedTestContentBrowserClient new_client;
-  ContentBrowserClient* old_client = SetBrowserClientForTesting(&new_client);
-
-  web_contents->NotifyPreferencesChanged();
-
-  // We should have updated the preferences for the WebContents, and should call
-  // OverrideWebkitPrefs with the main RenderViewHost only (not subframe RVHs).
-  EXPECT_EQ(std::unordered_set<RenderViewHost*>({main_frame_rvh}),
-            new_client.override_webkit_prefs_rvh_set());
-
-  SetBrowserClientForTesting(old_client);
-}
-
 namespace {
 
 class OutgoingSetRendererPrefsMojoWatcher {
@@ -3200,7 +3134,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, FrozenAndUnfrozenIPC) {
   RenderFrameDeletedObserver delete_rfh_c(rfh_c);
 
   // Delete an iframe when the page is active(not frozen), which should succeed.
-  rfh_b->GetNavigationControl()->Delete(
+  rfh_b->GetMojomFrameInRenderer()->Delete(
       mojom::FrameDeleteIntention::kNotMainFrame);
   delete_rfh_b.WaitUntilDeleted();
   EXPECT_TRUE(delete_rfh_b.deleted());
@@ -3211,7 +3145,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, FrozenAndUnfrozenIPC) {
   shell()->web_contents()->SetPageFrozen(true);
 
   // Try to delete an iframe, and succeeds because the message is unfreezable.
-  rfh_c->GetNavigationControl()->Delete(
+  rfh_c->GetMojomFrameInRenderer()->Delete(
       mojom::FrameDeleteIntention::kNotMainFrame);
   delete_rfh_c.WaitUntilDeleted();
   EXPECT_TRUE(delete_rfh_c.deleted());
@@ -3228,8 +3162,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   base::FilePath simple_links_path =
       test_data_dir.Append(GetTestDataFilePath())
           .Append(FILE_PATH_LITERAL("simple_links.html"));
-  GURL url(base::FilePath::StringType(FILE_PATH_LITERAL("file://")) +
-           simple_links_path.value());
+  GURL url("file://" + simple_links_path.AsUTF8Unsafe());
 
   shell()->set_delay_popup_contents_delegate_for_testing(true);
   EXPECT_TRUE(NavigateToURL(shell(), url));
@@ -4546,4 +4479,118 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, RenderIdleTime) {
   EXPECT_TRUE(browser_td >= renderer_td);
 }
 
+class WebContentsImplBrowserTestWindowControlsOverlay
+    : public WebContentsImplBrowserTest {
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kWebAppWindowControlsOverlay);
+    WebContentsImplBrowserTest::SetUp();
+  }
+
+  void ValidateTitlebarAreaInsetValue(const std::string& name,
+                                      const std::string& expected_result) {
+    SCOPED_TRACE(name);
+
+    EXPECT_EQ(
+        expected_result,
+        EvalJs(shell()->web_contents(),
+               JsReplace(
+                   "(() => {const e = document.getElementById('target');const "
+                   "style = window.getComputedStyle(e, null); return "
+                   "style.getPropertyValue($1);})();",
+                   name)));
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTestWindowControlsOverlay,
+                       UpdateWindowControlsOverlay) {
+  auto* web_contents = shell()->web_contents();
+
+  GURL url(
+      "data:text/html,<body><div id=target style=\"margin-left: "
+      "env(titlebar-area-inset-left);margin-right: "
+      "env(titlebar-area-inset-right);margin-top: "
+      "env(titlebar-area-inset-top);margin-bottom: "
+      "env(titlebar-area-inset-bottom);\"></div></body>");
+
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  // initial state with no visible bounds and empty rect
+  int empty_rect_value = 0;
+
+  EXPECT_EQ(false,
+            EvalJs(web_contents, "navigator.windowControlsOverlay.visible"));
+
+  EXPECT_EQ(
+      empty_rect_value,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().x"));
+
+  EXPECT_EQ(
+      empty_rect_value,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().y"));
+
+  EXPECT_EQ(
+      empty_rect_value,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().width"));
+
+  EXPECT_EQ(
+      empty_rect_value,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().height"));
+
+  ValidateTitlebarAreaInsetValue("margin-left", "0px");
+  ValidateTitlebarAreaInsetValue("margin-right", "0px");
+  ValidateTitlebarAreaInsetValue("margin-top", "0px");
+  ValidateTitlebarAreaInsetValue("margin-bottom", "0px");
+
+  gfx::Rect bounding_client_rect =
+      gfx::Rect(2 /*x*/, 2 /*y*/, 2 /*width*/, 2 /*height*/);
+
+  gfx::Insets insets =
+      gfx::Insets(2 /*top*/, 2 /*left*/, 2 /*bottom*/, 2 /*right*/);
+
+  web_contents->UpdateWindowControlsOverlay(bounding_client_rect, insets);
+
+  // information about the bounds should be updated
+  int new_x = 2;
+  int new_y = 2;
+  int new_width = 2;
+  int new_height = 2;
+
+  EXPECT_EQ(true,
+            EvalJs(web_contents, "navigator.windowControlsOverlay.visible"));
+
+  EXPECT_EQ(
+      new_x,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().x"));
+
+  EXPECT_EQ(
+      new_y,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().y"));
+
+  EXPECT_EQ(
+      new_width,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().width"));
+
+  EXPECT_EQ(
+      new_height,
+      EvalJs(web_contents,
+             "navigator.windowControlsOverlay.getBoundingClientRect().height"));
+
+  // check if the css environment variables were updated with the inset values
+  ValidateTitlebarAreaInsetValue("margin-left", "2px");
+  ValidateTitlebarAreaInsetValue("margin-right", "2px");
+  ValidateTitlebarAreaInsetValue("margin-top", "2px");
+  ValidateTitlebarAreaInsetValue("margin-bottom", "2px");
+}
 }  // namespace content

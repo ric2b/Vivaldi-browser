@@ -6,10 +6,10 @@ static_library("renderer") {
     "adblock_cosmetic_filter_agent.h",
   ]
   deps = [
+    "../mojom",
     "//base",
     "//content/public/common",
     "//content/public/renderer",
     "//third_party/blink/public:blink",
-    "//vivaldi_mojom/components/request_filter/adblock_filter/mojom"
   ]
 }

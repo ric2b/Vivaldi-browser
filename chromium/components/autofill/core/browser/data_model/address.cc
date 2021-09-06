@@ -45,7 +45,7 @@ bool Address::operator==(const Address& other) const {
   // TODO(crbug.com/1130194): Clean legacy implementation once structured
   // addresses are fully launched.
   if (structured_address::StructuredAddressesEnabled()) {
-    return structured_address_ == other.structured_address_;
+    return structured_address_.SameAs(other.structured_address_);
   }
 
   bool are_states_equal = (state_ == other.state_);
@@ -104,7 +104,9 @@ bool Address::MergeStructuredAddress(const Address& newer,
 
 base::Optional<AlternativeStateNameMap::CanonicalStateName>
 Address::GetCanonicalizedStateName() const {
-  return AlternativeStateNameMap::GetCanonicalStateName(country_code_, state_);
+  return AlternativeStateNameMap::GetCanonicalStateName(
+      base::UTF16ToUTF8(GetRawInfo(ADDRESS_HOME_COUNTRY)),
+      GetRawInfo(ADDRESS_HOME_STATE));
 }
 
 bool Address::IsStructuredAddressMergeable(const Address& newer) const {
@@ -117,7 +119,7 @@ const structured_address::Address& Address::GetStructuredAddress() const {
 }
 
 base::string16 Address::GetRawInfo(ServerFieldType type) const {
-  DCHECK_EQ(ADDRESS_HOME, AutofillType(type).group());
+  DCHECK_EQ(FieldTypeGroup::kAddressHome, AutofillType(type).group());
 
   // For structured addresses, the value can be directly retrieved.
   if (structured_address::StructuredAddressesEnabled())
@@ -177,6 +179,10 @@ base::string16 Address::GetRawInfo(ServerFieldType type) const {
     case ADDRESS_HOME_SUBPREMISE:
       return subpremise_;
 
+    case ADDRESS_HOME_ADDRESS:
+    case ADDRESS_HOME_ADDRESS_WITH_NAME:
+      return base::string16();
+
     default:
       NOTREACHED() << "Unrecognized type: " << type;
       return base::string16();
@@ -186,7 +192,7 @@ base::string16 Address::GetRawInfo(ServerFieldType type) const {
 void Address::SetRawInfoWithVerificationStatus(ServerFieldType type,
                                                const base::string16& value,
                                                VerificationStatus status) {
-  DCHECK_EQ(ADDRESS_HOME, AutofillType(type).group());
+  DCHECK_EQ(FieldTypeGroup::kAddressHome, AutofillType(type).group());
 
   // For structured addresses, the value can directly be set.
   // TODO(crbug.com/1130194): Clean legacy implementation once structured
@@ -308,6 +314,9 @@ void Address::SetRawInfoWithVerificationStatus(ServerFieldType type,
 
     // Not implemented for unstructured addresses.
     case ADDRESS_HOME_FLOOR:
+      break;
+
+    case ADDRESS_HOME_ADDRESS:
       break;
 
     default:
@@ -467,7 +476,7 @@ bool Address::SetInfoWithVerificationStatusImpl(const AutofillType& type,
     } else {
       country_code_ = country_code;
     }
-    return !country_code_.empty();
+    return !GetRawInfo(ADDRESS_HOME_COUNTRY).empty();
   }
 
   SetRawInfoWithVerificationStatus(storable_type, value, status);

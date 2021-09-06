@@ -32,6 +32,9 @@ export class ReadLaterItemElement extends PolymerElement {
     return {
       /** @type {!readLater.mojom.ReadLaterEntry} */
       data: Object,
+
+      /** @type {boolean} */
+      buttonRipples: Boolean,
     };
   }
 

@@ -42,9 +42,5 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# Swift Package Manager
-/.build
-.swiftpm
-
 !/Sparkle.xcodeproj
 !/Sparkle.xcodeproj/project.xcworkspace

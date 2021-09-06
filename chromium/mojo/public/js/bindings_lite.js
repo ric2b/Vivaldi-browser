@@ -164,8 +164,11 @@ mojo.internal.computeStructDimensions = function(structSpec, value) {
   let size = structSpec.packedSize;
   let numInterfaceIds = 0;
   for (const field of structSpec.fields) {
-    const fieldValue = value[field.name];
+    let fieldValue = value[field.name];
     if (mojo.internal.isNullOrUndefined(fieldValue)) {
+      fieldValue = field.defaultValue;
+    }
+    if (fieldValue === null) {
       continue;
     }
 
@@ -519,7 +522,7 @@ mojo.internal.Encoder = class {
    */
   encodeMap(mapSpec, offset, value) {
     let keys, values;
-    if (value instanceof Map) {
+    if (value.constructor.name == 'Map') {
       keys = Array.from(value.keys());
       values = Array.from(value.values());
     } else {
@@ -572,8 +575,7 @@ mojo.internal.Encoder = class {
                             field.packedBitOffset, field.nullable);
       };
 
-      if (value && (value instanceof Object) &&
-          !mojo.internal.isNullOrUndefined(value[field.name])) {
+      if (value && !mojo.internal.isNullOrUndefined(value[field.name])) {
         encodeStructField(value[field.name]);
         continue;
       }
@@ -727,15 +729,14 @@ mojo.internal.Decoder = class {
   }
 
   decodeString(offset) {
+    const data = this.decodeArray({elementType: mojo.internal.Uint8}, offset);
+    if (!data)
+      return null;
+
     if (!mojo.internal.Decoder.textDecoder)
       mojo.internal.Decoder.textDecoder = new TextDecoder('utf-8');
     return mojo.internal.Decoder.textDecoder.decode(
-        new Uint8Array(this.decodeArray(
-                           {
-                             elementType: mojo.internal.Uint8,
-                           },
-                           offset))
-            .buffer);
+        new Uint8Array(data).buffer);
   }
 
   decodeOffset(offset) {
@@ -1313,7 +1314,9 @@ mojo.internal.Handle = {
     encode: function(value, encoder, byteOffset, bitOffset, nullable) {
       encoder.encodeHandle(byteOffset, value);
     },
-    encodeNull: function(encoder, byteOffset) {},
+    encodeNull: function(encoder, byteOffset) {
+      encoder.encodeUint32(byteOffset, 0xffffffff);
+    },
     decode: function(decoder, byteOffset, bitOffset, nullable) {
       return decoder.decodeHandle(byteOffset);
     },
@@ -1402,10 +1405,12 @@ mojo.internal.Map = function(keyType, valueType, valueNullable) {
         return decoder.decodeMap(mapSpec, byteOffset);
       },
       computeDimensions: function(value, nullable) {
-        const keys = (value instanceof Map) ? Array.from(value.keys()) :
-                                              Object.keys(value);
-        const values = (value instanceof Map) ? Array.from(value.values()) :
-                                                keys.map(k => value[k]);
+        const keys =
+            (value.constructor.name == 'Map') ? Array.from(value.keys())
+                                              : Object.keys(value);
+        const values =
+            (value.constructor.name == 'Map') ? Array.from(value.values())
+                                              : keys.map(k => value[k]);
 
         const size = mojo.internal.kMapDataSize +
             mojo.internal.computeTotalArraySize({elementType: keyType}, keys) +
@@ -1552,9 +1557,6 @@ mojo.internal.InterfaceProxy = function(type) {
   return {
     $: {
       encode: function(value, encoder, byteOffset, bitOffset, nullable) {
-        if (!(value instanceof type))
-          throw new Error('Invalid proxy type. Expected ' + type.name);
-
         const endpoint = value.proxy.unbind();
         console.assert(endpoint, `unexpected null ${type.name}`);
 
@@ -1582,8 +1584,6 @@ mojo.internal.InterfaceRequest = function(type) {
   return {
     $: {
       encode: function(value, encoder, byteOffset, bitOffset, nullable) {
-        if (!(value instanceof type))
-          throw new Error('Invalid request type. Expected ' + type.name);
         if (!value.handle)
           throw new Error('Unexpected null ' + type.name);
 
@@ -1610,9 +1610,6 @@ mojo.internal.AssociatedInterfaceProxy = function(type) {
     $: {
       type: type,
       encode: function(value, encoder, byteOffset, bitOffset, nullable) {
-        console.assert(
-            value instanceof type,
-            `unexpected object in place of ${type.name}: `, value);
         console.assert(
             value.proxy.endpoint && value.proxy.endpoint.isPendingAssociation,
             `expected ${type.name} to be associated and unbound`);
@@ -1644,9 +1641,6 @@ mojo.internal.AssociatedInterfaceRequest = function(type) {
     $: {
       type: type,
       encode: function(value, encoder, byteOffset, bitOffset, nullable) {
-        console.assert(
-            value instanceof type,
-            `unexpected object in place of ${type.name}: `, value);
         console.assert(
             value.handle && value.handle.isPendingAssociation,
             `expected ${type.name} to be associated and unbound`);

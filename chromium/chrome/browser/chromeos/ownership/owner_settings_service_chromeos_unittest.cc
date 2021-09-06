@@ -14,9 +14,9 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_path_override.h"
 #include "base/values.h"
+#include "chrome/browser/ash/settings/device_settings_provider.h"
+#include "chrome/browser/ash/settings/device_settings_test_helper.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
-#include "chrome/browser/chromeos/settings/device_settings_provider.h"
-#include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -102,7 +102,7 @@ class OwnerSettingsServiceChromeOSTest : public DeviceSettingsTestBase {
   void SetUp() override {
     DeviceSettingsTestBase::SetUp();
     provider_.reset(new DeviceSettingsProvider(
-        base::Bind(&OnPrefChanged), device_settings_service_.get(),
+        base::BindRepeating(&OnPrefChanged), device_settings_service_.get(),
         TestingBrowserProcess::GetGlobal()->local_state()));
     owner_key_util_->SetPrivateKey(device_policy_->GetSigningKey());
     InitOwner(
@@ -383,7 +383,7 @@ class OwnerSettingsServiceChromeOSNoOwnerTest
   void SetUp() override {
     DeviceSettingsTestBase::SetUp();
     provider_.reset(new DeviceSettingsProvider(
-        base::Bind(&OnPrefChanged), device_settings_service_.get(),
+        base::BindRepeating(&OnPrefChanged), device_settings_service_.get(),
         TestingBrowserProcess::GetGlobal()->local_state()));
     FlushDeviceSettings();
     service_ = OwnerSettingsServiceChromeOSFactory::GetForBrowserContext(

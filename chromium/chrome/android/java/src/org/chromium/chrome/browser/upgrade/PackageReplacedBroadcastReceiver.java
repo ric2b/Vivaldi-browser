@@ -38,9 +38,6 @@ public final class PackageReplacedBroadcastReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(final Context context, Intent intent) {
         if (!Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) return;
-        if (ChromeApplication.isVivaldi()) {
-            VivaldiUtils.checkMajorVersion();
-        }
         VrModuleProvider.maybeRequestModuleIfDaydreamReady();
         AutofillAssistantModuleEntryProvider.maybeInstallDeferred();
 

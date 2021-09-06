@@ -6,13 +6,12 @@
 
 #include "base/command_line.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/enterprise/reporting/extension_info.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/forced_extensions/force_installed_tracker.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state_handler.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -360,6 +359,17 @@ ConvertUnpackerFailureReasonToProto(
       return em::ExtensionInstallReportLogEvent::ERROR_INDEXING_DNR_RULESET;
     case FailureReason::CRX_REQUIRED_PROOF_MISSING:
       return em::ExtensionInstallReportLogEvent::CRX_REQUIRED_PROOF_MISSING;
+    case FailureReason::CRX_HEADER_VERIFIED_CONTENTS_UNCOMPRESSING_FAILURE:
+      return em::ExtensionInstallReportLogEvent::
+          CRX_HEADER_VERIFIED_CONTENTS_UNCOMPRESSING_FAILURE;
+    case FailureReason::MALFORMED_VERIFIED_CONTENTS:
+      return em::ExtensionInstallReportLogEvent::MALFORMED_VERIFIED_CONTENTS;
+    case FailureReason::COULD_NOT_CREATE_METADATA_DIRECTORY:
+      return em::ExtensionInstallReportLogEvent::
+          COULD_NOT_CREATE_METADATA_DIRECTORY;
+    case FailureReason::COULD_NOT_WRITE_VERIFIED_CONTENTS_INTO_FILE:
+      return em::ExtensionInstallReportLogEvent::
+          COULD_NOT_WRITE_VERIFIED_CONTENTS_INTO_FILE;
     default:
       NOTREACHED();
       return em::ExtensionInstallReportLogEvent::

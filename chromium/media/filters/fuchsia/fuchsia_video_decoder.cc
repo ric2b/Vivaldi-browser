@@ -197,6 +197,7 @@ class FuchsiaVideoDecoder : public VideoDecoder,
   bool IsPlatformDecoder() const override;
   bool SupportsDecryption() const override;
   std::string GetDisplayName() const override;
+  VideoDecoderType GetDecoderType() const override;
 
   // VideoDecoder implementation.
   void Initialize(const VideoDecoderConfig& config,
@@ -334,6 +335,7 @@ FuchsiaVideoDecoder::FuchsiaVideoDecoder(
       enable_sw_decoding_(enable_sw_decoding),
       use_overlays_for_video_(base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseOverlaysForVideo)),
+      sysmem_allocator_("CrFuchsiaVideoDecoder"),
       client_native_pixmap_factory_(ui::CreateClientNativePixmapFactoryOzone()),
       weak_factory_(this) {
   DCHECK(raster_context_provider_);
@@ -359,6 +361,10 @@ bool FuchsiaVideoDecoder::SupportsDecryption() const {
 
 std::string FuchsiaVideoDecoder::GetDisplayName() const {
   return "FuchsiaVideoDecoder";
+}
+
+VideoDecoderType FuchsiaVideoDecoder::GetDecoderType() const {
+  return VideoDecoderType::kFuchsia;
 }
 
 void FuchsiaVideoDecoder::Initialize(const VideoDecoderConfig& config,

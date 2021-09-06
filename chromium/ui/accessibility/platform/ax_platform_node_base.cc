@@ -63,7 +63,8 @@ bool FindDescendantRoleWithMaxDepth(AXPlatformNodeBase* node,
 
 }  // namespace
 
-const base::char16 AXPlatformNodeBase::kEmbeddedCharacter = L'\xfffc';
+const base::char16 AXPlatformNodeBase::kEmbeddedCharacter =
+    STRING16_LITERAL('\xfffc');
 
 // Map from each AXPlatformNode's unique id to its instance.
 using UniqueIdMap = std::unordered_map<int32_t, AXPlatformNode*>;
@@ -147,13 +148,6 @@ std::string AXPlatformNodeBase::GetName() const {
   if (delegate_)
     return delegate_->GetName();
   return std::string();
-}
-
-base::string16 AXPlatformNodeBase::GetNameAsString16() const {
-  std::string name = GetName();
-  if (name.empty())
-    return base::string16();
-  return base::UTF8ToUTF16(name);
 }
 
 base::Optional<int> AXPlatformNodeBase::GetIndexInParent() {
@@ -1334,6 +1328,7 @@ AXHypertext::~AXHypertext() = default;
 AXHypertext::AXHypertext(const AXHypertext& other) = default;
 AXHypertext& AXHypertext::operator=(const AXHypertext& other) = default;
 
+// TODO(nektar): To be able to use AXNode in Views, move this logic to AXNode.
 void AXPlatformNodeBase::UpdateComputedHypertext() const {
   if (!delegate_)
     return;
@@ -1346,18 +1341,18 @@ void AXPlatformNodeBase::UpdateComputedHypertext() const {
   }
 
   // Construct the hypertext for this node, which contains the concatenation
-  // of all of the static text and widespace of this node's children and an
+  // of all of the static text and whitespace from this node's children, and an
   // embedded object character for all the other children. Build up a map from
   // the character index of each embedded object character to the id of the
   // child object it points to.
   base::string16 hypertext;
   for (AXPlatformNodeChildIterator child_iter = AXPlatformNodeChildrenBegin();
        child_iter != AXPlatformNodeChildrenEnd(); ++child_iter) {
-    // Similar to Firefox, we don't expose text-only objects in IA2 and ATK
+    // Similar to Firefox, we don't expose text nodes in IAccessible2 and ATK
     // hypertext with the embedded object character. We copy all of their text
     // instead.
     if (child_iter->IsText()) {
-      hypertext_.hypertext += child_iter->GetNameAsString16();
+      hypertext_.hypertext += child_iter->GetInnerText();
     } else {
       int32_t char_offset = static_cast<int32_t>(hypertext_.hypertext.size());
       int32_t child_unique_id = child_iter->GetUniqueId();
@@ -2003,22 +1998,18 @@ ui::TextAttributeList AXPlatformNodeBase::ComputeTextAttributes() const {
     attributes.push_back(std::make_pair("auto-generated", "true"));
 
   int color;
-  if (GetIntAttribute(ax::mojom::IntAttribute::kBackgroundColor, &color)) {
-    unsigned int alpha = SkColorGetA(color);
+  if ((color = delegate_->GetBackgroundColor())) {
     unsigned int red = SkColorGetR(color);
     unsigned int green = SkColorGetG(color);
     unsigned int blue = SkColorGetB(color);
-    // Don't expose default value of pure white.
-    if (alpha && (red != 255 || green != 255 || blue != 255)) {
-      std::string color_value = "rgb(" + base::NumberToString(red) + ',' +
-                                base::NumberToString(green) + ',' +
-                                base::NumberToString(blue) + ')';
-      SanitizeTextAttributeValue(color_value, &color_value);
-      attributes.push_back(std::make_pair("background-color", color_value));
-    }
+    std::string color_value = "rgb(" + base::NumberToString(red) + ',' +
+                              base::NumberToString(green) + ',' +
+                              base::NumberToString(blue) + ')';
+    SanitizeTextAttributeValue(color_value, &color_value);
+    attributes.push_back(std::make_pair("background-color", color_value));
   }
 
-  if (GetIntAttribute(ax::mojom::IntAttribute::kColor, &color)) {
+  if ((color = delegate_->GetColor())) {
     unsigned int red = SkColorGetR(color);
     unsigned int green = SkColorGetG(color);
     unsigned int blue = SkColorGetB(color);
@@ -2230,9 +2221,6 @@ std::string AXPlatformNodeBase::ComputeDetailsRoles() const {
 }
 
 int AXPlatformNodeBase::GetMaxSelectableItems() const {
-  if (!GetData().HasState(ax::mojom::State::kFocusable))
-    return 0;
-
   if (IsLeaf())
     return 0;
 

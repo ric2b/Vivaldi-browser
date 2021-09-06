@@ -48,6 +48,7 @@ class TestAutofillClient : public AutofillClient {
   PersonalDataManager* GetPersonalDataManager() override;
   AutocompleteHistoryManager* GetAutocompleteHistoryManager() override;
   PrefService* GetPrefs() override;
+  const PrefService* GetPrefs() const override;
   syncer::SyncService* GetSyncService() override;
   signin::IdentityManager* GetIdentityManager() override;
   FormDataImporter* GetFormDataImporter() override;
@@ -57,9 +58,10 @@ class TestAutofillClient : public AutofillClient {
   ukm::SourceId GetUkmSourceId() override;
   AddressNormalizer* GetAddressNormalizer() override;
   AutofillOfferManager* GetAutofillOfferManager() override;
-  const GURL& GetLastCommittedURL() override;
+  const GURL& GetLastCommittedURL() const override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
   translate::LanguageState* GetLanguageState() override;
+  translate::TranslateDriver* GetTranslateDriver() override;
 #if !defined(OS_IOS)
   std::unique_ptr<InternalAuthenticator> CreateCreditCardInternalAuthenticator(
       content::RenderFrameHost* rfh) override;
@@ -120,6 +122,9 @@ class TestAutofillClient : public AutofillClient {
   void CreditCardUploadCompleted(bool card_saved) override;
   void ConfirmCreditCardFillAssist(const CreditCard& card,
                                    base::OnceClosure callback) override;
+  void ConfirmSaveAddressProfile(
+      const AutofillProfile& profile,
+      AddressProfileSavePromptCallback callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(CreditCardScanCallback callback) override;
   void ShowAutofillPopup(
@@ -143,9 +148,9 @@ class TestAutofillClient : public AutofillClient {
   // By default, TestAutofillClient will report that the context is
   // secure. This can be adjusted by calling set_form_origin() with an
   // http:// URL.
-  bool IsContextSecure() override;
+  bool IsContextSecure() const override;
   bool ShouldShowSigninPromo() override;
-  bool AreServerCardsSupported() override;
+  bool AreServerCardsSupported() const override;
   void ExecuteCommand(int id) override;
 
   // RiskDataLoader:

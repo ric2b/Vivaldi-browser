@@ -47,6 +47,18 @@ void TestStoragePartition::CreateHasTrustTokensAnswerer(
   NOTREACHED() << "Not implemented.";
 }
 
+mojo::PendingRemote<network::mojom::AuthenticationAndCertificateObserver>
+TestStoragePartition::CreateAuthAndCertObserverForFrame(int process_id,
+                                                        int routing_id) {
+  return mojo::NullRemote();
+}
+
+mojo::PendingRemote<network::mojom::AuthenticationAndCertificateObserver>
+TestStoragePartition::CreateAuthAndCertObserverForNavigationRequest(
+    int frame_tree_id) {
+  return mojo::NullRemote();
+}
+
 storage::QuotaManager* TestStoragePartition::GetQuotaManager() {
   return quota_manager_;
 }
@@ -100,14 +112,13 @@ SharedWorkerService* TestStoragePartition::GetSharedWorkerService() {
   return shared_worker_service_;
 }
 
-CacheStorageContext* TestStoragePartition::GetCacheStorageContext() {
-  return cache_storage_context_;
-}
-
-CacheStorageContextImpl*
-TestStoragePartition::GetCacheStorageContextImplForTesting() {
-  NOTREACHED();
-  return nullptr;
+storage::mojom::CacheStorageControl*
+TestStoragePartition::GetCacheStorageControl() {
+  // Bind and throw away the receiver. If testing is required, then add a method
+  // to set the remote.
+  if (!cache_storage_control_.is_bound())
+    ignore_result(cache_storage_control_.BindNewPipeAndPassReceiver());
+  return cache_storage_control_.get();
 }
 
 GeneratedCodeCacheContext*
@@ -127,6 +138,10 @@ TestStoragePartition::GetDevToolsBackgroundServicesContext() {
 
 ContentIndexContext* TestStoragePartition::GetContentIndexContext() {
   return content_index_context_;
+}
+
+NativeIOContext* TestStoragePartition::GetNativeIOContext() {
+  return native_io_context_;
 }
 
 leveldb_proto::ProtoDatabaseProvider*

@@ -117,6 +117,15 @@ bool DecoderTemplate<Traits>::IsClosed() {
 }
 
 template <typename Traits>
+HardwarePreference DecoderTemplate<Traits>::GetHardwarePreference(
+    const ConfigType&) {
+  return HardwarePreference::kAllow;
+}
+
+template <typename Traits>
+void DecoderTemplate<Traits>::SetHardwarePreference(HardwarePreference) {}
+
+template <typename Traits>
 void DecoderTemplate<Traits>::configure(const ConfigType* config,
                                         ExceptionState& exception_state) {
   DVLOG(1) << __func__;
@@ -147,6 +156,7 @@ void DecoderTemplate<Traits>::configure(const ConfigType* config,
   request->type = Request::Type::kConfigure;
   request->media_config = std::move(media_config);
   request->reset_generation = reset_generation_;
+  request->hw_pref = GetHardwarePreference(*config);
   requests_.push_back(request);
   ProcessRequests();
 }
@@ -167,9 +177,9 @@ void DecoderTemplate<Traits>::decode(const InputType* chunk,
   auto status_or_buffer = MakeDecoderBuffer(*chunk);
 
   if (status_or_buffer.has_value()) {
-    request->decoder_buffer = std::move(status_or_buffer.value());
+    request->decoder_buffer = std::move(status_or_buffer).value();
   } else {
-    request->status = std::move(status_or_buffer.error());
+    request->status = std::move(status_or_buffer).error();
   }
 
   requests_.push_back(request);
@@ -280,6 +290,9 @@ bool DecoderTemplate<Traits>::ProcessConfigureRequest(Request* request) {
     // which can happen if InitializeDecoder() calls it synchronously.
     pending_request_ = request;
     initializing_sync_ = true;
+
+    SetHardwarePreference(pending_request_->hw_pref);
+
     Traits::InitializeDecoder(
         *decoder_, *pending_request_->media_config,
         WTF::Bind(&DecoderTemplate::OnInitializeDone, WrapWeakPersistent(this)),
@@ -474,6 +487,8 @@ void DecoderTemplate<Traits>::OnConfigureFlushDone(media::Status status) {
     return;
   }
 
+  SetHardwarePreference(pending_request_->hw_pref);
+
   // Processing continues in OnInitializeDone().
   Traits::InitializeDecoder(
       *decoder_, *pending_request_->media_config,
@@ -581,7 +596,9 @@ void DecoderTemplate<Traits>::OnOutput(uint32_t reset_generation,
 
 template <typename Traits>
 void DecoderTemplate<Traits>::ContextDestroyed() {
+  state_ = V8CodecState(V8CodecState::Enum::kClosed);
   logger_->Neuter();
+  decoder_.reset();
 }
 
 template <typename Traits>

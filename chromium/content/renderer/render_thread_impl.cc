@@ -62,6 +62,7 @@
 #include "content/common/buildflags.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/frame_messages.h"
+#include "content/common/process_visibility_tracker.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
@@ -76,7 +77,6 @@
 #include "content/renderer/browser_exposed_renderer_interfaces.h"
 #include "content/renderer/categorized_worker_pool.h"
 #include "content/renderer/effective_connection_type_helper.h"
-#include "content/renderer/loader/resource_dispatcher.h"
 #include "content/renderer/media/gpu/gpu_video_accelerator_factories_impl.h"
 #include "content/renderer/media/media_interface_factory.h"
 #include "content/renderer/media/render_media_client.h"
@@ -96,6 +96,7 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -596,8 +597,6 @@ void RenderThreadImpl::Init() {
   BindHostReceiver(remote_gpu.InitWithNewPipeAndPassReceiver());
   gpu_ = viz::Gpu::Create(std::move(remote_gpu), GetIOTaskRunner());
 
-  resource_dispatcher_.reset(new ResourceDispatcher());
-
   // NOTE: Do not add interfaces to |binders| within this method. Instead,
   // modify the definition of |ExposeRendererInterfacesToBrowser()| to ensure
   // security review coverage.
@@ -815,31 +814,6 @@ bool RenderThreadImpl::ShouldBeDestroyed() {
   return false;
 }
 
-bool RenderThreadImpl::Send(IPC::Message* msg) {
-  // There are cases where we want to pump asynchronous messages while waiting
-  // synchronously for the replies to the message to be sent here. However, this
-  // may create an opportunity for re-entrancy into WebKit and other subsystems,
-  // so we need to take care to disable callbacks, timers, and pending network
-  // loads that could trigger such callbacks.
-  bool pumping_events = false;
-  if (msg->is_sync()) {
-    if (msg->is_caller_pumping_messages()) {
-      pumping_events = true;
-    }
-  }
-
-  std::unique_ptr<blink::scheduler::WebThreadScheduler::RendererPauseHandle>
-      renderer_paused_handle;
-  std::unique_ptr<blink::WebScopedPagePauser> page_pauser_handle;
-
-  if (pumping_events) {
-    renderer_paused_handle = main_thread_scheduler_->PauseRenderer();
-    page_pauser_handle = blink::WebScopedPagePauser::Create();
-  }
-
-  return ChildThreadImpl::Send(msg);
-}
-
 IPC::SyncChannel* RenderThreadImpl::GetChannel() {
   return channel();
 }
@@ -861,33 +835,18 @@ IPC::SyncMessageFilter* RenderThreadImpl::GetSyncMessageFilter() {
 
 void RenderThreadImpl::AddRoute(int32_t routing_id, IPC::Listener* listener) {
   ChildThreadImpl::GetRouter()->AddRoute(routing_id, listener);
-  auto it = pending_frames_.find(routing_id);
-  if (it == pending_frames_.end())
-    return;
+}
 
-  RenderFrameImpl* frame = RenderFrameImpl::FromRoutingID(routing_id);
-  if (!frame)
-    return;
-
-  GetChannel()->AddListenerTaskRunner(
-      routing_id,
-      frame->GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
-
-  frame->BindFrame(std::move(it->second));
-  pending_frames_.erase(it);
+void RenderThreadImpl::AttachTaskRunnerToRoute(
+    int32_t routing_id,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  GetChannel()->AddListenerTaskRunner(routing_id, std::move(task_runner));
 }
 
 void RenderThreadImpl::RemoveRoute(int32_t routing_id) {
   ChildThreadImpl::GetRouter()->RemoveRoute(routing_id);
   GetChannel()->RemoveListenerTaskRunner(routing_id);
   pending_frames_.erase(routing_id);
-}
-
-void RenderThreadImpl::RegisterPendingFrameCreate(
-    int routing_id,
-    mojo::PendingReceiver<mojom::Frame> frame_receiver) {
-  auto pair = pending_frames_.emplace(routing_id, std::move(frame_receiver));
-  CHECK(pair.second) << "Inserting a duplicate item.";
 }
 
 mojom::RendererHost* RenderThreadImpl::GetRendererHost() {
@@ -906,7 +865,7 @@ int RenderThreadImpl::GenerateRoutingID() {
 
 bool RenderThreadImpl::GenerateFrameRoutingID(
     int32_t& routing_id,
-    base::UnguessableToken& frame_token,
+    blink::LocalFrameToken& frame_token,
     base::UnguessableToken& devtools_frame_token) {
   return render_message_filter()->GenerateFrameRoutingID(
       &routing_id, &frame_token, &devtools_frame_token);
@@ -930,9 +889,9 @@ void RenderThreadImpl::RemoveObserver(RenderThreadObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void RenderThreadImpl::SetResourceDispatcherDelegate(
-    ResourceDispatcherDelegate* delegate) {
-  resource_dispatcher_->set_delegate(delegate);
+void RenderThreadImpl::SetResourceRequestSenderDelegate(
+    blink::WebResourceRequestSenderDelegate* delegate) {
+  resource_request_sender_delegate_ = delegate;
 }
 
 void RenderThreadImpl::InitializeCompositorThread() {
@@ -1300,10 +1259,6 @@ int32_t RenderThreadImpl::GetClientId() {
   return client_id_;
 }
 
-bool RenderThreadImpl::IsOnline() {
-  return online_status_;
-}
-
 void RenderThreadImpl::SetRendererProcessType(
     blink::scheduler::WebRendererProcessType type) {
   main_thread_scheduler_->SetRendererProcessType(type);
@@ -1440,7 +1395,15 @@ void RenderThreadImpl::SetProcessState(
   }
 
   if (visible_state != visible_state_) {
-    if (visible_state == mojom::RenderProcessVisibleState::kVisible)
+    bool is_visible =
+        visible_state == mojom::RenderProcessVisibleState::kVisible;
+
+    if (!IsInBrowserProcess()) {
+      ProcessVisibilityTracker::GetInstance()->OnProcessVisibilityChanged(
+          is_visible);
+    }
+
+    if (is_visible)
       OnRendererVisible();
     else
       OnRendererHidden();
@@ -1672,29 +1635,29 @@ gpu::GpuChannelHost* RenderThreadImpl::GetGpuChannel() {
 }
 
 void RenderThreadImpl::CreateAgentSchedulingGroup(
-    mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap) {
-  agent_scheduling_groups_.emplace(
-      std::make_unique<AgentSchedulingGroup>(*this, std::move(bootstrap)));
+    mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap,
+    mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> broker_remote) {
+  agent_scheduling_groups_.emplace(std::make_unique<AgentSchedulingGroup>(
+      *this, std::move(bootstrap), std::move(broker_remote)));
 }
 
 void RenderThreadImpl::CreateAssociatedAgentSchedulingGroup(
     mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup>
-        agent_scheduling_group) {
+        agent_scheduling_group,
+    mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker> broker_remote) {
   agent_scheduling_groups_.emplace(std::make_unique<AgentSchedulingGroup>(
-      *this, std::move(agent_scheduling_group)));
+      *this, std::move(agent_scheduling_group), std::move(broker_remote)));
 }
 
 void RenderThreadImpl::OnNetworkConnectionChanged(
     net::NetworkChangeNotifier::ConnectionType type,
     double max_bandwidth_mbps) {
-  online_status_ = type != net::NetworkChangeNotifier::CONNECTION_NONE;
-  WebNetworkStateNotifier::SetOnLine(online_status_);
-  if (url_loader_throttle_provider_)
-    url_loader_throttle_provider_->SetOnline(online_status_);
-  for (auto& observer : observers_)
-    observer.NetworkStateChanged(online_status_);
+  bool online_status = type != net::NetworkChangeNotifier::CONNECTION_NONE;
+  WebNetworkStateNotifier::SetOnLine(online_status);
   WebNetworkStateNotifier::SetWebConnection(
       NetConnectionTypeToWebConnectionType(type), max_bandwidth_mbps);
+  if (url_loader_throttle_provider_)
+    url_loader_throttle_provider_->SetOnline(online_status);
 }
 
 void RenderThreadImpl::OnNetworkQualityChanged(
@@ -1733,7 +1696,7 @@ void RenderThreadImpl::SetUserAgentMetadata(
 
 void RenderThreadImpl::SetCorsExemptHeaderList(
     const std::vector<std::string>& list) {
-  resource_dispatcher_->SetCorsExemptHeaderList(list);
+  cors_exempt_header_list_ = list;
 }
 
 void RenderThreadImpl::UpdateScrollbarTheme(

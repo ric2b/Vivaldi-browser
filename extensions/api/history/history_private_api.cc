@@ -31,6 +31,8 @@ using vivaldi::MilliSecondsFromTime;
 
 namespace extensions {
 
+namespace {
+
 using vivaldi::history_private::HistoryPrivateItem;
 namespace DBSearch = vivaldi::history_private::DbSearch;
 namespace Search = vivaldi::history_private::Search;
@@ -63,6 +65,17 @@ std::unique_ptr<HistoryPrivateItem> GetHistoryItem(const history::URLRow& row) {
 
   return history_item;
 }
+
+history::HistoryService* GetFunctionCallerHistoryService(
+    ExtensionFunction& fun) {
+  Profile* profile = GetFunctionCallerProfile(fun);
+  if (!profile)
+    return nullptr;
+  return HistoryServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+}
+
+}  // namespace
 
 HistoryPrivateAPI::HistoryPrivateAPI(content::BrowserContext* context)
     : browser_context_(context) {
@@ -207,9 +220,6 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
   std::unique_ptr<DBSearch::Params> params(DBSearch::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-
   int max_hits = 100;
 
   if (params->query.max_results.get())
@@ -222,13 +232,10 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
       "AND urls.url LIKE ? OR urls.title LIKE ? "
       "ORDER BY urls.last_visit_time DESC LIMIT ?";
   const std::string search_text = "%" + params->query.text + "%";
-  hs->QueryHistoryWStatement(
+  GetFunctionCallerHistoryService(*this)->QueryHistoryWStatement(
       sql_statement, search_text, max_hits,
-      base::BindOnce(&HistoryPrivateDbSearchFunction::SearchComplete,
-                     base::Unretained(this)),
+      base::BindOnce(&HistoryPrivateDbSearchFunction::SearchComplete, this),
       &task_tracker_);
-
-  AddRef();  // Balanced in SearchComplete().
   return RespondLater();
 }
 
@@ -245,7 +252,6 @@ void HistoryPrivateDbSearchFunction::SearchComplete(
   }
   // This must be revisited since it is slow!
   Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
-  Release();
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
@@ -278,15 +284,10 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
     }
   }
 
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-
-  hs->QueryHistory(search_text, options,
-                   base::BindOnce(&HistoryPrivateSearchFunction::SearchComplete,
-                                  base::Unretained(this)),
-                   &task_tracker_);
-
-  AddRef();  // Balanced in SearchComplete().
+  GetFunctionCallerHistoryService(*this)->QueryHistory(
+      search_text, options,
+      base::BindOnce(&HistoryPrivateSearchFunction::SearchComplete, this),
+      &task_tracker_);
   return RespondLater();
 }
 
@@ -317,15 +318,16 @@ HistoryPrivateItem GetHistoryAndVisitItem(const history::URLResult& row,
 
 void HistoryPrivateSearchFunction::SearchComplete(
     history::QueryResults results) {
+  Profile* profile = GetFunctionCallerProfile(*this);
+  if (!profile)
+    return;
   HistoryItemList history_item_vec;
-  BookmarkModel* model =
-      BookmarkModelFactory::GetForBrowserContext(GetProfile());
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
   if (!results.empty()) {
     for (const auto& item : results)
       history_item_vec.push_back(GetHistoryAndVisitItem(item, model));
   }
   Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
-  Release();
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
@@ -344,21 +346,16 @@ ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
   std::set<GURL> restrict_urls;
   restrict_urls.insert(url);
 
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-  hs->ExpireHistoryBetween(
+  GetFunctionCallerHistoryService(*this)->ExpireHistoryBetween(
       restrict_urls, start_time, end_time, true,
-      base::Bind(&HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete,
-                 base::Unretained(this)),
+      base::BindOnce(&HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete,
+                     this),
       &task_tracker_);
-
-  AddRef();  // Balanced in DeleteVisitComplete().
   return RespondLater();
 }
 
 void HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete() {
   Respond(NoArguments());
-  Release();
 }
 
 ExtensionFunction::ResponseAction
@@ -367,18 +364,15 @@ HistoryPrivateGetTopUrlsPerDayFunction::Run() {
       GetTopUrlsPerDay::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
   double number_of_days = kMaxResultsWithinDay;
   if (params->max_top_url_results)
     number_of_days = params->max_top_url_results;
 
-  hs->TopUrlsPerDay(
+  GetFunctionCallerHistoryService(*this)->TopUrlsPerDay(
       number_of_days,
-      base::Bind(&HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete,
-                 base::Unretained(this)),
+      base::BindOnce(&HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete,
+                     this),
       &task_tracker_);
-  AddRef();  // Balanced in TopUrlsComplete().
   return RespondLater();
 }
 
@@ -400,7 +394,6 @@ void HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete(
     history_item_vec.push_back(std::move(*(GetTopUrlPerDay(item))));
   }
   Respond(ArgumentList(GetTopUrlsPerDay::Results::Create(history_item_vec)));
-  Release();
 }
 
 std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
@@ -443,29 +436,26 @@ ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
   if (params->query.end_time.get())
     options.end_time = GetTime(*params->query.end_time);
 
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
-
-  hs->VisitSearch(options,
-                  base::Bind(&HistoryPrivateVisitSearchFunction::VisitsComplete,
-                             base::Unretained(this)),
-                  &task_tracker_);
-  AddRef();  // Balanced in VisitsComplete().
+  GetFunctionCallerHistoryService(*this)->VisitSearch(
+      options,
+      base::BindOnce(&HistoryPrivateVisitSearchFunction::VisitsComplete, this),
+      &task_tracker_);
   return RespondLater();
 }
 
 // Callback for the history service to acknowledge visits search complete.
 void HistoryPrivateVisitSearchFunction::VisitsComplete(
     const history::Visit::VisitsList& visit_list) {
+  Profile* profile = GetFunctionCallerProfile(*this);
+  if (!profile)
+    return;
   VisitsPrivateList history_item_vec;
-  BookmarkModel* model =
-      BookmarkModelFactory::GetForBrowserContext(GetProfile());
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
 
   for (auto& item : visit_list) {
     history_item_vec.push_back(std::move(*(GetVisitsItem(item, model))));
   }
   Respond(ArgumentList(VisitSearch::Results::Create(history_item_vec)));
-  Release();
 }
 
 ExtensionFunction::ResponseAction
@@ -476,10 +466,9 @@ HistoryPrivateSetKeywordSearchTermsForURLFunction::Run() {
               *args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  HistoryServiceFactory::GetForProfile(GetProfile(),
-                                       ServiceAccessType::EXPLICIT_ACCESS)
-      ->SetKeywordSearchTermsForURL(GURL(params->url), params->keyword_id,
-                                    base::UTF8ToUTF16(params->search_terms));
+  GetFunctionCallerHistoryService(*this)->SetKeywordSearchTermsForURL(
+      GURL(params->url), params->keyword_id,
+      base::UTF8ToUTF16(params->search_terms));
 
   return RespondNow(NoArguments());
 }
@@ -492,9 +481,8 @@ HistoryPrivateDeleteAllSearchTermsForKeywordFunction::Run() {
                  Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  HistoryServiceFactory::GetForProfile(GetProfile(),
-                                       ServiceAccessType::EXPLICIT_ACCESS)
-      ->DeleteAllSearchTermsForKeyword(params->keyword_id);
+  GetFunctionCallerHistoryService(*this)->DeleteAllSearchTermsForKeyword(
+      params->keyword_id);
 
   return RespondNow(NoArguments());
 }
@@ -504,11 +492,11 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
       vivaldi::history_private::GetTypedHistory::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
   history::URLDatabase::TypedUrlResults results;
-  hs->InMemoryDatabase()->GetVivaldiTypedHistory(
-      params->query, params->prefix_keyword_id, params->max_results, &results);
+  GetFunctionCallerHistoryService(*this)
+      ->InMemoryDatabase()
+      ->GetVivaldiTypedHistory(params->query, params->prefix_keyword_id,
+                               params->max_results, &results);
 
   std::vector<vivaldi::history_private::TypedHistoryItem> response;
   for (const auto& result : results) {
@@ -530,13 +518,12 @@ HistoryPrivateMigrateOldTypedUrlFunction::Run() {
       vivaldi::history_private::MigrateOldTypedUrl::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  HistoryServiceFactory::GetForProfile(GetProfile(),
-                                       ServiceAccessType::IMPLICIT_ACCESS)
-      ->AddPage(GURL(params->url), base::Time::FromJsTime(params->time),
-                nullptr, 0, GURL(), history::RedirectList(),
-                HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
-                    params->transition_type),
-                history::SOURCE_BROWSED, false, /*publicly_routable=*/false);
+  GetFunctionCallerHistoryService(*this)->AddPage(
+      GURL(params->url), base::Time::FromJsTime(params->time), nullptr, 0,
+      GURL(), history::RedirectList(),
+      HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
+          params->transition_type),
+      history::SOURCE_BROWSED, false, /*publicly_routable=*/false);
 
   return RespondNow(NoArguments());
 }

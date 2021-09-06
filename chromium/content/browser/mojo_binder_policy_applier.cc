@@ -13,6 +13,15 @@ MojoBinderPolicyApplier::MojoBinderPolicyApplier(
 
 MojoBinderPolicyApplier::~MojoBinderPolicyApplier() = default;
 
+// static
+std::unique_ptr<MojoBinderPolicyApplier>
+MojoBinderPolicyApplier::CreateForPrerendering(
+    base::OnceClosure cancel_closure) {
+  return std::make_unique<MojoBinderPolicyApplier>(
+      MojoBinderPolicyMapImpl::GetInstanceForPrerendering(),
+      std::move(cancel_closure));
+}
+
 void MojoBinderPolicyApplier::ApplyPolicyToBinder(
     const std::string& interface_name,
     base::OnceClosure binder_callback) {
@@ -26,7 +35,6 @@ void MojoBinderPolicyApplier::ApplyPolicyToBinder(
       std::move(binder_callback).Run();
       break;
     case MojoBinderPolicy::kCancel:
-      // TODO(crbug.com/1132752): Integrate with `PrerenderHostRegistry`.
       if (cancel_closure_)
         std::move(cancel_closure_).Run();
       break;

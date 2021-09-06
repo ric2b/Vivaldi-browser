@@ -137,6 +137,8 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool sync_xhr_in_documents_enabled;
   // TODO(https://crbug.com/1163644): Remove once Chrome Apps are deprecated.
   bool target_blank_implies_no_opener_enabled_will_be_removed = true;
+  // TODO(https://crbug.com/1172495): Remove once Chrome Apps are deprecated.
+  bool allow_non_empty_navigator_plugins = false;
   int number_of_cpu_cores;
   blink::mojom::EditingBehavior editing_behavior;
   bool supports_multiple_windows;
@@ -349,6 +351,10 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // context-menu (depends on how the event is handled).  Currently touch-drags
   // cannot show context menus, see crbug.com/1096189.
   bool touch_dragend_context_menu = false;
+
+  // By default, WebXR's immersive-ar session creation is allowed, but this can
+  // change depending on the enterprise policy if the platform supports it.
+  bool webxr_immersive_ar_allowed = true;
 
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.

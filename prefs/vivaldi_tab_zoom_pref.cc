@@ -12,7 +12,7 @@
 // is enabled.
 namespace vivaldi {
 
-bool isTabZoomEnabled(content::WebContents* web_contents) {
+bool IsTabZoomEnabled(content::WebContents* web_contents) {
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
 

@@ -146,7 +146,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         if (hasPromoHeader()) {
             mElements.add(BookmarkListEntry.createSyncPromoHeader(mPromoHeaderType));
         }
-
+        if (!ChromeApplication.isVivaldi())
         updateHeader(false);
         for (BookmarkId bId : bookmarks) {
             BookmarkItem item = mDelegate.getModel().getBookmarkById(bId);
@@ -293,6 +293,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         mDelegate.getModel().addObserver(mBookmarkModelObserver);
         mDelegate.getSelectionDelegate().addObserver(this);
 
+        if (!ChromeApplication.isVivaldi()) {
         Runnable promoHeaderChangeAction = () -> {
             // If top level folders are not showing, update the header and notify.
             // Otherwise, update header without notifying; we are going to update the bookmarks
@@ -302,6 +303,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         };
 
         mPromoHeaderManager = new BookmarkPromoHeader(mContext, promoHeaderChangeAction);
+        }
         populateTopLevelFoldersList();
 
         mElements = new ArrayList<>();
@@ -316,6 +318,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         mDelegate.getModel().removeObserver(mBookmarkModelObserver);
         mDelegate.getSelectionDelegate().removeObserver(this);
         mDelegate = null;
+        if (!ChromeApplication.isVivaldi())
         mPromoHeaderManager.destroy();
         mProfileSyncService.removeSyncStateChangedListener(this);
     }
@@ -557,6 +560,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
     }
 
     private boolean hasPromoHeader() {
+        if (ChromeApplication.isVivaldi()) return false;
         return mPromoHeaderType != ViewType.INVALID;
     }
 
@@ -674,7 +678,8 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
                         case TITLE:
                             return item.getTitle().compareTo(t1.getBookmarkItem().getTitle());
                         case ADDRESS:
-                            return item.getUrl().compareTo(t1.getBookmarkItem().getUrl());
+                            return item.getUrl().getSpec()
+                                    .compareTo(t1.getBookmarkItem().getUrl().getSpec());
                         case NICK:
                             if (item.getNickName().isEmpty()) return 1;
                             else if (t1.getBookmarkItem().getNickName().isEmpty()) return -1;
@@ -696,8 +701,11 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
             }
             setBookmarks(sortedIds);
             disableDrag();
-        } else {
-            setBookmarks(mDelegate.getModel().getChildIDsVivaldi(mCurrentFolder, true,
+        } else { // Manual sort order
+            if (topLevelFoldersShowing())
+                setBookmarks(mTopLevelFolders);
+            else
+                setBookmarks(mDelegate.getModel().getChildIDsVivaldi(mCurrentFolder, true,
                     true, false));
             enableDrag();
         }

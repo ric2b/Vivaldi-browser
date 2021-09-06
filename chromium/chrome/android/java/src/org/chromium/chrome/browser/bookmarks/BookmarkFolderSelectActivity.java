@@ -37,9 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
-
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
-import org.vivaldi.browser.bookmarks.VivaldiBookmarkEditActivity;
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
 
@@ -174,8 +172,16 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
         setSupportActionBar(toolbar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         if (ChromeApplication.isVivaldi())
-            getSupportActionBar().setHomeAsUpIndicator(getResources().getDrawable(R.drawable.vivaldi_nav_button_back));
+            getSupportActionBar().setHomeAsUpIndicator(
+                    getResources().getDrawable(R.drawable.vivaldi_nav_button_back));
 
+        if (ChromeApplication.isVivaldi()) {
+            showBookmarks = getIntent().getBooleanExtra(INTENT_SHOW_BOOKMARKS, true);
+            showSpeedDials = getIntent().getBooleanExtra(INTENT_SHOW_SPEED_DIALS, true);
+            VivaldiUtils.updateStatusBar(this);
+            getWindow().setStatusBarColor(
+                    getResources().getColor(android.R.color.transparent));
+        }
         updateFolderList();
 
         View shadow = findViewById(R.id.shadow);
@@ -188,12 +194,6 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
                             ? View.VISIBLE
                             : View.GONE);
         });
-
-        if (ChromeApplication.isVivaldi()) {
-            VivaldiUtils.updateStatusBar(this);
-            getWindow().setStatusBarColor(
-                    getResources().getColor(android.R.color.transparent));
-        }
     }
 
     private void updateFolderList() {
@@ -210,10 +210,15 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
 
         for (int i = 0; i < folderList.size(); i++) {
             BookmarkId folder = folderList.get(i);
-
             if (!mModel.isFolderVisible(folder)) continue;
 
             String title = mModel.getBookmarkById(folder).getTitle();
+            if (ChromeApplication.isVivaldi()) {
+                boolean sd = mModel.getBookmarkById(folder).isSpeeddial();
+                if (showSpeedDials && sd || showBookmarks && !sd)
+                entryList.add(new FolderListEntry(folder, depthList.get(i), title,
+                        folder.equals(mParentId), FolderListEntry.TYPE_NORMAL, sd));
+            } else
             entryList.add(new FolderListEntry(folder, depthList.get(i), title,
                     folder.equals(mParentId), FolderListEntry.TYPE_NORMAL));
         }
@@ -257,9 +262,16 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             setResult(RESULT_OK, intent);
             finish();
         } else if (entry.mType == FolderListEntry.TYPE_NEW_FOLDER) {
+            if (ChromeApplication.isVivaldi())
+                VivaldiBookmarkAddEditFolderActivity.startAddFolderActivity(
+                        this,
+                        false,
+                        mParentId,
+                        mBookmarksToMove);
+            else
             BookmarkAddEditFolderActivity.startAddFolderActivity(this, mBookmarksToMove);
         } else if (entry.mType == FolderListEntry.TYPE_NORMAL) {
-            if (entry.mId.equals(mParentId)) {
+            if (ChromeApplication.isVivaldi() && entry.mId.equals(mParentId)) {
                 finish();
             } else {
                 mModel.moveBookmarks(mBookmarksToMove, entry.mId);
@@ -303,6 +315,19 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             mTitle = title;
             mIsSelected = isSelected;
             mType = type;
+        }
+
+        // Vivaldi
+        boolean mIsSpeedDial;
+        public FolderListEntry(BookmarkId bookmarkId, int depth, String title, boolean isSelected,
+                int type, boolean isSpeedDial) {
+            assert type == TYPE_NEW_FOLDER || type == TYPE_NORMAL;
+            mDepth = depth;
+            mId = bookmarkId;
+            mTitle = title;
+            mIsSelected = isSelected;
+            mType = type;
+            mIsSpeedDial = isSpeedDial;
         }
     }
 
@@ -390,9 +415,10 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
 
             Drawable iconDrawable;
             if (entry.mType == FolderListEntry.TYPE_NORMAL) {
-                if (ChromeApplication.isVivaldi())
-                    iconDrawable = VivaldiBookmarkUtils.getFolderIcon(view.getContext());
-                else
+                if (ChromeApplication.isVivaldi()) {
+                    iconDrawable = VivaldiBookmarkUtils.getFolderIconForAddDialog(
+                            view.getContext(), entry.mIsSpeedDial, entry.mIsSelected);
+                } else
                 iconDrawable = BookmarkUtils.getFolderIcon(view.getContext(), BookmarkType.NORMAL);
             } else {
                 // For new folder, start_icon is different.
@@ -403,6 +429,9 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
                 iconDrawable = vectorDrawable;
             }
 
+            if (ChromeApplication.isVivaldi())
+                startIcon.setImageDrawable(iconDrawable);
+            else
             SelectableItemView.applyModernIconStyle(startIcon, iconDrawable, entry.mIsSelected);
         }
 
@@ -436,13 +465,40 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
         return INTENT_BOOKMARKS_TO_MOVE;
     }
     public static int getCreateFolderRequestCode() { return CREATE_FOLDER_REQUEST_CODE; }
+    public static String getIntentSelectedFolder() { return INTENT_SELECTED_FOLDER; }
+    public static final String INTENT_SHOW_SPEED_DIALS = "ShowSpeedDials";
+    public static final String INTENT_SHOW_BOOKMARKS = "ShowBookmarks";
+    private boolean showSpeedDials = true;
+    private boolean showBookmarks = true;
 
     /**
      * Starts a select folder activity for the new folder that is about to be created. This method
      * is only supposed to be called by {@link BookmarkAddEditFolderActivity}
      */
     public static void startNewFolderSelectActivityForVivaldi(
-            BookmarkAddEditFolderActivity activity, List<BookmarkId> bookmarks) {
+            VivaldiBookmarkAddEditFolderActivity activity,
+            boolean onlySD,
+            List<BookmarkId> bookmarks) {
+        assert ChromeApplication.isVivaldi() || bookmarks.size() > 0;
+        Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
+        intent.putExtra(INTENT_IS_CREATING_FOLDER, true);
+        intent.putExtra(INTENT_SHOW_SPEED_DIALS, onlySD);
+        intent.putExtra(INTENT_SHOW_BOOKMARKS, !onlySD);
+        ArrayList<String> bookmarkStrings = new ArrayList<>(bookmarks.size());
+        for (BookmarkId id : bookmarks) {
+            bookmarkStrings.add(id.toString());
+        }
+        intent.putStringArrayListExtra(INTENT_BOOKMARKS_TO_MOVE, bookmarkStrings);
+        activity.startActivityForResult(intent,
+                BookmarkAddEditFolderActivity.PARENT_FOLDER_REQUEST_CODE);
+    }
+
+    /**
+     * Starts a select folder activity for the new folder that is about to be created. This method
+     * is only supposed to be called by {@link BookmarkAddEditFolderActivity}
+     */
+    public static void startNewFolderSelectActivityForVivaldi(
+            VivaldiBookmarkAddEditFolderActivity activity, List<BookmarkId> bookmarks) {
         assert ChromeApplication.isVivaldi() || bookmarks.size() > 0;
         Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
         intent.putExtra(INTENT_IS_CREATING_FOLDER, true);

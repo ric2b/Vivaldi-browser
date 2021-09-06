@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2018 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2016-2021 Vivaldi Technologies AS. All rights reserved
 
 #include "extensions/api/tabs/tabs_private_api.h"
 
@@ -17,7 +17,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "browser/translate/vivaldi_translate_client.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -37,12 +39,20 @@
 #include "components/permissions/permission_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/translate/core/browser/language_state.h"
+#include "components/translate/core/browser/translate_manager.h"
+#include "components/translate/core/browser/translate_ui_delegate.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h" // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/notification_details.h"
+#include "content/public/browser/notification_service.h"
+#include "content/public/browser/notification_source.h"
+#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "extensions/api/access_keys/access_keys_api.h"
@@ -385,11 +395,25 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
   prefs_registrar_.Add(vivaldiprefs::kWebpagesAccessKeys,
                        base::Bind(&VivaldiPrivateTabObserver::OnPrefsChanged,
                                   weak_ptr_factory_.GetWeakPtr()));
+
+  VivaldiTranslateClient* translate_client =
+      VivaldiTranslateClient::FromWebContents(web_contents);
+  DCHECK(translate_client);
+
+  translate_client->translate_driver()->AddTranslationObserver(this);
+  translate_client->translate_driver()->AddLanguageDetectionObserver(this);
 }
 
 VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {}
 
-void VivaldiPrivateTabObserver::WebContentsDestroyed() {}
+void VivaldiPrivateTabObserver::WebContentsDestroyed() {
+  VivaldiTranslateClient* translate_client =
+      VivaldiTranslateClient::FromWebContents(web_contents());
+  DCHECK(translate_client);
+
+  translate_client->translate_driver()->RemoveTranslationObserver(this);
+  translate_client->translate_driver()->RemoveLanguageDetectionObserver(this);
+}
 
 void VivaldiPrivateTabObserver::OnPrefsChanged(const std::string& path) {
   if (path == vivaldiprefs::kWebpagesFocusTrap) {
@@ -442,11 +466,11 @@ base::Optional<base::Value> GetDictValueFromExtData(std::string& extdata) {
   return base::nullopt;
 }
 
-void VivaldiPrivateTabObserver::RenderViewCreated(
-    content::RenderViewHost* render_view_host) {
+void VivaldiPrivateTabObserver::RenderFrameCreated(
+    content::RenderFrameHost* render_frame_host) {
   std::string ext = web_contents()->GetExtData();
   base::Optional<base::Value> json = GetDictValueFromExtData(ext);
-  if (::vivaldi::isTabZoomEnabled(web_contents())) {
+  if (::vivaldi::IsTabZoomEnabled(web_contents())) {
     base::Optional<double> zoom =
         json ? json->FindDoubleKey(kVivaldiTabZoom) : base::nullopt;
     if (zoom) {
@@ -459,10 +483,8 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
     }
   }
 
-  mute_ = IsTabMuted(web_contents());
-
   // This is not necessary for each RVH-change.
-  SetMuted(mute_);
+  SetMuted(IsTabMuted(web_contents()));
 
   SetShowImages(show_images_);
   SetLoadFromCacheOnly(load_from_cache_only_);
@@ -471,11 +493,10 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
   UpdateAllowAccessKeys();
   CommitSettings();
 
-  const GURL& site = render_view_host->GetSiteInstance()->GetSiteURL();
-  std::string renderviewhost = site.host();
-  if (::vivaldi::IsVivaldiApp(renderviewhost)) {
+  const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
+  if (::vivaldi::IsVivaldiApp(site.host())) {
     auto* security_policy = content::ChildProcessSecurityPolicy::GetInstance();
-    int process_id = render_view_host->GetProcess()->GetID();
+    int process_id = render_frame_host->GetProcess()->GetID();
     security_policy->GrantRequestScheme(process_id, url::kFileScheme);
     security_policy->GrantRequestScheme(process_id, content::kViewSourceScheme);
   }
@@ -496,7 +517,7 @@ void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
 void VivaldiPrivateTabObserver::RenderViewHostChanged(
     content::RenderViewHost* old_host,
     content::RenderViewHost* new_host) {
-  if (::vivaldi::isTabZoomEnabled(web_contents())) {
+  if (::vivaldi::IsTabZoomEnabled(web_contents())) {
     int render_view_id = new_host->GetRoutingID();
     int process_id = new_host->GetProcess()->GetID();
 
@@ -568,10 +589,13 @@ void VivaldiPrivateTabObserver::SetMuted(bool mute) {
   std::string ext = web_contents()->GetExtData();
   base::Optional<base::Value> json = GetDictValueFromExtData(ext);
   if (json) {
-    json->SetBoolKey(kVivaldiTabMuted, mute);
-    std::string json_string;
-    if (ValueToJSONString(*json, json_string)) {
-      web_contents()->SetExtData(json_string);
+    base::Optional<bool> existing = json->FindBoolKey(kVivaldiTabMuted);
+    if ((existing && *existing != mute) || (!existing && mute)) {
+      json->SetBoolKey(kVivaldiTabMuted, mute);
+      std::string json_string;
+      if (ValueToJSONString(*json, json_string)) {
+        web_contents()->SetExtData(json_string);
+      }
     }
   }
   if (mute_ == web_contents()->IsAudioMuted()) {
@@ -611,7 +635,7 @@ void VivaldiPrivateTabObserver::OnZoomChanged(
       content::BrowserContext::GetStoragePartition(
           web_contents->GetBrowserContext(), web_contents->GetSiteInstance(),
           false);
-  if (!::vivaldi::isTabZoomEnabled(web_contents) || tab_zoom_level_ == -1) {
+  if (!::vivaldi::IsTabZoomEnabled(web_contents) || tab_zoom_level_ == -1) {
     return;
   }
 
@@ -809,6 +833,65 @@ void VivaldiPrivateTabObserver::NavigationEntryCommitted(
     const content::LoadCommittedDetails& load_details) {
   TabsPrivateAPI::FromBrowserContext(web_contents()->GetBrowserContext())
       ->UpdateMuting();
+}
+
+// translate::ContentTranslateDriver::Observer implementation
+void VivaldiPrivateTabObserver::OnLanguageDetermined(
+    const translate::LanguageDetectionDetails& details) {
+  VivaldiTranslateClient* translate_client =
+      VivaldiTranslateClient::FromWebContents(web_contents());
+  if (!translate_client->IsTranslatableURL(details.url)) {
+    return;
+  }
+  extensions::vivaldi::tabs_private::LanguageDetectionDetails lang_details;
+
+  lang_details.url = details.url.spec();
+  lang_details.content_language = details.content_language;
+  lang_details.cld_language = details.model_detected_language;
+  lang_details.is_cld_reliable = details.is_model_reliable;
+  lang_details.has_no_translate = details.has_notranslate;
+  lang_details.html_root_language = details.html_root_language;
+  lang_details.adopted_language = details.adopted_language;
+
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+  if (tab_id) {
+    ::vivaldi::BroadcastEvent(
+        extensions::vivaldi::tabs_private::OnLanguageDetermined::kEventName,
+        extensions::vivaldi::tabs_private::OnLanguageDetermined::Create(
+            tab_id, std::move(lang_details)),
+        web_contents()->GetBrowserContext());
+  }
+}
+
+void VivaldiPrivateTabObserver::OnPageTranslated(
+    const std::string& original_lang,
+    const std::string& translated_lang,
+    translate::TranslateErrors::Type error_type) {
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+  if (tab_id) {
+    ::vivaldi::BroadcastEvent(
+        extensions::vivaldi::tabs_private::OnPageTranslated::kEventName,
+        extensions::vivaldi::tabs_private::OnPageTranslated::Create(
+            tab_id, original_lang, translated_lang,
+            ToVivaldiTranslateError(error_type)),
+        web_contents()->GetBrowserContext());
+  }
+}
+
+void VivaldiPrivateTabObserver::OnIsPageTranslatedChanged(
+    content::WebContents* source) {
+  VivaldiTranslateClient* translate_client =
+      VivaldiTranslateClient::FromWebContents(web_contents());
+  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
+  bool isTranslated = translate_client->GetLanguageState().IsPageTranslated();
+
+  // OnPageTranslated is typically the main event, but it's not fired when
+  // revert has been used, so the client will need this event to know.
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::tabs_private::OnIsPageTranslatedChanged::kEventName,
+      extensions::vivaldi::tabs_private::OnIsPageTranslatedChanged::Create(
+          tab_id, isTranslated),
+      web_contents()->GetBrowserContext());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1150,6 +1233,54 @@ TabsPrivateHasBeforeUnloadOrUnloadFunction::Run() {
           params->tab_id, browser_context(), nullptr);
   return RespondNow(ArgumentList(
       Results::Create(contents && contents->NeedToFireBeforeUnloadOrUnloadEvents())));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateTranslatePageFunction::Run() {
+  using tabs_private::TranslatePage::Params;
+  namespace Results = tabs_private::TranslatePage::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string source = params->src_lang;
+  std::string dest = params->dest_lang;
+
+  if (dest.empty()) {
+    return RespondNow(Error("Missing destination language"));
+  }
+  content::WebContents* contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+          params->tab_id, browser_context(), nullptr);
+
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate =
+      std::make_unique<translate::TranslateUIDelegate>(
+          VivaldiTranslateClient::GetManagerFromWebContents(contents)
+              ->GetWeakPtr(),
+          source, dest);
+  ui_delegate->Translate();
+
+  return RespondNow(ArgumentList(Results::Create(true)));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateRevertTranslatePageFunction::Run() {
+  using tabs_private::RevertTranslatePage::Params;
+  namespace Results = tabs_private::RevertTranslatePage::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  content::WebContents* contents =
+    ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+        params->tab_id, browser_context(), nullptr);
+
+  translate::TranslateManager* translate_manager =
+      VivaldiTranslateClient::GetManagerFromWebContents(contents);
+  if (translate_manager) {
+    translate_manager->RevertTranslation();
+  }
+  return RespondNow(ArgumentList(Results::Create(true)));
 }
 
 }  // namespace extensions

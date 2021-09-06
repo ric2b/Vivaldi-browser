@@ -187,7 +187,6 @@ void WriteCommand(const Target* target,
         out << flags.cflags_objcc;
     } else if (range.type == &SubstitutionLabel ||
                range.type == &SubstitutionLabelName ||
-               range.type == &SubstitutionLabelNoToolchain ||
                range.type == &SubstitutionRootGenDir ||
                range.type == &SubstitutionRootOutDir ||
                range.type == &SubstitutionTargetGenDir ||

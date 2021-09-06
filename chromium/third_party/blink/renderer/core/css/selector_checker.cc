@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
+#include "third_party/blink/renderer/core/html/html_popup_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -550,6 +551,14 @@ static bool AnyAttributeMatches(Element& element,
     if (legacy_case_insensitive &&
         AttributeValueMatches(attribute_item, match, selector_value,
                               kTextCaseASCIIInsensitive)) {
+      // If the `s` modifier is in the attribute selector, return false
+      // despite of legacy_case_insensitive.
+      if (selector.AttributeMatch() ==
+          CSSSelector::AttributeMatchType::kCaseSensitiveAlways) {
+        DCHECK(RuntimeEnabledFeatures::CSSCaseSensitiveSelectorEnabled());
+        return false;
+      }
+
       UseCounter::Count(element.GetDocument(),
                         WebFeature::kCaseInsensitiveAttrSelectorMatch);
       return true;
@@ -937,10 +946,14 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         break;
 
       if (auto* html_element = DynamicTo<HTMLElement>(element)) {
-        return html_element->ComputeInheritedDirectionality() == direction;
+        return html_element->CachedDirectionality() == direction;
       }
       break;
     }
+    case CSSSelector::kPseudoPopupOpen:
+      if (auto* popup_element = DynamicTo<HTMLPopupElement>(element))
+        return popup_element->open();
+      break;
     case CSSSelector::kPseudoFullscreen:
     // fall through
     case CSSSelector::kPseudoFullScreen:
@@ -1027,7 +1040,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return !element.GetDocument().GetPage()->GetFocusController().IsActive();
     case CSSSelector::kPseudoState: {
       return element.DidAttachInternals() &&
-             element.EnsureElementInternals().HasState(selector.Argument());
+             element.EnsureElementInternals().HasState(selector.Value());
     }
     case CSSSelector::kPseudoHorizontal:
     case CSSSelector::kPseudoVertical:
@@ -1112,6 +1125,12 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
         return false;
       return true;
     }
+    case CSSSelector::kPseudoTargetText:
+      if (!is_ua_rule_) {
+        UseCounter::Count(context.element->GetDocument(),
+                          WebFeature::kCSSSelectorTargetText);
+      }
+      FALLTHROUGH;
     default:
       DCHECK_NE(mode_, kQueryingRules);
       result.dynamic_pseudo =

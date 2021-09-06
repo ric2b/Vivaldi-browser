@@ -7,6 +7,7 @@
 #include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/scoped_observation.h"
 #include "base/values.h"
 #include "chrome/browser/cart/cart_db.h"
 #include "chrome/browser/cart/cart_service_factory.h"
@@ -36,12 +37,6 @@ class CartService : public history::HistoryServiceObserver,
   void RestoreHidden();
   // Returns whether cart module has been temporarily hidden.
   bool IsHidden();
-  // Gets called when cart module is permanently removed.
-  void Remove();
-  // Gets called when restoring the permanently removed cart module.
-  void RestoreRemoved();
-  // Returns whether cart module has been permanently removed.
-  bool IsRemoved();
   // Get the proto database owned by the service.
   CartDB* GetDB();
   // Load the cart for a domain.
@@ -122,6 +117,8 @@ class CartService : public history::HistoryServiceObserver,
   Profile* profile_;
   std::unique_ptr<CartDB> cart_db_;
   history::HistoryService* history_service_;
+  base::ScopedObservation<history::HistoryService, HistoryServiceObserver>
+      history_service_observation_{this};
   base::Optional<base::Value> domain_name_mapping_;
   base::Optional<base::Value> domain_cart_url_mapping_;
   base::WeakPtrFactory<CartService> weak_ptr_factory_{this};

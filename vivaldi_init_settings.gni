@@ -25,10 +25,6 @@ declare_overrides() {
     if (is_official_build) {
       symbol_level = 1
     }
-    if (target_cpu == "x86") {
-      use_lld = true
-      enable_av1_decoder = false
-    }
   }
 
   if (is_android) {

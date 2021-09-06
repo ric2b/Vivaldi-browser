@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/constants/ash_features.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -15,9 +16,9 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/policy/policy_constants.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -29,10 +30,7 @@ namespace policy {
 
 class SystemFeaturesPolicyTest : public PolicyTest {
  public:
-  SystemFeaturesPolicyTest() {
-    scoped_feature_list_.InitAndDisableFeature(
-        chromeos::features::kCameraSystemWebApp);
-  }
+  SystemFeaturesPolicyTest() = default;
 
  protected:
   base::string16 GetWebUITitle(const GURL& url) {
@@ -55,18 +53,25 @@ class SystemFeaturesPolicyTest : public PolicyTest {
   }
 
   // Disables specified system features or enables all if system_features is
-  // empty.
-  void UpdateSystemFeaturesDisableList(base::Value system_features) {
+  // empty. Updates disabled mode for disabled system features.
+  void UpdateSystemFeaturesDisableList(base::Value system_features,
+                                       const char* disabled_mode) {
     PolicyMap policies;
     policies.Set(key::kSystemFeaturesDisableList, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                  std::move(system_features), nullptr);
+    if (disabled_mode) {
+      policies.Set(key::kSystemFeaturesDisableMode, POLICY_LEVEL_MANDATORY,
+                   POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                   base::Value(disabled_mode), nullptr);
+    }
     UpdateProviderPolicy(policies);
   }
 
   void VerifyAppState(const char* app_id,
                       apps::mojom::Readiness expected_readiness,
-                      bool blocked_icon) {
+                      bool blocked_icon,
+                      apps::mojom::OptionalBool expected_visibility) {
     auto* profile = browser()->profile();
     extensions::ExtensionRegistry* registry =
         extensions::ExtensionRegistry::Get(profile);
@@ -77,8 +82,8 @@ class SystemFeaturesPolicyTest : public PolicyTest {
     proxy->FlushMojoCallsForTesting();
 
     proxy->AppRegistryCache().ForOneApp(
-        app_id,
-        [&expected_readiness, &blocked_icon](const apps::AppUpdate& update) {
+        app_id, [&expected_readiness, &blocked_icon,
+                 &expected_visibility](const apps::AppUpdate& update) {
           EXPECT_EQ(expected_readiness, update.Readiness());
           if (blocked_icon) {
             EXPECT_TRUE(apps::IconEffects::kBlocked &
@@ -87,96 +92,79 @@ class SystemFeaturesPolicyTest : public PolicyTest {
             EXPECT_FALSE(apps::IconEffects::kBlocked &
                          update.IconKey()->icon_effects);
           }
+          EXPECT_EQ(expected_visibility, update.ShowInLauncher());
+          EXPECT_EQ(expected_visibility, update.ShowInSearch());
+          EXPECT_EQ(expected_visibility, update.ShowInShelf());
         });
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
-
-IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest, DisableCameraBeforeInstall) {
-  base::Value system_features(base::Value::Type::LIST);
-  system_features.Append(kCameraFeature);
-  UpdateSystemFeaturesDisableList(std::move(system_features));
-  EnableExtensions(false);
-  VerifyAppState(extension_misc::kCameraAppId,
-                 apps::mojom::Readiness::kDisabledByPolicy, true);
-
-  UpdateSystemFeaturesDisableList(base::Value());
-  VerifyAppState(extension_misc::kCameraAppId, apps::mojom::Readiness::kReady,
-                 false);
-}
-
-IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest, DisableCameraAfterInstall) {
-  EnableExtensions(false);
-  base::Value system_features(base::Value::Type::LIST);
-  system_features.Append(kCameraFeature);
-  UpdateSystemFeaturesDisableList(std::move(system_features));
-
-  VerifyAppState(extension_misc::kCameraAppId,
-                 apps::mojom::Readiness::kDisabledByPolicy, true);
-
-  UpdateSystemFeaturesDisableList(base::Value());
-  VerifyAppState(extension_misc::kCameraAppId, apps::mojom::Readiness::kReady,
-                 false);
-}
 
 IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest, DisableWebStoreBeforeInstall) {
   base::Value system_features(base::Value::Type::LIST);
   system_features.Append(kWebStoreFeature);
-  UpdateSystemFeaturesDisableList(std::move(system_features));
+  UpdateSystemFeaturesDisableList(std::move(system_features), nullptr);
   EnableExtensions(true);
   VerifyAppState(extensions::kWebStoreAppId,
-                 apps::mojom::Readiness::kDisabledByPolicy, true);
+                 apps::mojom::Readiness::kDisabledByPolicy, true,
+                 apps::mojom::OptionalBool::kTrue);
 
-  UpdateSystemFeaturesDisableList(base::Value());
+  UpdateSystemFeaturesDisableList(base::Value(), nullptr);
   VerifyAppState(extensions::kWebStoreAppId, apps::mojom::Readiness::kReady,
-                 false);
+                 false, apps::mojom::OptionalBool::kTrue);
 }
 
 IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest, DisableWebStoreAfterInstall) {
   EnableExtensions(false);
   base::Value system_features(base::Value::Type::LIST);
   system_features.Append(kWebStoreFeature);
-  UpdateSystemFeaturesDisableList(std::move(system_features));
+  UpdateSystemFeaturesDisableList(std::move(system_features), nullptr);
 
   VerifyAppState(extensions::kWebStoreAppId,
-                 apps::mojom::Readiness::kDisabledByPolicy, true);
+                 apps::mojom::Readiness::kDisabledByPolicy, true,
+                 apps::mojom::OptionalBool::kTrue);
 
-  UpdateSystemFeaturesDisableList(base::Value());
+  UpdateSystemFeaturesDisableList(base::Value(), nullptr);
   VerifyAppState(extensions::kWebStoreAppId, apps::mojom::Readiness::kReady,
-                 false);
+                 false, apps::mojom::OptionalBool::kTrue);
 }
 
 IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
-                       DisableCameraAndWebStoreAfterInstall) {
+                       DisableWebStoreAfterInstallWithModes) {
   EnableExtensions(false);
   base::Value system_features(base::Value::Type::LIST);
   system_features.Append(kWebStoreFeature);
-  system_features.Append(kCameraFeature);
-  UpdateSystemFeaturesDisableList(std::move(system_features));
-
+  // Disable app with default mode (blocked)..
+  UpdateSystemFeaturesDisableList(system_features.Clone(), nullptr);
   VerifyAppState(extensions::kWebStoreAppId,
-                 apps::mojom::Readiness::kDisabledByPolicy, true);
-  VerifyAppState(extension_misc::kCameraAppId,
-                 apps::mojom::Readiness::kDisabledByPolicy, true);
-
-  UpdateSystemFeaturesDisableList(base::Value());
+                 apps::mojom::Readiness::kDisabledByPolicy, true,
+                 apps::mojom::OptionalBool::kTrue);
+  // Disable and hide app.
+  UpdateSystemFeaturesDisableList(system_features.Clone(), kHiddenDisableMode);
+  VerifyAppState(extensions::kWebStoreAppId,
+                 apps::mojom::Readiness::kDisabledByPolicy, true,
+                 apps::mojom::OptionalBool::kFalse);
+  // Disable and block app.
+  UpdateSystemFeaturesDisableList(system_features.Clone(), kBlockedDisableMode);
+  VerifyAppState(extensions::kWebStoreAppId,
+                 apps::mojom::Readiness::kDisabledByPolicy, true,
+                 apps::mojom::OptionalBool::kTrue);
+  // Enable app
+  UpdateSystemFeaturesDisableList(base::Value(), nullptr);
   VerifyAppState(extensions::kWebStoreAppId, apps::mojom::Readiness::kReady,
-                 false);
+                 false, apps::mojom::OptionalBool::kTrue);
 }
 
 IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest, RedirectChromeSettingsURL) {
   PolicyMap policies;
   base::Value system_features(base::Value::Type::LIST);
   system_features.Append(kBrowserSettingsFeature);
-  UpdateSystemFeaturesDisableList(std::move(system_features));
+  UpdateSystemFeaturesDisableList(std::move(system_features), nullptr);
 
   GURL settings_url = GURL(chrome::kChromeUISettingsURL);
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_CHROME_URLS_DISABLED_PAGE_HEADER),
             GetWebUITitle(settings_url));
 
-  UpdateSystemFeaturesDisableList(base::Value());
+  UpdateSystemFeaturesDisableList(base::Value(), nullptr);
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_SETTINGS_SETTINGS),
             GetWebUITitle(settings_url));
 }

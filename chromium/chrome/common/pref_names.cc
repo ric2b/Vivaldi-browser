@@ -101,12 +101,6 @@ const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 // shutdown. Used to determine the exit type the last time the profile was open.
 const char kSessionExitType[] = "profile.exit_type";
 
-// The last time that the site engagement service recorded an engagement event
-// for this profile for any URL. Recorded only during shutdown. Used to prevent
-// the service from decaying engagement when a user does not use Chrome at all
-// for an extended period of time.
-const char kSiteEngagementLastUpdateTime[] = "profile.last_engagement_time";
-
 // An integer pref. Holds one of several values:
 // 0: unused, previously indicated to open the homepage on startup
 // 1: restore the last session.
@@ -382,6 +376,11 @@ const char kWebKitPluginsEnabled[] = "webkit.webprefs.plugins_enabled";
 // Boolean that is true when the SSL interstitial should allow users to
 // proceed anyway. Otherwise, proceeding is not possible.
 const char kSSLErrorOverrideAllowed[] = "ssl.error_override_allowed";
+
+// List of origins for which the SSL interstitial should allow users to proceed
+// anyway. Ignored if kSSLErrorOverrideAllowed is false.
+const char kSSLErrorOverrideAllowedForOrigins[] =
+    "ssl.error_override_allowed_for_origins";
 
 // Enum that specifies whether Incognito mode is:
 // 0 - Enabled. Default behaviour. Default mode is available on demand.
@@ -1040,10 +1039,6 @@ const char kLastRsuDeviceIdUploaded[] = "rsu.last_rsu_device_id_uploaded";
 // A string pref stored in local state containing the name of the device.
 const char kDeviceName[] = "device_name";
 
-// Boolean user profile pref that determines whether to show a banner in browser
-// settings that links to OS settings.
-const char kSettingsShowOSBanner[] = "settings.cros.show_os_banner";
-
 // Int64 pref indicating the time in microseconds since Windows epoch when the
 // timer for update required which will block user session was started. If the
 // timer is not started the pref holds the default value base::Time().
@@ -1071,6 +1066,12 @@ const char kEduCoexistenceArcMigrationCompleted[] =
 const char kIntegratedWebAuthenticationAllowed[] =
     "auth.integrated_web_authentication_allowed";
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+// Boolean user profile pref that determines whether to show a banner in browser
+// settings that links to OS settings.
+const char kSettingsShowOSBanner[] = "settings.cros.show_os_banner";
+#endif
 
 // A boolean pref set to true if a Home button to open the Home pages should be
 // visible on the toolbar.
@@ -1233,30 +1234,6 @@ const char kLiveCaptionLanguageCode[] =
 
 // The file path of the Speech On-Device API (SODA) binary.
 const char kSodaBinaryPath[] = "accessibility.captions.soda_binary_path";
-
-// The file path of the en-US Speech On-Device API (SODA) configuration file.
-const char kSodaEnUsConfigPath[] =
-    "accessibility.captions.soda_en_us_config_path";
-
-// The file path of the ja-JP Speech On-Device API (SODA) configuration file.
-const char kSodaJaJpConfigPath[] =
-    "accessibility.captions.soda_ja_jp_config_path";
-
-// The file path of the de-DE Speech On-Device API (SODA) configuration file.
-const char kSodaDeDeConfigPath[] =
-    "accessibility.captions.soda_de_de_config_path";
-
-// The file path of the es-ES Speech On-Device API (SODA) configuration file.
-const char kSodaEsEsConfigPath[] =
-    "accessibility.captions.soda_es_es_config_path";
-
-// The file path of the fr-FR Speech On-Device API (SODA) configuration file.
-const char kSodaFrFrConfigPath[] =
-    "accessibility.captions.soda_fr_fr_config_path";
-
-// The file path of the it-IT Speech On-Device API (SODA) configuration file.
-const char kSodaItItConfigPath[] =
-    "accessibility.captions.soda_it_it_config_path";
 
 // The scheduled time to clean up the Speech On-Device API (SODA) files from the
 // device.
@@ -1625,9 +1602,15 @@ const char kQuietNotificationPermissionPromoWasShown[] =
     "profile.content_settings.quiet_permission_ui_promo.was_shown."
     "notifications";
 
-// List containing a history of past permission actions.
-const char kNotificationPermissionActions[] =
-    "profile.content_settings.permission_actions.notifications";
+// List containing a history of past permission actions, for all permission
+// types.
+const char kPermissionActions[] = "profile.content_settings.permission_actions";
+
+// Boolean indicating if JS dialogs triggered from a different origin iframe
+// should be blocked. Has no effect if
+// "SuppressDifferentOriginSubframeJSDialogs" feature is disabled.
+const char kSuppressDifferentOriginSubframeJSDialogs[] =
+    "suppress_different_origin_subframe_js_dialogs";
 
 // *************** LOCAL STATE ***************
 // These are attached to the machine/installation
@@ -1866,6 +1849,7 @@ const char kNtpCustomBackgroundDict[] = "ntp.custom_background_dict";
 const char kNtpCustomBackgroundLocalToDevice[] =
     "ntp.custom_background_local_to_device";
 const char kNtpModulesVisible[] = "NewTabPage.ModulesVisible";
+const char kNtpDisabledModules[] = "NewTabPage.DisabledModules";
 // List of promos that the user has dismissed while on the NTP.
 const char kNtpPromoBlocklist[] = "ntp.promo_blocklist";
 // Data associated with search suggestions that appear on the NTP.
@@ -1945,6 +1929,9 @@ const char kWebAppCreateInQuickLaunchBar[] =
 // will be launched.
 const char kWebAppInstallForceList[] = "profile.web_app.install.forcelist";
 
+// A list of dictionaries for managing Web Apps.
+const char kWebAppSettings[] = "profile.web_app.policy_settings";
+
 // A list of dictionaries for managed configurations. Each dictionary contains
 // 3 strings -- origin to be configured, link to the configuration, and the
 // hashed value to that configuration.
@@ -1991,6 +1978,12 @@ const char kWebAppsUninstalledDefaultChromeApps[] =
 // Used only in the new web applications system to store app preferences which
 // outlive the app installation and uninstallation.
 const char kWebAppsPreferences[] = "web_apps.web_app_ids";
+
+#if defined(OS_WIN) || defined(OS_MAC) || \
+    (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
+// Dictionary that maps origins to web apps that can act as URL handlers.
+const char kWebAppsUrlHandlerInfo[] = "web_apps.url_handler_info";
+#endif
 
 const char kWebAppsUserDisplayModeCleanedUp[] =
     "web_apps.user_display_mode_cleaned_up";
@@ -3003,8 +2996,12 @@ const char kBlockAutoplayEnabled[] = "media.block_autoplay";
 // of lacros-chrome is complete.
 #if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // Boolean that indicates if native notifications are allowed to be used in
-// place of Chrome notifications.
+// place of Chrome notifications. Will be replaced by kAllowSystemNotifications.
 const char kAllowNativeNotifications[] = "native_notifications.allowed";
+
+// Boolean that indicates if system notifications are allowed to be used in
+// place of Chrome notifications.
+const char kAllowSystemNotifications[] = "system_notifications.allowed";
 #endif
 
 // Integer that holds the value of the next persistent notification ID to be
@@ -3179,11 +3176,22 @@ const char kSecurityTokenSessionNotificationScheduledDomain[] =
 #if !defined(OS_ANDROID)
 // Boolean pref indicating whether user has hidden the cart module on NTP.
 const char kCartModuleHidden[] = "cart_module_hidden";
-// Boolean pref indicating whether user has removed the cart module on NTP.
-const char kCartModuleRemoved[] = "cart_module_removed";
 // An integer that keeps track of how many times welcome surface has shown in
 // cart module.
 const char kCartModuleWelcomeSurfaceShownTimes[] =
     "cart_module_welcome_surface_shown_times";
 #endif
+
+#if defined(OS_ANDROID)
+// Boolean pref controlling whether immersive AR sessions are enabled
+// in WebXR Device API.
+const char kWebXRImmersiveArEnabled[] = "webxr.immersive_ar_enabled";
+#endif
+
+#if !defined(OS_ANDROID)
+// The duration for keepalive requests on browser shutdown.
+const char kFetchKeepaliveDurationOnShutdown[] =
+    "fetch_keepalive_duration_on_shutdown";
+#endif
+
 }  // namespace prefs

@@ -125,12 +125,16 @@
 }
 
 - (void)updateWindowHasIncognitoContent:(SceneState*)sceneState {
-  BOOL hasIncognitoContent = NO;
+  BOOL hasIncognitoContent = YES;
   if (sceneState.interfaceProvider.hasIncognitoInterface) {
     hasIncognitoContent =
         sceneState.interfaceProvider.incognitoInterface.browser
             ->GetWebStateList()
             ->count() > 0;
+    // If there is no tabs, act as if the user authenticated since last
+    // foreground to avoid issue with multiwindows.
+    if (!hasIncognitoContent)
+      self.authenticatedSinceLastForeground = YES;
   }
 
   self.windowHadIncognitoContentWhenBackgrounded = hasIncognitoContent;

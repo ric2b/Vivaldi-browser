@@ -27,6 +27,8 @@ extern const base::Feature kDelayRequestsOnMultiplexedConnections;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kPauseBrowserInitiatedHeavyTrafficForP2P;
 COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kPauseLowPriorityBrowserRequestsOnWeakSignal;
+COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCORBProtectionSniffing;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kProactivelyThrottleLowPriorityRequests;
@@ -40,8 +42,6 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyAccessReporting;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyByDefault;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCrossOriginEmbedderPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginIsolated;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -57,8 +57,6 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kDisableKeepaliveFetch;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kRequestInitiatorSiteLockEnfocement;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCertVerifierService;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kTrustTokens;

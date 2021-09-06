@@ -94,12 +94,20 @@ Browser* GetBrowserInProfileWithId(Profile* profile,
   return nullptr;
 }
 
-Browser* CreateBrowser(Profile* profile,
-                       int window_id,
-                       bool user_gesture,
-                       std::string* error) {
+Browser* CreateBrowser(Profile* profile, bool user_gesture) {
+  if (Browser::GetCreationStatusForProfile(profile) !=
+      Browser::CreationStatus::kOk) {
+    return nullptr;
+  }
+
   Browser::CreateParams params(Browser::TYPE_NORMAL, profile, user_gesture);
-  Browser* browser = Browser::Create(params);
+  return Browser::Create(params);
+}
+
+Browser* CreateAndShowBrowser(Profile* profile,
+                              bool user_gesture,
+                              std::string* error) {
+  Browser* browser = CreateBrowser(profile, user_gesture);
   if (!browser) {
     *error = tabs_constants::kBrowserWindowNotAllowed;
     return nullptr;
@@ -201,10 +209,9 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(ExtensionFunction* function,
 
   Browser* browser = GetBrowserFromWindowID(chrome_details, window_id, error);
   if (!browser) {
-    if (!params.create_browser_if_needed) {
+    if (!params.create_browser_if_needed)
       return nullptr;
-    }
-    browser = CreateBrowser(profile, window_id, user_gesture, error);
+    browser = CreateAndShowBrowser(profile, user_gesture, error);
     if (!browser)
       return nullptr;
   }
@@ -278,9 +285,7 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(ExtensionFunction* function,
 
     browser = chrome::FindTabbedBrowser(profile, false);
     if (!browser) {
-      Browser::CreateParams params =
-          Browser::CreateParams(Browser::TYPE_NORMAL, profile, user_gesture);
-      browser = Browser::Create(params);
+      browser = CreateBrowser(profile, user_gesture);
       if (!browser) {
         *error = tabs_constants::kBrowserWindowNotAllowed;
         return nullptr;
@@ -869,11 +874,8 @@ void ExtensionTabUtil::CreateTab(std::unique_ptr<WebContents> web_contents,
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   Browser* browser = chrome::FindTabbedBrowser(profile, false);
   const bool browser_created = !browser;
-  if (!browser) {
-    Browser::CreateParams params = Browser::CreateParams(profile, user_gesture);
-    browser = Browser::Create(params);
-  }
-
+  if (!browser)
+    browser = CreateBrowser(profile, user_gesture);
   if (!browser)
     return;
 
@@ -928,7 +930,7 @@ bool ExtensionTabUtil::OpenOptionsPageFromAPI(
   DCHECK(!profile->IsOffTheRecord() || IncognitoInfo::IsSplitMode(extension));
   Browser* browser = chrome::FindBrowserWithProfile(profile);
   if (!browser)
-    browser = Browser::Create(Browser::CreateParams(profile, true));
+    browser = CreateBrowser(profile, true);
   if (!browser)
     return false;
   return extensions::ExtensionTabUtil::OpenOptionsPage(extension, browser);
@@ -977,7 +979,7 @@ bool ExtensionTabUtil::OpenOptionsPage(const Extension* extension,
   params.path_behavior = open_in_tab ? NavigateParams::RESPECT
                                      : NavigateParams::IGNORE_AND_NAVIGATE;
   params.url = url_to_navigate;
-  ShowSingletonTabOverwritingNTP(browser, std::move(params));
+  ShowSingletonTabOverwritingNTP(browser, &params);
   return true;
 }
 

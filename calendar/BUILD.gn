@@ -67,6 +67,11 @@ static_library("calendar") {
     "//vivaldi/app:resources",
     "//vivaldi/prefs:prefs_strings",
   ]
+  if (!is_android) {
+    deps += [
+      "//vivaldi/extensions/schema",
+    ]
+  }
   public_deps = [
     #"//components/sync/protocol",
     #"//vivaldi/sync",

@@ -13,8 +13,8 @@
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -28,6 +28,7 @@
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/sessions/session_service_log.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
@@ -64,11 +65,8 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
 
-    Profile* profile = browser()->profile();
-    SessionService* session_service = new SessionService(profile);
-    path_ = profile->GetPath();
-
-    helper_.SetService(session_service);
+    session_service_ = std::make_unique<SessionService>(browser()->profile());
+    helper_.SetService(session_service_.get());
 
     service()->SetWindowType(window_id, Browser::TYPE_NORMAL);
     service()->SetWindowBounds(window_id,
@@ -78,8 +76,25 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
   }
 
   void TearDown() override {
-    helper_.SetService(nullptr);
+    DestroySessionService();
     BrowserWithTestWindowTest::TearDown();
+  }
+
+  base::Optional<SessionServiceEvent> FindMostRecentEventOfType(
+      SessionServiceEventLogType type) {
+    auto events = GetSessionServiceEvents(browser()->profile());
+    for (auto i = events.rbegin(); i != events.rend(); ++i) {
+      if (i->type == type)
+        return *i;
+    }
+    return base::nullopt;
+  }
+
+  void DestroySessionService() {
+    // Destroy the SessionService first as it may post tasks.
+    session_service_.reset();
+    // This flushes tasks.
+    helper_.SetService(nullptr);
   }
 
   void UpdateNavigation(
@@ -107,11 +122,10 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
   void ReadWindows(
       std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
       SessionID* active_window_id) {
-    // Forces closing the file.
-    helper_.SetService(nullptr);
+    DestroySessionService();
 
-    SessionService* session_service = new SessionService(path_);
-    helper_.SetService(session_service);
+    session_service_ = std::make_unique<SessionService>(browser()->profile());
+    helper_.SetService(session_service_.get());
 
     SessionID* non_null_active_window_id = active_window_id;
     SessionID dummy_active_window_id = SessionID::InvalidValue();
@@ -180,10 +194,7 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
 
   const SessionID window_id = SessionID::NewUnique();
 
-  // Path used in testing.
-  base::ScopedTempDir temp_dir_;
-  base::FilePath path_;
-
+  std::unique_ptr<SessionService> session_service_;
   SessionServiceTestHelper helper_;
 };
 
@@ -485,9 +496,10 @@ TEST_F(SessionServiceTest, LockingWindowRemembersAll) {
   ASSERT_TRUE(service()->profile());
   ProfileManager* manager = g_browser_process->profile_manager();
   ASSERT_TRUE(manager);
-  ProfileAttributesEntry* entry;
-  ASSERT_TRUE(manager->GetProfileAttributesStorage().
-      GetProfileAttributesWithPath(service()->profile()->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      manager->GetProfileAttributesStorage().GetProfileAttributesWithPath(
+          service()->profile()->GetPath());
+  ASSERT_NE(entry, nullptr);
   entry->SetIsSigninRequired(true);
 
   service()->WindowClosing(window_id);
@@ -554,7 +566,7 @@ TEST_F(SessionServiceTest, RemoveUnusedRestoreWindowsTest) {
   EXPECT_EQ(sessions::SessionWindow::TYPE_NORMAL, windows_list[0]->type);
 }
 
-#if defined (OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Makes sure we track apps. Only applicable on chromeos.
 TEST_F(SessionServiceTest, RestoreApp) {
   SessionID window2_id = SessionID::NewUnique();
@@ -1322,7 +1334,8 @@ namespace {
 
 void OnGotPreviousSession(
     std::vector<std::unique_ptr<sessions::SessionWindow>> windows,
-    SessionID ignored_active_window) {
+    SessionID ignored_active_window,
+    bool error_reading) {
   FAIL() << "SessionService was destroyed, this shouldn't be reached.";
 }
 
@@ -1358,7 +1371,57 @@ TEST_F(SessionServiceTest, GetSessionsAndDestroy) {
       base::BindOnce(&SimulateWaitForTesting, base::Unretained(&flag)));
   service()->GetLastSession(base::BindOnce(&OnGotPreviousSession));
   helper_.RunTaskOnBackendThread(FROM_HERE, run_loop.QuitClosure());
-  delete helper_.ReleaseService();
+  // Don't use DestroySessionService() as that runs the MessageLoop, which
+  // this test needs to control.
+  session_service_.reset();
   flag.Set();
   run_loop.Run();
+}
+
+TEST_F(SessionServiceTest, LogExit) {
+  EXPECT_FALSE(FindMostRecentEventOfType(SessionServiceEventLogType::kExit));
+  helper_.SetHasOpenTrackableBrowsers(false);
+  service()->WindowClosing(window_id);
+  auto exit_event =
+      FindMostRecentEventOfType(SessionServiceEventLogType::kExit);
+  ASSERT_TRUE(exit_event);
+  EXPECT_EQ(1, exit_event->data.exit.window_count);
+  EXPECT_EQ(browser()->tab_strip_model()->count(),
+            exit_event->data.exit.tab_count);
+
+  // Create another window, which should remove the exit.
+  SessionID window2_id = SessionID::NewUnique();
+  service()->SetWindowType(window2_id, Browser::TYPE_NORMAL);
+  EXPECT_FALSE(FindMostRecentEventOfType(SessionServiceEventLogType::kExit));
+}
+
+TEST_F(SessionServiceTest, OnErrorWritingSessionCommands) {
+  helper_.SaveNow();
+  EXPECT_FALSE(helper_.HasPendingReset());
+  EXPECT_FALSE(helper_.HasPendingSave());
+  EXPECT_FALSE(
+      FindMostRecentEventOfType(SessionServiceEventLogType::kWriteError));
+  service()->OnErrorWritingSessionCommands();
+  EXPECT_TRUE(helper_.HasPendingReset());
+  EXPECT_TRUE(helper_.HasPendingSave());
+  auto write_error_event =
+      FindMostRecentEventOfType(SessionServiceEventLogType::kWriteError);
+  ASSERT_TRUE(write_error_event);
+  EXPECT_EQ(1, write_error_event->data.write_error.error_count);
+  EXPECT_EQ(0, write_error_event->data.write_error.unrecoverable_error_count);
+}
+
+TEST_F(SessionServiceTest, OnErrorWritingSessionCommandsUnrecoverable) {
+  helper_.SaveNow();
+  service()->WindowClosing(window_id);
+  EXPECT_FALSE(
+      FindMostRecentEventOfType(SessionServiceEventLogType::kWriteError));
+  service()->OnErrorWritingSessionCommands();
+  EXPECT_TRUE(helper_.HasPendingReset());
+  EXPECT_TRUE(helper_.HasPendingSave());
+  auto write_error_event =
+      FindMostRecentEventOfType(SessionServiceEventLogType::kWriteError);
+  ASSERT_TRUE(write_error_event);
+  EXPECT_EQ(1, write_error_event->data.write_error.error_count);
+  EXPECT_EQ(0, write_error_event->data.write_error.unrecoverable_error_count);
 }

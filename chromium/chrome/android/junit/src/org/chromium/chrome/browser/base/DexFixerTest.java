@@ -35,8 +35,6 @@ import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.test.ShadowRecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
@@ -70,7 +68,6 @@ public class DexFixerTest {
     @Before
     public void setUp() {
         ShadowOs.sWorldReadable = true;
-        CachedFeatureFlags.setForTesting(ChromeFeatureList.DEX_FIXER, true);
     }
 
     @After
@@ -96,7 +93,8 @@ public class DexFixerTest {
 
     private void verifyDexOpt() {
         try {
-            verify(mMockRuntime).exec(Mockito.matches("cmd package compile -r shared \\S+"));
+            verify(mMockRuntime)
+                    .exec(Mockito.matches("/system/bin/cmd package compile -r shared \\S+"));
         } catch (IOException e) {
             // Mocks don't actually throw...
         }

@@ -16,23 +16,22 @@
 #include "components/sync/trusted_vault/trusted_vault_access_token_fetcher.h"
 #include "components/sync/trusted_vault/trusted_vault_crypto.h"
 #include "components/sync/trusted_vault/trusted_vault_request.h"
+#include "components/sync/trusted_vault/trusted_vault_server_constants.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace syncer {
 
 namespace {
 
-const char kJoinSecurityDomainsURLPath[] = "/domain:join";
-const char kListSecurityDomainsURLPathAndQuery[] = "/domain:list?view=1";
-
 void ProcessDownloadKeysResponse(
     std::unique_ptr<DownloadKeysResponseHandler> response_handler,
-    TrustedVaultConnection::DownloadKeysCallback callback,
+    TrustedVaultConnection::DownloadNewKeysCallback callback,
     TrustedVaultRequest::HttpStatus http_status,
     const std::string& response_body) {
   DownloadKeysResponseHandler::ProcessedResponse processed_response =
       response_handler->ProcessResponse(http_status, response_body);
-  std::move(callback).Run(processed_response.status, processed_response.keys,
+  std::move(callback).Run(processed_response.status,
+                          processed_response.new_keys,
                           processed_response.last_key_version);
 }
 
@@ -76,12 +75,12 @@ TrustedVaultConnectionImpl::RegisterAuthenticationFactor(
 }
 
 std::unique_ptr<TrustedVaultConnection::Request>
-TrustedVaultConnectionImpl::DownloadKeys(
+TrustedVaultConnectionImpl::DownloadNewKeys(
     const CoreAccountInfo& account_info,
     const base::Optional<TrustedVaultKeyAndVersion>&
         last_trusted_vault_key_and_version,
     std::unique_ptr<SecureBoxKeyPair> device_key_pair,
-    DownloadKeysCallback callback) {
+    DownloadNewKeysCallback callback) {
   auto request = std::make_unique<TrustedVaultRequest>(
       TrustedVaultRequest::HttpMethod::kGet,
       GURL(trusted_vault_service_url_.spec() +

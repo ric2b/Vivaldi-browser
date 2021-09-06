@@ -99,7 +99,7 @@
 VivaldiAutofillBubbleHandler::VivaldiAutofillBubbleHandler() {}
 VivaldiAutofillBubbleHandler::~VivaldiAutofillBubbleHandler() {}
 
-autofill::SaveCardBubbleView*
+autofill::AutofillBubbleBase*
 VivaldiAutofillBubbleHandler::ShowSaveCreditCardBubble(
     content::WebContents* web_contents,
     autofill::SaveCardBubbleController* controller,
@@ -107,10 +107,18 @@ VivaldiAutofillBubbleHandler::ShowSaveCreditCardBubble(
   return nullptr;
 }
 
-autofill::LocalCardMigrationBubble*
+autofill::AutofillBubbleBase*
 VivaldiAutofillBubbleHandler::ShowLocalCardMigrationBubble(
     content::WebContents* web_contents,
     autofill::LocalCardMigrationBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
+
+autofill::AutofillBubbleBase*
+VivaldiAutofillBubbleHandler::ShowOfferNotificationBubble(
+    content::WebContents* web_contents,
+    autofill::OfferNotificationBubbleController* controller,
     bool is_user_gesture) {
   return nullptr;
 }
@@ -121,6 +129,13 @@ autofill::SaveUPIBubble* VivaldiAutofillBubbleHandler::ShowSaveUPIBubble(
   return nullptr;
 }
 
+autofill::AutofillBubbleBase*
+VivaldiAutofillBubbleHandler::ShowSaveAddressProfileBubble(
+    content::WebContents* web_contents,
+    autofill::SaveAddressProfileBubbleController* controller,
+    bool is_user_gesture) {
+  return nullptr;
+}
 
 namespace {
 static base::TimeTicks g_first_window_creation_time;
@@ -1196,13 +1211,6 @@ void VivaldiBrowserWindow::NavigationStateChanged(
           GetProfile());
     }
   }
-}
-
-void VivaldiBrowserWindow::AllTabsClosed(int window_id) {
-  ::vivaldi::BroadcastEvent(
-    extensions::vivaldi::window_private::OnCloseAllTabsDone::kEventName,
-    extensions::vivaldi::window_private::OnCloseAllTabsDone::Create(window_id),
-    GetProfile());
 }
 
 ExtensionsContainer* VivaldiBrowserWindow::GetExtensionsContainer() {

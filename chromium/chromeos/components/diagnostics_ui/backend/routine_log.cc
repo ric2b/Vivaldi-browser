@@ -9,6 +9,7 @@
 
 #include "base/files/file_util.h"
 #include "base/i18n/time_formatting.h"
+#include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 
@@ -16,13 +17,41 @@ namespace chromeos {
 namespace diagnostics {
 namespace {
 
+const char kCancelledDescription[] = "Inflight Routine Cancelled";
 const char kNewline[] = "\n";
 const char kSeparator[] = " - ";
 const char kStartedDescription[] = "Started";
 
-std::string GetCurrentTimeAsString() {
-  return base::UTF16ToUTF8(
-      base::TimeFormatTimeOfDayWithMilliseconds(base::Time::Now()));
+std::string GetCurrentDateTimeAsString() {
+  return base::UTF16ToUTF8(base::TimeFormatShortDateAndTime(base::Time::Now()));
+}
+
+std::string getRoutineResultString(mojom::StandardRoutineResult result) {
+  switch (result) {
+    case mojom::StandardRoutineResult::kTestPassed:
+      return "Passed";
+    case mojom::StandardRoutineResult::kTestFailed:
+      return "Failed";
+    case mojom::StandardRoutineResult::kExecutionError:
+      return "Execution error";
+    case mojom::StandardRoutineResult::kUnableToRun:
+      return "Unable to run";
+  }
+}
+
+std::string getRoutineTypeString(mojom::RoutineType type) {
+  std::stringstream s;
+  s << type;
+
+  // RoutineType::kCpuStress -> ["RoutineType",  "CpuStress"]
+  std::vector<std::string> parts = base::SplitStringUsingSubstr(
+    s.str(), "::k", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  DCHECK_EQ(2U, parts.size());
+
+  const std::string routineName = parts[1];
+  DCHECK_GE(routineName.size(), 1U);
+  return routineName;
 }
 
 }  // namespace
@@ -34,12 +63,13 @@ RoutineLog::~RoutineLog() = default;
 
 void RoutineLog::LogRoutineStarted(mojom::RoutineType type) {
   if (!base::PathExists(routine_log_file_path_)) {
-    base::WriteFile(routine_log_file_path_, "");
+    CreateFile();
   }
 
   std::stringstream log_line;
-  log_line << GetCurrentTimeAsString() << kSeparator << type << kSeparator
-           << kStartedDescription << kNewline;
+  log_line << GetCurrentDateTimeAsString() << kSeparator
+           << getRoutineTypeString(type) << kSeparator << kStartedDescription
+           << kNewline;
   AppendToLog(log_line.str());
 }
 
@@ -48,13 +78,52 @@ void RoutineLog::LogRoutineCompleted(mojom::RoutineType type,
   DCHECK(base::PathExists(routine_log_file_path_));
 
   std::stringstream log_line;
-  log_line << GetCurrentTimeAsString() << kSeparator << type << kSeparator
-           << result << kNewline;
+  log_line << GetCurrentDateTimeAsString() << kSeparator
+           << getRoutineTypeString(type) << kSeparator
+           << getRoutineResultString(result) << kNewline;
   AppendToLog(log_line.str());
+}
+
+void RoutineLog::LogRoutineCancelled() {
+  DCHECK(base::PathExists(routine_log_file_path_));
+
+  std::stringstream log_line;
+  log_line << GetCurrentDateTimeAsString() << kSeparator
+           << kCancelledDescription << kNewline;
+  AppendToLog(log_line.str());
+}
+
+std::string RoutineLog::GetContents() const {
+  if (!base::PathExists(routine_log_file_path_)) {
+    return "";
+  }
+
+  std::string contents;
+  base::ReadFileToString(routine_log_file_path_, &contents);
+
+  return contents;
 }
 
 void RoutineLog::AppendToLog(const std::string& content) {
   base::AppendToFile(routine_log_file_path_, content.data(), content.size());
+}
+
+void RoutineLog::CreateFile() {
+  DCHECK(!base::PathExists(routine_log_file_path_));
+
+  if (!base::PathExists(routine_log_file_path_.DirName())) {
+    const bool create_dir_success =
+        base::CreateDirectory(routine_log_file_path_.DirName());
+    if (!create_dir_success) {
+      LOG(ERROR) << "Failed to create Diagnostics Routine Log directory.";
+      return;
+    }
+  }
+
+  const bool create_file_success = base::WriteFile(routine_log_file_path_, "");
+  if (!create_file_success) {
+    LOG(ERROR) << "Failed to create Diagnostics Routine Log file.";
+  }
 }
 
 }  // namespace diagnostics

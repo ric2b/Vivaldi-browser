@@ -11,7 +11,7 @@
 #include "components/content_injection/content_injection_types.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
-#include "vivaldi_mojom/components/content_injection/mojom/content_injection.mojom.h"
+#include "components/content_injection/mojom/content_injection.mojom.h"
 
 namespace content {
 class RenderFrame;

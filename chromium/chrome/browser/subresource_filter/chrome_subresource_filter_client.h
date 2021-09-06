@@ -6,13 +6,9 @@
 #define CHROME_BROWSER_SUBRESOURCE_FILTER_CHROME_SUBRESOURCE_FILTER_CLIENT_H_
 
 #include <memory>
-#include <vector>
 
 #include "base/macros.h"
-#include "components/content_settings/core/common/content_settings.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
-
-class GURL;
 
 namespace content {
 class WebContents;
@@ -20,7 +16,6 @@ class WebContents;
 
 namespace subresource_filter {
 class ContentSubresourceFilterThrottleManager;
-class SubresourceFilterProfileContext;
 }  // namespace subresource_filter
 
 // Chrome implementation of SubresourceFilterClient. Instances are associated
@@ -37,34 +32,18 @@ class ChromeSubresourceFilterClient
   static void CreateThrottleManagerWithClientForWebContents(
       content::WebContents* web_contents);
 
-  // Returns the ChromeSubresourceFilterClient instance that is owned by the
-  // ThrottleManager owned by |web_contents|, or nullptr if there is no such
-  // ThrottleManager.
-  static ChromeSubresourceFilterClient* FromWebContents(
-      content::WebContents* web_contents);
-
   // SubresourceFilterClient:
   void ShowNotification() override;
-  void OnAdsViolationTriggered(
-      content::RenderFrameHost* rfh,
-      subresource_filter::mojom::AdsViolation triggered_violation) override;
   const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
   GetSafeBrowsingDatabaseManager() override;
   subresource_filter::ProfileInteractionManager* GetProfileInteractionManager()
       override;
-  void OnReloadRequested() override;
 
  private:
-  void ShowUI(const GURL& url);
-
   content::WebContents* web_contents_;
 
   std::unique_ptr<subresource_filter::ContentSubresourceFilterThrottleManager>
       throttle_manager_;
-
-  // Owned by the profile.
-  subresource_filter::SubresourceFilterProfileContext* profile_context_ =
-      nullptr;
 
   std::unique_ptr<subresource_filter::ProfileInteractionManager>
       profile_interaction_manager_;

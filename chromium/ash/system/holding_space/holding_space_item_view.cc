@@ -10,8 +10,10 @@
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_model.h"
 #include "ash/public/cpp/shelf_config.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/holding_space/holding_space_item_view_delegate.h"
+#include "ash/system/holding_space/holding_space_util.h"
 #include "base/bind.h"
 #include "ui/base/class_property.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -21,6 +23,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
@@ -35,6 +38,9 @@ namespace {
 // `HoldingSpaceItemView`. Class name is not an adequate identifier as it may be
 // overridden by subclasses.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kIsHoldingSpaceItemViewProperty, false)
+
+// Appearance.
+constexpr size_t kCheckmarkBackgroundSize = 18;
 
 // Helpers ---------------------------------------------------------------------
 
@@ -118,10 +124,19 @@ HoldingSpaceItemView::HoldingSpaceItemView(
           &HoldingSpaceItemView::OnPaintSelect, base::Unretained(this)));
   layer()->Add(selected_layer_owner_->layer());
 
+  // This view's `selected_` state is represented differently depending on
+  // `delegate_`'s selection UI. Register to be notified of changes.
+  selection_ui_changed_subscription_ =
+      delegate_->AddSelectionUiChangedCallback(base::BindRepeating(
+          &HoldingSpaceItemView::OnSelectionUiChanged, base::Unretained(this)));
+
   delegate_->OnHoldingSpaceItemViewCreated(this);
 }
 
-HoldingSpaceItemView::~HoldingSpaceItemView() = default;
+HoldingSpaceItemView::~HoldingSpaceItemView() {
+  if (delegate_)
+    delegate_->OnHoldingSpaceItemViewDestroying(this);
+}
 
 // static
 HoldingSpaceItemView* HoldingSpaceItemView::Cast(views::View* view) {
@@ -134,9 +149,14 @@ bool HoldingSpaceItemView::IsInstance(views::View* view) {
   return view->GetProperty(kIsHoldingSpaceItemViewProperty);
 }
 
+void HoldingSpaceItemView::Reset() {
+  delegate_ = nullptr;
+}
+
 bool HoldingSpaceItemView::HandleAccessibleAction(
     const ui::AXActionData& action_data) {
-  return delegate_->OnHoldingSpaceItemViewAccessibleAction(this, action_data) ||
+  return (delegate_ && delegate_->OnHoldingSpaceItemViewAccessibleAction(
+                           this, action_data)) ||
          views::View::HandleAccessibleAction(action_data);
 }
 
@@ -163,11 +183,12 @@ void HoldingSpaceItemView::OnBlur() {
 }
 
 void HoldingSpaceItemView::OnGestureEvent(ui::GestureEvent* event) {
-  delegate_->OnHoldingSpaceItemViewGestureEvent(this, *event);
+  if (delegate_)
+    delegate_->OnHoldingSpaceItemViewGestureEvent(this, *event);
 }
 
 bool HoldingSpaceItemView::OnKeyPressed(const ui::KeyEvent& event) {
-  return delegate_->OnHoldingSpaceItemViewKeyPressed(this, event);
+  return delegate_ && delegate_->OnHoldingSpaceItemViewKeyPressed(this, event);
 }
 
 void HoldingSpaceItemView::OnMouseEvent(ui::MouseEvent* event) {
@@ -183,11 +204,28 @@ void HoldingSpaceItemView::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 bool HoldingSpaceItemView::OnMousePressed(const ui::MouseEvent& event) {
-  return delegate_->OnHoldingSpaceItemViewMousePressed(this, event);
+  return delegate_ &&
+         delegate_->OnHoldingSpaceItemViewMousePressed(this, event);
 }
 
 void HoldingSpaceItemView::OnMouseReleased(const ui::MouseEvent& event) {
-  delegate_->OnHoldingSpaceItemViewMouseReleased(this, event);
+  if (delegate_)
+    delegate_->OnHoldingSpaceItemViewMouseReleased(this, event);
+}
+
+void HoldingSpaceItemView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  AshColorProvider* const ash_color_provider = AshColorProvider::Get();
+
+  // Checkmark.
+  checkmark_->SetBackground(holding_space_util::CreateCircleBackground(
+      ash_color_provider->GetControlsLayerColor(
+          AshColorProvider::ControlsLayerType::kFocusRingColor),
+      kCheckmarkBackgroundSize));
+  checkmark_->SetImage(gfx::CreateVectorIcon(
+      kCheckIcon, kHoldingSpaceIconSize,
+      ash_color_provider->IsDarkModeEnabled() ? gfx::kGoogleGrey900
+                                              : SK_ColorWHITE));
 }
 
 void HoldingSpaceItemView::OnHoldingSpaceItemUpdated(
@@ -223,6 +261,19 @@ void HoldingSpaceItemView::SetSelected(bool selected) {
 
   selected_ = selected;
   InvalidateLayer(selected_layer_owner_->layer());
+
+  if (delegate_)
+    delegate_->OnHoldingSpaceItemViewSelectedChanged(this);
+
+  OnSelectionUiChanged();
+}
+
+views::ImageView* HoldingSpaceItemView::AddCheckmark(views::View* parent) {
+  DCHECK(!checkmark_);
+  checkmark_ = parent->AddChildView(std::make_unique<views::ImageView>());
+  checkmark_->SetID(kHoldingSpaceItemCheckmarkId);
+  checkmark_->SetVisible(selected());
+  return checkmark_;
 }
 
 views::ToggleImageButton* HoldingSpaceItemView::AddPin(views::View* parent) {
@@ -253,6 +304,14 @@ views::ToggleImageButton* HoldingSpaceItemView::AddPin(views::View* parent) {
                                         base::Unretained(this)));
 
   return pin_;
+}
+
+void HoldingSpaceItemView::OnSelectionUiChanged() {
+  const bool multiselect =
+      delegate_ && delegate_->selection_ui() ==
+                       HoldingSpaceItemViewDelegate::SelectionUi::kMultiSelect;
+
+  checkmark_->SetVisible(selected() && multiselect);
 }
 
 void HoldingSpaceItemView::OnPaintFocus(gfx::Canvas* canvas, gfx::Size size) {
@@ -306,7 +365,7 @@ void HoldingSpaceItemView::OnPinPressed() {
 void HoldingSpaceItemView::UpdatePin() {
   if (!IsMouseHovered()) {
     pin_->SetVisible(false);
-    OnPinVisiblityChanged(false);
+    OnPinVisibilityChanged(false);
     return;
   }
 
@@ -316,7 +375,7 @@ void HoldingSpaceItemView::UpdatePin() {
 
   pin_->SetToggled(!is_item_pinned);
   pin_->SetVisible(true);
-  OnPinVisiblityChanged(true);
+  OnPinVisibilityChanged(true);
 }
 
 BEGIN_METADATA(HoldingSpaceItemView, views::View)

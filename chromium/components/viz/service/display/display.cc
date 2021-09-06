@@ -30,8 +30,13 @@
 #include "components/viz/service/display/damage_frame_annotator.h"
 #include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/display_client.h"
+#include "components/viz/service/display/display_resource_provider_gl.h"
+#include "components/viz/service/display/display_resource_provider_null.h"
+#include "components/viz/service/display/display_resource_provider_skia.h"
+#include "components/viz/service/display/display_resource_provider_software.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/gl_renderer.h"
+#include "components/viz/service/display/null_renderer.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/renderer_utils.h"
 #include "components/viz/service/display/skia_output_surface.h"
@@ -511,32 +516,37 @@ void Display::SetOutputIsSecure(bool secure) {
 }
 
 void Display::InitializeRenderer(bool enable_shared_images) {
-  bool uses_gpu_resources = output_surface_->context_provider() ||
-                            skia_output_surface_ ||
-                            output_surface_->capabilities().skips_draw;
-
-  resource_provider_ = std::make_unique<DisplayResourceProvider>(
-      uses_gpu_resources ? DisplayResourceProvider::kGpu
-                         : DisplayResourceProvider::kSoftware,
-      output_surface_->context_provider(), bitmap_manager_,
-      enable_shared_images);
   if (skia_output_surface_) {
+    auto resource_provider = std::make_unique<DisplayResourceProviderSkia>();
     renderer_ = std::make_unique<SkiaRenderer>(
         &settings_, debug_settings_, output_surface_.get(),
-        resource_provider_.get(), overlay_processor_.get(),
+        resource_provider.get(), overlay_processor_.get(),
         skia_output_surface_);
+    resource_provider_ = std::move(resource_provider);
   } else if (output_surface_->context_provider()) {
+    auto resource_provider = std::make_unique<DisplayResourceProviderGL>(
+        output_surface_->context_provider(), enable_shared_images);
     renderer_ = std::make_unique<GLRenderer>(
         &settings_, debug_settings_, output_surface_.get(),
-        resource_provider_.get(), overlay_processor_.get(),
+        resource_provider.get(), overlay_processor_.get(),
         current_task_runner_);
+    resource_provider_ = std::move(resource_provider);
+  } else if (output_surface_->capabilities().skips_draw) {
+    auto resource_provider = std::make_unique<DisplayResourceProviderNull>();
+    renderer_ = std::make_unique<NullRenderer>(
+        &settings_, debug_settings_, output_surface_.get(),
+        resource_provider.get(), overlay_processor_.get());
+    resource_provider_ = std::move(resource_provider);
   } else {
+    auto resource_provider =
+        std::make_unique<DisplayResourceProviderSoftware>(bitmap_manager_);
     DCHECK(!overlay_processor_->IsOverlaySupported());
     auto renderer = std::make_unique<SoftwareRenderer>(
         &settings_, debug_settings_, output_surface_.get(),
-        resource_provider_.get(), overlay_processor_.get());
+        resource_provider.get(), overlay_processor_.get());
     software_renderer_ = renderer.get();
     renderer_ = std::move(renderer);
+    resource_provider_ = std::move(resource_provider);
   }
 
   renderer_->Initialize();
@@ -545,8 +555,8 @@ void Display::InitializeRenderer(bool enable_shared_images) {
   // Outputting a partial list of quads might not work in cases where contents
   // outside the damage rect might be needed by the renderer.
   bool output_partial_list =
-      output_surface_->capabilities().only_invalidates_damage_rect &&
       renderer_->use_partial_swap() &&
+      output_surface_->capabilities().only_invalidates_damage_rect &&
       !overlay_processor_->IsOverlaySupported();
 
   aggregator_ = std::make_unique<SurfaceAggregator>(
@@ -601,7 +611,7 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
   Surface* surface = surface_manager_->GetSurfaceForId(current_surface_id_);
   if (surface->HasActiveFrame()) {
     current_display_transform =
-        surface->GetActiveFrame().metadata.display_transform_hint;
+        surface->GetActiveFrameMetadata().display_transform_hint;
     if (current_display_transform != output_surface_->GetDisplayTransform()) {
       output_surface_->SetDisplayTransformHint(current_display_transform);
 
@@ -630,10 +640,14 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
   {
     FrameRateDecider::ScopedAggregate scoped_aggregate(
         frame_rate_decider_.get());
+    gfx::Rect target_damage_bounding_rect;
+    if (output_surface_->capabilities().supports_target_damage)
+      target_damage_bounding_rect = renderer_->GetTargetDamageBoundingRect();
+
     // Ensure that the surfaces that were damaged by any delegated ink trail are
     // aggregated again so that the trail exists for a single frame.
-    gfx::Rect target_damage_bounding_rect =
-        renderer_->GetDelegatedInkTrailDamageRect();
+    target_damage_bounding_rect.Union(
+        renderer_->GetDelegatedInkTrailDamageRect());
 
     frame = aggregator_->Aggregate(
         current_surface_id_, expected_display_time, current_display_transform,
@@ -715,7 +729,7 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
       last_render_pass.output_rect.size() != current_surface_size &&
       last_render_pass.damage_rect == last_render_pass.output_rect &&
       !current_surface_size.IsEmpty()) {
-    // Resize the output rect to the current surface size so that we won't
+    // Resize the |output_rect| to the |current_surface_size| so that we won't
     // skip the draw and so that the GL swap won't stretch the output.
     last_render_pass.output_rect.set_size(current_surface_size);
     last_render_pass.damage_rect = last_render_pass.output_rect;
@@ -1280,6 +1294,12 @@ base::ScopedClosureRunner Display::GetCacheBackBufferCb() {
 void Display::DisableGPUAccessByDefault() {
   DCHECK(resource_provider_);
   resource_provider_->SetAllowAccessToGPUThread(false);
+}
+
+void Display::PreserveChildSurfaceControls() {
+  if (skia_output_surface_) {
+    skia_output_surface_->PreserveChildSurfaceControls();
+  }
 }
 
 DelegatedInkPointRendererBase* Display::GetDelegatedInkPointRenderer() {

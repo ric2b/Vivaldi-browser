@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/ui_features.h"
 
+#include "base/feature_list.h"
 #include "build/chromeos_buildflags.h"
 
 namespace features {
@@ -11,6 +12,15 @@ namespace features {
 // Enables Chrome Labs menu in the toolbar. See https://crbug.com/1145666
 const base::Feature kChromeLabs{"ChromeLabs",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the Commander UI surface. See https://crbug.com/1014639
+const base::Feature kCommander{"Commander", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Enables "Tips for Chrome" in Main Chrome Menu | Help.
+const base::Feature kChromeTipsInMainMenu{"ChromeTipsInMainMenu",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Enables showing the EV certificate details in the Page Info bubble.
 const base::Feature kEvDetailsInPageInfo{"EvDetailsInPageInfo",
@@ -52,6 +62,7 @@ const base::Feature kProminentDarkModeActiveTabTitle{
 // Enables tabs to scroll in the tabstrip. https://crbug.com/951078
 const base::Feature kScrollableTabStrip{"ScrollableTabStrip",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+const char kMinimumTabWidthFeatureParameterName[] = "minTabWidth";
 
 // Enables buttons to permanently appear on the tabstrip when
 // scrollable-tabstrip is enabled. https://crbug.com/1116118
@@ -69,14 +80,15 @@ const base::Feature kSyncConfirmationUpdatedText{
 const base::Feature kSignInProfileCreation{"SignInProfileCreation",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Smoother enterprise experience in the sign-in profile creation flow.
+// https://crbug.com/1178494
+const base::Feature kSignInProfileCreationEnterprise{
+    "kSignInProfileCreationEnterprise", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Automatically create groups for users based on domain.
 // https://crbug.com/1128703
 const base::Feature kTabGroupsAutoCreate{"TabGroupsAutoCreate",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables tab groups to be collapsed and expanded. https://crbug.com/1018230
-const base::Feature kTabGroupsCollapse{"TabGroupsCollapse",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables tabs to be frozen when collapsed. https://crbug.com/1110108
 const base::Feature kTabGroupsCollapseFreezing{
@@ -117,11 +129,11 @@ const base::Feature kTabOutlinesInLowContrastThemes{
 // is enabled by default on ChromeOS following its launch on the platform.
 // TODO(crbug.com/1137558): Remove this after launch to the remaining desktop
 // platforms.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const base::Feature kTabSearch{"TabSearch", base::FEATURE_ENABLED_BY_DEFAULT};
 #else
 const base::Feature kTabSearch{"TabSearch", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Enables the tab search submit feedback button.
 const base::Feature kTabSearchFeedback{"TabSearchFeedback",
@@ -147,9 +159,19 @@ const base::FeatureParam<bool> kTabSearchMoveActiveTabToBottom{
 const base::Feature kWebFooterExperiment{"WebFooterExperiment",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
+// This enables enables persistence of a WebContents in a 1-to-1 association
+// with the current Profile for WebUI bubbles. See https://crbug.com/1177048.
+const base::Feature kWebUIBubblePerProfilePersistence{
+    "WebUIBubblePerProfilePersistence", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables a web-based tab strip. See https://crbug.com/989131. Note this
 // feature only works when the ENABLE_WEBUI_TAB_STRIP buildflag is enabled.
 const base::Feature kWebUITabStrip{"WebUITabStrip",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables a WebUI Feedback UI, as opposed to the Chrome App UI. See
+// https://crbug.com/1167223.
+const base::Feature kWebUIFeedback{"WebUIFeedback",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -163,4 +185,5 @@ const base::Feature kHiddenNetworkWarning{"HiddenNetworkWarning",
 const base::Feature kSeparatePointingStickSettings{
     "SeparatePointingStickSettings", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 }  // namespace features

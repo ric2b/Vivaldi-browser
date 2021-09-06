@@ -21,6 +21,9 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/ash/login/lock/screen_locker_tester.h"
+#include "chrome/browser/ash/login/screens/user_selection_screen.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
@@ -28,9 +31,7 @@
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/helper.h"
-#include "chrome/browser/chromeos/login/lock/screen_locker_tester.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
-#include "chrome/browser/chromeos/login/screens/user_selection_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
@@ -48,7 +49,6 @@
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
@@ -58,7 +58,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/tpm_error_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/authpolicy/fake_authpolicy_client.h"
 #include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
@@ -132,14 +131,16 @@ const int kAutoLoginShortDelay = 1;
 const int kAutoLoginLongDelay = 10000;
 
 // Wait for cros settings to become permanently untrusted and run `callback`.
-void WaitForPermanentlyUntrustedStatusAndRun(const base::Closure& callback) {
+void WaitForPermanentlyUntrustedStatusAndRun(base::OnceClosure callback) {
+  auto split_callback = base::SplitOnceCallback(std::move(callback));
   while (true) {
     const CrosSettingsProvider::TrustedStatus status =
         CrosSettings::Get()->PrepareTrustedValues(
-            base::BindOnce(&WaitForPermanentlyUntrustedStatusAndRun, callback));
+            base::BindOnce(&WaitForPermanentlyUntrustedStatusAndRun,
+                           std::move(split_callback.first)));
     switch (status) {
       case CrosSettingsProvider::PERMANENTLY_UNTRUSTED:
-        callback.Run();
+        std::move(split_callback.second).Run();
         return;
       case CrosSettingsProvider::TEMPORARILY_UNTRUSTED:
         return;

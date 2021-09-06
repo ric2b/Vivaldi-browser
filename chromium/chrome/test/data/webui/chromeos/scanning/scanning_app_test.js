@@ -4,6 +4,7 @@
 
 import 'chrome://scanning/scanning_app.js';
 
+import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {setScanServiceForTesting} from 'chrome://scanning/mojo_interface_provider.js';
 import {ScannerArr} from 'chrome://scanning/scanning_app_types.js';
 import {tokenToString} from 'chrome://scanning/scanning_app_util.js';
@@ -105,7 +106,7 @@ class FakeScanService {
    */
   getResolver_(methodName) {
     let method = this.resolverMap_.get(methodName);
-    assert(!!method, `Method '${methodName}' not found.`);
+    assertTrue(!!method, `Method '${methodName}' not found.`);
     return method;
   }
 
@@ -332,7 +333,9 @@ export function scanningAppTest() {
     scanningApp = /** @type {!ScanningAppElement} */ (
         document.createElement('scanning-app'));
     document.body.appendChild(scanningApp);
-    assert(!!scanningApp);
+    assertTrue(!!scanningApp);
+    assertTrue(isVisible(
+        /** @type {!HTMLElement} */ (scanningApp.$$('loading-page'))));
     return fakeScanService_.whenCalled('getScanners');
   }
 
@@ -393,6 +396,9 @@ export function scanningAppTest() {
 
     return initializeScanningApp(expectedScanners, capabilities)
         .then(() => {
+          assertFalse(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('loading-page'))));
+
           scannerSelect = scanningApp.$$('#scannerSelect').$$('select');
           sourceSelect = scanningApp.$$('#sourceSelect').$$('select');
           fileTypeSelect = scanningApp.$$('#fileTypeSelect').$$('select');
@@ -748,6 +754,37 @@ export function scanningAppTest() {
         })
         .then(() => {
           assertFalse(isSettingsOpen());
+        });
+  });
+
+  test('NoScanners', () => {
+    return initializeScanningApp(/*scanners=*/[], /*capabilities=*/ new Map())
+        .then(() => {
+          assertTrue(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('loading-page'))));
+          assertFalse(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('#panelContainer'))));
+        });
+  });
+
+  test('RetryClickLoadsScanners', () => {
+    return initializeScanningApp(/*scanners=*/[], /*capabilities=*/ new Map())
+        .then(() => {
+          assertTrue(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('loading-page'))));
+          assertFalse(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('#panelContainer'))));
+
+          fakeScanService_.setScanners(expectedScanners);
+          fakeScanService_.setCapabilities(capabilities);
+          scanningApp.$$('loading-page').$$('#retryButton').click();
+          return fakeScanService_.whenCalled('getScanners');
+        })
+        .then(() => {
+          assertFalse(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('loading-page'))));
+          assertTrue(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('#panelContainer'))));
         });
   });
 }

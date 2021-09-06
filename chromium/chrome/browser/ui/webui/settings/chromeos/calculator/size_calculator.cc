@@ -179,11 +179,11 @@ void BrowsingDataSizeCalculator::PerformCalculation() {
         new browsing_data::IndexedDBHelper(storage_partition),
         browsing_data::FileSystemHelper::Create(
             storage_partition->GetFileSystemContext(),
-            browsing_data_file_system_util::GetAdditionalFileSystemTypes()),
+            browsing_data_file_system_util::GetAdditionalFileSystemTypes(),
+            storage_partition->GetNativeIOContext()),
         new browsing_data::ServiceWorkerHelper(
             storage_partition->GetServiceWorkerContext()),
-        new browsing_data::CacheStorageHelper(
-            storage_partition->GetCacheStorageContext()));
+        new browsing_data::CacheStorageHelper(storage_partition));
   }
   site_data_size_collector_->Fetch(
       base::BindOnce(&BrowsingDataSizeCalculator::OnGetBrowsingDataSize,

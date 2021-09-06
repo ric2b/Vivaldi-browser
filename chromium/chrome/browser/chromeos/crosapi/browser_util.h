@@ -63,6 +63,11 @@ bool IsLacrosEnabled(version_info::Channel channel);
 // Forces IsLacrosEnabled() to return true for testing.
 void SetLacrosEnabledForTest(bool force_enabled);
 
+// Returns true if Lacros is allowed to launch and show a window. This can
+// return false if the user is using multi-signin, which is mutually exclusive
+// with Lacros.
+bool IsLacrosAllowedToLaunch();
+
 // Returns true if |window| is an exo ShellSurface window representing a Lacros
 // browser.
 bool IsLacrosWindow(const aura::Window* window);
@@ -70,17 +75,20 @@ bool IsLacrosWindow(const aura::Window* window);
 // Returns the UUID and version for all tracked interfaces. Exposed for testing.
 base::flat_map<base::Token, uint32_t> GetInterfaceVersions();
 
+// Returns the initial parameter to be passed to Crosapi client,
+// such as lacros-chrome.
+mojom::BrowserInitParamsPtr GetBrowserInitParams(
+    EnvironmentProvider* environment_provider);
+
 // Invite the lacros-chrome to the mojo universe.
 // Queue messages to establish the mojo connection, so that the passed IPC is
 // available already when lacros-chrome accepts the invitation.
-mojo::Remote<crosapi::mojom::LacrosChromeService>
-SendMojoInvitationToLacrosChrome(
+mojo::Remote<crosapi::mojom::BrowserService> SendMojoInvitationToLacrosChrome(
     ::crosapi::EnvironmentProvider* environment_provider,
     mojo::PlatformChannelEndpoint local_endpoint,
     base::OnceClosure mojo_disconnected_callback,
-    base::OnceCallback<
-        void(mojo::PendingReceiver<crosapi::mojom::AshChromeService>)>
-        ash_chrome_service_callback);
+    base::OnceCallback<void(mojo::PendingReceiver<crosapi::mojom::Crosapi>)>
+        crosapi_callback);
 
 // Creates a memory backed file containing the serialized |params|,
 // and returns its FD.

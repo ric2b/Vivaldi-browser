@@ -31,6 +31,8 @@
 <translation id="2486841023299517366">Con vật 4</translation>
 <translation id="2612127540243995147">Sẵn sàng để cài đặt. Vivaldi sẽ bị đóng và khởi chạy lại.</translation>
 <translation id="2613387515621326337">Truy cập trang web cập nhật</translation>
+<translation id="2647368062414805334">Rất tiếc, thiết lập trên Edge của bạn không khả dụng khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Edge . Sau đó bấm Tiếp tục.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Con vật 3</translation>
 <translation id="2873951654529031587">Thùng rác</translation>
 <translation id="292258461174562431">Quái vật 4</translation>
@@ -61,6 +63,7 @@
 <translation id="3732157130969736834">Đánh dấu Liên kết</translation>
 <translation id="3732388226447288666">Con vật 2</translation>
 <translation id="3732439195215136813">Con vật 5</translation>
+<translation id="3795800845758778870">Rất tiếc, thiết lập trên Brave của bạn không khả dụng khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Brave.  Sau đó bấm Tiếp tục.</translation>
 <translation id="3832132597516774400">Phong cảnh 5</translation>
 <translation id="3914946330804881301">Nhập Từ Opera</translation>
 <translation id="3921292902397893431">Quái vật 8</translation>
@@ -115,6 +118,8 @@
 <translation id="6551219277044048123">Thêm vào như một Công cụ Tìm &amp;kiếm...</translation>
 <translation id="6630781781151951863">Phong cảnh 18</translation>
 <translation id="6635049669875534328">Ghi chú phát hành:</translation>
+<translation id="6693585104974197539">Chọn thư mục hồ sơ Edge để nhập</translation>
+<translation id="6726279523566323394">Chọn thư mục hồ sơ Brave để nhập</translation>
 <translation id="6804831687363620480">Rất tiếc, các thiết lập Opera 15+ của bạn không khả dụng trong khi trình duyệt đó đang chạy. Để nhập các thiết lập đó vào Vivaldi, hãy lưu công việc của bạn và đóng tất cả các cửa sổ Opera 15+. Sau đó bấm Tiếp tục.</translation>
 <translation id="6896758677409633944">Sao chép</translation>
 <translation id="7086554968911045110">Phong cảnh 7</translation>
@@ -158,5 +163,6 @@
 <translation id="9065203028668620118">Hiệu chỉnh</translation>
 <translation id="9157539936604258187">Mở Liên kết</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Phong cảnh 16</translation>
 </translationbundle>

@@ -60,6 +60,7 @@ class MockDedicatedWorker
       factory_->CreateWorkerHost(
           blink::DedicatedWorkerToken(),
           browser_interface_broker_.BindNewPipeAndPassReceiver(),
+          remote_host_.BindNewPipeAndPassReceiver(),
           base::BindOnce([](const network::CrossOriginEmbedderPolicy&) {}));
     }
   }
@@ -72,7 +73,8 @@ class MockDedicatedWorker
   // blink::mojom::DedicatedWorkerHostFactoryClient:
   void OnWorkerHostCreated(
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
-          browser_interface_broker) override {
+          browser_interface_broker,
+      mojo::PendingRemote<blink::mojom::DedicatedWorkerHost>) override {
     browser_interface_broker_.Bind(std::move(browser_interface_broker));
   }
 
@@ -96,6 +98,7 @@ class MockDedicatedWorker
   mojo::Remote<blink::mojom::DedicatedWorkerHostFactory> factory_;
 
   mojo::Remote<blink::mojom::BrowserInterfaceBroker> browser_interface_broker_;
+  mojo::Remote<blink::mojom::DedicatedWorkerHost> remote_host_;
 };
 
 class DedicatedWorkerServiceImplTest

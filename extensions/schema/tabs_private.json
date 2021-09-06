@@ -16,6 +16,30 @@
                   "pip", "desktop_capturing", "vr_presenting_in_headset", "serial_connected" ]
       },
       {
+        "id":  "TranslateStep",
+        "type":  "string",
+        "description": "Denotes which state the page is in with respect to translate.",
+        "enum": ["idle", "before_translate", "translating", "after_translate", "translate_error"]
+      },
+      {
+        "id":  "TranslateError",
+        "type":  "string",
+        "description": "Signals translation errors.",
+        "enum": [
+          "no_error",               // No error
+          "network",                // No connectivity.
+          "init_error",             // The translation script failed to initialize.
+          "unknown_language",       // The page's language could not be detected.
+          "unsupported_language",   // The server detected a language that the browser does not know.
+          "identical_languages",    // The original and target languages are the same.
+          "translation_error",      // An error was reported by the translation script during translation.
+          "translation_timeout",    // The library doesn't finish initialization.
+          "unexpected_script_error",  // The library raises an unexpected exception.
+          "bad_origin",             // The library is blocked because of bad origin.
+          "script_load_error"       // Loader fails to load a dependent JavaScript.
+        ]
+      },
+      {
         "id": "UpdateTabInfo",
         "type": "object",
         "description": "Object passed to the update and returned in the get function function.",
@@ -142,6 +166,41 @@
           "href": {
             "type": "string",
             "description": "Url of focused element in case it's a link."
+          }
+        }
+      },
+      {
+        "id": "LanguageDetectionDetails",
+        "type": "object",
+        "description": "Details the language detection for the current page. Corresponds to LanguageDetectionDetails in C++.",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The url of the page detected was done on."
+          },
+          "contentLanguage": {
+            "type": "string",
+            "description": "The language detected by the content (Content-Language)."
+          },
+          "cldLanguage": {
+            "type": "string",
+            "description": "The language detected by CLD (Chromium's Compact Language Detector library)."
+          },
+          "isCldReliable": {
+            "type": "boolean",
+            "description": "true if the CLD detection is reliable, otherwise false."
+          },
+          "hasNoTranslate": {
+            "type": "boolean",
+            "description": "Whether the notranslate is specified in head tag as a meta; <meta name='google' value='notranslate'> or <meta name='google' content='notranslate'>"
+          },
+          "htmlRootLanguage": {
+            "type": "string",
+            "description": "The language written in the lang attribute of the html element."
+          },
+          "adoptedLanguage": {
+            "type": "string",
+            "description": "The adopted language, usually a authoritive decision on the different language tags in a document."
           }
         }
       }
@@ -359,6 +418,63 @@
                 "name": "hasHandler",
                 "type": "boolean",
                 "description": "true if the page has a beforeunload or unload handler, blocking a quick termination of the tab."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "translatePage",
+        "type": "function",
+        "description": "Attempts to translate the given page.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "name": "srcLang",
+            "type": "string",
+            "description": "Source language code to translate from. May be omitted."
+          },
+          {
+            "name": "destLang",
+            "type": "string",
+            "description": "Destination language code to translate to. Must be present."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": false,
+            "parameters": [
+              {
+                "name": "success",
+                "type": "boolean",
+                "description": "Immediate errors will be given in the callback, eg. for invalid or missing language codes, pages that cannot be translated (eg. devtools, blank pages), etc."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "revertTranslatePage",
+        "type": "function",
+        "description": "Attempts to revert the translating of the given page.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "success",
+                "type": "boolean",
+                "description": "true if the page can be reverted, otherwise false."
               }
             ]
           }
@@ -728,7 +844,96 @@
             "description": "If true, the tab operation that triggered the dialog has been allowed to proceed."
           }
         ]
+      },
+      {
+        "name": "onLanguageDetermined",
+        "type": "function",
+        "description": "Fired when the language of the current page has been determined.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab Id."
+          },
+          {
+            "name": "details",
+            "$ref": "LanguageDetectionDetails"
+          }
+        ]
+      },
+      {
+        "name": "onShowTranslationUI",
+        "type": "function",
+        "description": "Fired when we should show translation UI. The status decides what UI we should show.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab Id."
+          },
+          {
+            "name": "step",
+            "$ref": "TranslateStep"
+          },
+          {
+            "name": "error",
+            "$ref": "TranslateError"
+          },
+          {
+            "type": "boolean",
+            "name": "triggeredFromMenu",
+            "description": "true if this was triggered by a manual action or not."
+          }
+        ]
+      },
+      {
+        "name": "onPageTranslated",
+        "type": "function",
+        "description": "Fired when a translation has been completed on a page.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab Id."
+          },
+          {
+            "name": "srcLang",
+            "type": "string",
+            "description": "Source language code it was translated from."
+          },
+          {
+            "name": "destLang",
+            "type": "string",
+            "description": "Destination language code it was translated to."
+          },
+          {
+            "name": "error",
+            "$ref": "TranslateError"
+          }
+        ]
+      },
+      {
+        "name": "onIsPageTranslatedChanged",
+        "type": "function",
+        "description": "Fired when a translation state has changed on a page, eg. revert has been used.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab Id."
+          },
+          {
+            "type": "boolean",
+            "name": "isTranslated",
+            "description": "The translation state has changed. For eg. revert, it will be false after revert has been invoked."
+          }
+        ]
       }
+
     ]
   }
 ]

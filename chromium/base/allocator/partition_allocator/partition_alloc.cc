@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/allocator/partition_allocator/address_pool_manager.h"
-#include "base/allocator/partition_allocator/checked_ptr_support.h"
 #include "base/allocator/partition_allocator/memory_reclaimer.h"
 #include "base/allocator/partition_allocator/page_allocator_internal.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
@@ -21,6 +20,7 @@
 #include "base/allocator/partition_allocator/partition_root.h"
 #include "base/allocator/partition_allocator/partition_stats.h"
 #include "base/allocator/partition_allocator/pcscan.h"
+#include "base/partition_alloc_buildflags.h"
 
 namespace base {
 
@@ -96,6 +96,7 @@ void PartitionAllocator<thread_safe>::init(PartitionOptions opts) {
       << "Cannot use a thread cache when PartitionAlloc is malloc().";
 #endif
   partition_root_.Init(opts);
+  partition_root_.ConfigureLazyCommit();
   PartitionAllocMemoryReclaimer::Instance()->RegisterPartition(
       &partition_root_);
 }
@@ -106,9 +107,13 @@ template PartitionAllocator<internal::NotThreadSafe>::~PartitionAllocator();
 template void PartitionAllocator<internal::NotThreadSafe>::init(
     PartitionOptions);
 
-#if DCHECK_IS_ON()
+#if DCHECK_IS_ON() && BUILDFLAG(USE_BACKUP_REF_PTR)
 void DCheckGetSlotOffsetIsZero(void* ptr) {
-  PA_DCHECK(PartitionAllocGetSlotOffset(ptr) == 0);
+  // Add kPartitionPastAllocationAdjustment, because PartitionAllocGetSlotStart
+  // will subtract it.
+  PA_DCHECK(PartitionAllocGetSlotStart(reinterpret_cast<char*>(ptr) +
+                                       kPartitionPastAllocationAdjustment) ==
+            ptr);
 }
 #endif
 

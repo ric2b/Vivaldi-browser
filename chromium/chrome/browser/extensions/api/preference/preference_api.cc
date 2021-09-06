@@ -32,6 +32,7 @@
 #include "components/embedder_support/pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/spellcheck/browser/pref_names.h"
@@ -118,6 +119,8 @@ const PrefMappingEntry kPrefMapping[] = {
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"thirdPartyCookiesAllowed", prefs::kCookieControlsMode,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
+    {"privacySandboxEnabled", prefs::kPrivacySandboxApisEnabled,
+     APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"translationServiceEnabled", prefs::kOfferTranslateEnabled,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"webRTCIPHandlingPolicy", prefs::kWebRTCIPHandlingPolicy,
@@ -141,6 +144,9 @@ const PrefMappingEntry kPrefMapping[] = {
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
     {"cursorHighlight", ash::prefs::kAccessibilityCursorHighlightEnabled,
+     APIPermission::kAccessibilityFeaturesRead,
+     APIPermission::kAccessibilityFeaturesModify},
+    {"dictation", ash::prefs::kAccessibilityDictationEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
     {"dockedMagnifier", ash::prefs::kDockedMagnifierEnabled,
@@ -370,9 +376,10 @@ PreferenceEventRouter::PreferenceEventRouter(Profile* profile)
     : profile_(profile) {
   registrar_.Init(profile_->GetPrefs());
   for (const auto& pref : kPrefMapping) {
-    registrar_.Add(pref.browser_pref,
-                   base::Bind(&PreferenceEventRouter::OnPrefChanged,
-                              base::Unretained(this), registrar_.prefs()));
+    registrar_.Add(
+        pref.browser_pref,
+        base::BindRepeating(&PreferenceEventRouter::OnPrefChanged,
+                            base::Unretained(this), registrar_.prefs()));
   }
   DCHECK(!profile_->IsOffTheRecord());
   observed_profiles_.Add(profile_);
@@ -455,8 +462,9 @@ void PreferenceEventRouter::ObserveOffTheRecordPrefs(PrefService* prefs) {
   for (const auto& pref : kPrefMapping) {
     incognito_registrar_->Add(
         pref.browser_pref,
-        base::Bind(&PreferenceEventRouter::OnPrefChanged,
-                   base::Unretained(this), incognito_registrar_->prefs()));
+        base::BindRepeating(&PreferenceEventRouter::OnPrefChanged,
+                            base::Unretained(this),
+                            incognito_registrar_->prefs()));
   }
 }
 

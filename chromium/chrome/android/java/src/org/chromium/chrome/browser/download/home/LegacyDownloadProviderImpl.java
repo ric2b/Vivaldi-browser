@@ -124,8 +124,8 @@ class LegacyDownloadProviderImpl implements DownloadObserver, LegacyDownloadProv
     @Override
     public void openItem(OfflineItem item) {
         // TODO(shaktisahu): May be pass metrics as a param.
-        DownloadManagerService.getDownloadManagerService().openDownload(
-                item.id, item.isOffTheRecord, DownloadOpenSource.DOWNLOAD_HOME);
+        DownloadManagerService.getDownloadManagerService().openDownload(item.id,
+                OTRProfileID.deserialize(item.otrProfileId), DownloadOpenSource.DOWNLOAD_HOME);
     }
 
     @Override
@@ -175,13 +175,15 @@ class LegacyDownloadProviderImpl implements DownloadObserver, LegacyDownloadProv
     }
 
     @Override
-    public void getAllItems(Callback<ArrayList<OfflineItem>> callback, boolean offTheRecord) {
+    public void getAllItems(Callback<ArrayList<OfflineItem>> callback, OTRProfileID otrProfileID) {
+        // TODO(crbug.com/1145502): Create a map to hold OTRProfileID as key and list of callbacks
+        // as value.
         List<Callback<ArrayList<OfflineItem>>> list =
-                offTheRecord ? mOffTheRecordRequests : mRequests;
+                otrProfileID != null ? mOffTheRecordRequests : mRequests;
 
         list.add(callback);
         if (list.size() > 1) return;
-        DownloadManagerService.getDownloadManagerService().getAllDownloads(offTheRecord);
+        DownloadManagerService.getDownloadManagerService().getAllDownloads(otrProfileID);
     }
 
     @Override
@@ -207,7 +209,7 @@ class LegacyDownloadProviderImpl implements DownloadObserver, LegacyDownloadProv
     @Override
     public void changeSchedule(final OfflineItem item, final OfflineItemSchedule schedule) {
         DownloadManagerService.getDownloadManagerService().changeSchedule(
-                item.id, schedule, item.isOffTheRecord);
+                item.id, schedule, OTRProfileID.deserialize(item.otrProfileId));
     }
 
     /**

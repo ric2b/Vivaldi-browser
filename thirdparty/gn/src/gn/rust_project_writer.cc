@@ -167,11 +167,25 @@ std::vector<std::string> FindAllArgValuesAfterPrefix(
 const std::string_view sysroot_crates[] = {"std",
                                            "core",
                                            "alloc",
+                                           "collections",
+                                           "libc",
                                            "panic_unwind",
                                            "proc_macro",
+                                           "rustc_unicode",
+                                           "std_unicode",
                                            "test",
+                                           "alloc_jemalloc",
+                                           "alloc_system",
+                                           "compiler_builtins",
+                                           "getopts",
                                            "panic_abort",
-                                           "unwind"};
+                                           "unwind",
+                                           "build_helper",
+                                           "rustc_asan",
+                                           "rustc_lsan",
+                                           "rustc_msan",
+                                           "rustc_tsan",
+                                           "syntax"};
 
 // Multiple sysroot crates have dependenices on each other.  This provides a
 // mechanism for specifiying that in an extendible manner.
@@ -267,7 +281,7 @@ void AddTarget(const BuildSettings* build_settings,
   // Check what sysroot this target needs.  Add it to the crate list if it
   // hasn't already been added.
   auto rust_tool =
-      target->toolchain()->GetToolForTargetFinalOutputAsRust(target);
+      target->toolchain()->GetToolForSourceTypeAsRust(SourceFile::SOURCE_RS);
   auto current_sysroot = rust_tool->GetSysroot();
   if (current_sysroot != "" && sysroot_lookup.count(current_sysroot) == 0) {
     AddSysroot(build_settings, current_sysroot, sysroot_lookup, crate_list);
@@ -318,12 +332,6 @@ void AddTarget(const BuildSettings* build_settings,
     AddSysrootDependencyToCrate(&crate, sysroot, "core");
     AddSysrootDependencyToCrate(&crate, sysroot, "alloc");
     AddSysrootDependencyToCrate(&crate, sysroot, "std");
-
-    // Proc macros have the proc_macro crate as a direct dependency
-    if (std::string_view(rust_tool->name()) ==
-        std::string_view(RustTool::kRsToolMacro)) {
-      AddSysrootDependencyToCrate(&crate, sysroot, "proc_macro");
-    }
   }
 
   // Add the rest of the crate dependencies.

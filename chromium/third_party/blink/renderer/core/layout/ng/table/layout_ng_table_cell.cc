@@ -121,12 +121,21 @@ void LayoutNGTableCell::StyleDidChange(StyleDifference diff,
   LayoutNGBlockFlowMixin<LayoutBlockFlow>::StyleDidChange(diff, old_style);
 }
 
-void LayoutNGTableCell::ColSpanOrRowSpanChanged() {
+void LayoutNGTableCell::WillBeRemovedFromTree() {
   NOT_DESTROYED();
-  // TODO(atotic) Invalidate layout?
-  UpdateColAndRowSpanFlags();
   if (LayoutNGTable* table = Table())
     table->TableGridStructureChanged();
+  LayoutNGMixin<LayoutBlockFlow>::WillBeRemovedFromTree();
+}
+
+void LayoutNGTableCell::ColSpanOrRowSpanChanged() {
+  NOT_DESTROYED();
+  UpdateColAndRowSpanFlags();
+  if (LayoutNGTable* table = Table()) {
+    table->SetNeedsLayoutAndIntrinsicWidthsRecalc(
+        layout_invalidation_reason::kTableChanged);
+    table->TableGridStructureChanged();
+  }
 }
 
 LayoutBox* LayoutNGTableCell::CreateAnonymousBoxWithSameTypeAs(

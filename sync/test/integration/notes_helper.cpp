@@ -371,16 +371,6 @@ bool ModelMatchesVerifier(int profile) {
   return NotesModelsMatch(GetVerifierNotesModel(), GetNotesModel(profile));
 }
 
-bool AllModelsMatchVerifier() {
-  for (int i = 0; i < sync_datatype_helper::test()->num_clients(); ++i) {
-    if (!ModelMatchesVerifier(i)) {
-      LOG(ERROR) << "Model " << i << " does not match the verifier.";
-      return false;
-    }
-  }
-  return true;
-}
-
 bool ModelsMatch(int profile_a, int profile_b) {
   return NotesModelsMatch(GetNotesModel(profile_a), GetNotesModel(profile_b));
 }

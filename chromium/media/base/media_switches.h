@@ -122,6 +122,7 @@ MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderSkipMultithreaded;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderAlwaysCopy;
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderAllowOverlay;
 MEDIA_EXPORT extern const base::Feature kEnableMediaInternals;
+MEDIA_EXPORT extern const base::Feature kExposeSwDecodersToWebRTC;
 MEDIA_EXPORT extern const base::Feature kExternalClearKeyForTesting;
 MEDIA_EXPORT extern const base::Feature kFFmpegDecodeOpaqueVP8;
 MEDIA_EXPORT extern const base::Feature kFailUrlProvisionFetcherForTesting;
@@ -135,7 +136,6 @@ MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsOverlayControls;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsPictureInPicture;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsSeamlessTransfer;
 MEDIA_EXPORT extern const base::Feature kGlobalMediaControlsModernUI;
-MEDIA_EXPORT extern const base::Feature kH264DecoderBufferIsCompleteFrame;
 MEDIA_EXPORT extern const base::Feature kHardwareMediaKeyHandling;
 MEDIA_EXPORT extern const base::Feature kHardwareSecureDecryption;
 MEDIA_EXPORT extern const base::Feature kInternalMediaSession;
@@ -181,11 +181,15 @@ MEDIA_EXPORT extern const base::Feature kUseFakeDeviceForMediaStream;
 MEDIA_EXPORT extern const base::Feature kUseMediaHistoryStore;
 MEDIA_EXPORT extern const base::Feature kUseR16Texture;
 MEDIA_EXPORT extern const base::Feature kUseSodaForLiveCaption;
-#if (defined(OS_LINUX) || defined(OS_FREEBSD)) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 MEDIA_EXPORT extern const base::Feature kVaapiVideoDecodeLinux;
-#endif  // (defined(OS_LINUX) || defined(OS_FREEBSD)) && !defined(OS_CHROMEOS)
+MEDIA_EXPORT extern const base::Feature kVaapiVideoEncodeLinux;
+#endif  // defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 MEDIA_EXPORT extern const base::Feature kVaapiAV1Decoder;
 MEDIA_EXPORT extern const base::Feature kVaapiLowPowerEncoderGen9x;
+MEDIA_EXPORT extern const base::Feature kVaapiEnforceVideoMinMaxResolution;
 MEDIA_EXPORT extern const base::Feature kVaapiVP8Encoder;
 MEDIA_EXPORT extern const base::Feature kVaapiVP9Encoder;
 MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
@@ -225,17 +229,22 @@ MEDIA_EXPORT extern const base::Feature kUseAlternateVideoDecoderImplementation;
 #if defined(OS_WIN)
 MEDIA_EXPORT extern const base::Feature kDelayCopyNV12Textures;
 MEDIA_EXPORT extern const base::Feature kDirectShowGetPhotoState;
+MEDIA_EXPORT extern const base::Feature kIncludeIRCamerasInDeviceEnumeration;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationAsyncH264Encoding;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationAV1Decoding;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationVideoCapture;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationVP8Decoding;
+MEDIA_EXPORT extern const base::Feature kMediaFoundationD3D11VideoCapture;
 MEDIA_EXPORT extern const base::Feature kWasapiRawAudioCapture;
 #endif  // defined(OS_WIN)
 
 #if defined(OS_MAC)
 MEDIA_EXPORT extern const base::Feature kAVFoundationCaptureV2;
 MEDIA_EXPORT extern const base::Feature kAVFoundationCaptureV2ZeroCopy;
-MEDIA_EXPORT extern const base::Feature kVideoToolboxVp9Decoding;
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+MEDIA_EXPORT extern const base::Feature kDeprecateLowUsageCodecs;
 #endif
 
 // Based on a |command_line| and the current platform, returns the effective

@@ -2,6 +2,89 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {List} from 'chrome://resources/js/cr/ui/list.m.js';
+// #import {ArrayDataModel} from 'chrome://resources/js/cr/ui/array_data_model.m.js';
+// #import {FilesMessage} from '../elements/files_message.m.js';
+// #import {FileListSelectionModel} from './ui/file_list_selection_model.m.js';
+// #import {A11yAnnounce} from './ui/a11y_announce.m.js';
+// #import {ProgressCenter} from '../../../externs/background/progress_center.m.js';
+// #import {FakeEntry, FilesAppDirEntry} from '../../../externs/files_app_entry_interfaces.m.js';
+// #import {FileBrowserBackgroundFull} from '../../../externs/background/file_browser_background_full.m.js';
+// #import {BackgroundWindow} from '../../../externs/background_window.m.js';
+// #import {FileOperationManager} from '../../../externs/background/file_operation_manager.m.js';
+// #import {mediaImportInterfaces} from '../../../externs/background/media_import_handler.m.js';
+// #import {mediaScannerInterfaces} from '../../../externs/background/media_scanner.m.js';
+// #import {Crostini} from '../../../externs/background/crostini.m.js';
+// #import {importerHistoryInterfaces} from '../../../externs/background/import_history.m.js';
+// #import {CommandHandlerDeps} from '../../../externs/command_handler_deps.m.js';
+// #import {ProgressItemState} from '../../common/js/progress_center_common.m.js';
+// #import {StorageAdapter} from '../../common/js/storage_adapter.m.js';
+// #import {crossoverSearchUtils} from './crossover_search_utils.m.js';
+// #import {FileTasks} from './file_tasks.m.js';
+// #import {CrostiniController} from './crostini_controller.m.js';
+// #import {NavigationListModel, NavigationModelFakeItem, NavigationModelItemType} from './navigation_list_model.m.js';
+// #import {DirectoryTree} from './ui/directory_tree.m.js';
+// #import {NavigationUma} from './navigation_uma.m.js';
+// #import {FileTypeFiltersController} from './file_type_filters_controller.m.js';
+// #import {DialogActionController} from './dialog_action_controller.m.js';
+// #import {SpinnerController} from './spinner_controller.m.js';
+// #import {DirectoryTreeNamingController} from './directory_tree_naming_controller.m.js';
+// #import {SearchController} from './search_controller.m.js';
+// #import {TaskController} from './task_controller.m.js';
+// #import {NamingController} from './naming_controller.m.js';
+// #import {MetadataUpdateController} from './metadata_update_controller.m.js';
+// #import {ColumnVisibilityController} from './column_visibility_controller.m.js';
+// #import {ListThumbnailLoader} from './list_thumbnail_loader.m.js';
+// #import {FileSelectionHandler, FileSelection} from './file_selection.m.js';
+// #import {FakeEntryImpl} from '../../common/js/files_app_entry_types.m.js';
+// #import {AndroidAppListModel} from './android_app_list_model.m.js';
+// #import {FolderShortcutsDataModel} from './folder_shortcuts_data_model.m.js';
+// #import {DirectoryModel} from './directory_model.m.js';
+// #import {assert, assertInstanceof} from 'chrome://resources/js/assert.m.js';
+// #import {FileGrid} from './ui/file_grid.m.js';
+// #import {FileTable} from './ui/file_table.m.js';
+// #import {FileManagerUI} from './ui/file_manager_ui.m.js';
+// #import {queryRequiredElement} from 'chrome://resources/js/util.m.js';
+// #import {FileFilter} from './directory_contents.m.js';
+// #import {ProvidersModel} from './providers_model.m.js';
+// #import {ThumbnailModel} from './metadata/thumbnail_model.m.js';
+// #import {MetadataModel} from './metadata/metadata_model.m.js';
+// #import {ContentMetadataProvider} from './metadata/content_metadata_provider.m.js';
+// #import {FilteredVolumeManager} from '../../../base/js/filtered_volume_manager.m.js';
+// #import {LaunchParam} from './launch_param.m.js';
+// #import {contextMenuHandler} from 'chrome://resources/js/cr/ui/context_menu_handler.m.js';
+// #import {CommandButton} from './ui/commandbutton.m.js';
+// #import {CommandHandler, CommandUtil} from './file_manager_commands.m.js';
+// #import {FileTransferController} from './file_transfer_controller.m.js';
+// #import {Banners} from './ui/banners.m.js';
+// #import {MainWindowComponent} from './main_window_component.m.js';
+// #import {QuickViewController} from './quick_view_controller.m.js';
+// #import {MetadataBoxController} from './metadata_box_controller.m.js';
+// #import {QuickViewUma} from './quick_view_uma.m.js';
+// #import {QuickViewModel} from './quick_view_model.m.js';
+// #import {LastModifiedController} from './last_modified_controller.m.js';
+// #import {ActionsController} from './actions_controller.m.js';
+// #import {EmptyFolderController} from './empty_folder_controller.m.js';
+// #import {ToolbarController} from './toolbar_controller.m.js';
+// #import {Menu} from 'chrome://resources/js/cr/ui/menu.m.js';
+// #import {util, str} from '../../common/js/util.m.js';
+// #import {SelectionMenuController} from './selection_menu_controller.m.js';
+// #import {GearMenuController} from './gear_menu_controller.m.js';
+// #import {SortMenuController} from './sort_menu_controller.m.js';
+// #import {ScanController} from './scan_controller.m.js';
+// #import {DriveDialogController} from './drive_dialog_controller.m.js';
+// #import {VolumeManagerCommon, AllowedPaths} from '../../../base/js/volume_manager_types.m.js';
+// #import {AppStateController} from './app_state_controller.m.js';
+// #import {DialogType} from './dialog_type.m.js';
+// #import {FileMetadataFormatter} from './ui/file_metadata_formatter.m.js';
+// #import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.m.js';
+// #import {importer} from './import_controller.m.js';
+// #import {metrics} from '../../common/js/metrics.m.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// #import {importElements} from './elements_importer.m.js';
+// clang-format on
+
 /**
  * FileManager constructor.
  *
@@ -10,7 +93,7 @@
  *
  * @implements {CommandHandlerDeps}
  */
-class FileManager extends cr.EventTarget {
+/* #export */ class FileManager extends cr.EventTarget {
   constructor() {
     super();
 
@@ -115,6 +198,12 @@ class FileManager extends cr.EventTarget {
      * @private {ActionsController}
      */
     this.actionsController_ = null;
+
+    /**
+     * Controller for showing dialogs from Drive.
+     * @private {?DriveDialogController}
+     */
+    this.driveDialogController_ = null;
 
     /**
      * Handler for command events.
@@ -509,6 +598,15 @@ class FileManager extends cr.EventTarget {
   }
 
   /**
+   * Returns the last URL visited with visitURL() (e.g. for "Manage in Drive").
+   * Used by the integration tests.
+   * @return {string}
+   */
+  getLastVisitedURL() {
+    return util.getLastVisitedURL();
+  }
+
+  /**
    * One time initialization for app state controller to load view option from
    * local storage.
    * @return {!Promise<void>}
@@ -597,6 +695,11 @@ class FileManager extends cr.EventTarget {
         assert(this.folderShortcutsModel_),
         this.fileBrowserBackground_.driveSyncHandler, this.selectionHandler_,
         assert(this.ui_));
+    if (this.dialogType === DialogType.FULL_PAGE) {
+      this.driveDialogController_ = new DriveDialogController(this.ui_);
+      this.fileBrowserBackground_.driveSyncHandler.addDialog(
+          window.appID, this.driveDialogController_);
+    }
     this.lastModifiedController_ = new LastModifiedController(
         this.ui_.listContainer.table, this.directoryModel_);
 
@@ -784,8 +887,16 @@ class FileManager extends cr.EventTarget {
     this.document_ = this.dialogDom_.ownerDocument;
 
     metrics.startInterval('Load.InitDocuments');
-    await Promise.all(
-        [this.initBackgroundPagePromise_, window.importElementsPromise]);
+    if (window.importElementsPromise) {
+      // For non-js modules version these promises can run in parallel.
+      await Promise.all(
+          [this.initBackgroundPagePromise_, window.importElementsPromise]);
+    } else if (window.importElements) {
+      // importElements depend on loadTimeData which is initialized in the
+      // initBackgroundPagePromise_.
+      await this.initBackgroundPagePromise_;
+      await window.importElements();
+    }
     metrics.recordInterval('Load.InitDocuments');
 
     metrics.startInterval('Load.InitUI');
@@ -815,6 +926,10 @@ class FileManager extends cr.EventTarget {
    * @private
    */
   initGeneral_() {
+    // For the SWA version we need the adapters set up before they get used.
+    if (window.isSWA) {
+      this.initAdapters_();
+    }
     // Initialize the application state.
     // TODO(mtomasz): Unify window.appState with location.search format.
     if (window.appState) {
@@ -852,8 +967,7 @@ class FileManager extends cr.EventTarget {
     /** @type {!BackgroundWindow} */
     this.backgroundPage_ = await new Promise(resolve => {
       if (window.isSWA) {
-        const backgroundWindowSWA = window.BackgroundWindowSWA || null;
-        resolve(new backgroundWindowSWA());
+        resolve(window);
       } else {
         chrome.runtime.getBackgroundPage(resolve);
       }
@@ -903,6 +1017,15 @@ class FileManager extends cr.EventTarget {
   }
 
   /**
+   * One time initialization of the SWA adapters for chrome extension APIs.
+   * @private
+   */
+  initAdapters_() {
+    /** @suppress {checkTypes|const} */
+    window.chrome.storage = new StorageAdapter();
+  }
+
+  /**
    * One time initialization of the essential UI elements in the Files app.
    * These elements will be shown to the user. Only visible elements should be
    * initialized here. Any heavy operation should be avoided. The Files app's
@@ -921,6 +1044,14 @@ class FileManager extends cr.EventTarget {
       DialogType.SELECT_OPEN_MULTI_FILE,
       DialogType.FULL_PAGE,
     ]);
+
+    if (util.isFilesJsModulesEnabled()) {
+      ContentMetadataProvider.configure(
+          'foreground/js/metadata_dispatcher.m.js', /*isModule=*/ true);
+    } else if (window.isSWA) {
+      ContentMetadataProvider.configure(
+          'foreground/js/metadata/metadata_dispatcher.js');
+    }
 
     // Create the metadata cache.
     assert(this.volumeManager_);
@@ -1494,6 +1625,10 @@ class FileManager extends cr.EventTarget {
 
     if (this.ui_ && this.ui_.progressCenterPanel) {
       this.progressCenter.removePanel(this.ui_.progressCenterPanel);
+    }
+
+    if (this.driveDialogController_) {
+      this.fileBrowserBackground_.driveSyncHandler.removeDialog(window.appID);
     }
   }
 

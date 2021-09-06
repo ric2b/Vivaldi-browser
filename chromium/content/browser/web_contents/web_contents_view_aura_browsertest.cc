@@ -26,7 +26,6 @@
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
-#include "content/common/input_messages.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/overscroll_configuration.h"
@@ -236,7 +235,8 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
   }
 
   RenderViewHost* GetRenderViewHost() const {
-    RenderViewHost* const rvh = shell()->web_contents()->GetRenderViewHost();
+    RenderViewHost* const rvh =
+        shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
     CHECK(rvh);
     return rvh;
   }
@@ -464,7 +464,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
   EXPECT_EQ(1, GetCurrentIndex());
 
   aura::Window* content = web_contents->GetContentNativeView();
-  ui::EventSink* sink = content->GetHost()->event_sink();
+  ui::EventSink* sink = content->GetHost()->GetEventSink();
   gfx::Rect bounds = content->GetBoundsInRootWindow();
 
   // Spurious mouse moves interfere with the overscroll gesture which causes

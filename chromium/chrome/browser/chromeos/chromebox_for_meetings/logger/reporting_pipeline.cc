@@ -10,7 +10,7 @@
 #include "base/bind_post_task.h"
 #include "base/callback_helpers.h"
 #include "chrome/browser/policy/messaging_layer/public/report_queue_configuration.h"
-#include "record_constants.pb.h"
+#include "components/reporting/proto/record_constants.pb.h"
 
 namespace chromeos {
 namespace cfm {
@@ -48,6 +48,8 @@ ReportingPipeline::~ReportingPipeline() {
 void ReportingPipeline::Init() {
   CHECK(chromeos::DeviceSettingsService::IsInitialized());
   chromeos::DeviceSettingsService::Get()->AddObserver(this);
+  // Device settings update may not be triggered in some cases
+  DeviceSettingsUpdated();
 }
 
 void ReportingPipeline::Reset() {

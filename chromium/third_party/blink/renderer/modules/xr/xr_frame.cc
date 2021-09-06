@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/xr/xr_hit_test_source.h"
 #include "third_party/blink/renderer/modules/xr/xr_input_source.h"
+#include "third_party/blink/renderer/modules/xr/xr_joint_space.h"
 #include "third_party/blink/renderer/modules/xr/xr_light_estimate.h"
 #include "third_party/blink/renderer/modules/xr/xr_light_probe.h"
 #include "third_party/blink/renderer/modules/xr/xr_plane_set.h"
@@ -21,15 +22,8 @@ namespace blink {
 
 namespace {
 
-const char kInactiveFrame[] =
-    "XRFrame access outside the callback that produced it is invalid.";
-
 const char kInvalidView[] =
     "XRView passed in to the method did not originate from current XRFrame.";
-
-const char kNonAnimationFrame[] =
-    "getViewerPose can only be called on XRFrame objects passed to "
-    "XRSession.requestAnimationFrame callbacks.";
 
 const char kSessionMismatch[] = "XRSpace and XRFrame sessions do not match.";
 
@@ -44,7 +38,15 @@ const char kCannotObtainNativeOrigin[] =
     "The operation was unable to obtain necessary information and could not be "
     "completed.";
 
+const char kSpacesSequenceTooLarge[] =
+    "Insufficient buffer capacity for pose results.";
+
+const char kMismatchedBufferSizes[] = "Buffer sizes must be equal";
+
 }  // namespace
+
+constexpr char XRFrame::kInactiveFrame[];
+constexpr char XRFrame::kNonAnimationFrame[];
 
 XRFrame::XRFrame(XRSession* session, bool is_animation_frame)
     : session_(session), is_animation_frame_(is_animation_frame) {}
@@ -154,30 +156,41 @@ XRLightEstimate* XRFrame::getLightEstimate(
   return light_probe->getLightEstimate();
 }
 
-XRDepthInformation* XRFrame::getDepthInformation(
+XRCPUDepthInformation* XRFrame::getDepthInformation(
     XRView* view,
     ExceptionState& exception_state) const {
   DVLOG(2) << __func__;
 
+  if (!session_->IsFeatureEnabled(device::mojom::XRSessionFeature::DEPTH)) {
+    DVLOG(2) << __func__ << ": depth sensing is not enabled on a session";
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        XRSession::kDepthSensingFeatureNotSupported);
+    return nullptr;
+  }
+
   if (!is_active_) {
+    DVLOG(2) << __func__ << ": frame is not active";
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kInactiveFrame);
     return nullptr;
   }
 
   if (!is_animation_frame_) {
+    DVLOG(2) << __func__ << ": frame is not animating";
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kNonAnimationFrame);
     return nullptr;
   }
 
   if (this != view->frame()) {
+    DVLOG(2) << __func__ << ": view did not originate from the frame";
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kInvalidView);
     return nullptr;
   }
 
-  return session_->GetDepthInformation(this);
+  return session_->GetCpuDepthInformation(this, exception_state);
 }
 
 // Return an XRPose that has a transform of basespace_from_space, while
@@ -379,6 +392,111 @@ ScriptPromise XRFrame::CreateAnchorFromNonStationarySpace(
 HeapVector<Member<XRImageTrackingResult>> XRFrame::getImageTrackingResults(
     ExceptionState& exception_state) {
   return session_->ImageTrackingResults(exception_state);
+}
+
+XRJointPose* XRFrame::getJointPose(XRJointSpace* joint,
+                                   XRSpace* baseSpace,
+                                   ExceptionState& exception_state) {
+  if (!is_active_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kInactiveFrame);
+    return nullptr;
+  }
+
+  if (session_ != baseSpace->session() || session_ != joint->session()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kSessionMismatch);
+    return nullptr;
+  }
+
+  const XRPose* pose = joint->getPose(baseSpace);
+  if (!pose) {
+    return nullptr;
+  }
+
+  const float radius = joint->radius();
+
+  return MakeGarbageCollected<XRJointPose>(pose->transform()->TransformMatrix(),
+                                           radius);
+}
+
+bool XRFrame::fillJointRadii(HeapVector<Member<XRJointSpace>>& jointSpaces,
+                             NotShared<DOMFloat32Array> radii,
+                             ExceptionState& exception_state) {
+  if (!is_active_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kInactiveFrame);
+    return false;
+  }
+
+  if (jointSpaces.size() != radii->length()) {
+    exception_state.ThrowTypeError(kMismatchedBufferSizes);
+    return false;
+  }
+
+  for (unsigned offset = 0; offset < jointSpaces.size(); offset++) {
+    const XRJointSpace* jointSpace = jointSpaces[offset];
+    if (session_ != jointSpace->session()) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                        kSessionMismatch);
+      return false;
+    }
+
+    radii->Data()[offset] = jointSpace->radius();
+  }
+
+  return true;
+}
+
+bool XRFrame::fillPoses(HeapVector<Member<XRSpace>>& spaces,
+                        XRSpace* baseSpace,
+                        NotShared<DOMFloat32Array> transforms,
+                        ExceptionState& exception_state) {
+  if (!is_active_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kInactiveFrame);
+    return false;
+  }
+
+  const unsigned floats_per_transform = 16;
+
+  if (spaces.size() * floats_per_transform > transforms->length()) {
+    exception_state.ThrowTypeError(kSpacesSequenceTooLarge);
+    return false;
+  }
+
+  if (session_ != baseSpace->session()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kSessionMismatch);
+    return false;
+  }
+
+  bool allValid = true;
+  unsigned offset = 0;
+  for (const auto& space : spaces) {
+    if (session_ != space->session()) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                        kSessionMismatch);
+      return false;
+    }
+
+    const XRPose* pose = space->getPose(baseSpace);
+    if (!pose) {
+      for (unsigned i = 0; i < floats_per_transform; i++) {
+        transforms->Data()[offset + i] = NAN;
+        allValid = false;
+      }
+    } else {
+      const float* const poseMatrix = pose->transform()->matrix()->Data();
+      for (unsigned i = 0; i < floats_per_transform; i++) {
+        transforms->Data()[offset + i] = poseMatrix[i];
+      }
+    }
+
+    offset += floats_per_transform;
+  }
+
+  return allValid;
 }
 
 void XRFrame::Trace(Visitor* visitor) const {

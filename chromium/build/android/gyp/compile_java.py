@@ -4,8 +4,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import distutils.spawn
-import functools
 import logging
 import multiprocessing
 import optparse
@@ -19,6 +17,7 @@ import zipfile
 from util import build_utils
 from util import md5_check
 from util import jar_info_utils
+from util import server_utils
 
 sys.path.insert(
     0,
@@ -359,7 +358,7 @@ class _InfoFileContext(object):
     entries = self._Collect()
 
     logging.info('Writing info file: %s', output_path)
-    with build_utils.AtomicOutput(output_path) as f:
+    with build_utils.AtomicOutput(output_path, mode='w') as f:
       jar_info_utils.WriteJarInfoFile(f, entries, self._srcjar_files)
     logging.info('Completed info file: %s', output_path)
 
@@ -409,8 +408,11 @@ def _OnStaleMd5(options, javac_cmd, javac_args, java_files):
 
   # Compiles with Error Prone take twice as long to run as pure javac. Thus GN
   # rules run both in parallel, with Error Prone only used for checks.
-  _RunCompiler(options, javac_cmd + javac_args, java_files,
-               options.classpath, options.jar_path,
+  _RunCompiler(options,
+               javac_cmd + javac_args,
+               java_files,
+               options.classpath,
+               options.jar_path,
                save_outputs=not options.enable_errorprone)
   logging.info('Completed all steps in _OnStaleMd5')
 
@@ -525,6 +527,7 @@ def _ParseOptions(argv):
   parser = optparse.OptionParser()
   build_utils.AddDepfileOption(parser)
 
+  parser.add_option('--target-name', help='Fully qualified GN target name.')
   parser.add_option(
       '--java-srcjars',
       action='append',
@@ -631,11 +634,15 @@ def _ParseOptions(argv):
 
 def main(argv):
   build_utils.InitLogging('JAVAC_DEBUG')
-  colorama.init()
-
   argv = build_utils.ExpandFileArgs(argv)
   options, java_files = _ParseOptions(argv)
 
+  # Only use the build server for errorprone runs.
+  if options.enable_errorprone and server_utils.MaybeRunCommand(
+      name=options.target_name, argv=sys.argv, stamp_file=options.jar_path):
+    return
+
+  colorama.init()
   javac_cmd = []
   if options.gomacc_path:
     javac_cmd.append(options.gomacc_path)
@@ -721,15 +728,16 @@ def main(argv):
     input_paths.append(options.header_jar)
   input_paths += [x[0] for x in options.additional_jar_files]
 
-  output_paths = [
-      options.jar_path,
-      options.jar_path + '.info',
-  ]
+  output_paths = [options.jar_path]
+  if not options.enable_errorprone:
+    output_paths += [options.jar_path + '.info']
 
   input_strings = javac_cmd + javac_args + options.classpath + java_files + [
       options.warnings_as_errors, options.jar_info_exclude_globs
   ]
 
+  # Keep md5_check since we plan to use its changes feature to implement a build
+  # speed improvement for non-signature compiles: https://crbug.com/1170778
   md5_check.CallAndWriteDepfileIfStale(
       lambda: _OnStaleMd5(options, javac_cmd, javac_args, java_files),
       options,

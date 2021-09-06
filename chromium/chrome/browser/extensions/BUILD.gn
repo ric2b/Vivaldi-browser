@@ -171,8 +171,6 @@ static_library("extensions") {
     "api/identity/extension_token_key.h",
     "api/identity/gaia_remote_consent_flow.cc",
     "api/identity/gaia_remote_consent_flow.h",
-    "api/identity/gaia_web_auth_flow.cc",
-    "api/identity/gaia_web_auth_flow.h",
     "api/identity/identity_api.cc",
     "api/identity/identity_api.h",
     "api/identity/identity_clear_all_cached_auth_tokens_function.cc",
@@ -217,6 +215,10 @@ static_library("extensions") {
     "api/image_writer_private/operation_manager.h",
     "api/image_writer_private/removable_storage_provider.cc",
     "api/image_writer_private/removable_storage_provider.h",
+    "api/image_writer_private/single_file_tar_reader.cc",
+    "api/image_writer_private/single_file_tar_reader.h",
+    "api/image_writer_private/tar_extractor.cc",
+    "api/image_writer_private/tar_extractor.h",
     "api/image_writer_private/write_from_file_operation.cc",
     "api/image_writer_private/write_from_file_operation.h",
     "api/image_writer_private/write_from_url_operation.cc",
@@ -736,6 +738,9 @@ static_library("extensions") {
   defines = []
 
   allow_circular_includes_from = [
+    # TODO(crbug.com/1158905): Remove this circular dependency.
+    "//chrome/browser/devtools",
+
     # Lots of APIs use headers from the list above.
     "//chrome/browser/extensions/api:api_registration",
 
@@ -784,6 +789,7 @@ static_library("extensions") {
     "//chrome/browser/image_decoder",
     "//chrome/browser/media/router",
     "//chrome/browser/media/router/discovery",
+    "//chrome/browser/profiles:profile",
     "//chrome/browser/resource_coordinator:intervention_policy_database_proto",
     "//chrome/browser/resource_coordinator:mojo_bindings",
     "//chrome/browser/safe_browsing",
@@ -811,6 +817,7 @@ static_library("extensions") {
     "//components/download/public/common:public",
     "//components/drive",
     "//components/embedder_support",
+    "//components/embedder_support:browser_util",
     "//components/enterprise",
     "//components/favicon/content",
     "//components/feedback",
@@ -840,7 +847,6 @@ static_library("extensions") {
     "//components/pref_registry",
     "//components/privacy_sandbox:privacy_sandbox_prefs",
     "//components/proxy_config",
-    "//components/rappor",
     "//components/resources",
     "//components/safe_browsing:buildflags",
     "//components/safe_browsing/content/web_ui:web_ui",
@@ -884,6 +890,7 @@ static_library("extensions") {
     "//extensions/browser",
     "//extensions/browser:core_api_provider",
     "//extensions/browser/api:api_implementations",
+    "//extensions/browser/updater",
     "//extensions/buildflags",
     "//extensions/common",
     "//extensions/common/api",
@@ -1045,6 +1052,7 @@ static_library("extensions") {
     }
     deps += [
       "//ash",
+      "//ash/constants",
       "//ash/keyboard/ui:resources_grit_grit",
       "//ash/public/cpp",
       "//chrome/browser/chromeos/crostini:crostini_installer_types_mojom",
@@ -1060,7 +1068,6 @@ static_library("extensions") {
       "//chromeos/components/chromebox_for_meetings/buildflags",
       "//chromeos/components/proximity_auth",
       "//chromeos/components/remote_apps/mojom",
-      "//chromeos/constants",
       "//chromeos/cryptohome",
       "//chromeos/dbus",
       "//chromeos/dbus/cryptohome",
@@ -1113,8 +1120,8 @@ static_library("extensions") {
     sources += [
       "api/enterprise_reporting_private/chrome_desktop_report_request_helper.cc",
       "api/enterprise_reporting_private/chrome_desktop_report_request_helper.h",
-      "api/enterprise_reporting_private/device_info_fetcher.cc",
-      "api/enterprise_reporting_private/device_info_fetcher.h",
+      "api/enterprise_reporting_private/context_info_fetcher.cc",
+      "api/enterprise_reporting_private/context_info_fetcher.h",
       "api/enterprise_reporting_private/enterprise_reporting_private_api.cc",
       "api/enterprise_reporting_private/enterprise_reporting_private_api.h",
       "api/enterprise_reporting_private/keychain_data_helper_mac.h",
@@ -1133,14 +1140,12 @@ static_library("extensions") {
     ]
     deps += [
       "//components/enterprise",
+      "//components/enterprise/common/proto:connectors_proto",
       "//components/keep_alive_registry",
     ]
     if (is_linux || is_chromeos) {
-      sources += [
-        "api/enterprise_reporting_private/device_info_fetcher_linux.cc",
-        "api/enterprise_reporting_private/device_info_fetcher_linux.h",
-        "api/image_writer_private/removable_storage_provider_linux.cc",
-      ]
+      sources +=
+          [ "api/image_writer_private/removable_storage_provider_linux.cc" ]
     }
     if (is_posix) {
       sources += [ "api/messaging/native_process_launcher_posix.cc" ]
@@ -1164,8 +1169,6 @@ static_library("extensions") {
 
   if (is_mac) {
     sources += [
-      "api/enterprise_reporting_private/device_info_fetcher_mac.h",
-      "api/enterprise_reporting_private/device_info_fetcher_mac.mm",
       "api/image_writer_private/removable_storage_provider_mac.cc",
       "global_shortcut_listener_mac.h",
       "global_shortcut_listener_mac.mm",
@@ -1215,8 +1218,6 @@ static_library("extensions") {
 
   if (is_win) {
     sources += [
-      "api/enterprise_reporting_private/device_info_fetcher_win.cc",
-      "api/enterprise_reporting_private/device_info_fetcher_win.h",
       "api/image_writer_private/removable_storage_provider_win.cc",
       "api/messaging/native_process_launcher_win.cc",
       "external_registry_loader_win.cc",

@@ -57,12 +57,9 @@ class MockFileSystemAccessManager
   void GetSandboxedFileSystem(
       GetSandboxedFileSystemCallback callback) override {}
 
-  void ChooseEntries(
-      mojom::ChooseFileSystemEntryType type,
-      WTF::Vector<mojom::blink::ChooseFileSystemEntryAcceptsOptionPtr> accepts,
-      mojom::CommonDirectory starting_directory,
-      bool include_accepts_all,
-      ChooseEntriesCallback callback) override {
+  void ChooseEntries(mojom::blink::FilePickerOptionsPtr options,
+                     mojom::blink::CommonFilePickerOptionsPtr common_options,
+                     ChooseEntriesCallback callback) override {
     if (choose_entries_response_callback_) {
       std::move(choose_entries_response_callback_).Run(std::move(callback));
     }
@@ -85,10 +82,10 @@ class MockFileSystemAccessManager
       mojo::PendingReceiver<mojom::blink::FileSystemAccessDirectoryHandle>)
       override {}
 
-  void GetEntryFromDragDropToken(
-      mojo::PendingRemote<blink::mojom::blink::FileSystemAccessDragDropToken>
-          token,
-      GetEntryFromDragDropTokenCallback callback) override {}
+  void GetEntryFromDataTransferToken(
+      mojo::PendingRemote<
+          blink::mojom::blink::FileSystemAccessDataTransferToken> token,
+      GetEntryFromDataTransferTokenCallback callback) override {}
 
  private:
   void BindFileSystemAccessManager(mojo::ScopedMessagePipeHandle handle) {
@@ -114,7 +111,8 @@ class GlobalFileSystemAccessTest : public PageTestBase {
   void Navigate(const String& destinationUrl) {
     const KURL& url = KURL(NullURL(), destinationUrl);
     auto navigation_params =
-        WebNavigationParams::CreateWithHTMLBuffer(SharedBuffer::Create(), url);
+        WebNavigationParams::CreateWithHTMLBufferForTesting(
+            SharedBuffer::Create(), url);
     GetDocument().GetFrame()->Loader().CommitNavigation(
         std::move(navigation_params), /*extra_data=*/nullptr);
     blink::test::RunPendingTasks();

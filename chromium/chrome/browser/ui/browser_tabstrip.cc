@@ -40,9 +40,7 @@ void AddTabAt(Browser* browser,
   Navigate(&params);
   CoreTabHelper* core_tab_helper =
       CoreTabHelper::FromWebContents(params.navigated_or_inserted_contents);
-  if (core_tab_helper) {
   core_tab_helper->set_new_tab_start_time(new_tab_start_time);
-  }
 }
 
 content::WebContents* AddSelectedTabWithURL(Browser* browser,

@@ -372,7 +372,7 @@ const char kEnablePluginPlaceholderTesting[] =
 // also applys to workers.
 const char kEnablePreciseMemoryInfo[] = "enable-precise-memory-info";
 
-// Set options to cache V8 data. (off, preparse data, or code)
+// Set options to cache V8 data. (none, code, or default)
 const char kV8CacheOptions[] = "v8-cache-options";
 
 // If true the ServiceProcessLauncher is used to launch services. This allows
@@ -556,6 +556,12 @@ const char kMojoCoreLibraryPath[] = "mojo-core-library-path";
 
 // Use a Mojo-based LocalStorage implementation.
 const char kMojoLocalStorage[]              = "mojo-local-storage";
+
+// Disables the unsandboxed zygote.
+// Note: this flag should not be used on most platforms. It is introduced
+// because some platforms (e.g. Cast) have very limited memory and binaries
+// won't be updated when the browser process is running.
+const char kNoUnsandboxedZygote[] = "no-unsandboxed-zygote";
 
 // Disables the use of a zygote process for forking child processes. Instead,
 // child processes will be forked and exec'd directly. Note that --no-sandbox
@@ -779,8 +785,9 @@ const char kUtilityProcess[]                = "utility";
 // Causes the utility process to display a dialog on launch.
 const char kUtilityStartupDialog[] = "utility-startup-dialog";
 
-// This switch indicates the type of a utility process. It is not used by Chrome
-// but is added to the command line for debugging and profiling purposes.
+// This switch indicates the type of a utility process. It does not affect the
+// services offered by the process, but is added to the command line for
+// debugging and profiling purposes.
 const char kUtilitySubType[] = "utility-sub-type";
 
 // In debug builds, asserts that the stream of input events is valid.
@@ -928,9 +935,6 @@ const char kEnableLongpressDragSelection[]  = "enable-longpress-drag-selection";
 const char kForceOnlineConnectionStateForIndicator[] =
     "force-online-connection-state-for-indicator";
 
-// The telephony region (ISO country code) to use in phone number detection.
-const char kNetworkCountryIso[] = "network-country-iso";
-
 // Enables remote debug over HTTP on the specified socket name.
 const char kRemoteDebuggingSocketName[]     = "remote-debugging-socket-name";
 
@@ -1019,6 +1023,9 @@ const char kRaiseTimerFrequency[] = "raise-timer-frequency";
 // Causes the second GPU process used for gpu info collection to display a
 // dialog on launch.
 const char kGpu2StartupDialog[] = "gpu2-startup-dialog";
+
+// Use high priority for the audio process.
+const char kAudioProcessHighPriority[] = "audio-process-high-priority";
 #endif
 
 #if defined(ENABLE_IPC_FUZZER)

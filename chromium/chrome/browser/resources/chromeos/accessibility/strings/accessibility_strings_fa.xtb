@@ -150,6 +150,7 @@
 <translation id="2045055672832940894">کنترل قبلی وجود ندارد</translation>
 <translation id="2045606329038304310">کنترل فیلد فرم</translation>
 <translation id="2063539687800151747">نقل‌قول آغازین</translation>
+<translation id="2074531330963286860">کنش‌هایی دردسترس است. برای مشاهده آن‌ها، «جستجو+نقطه» را فشار دهید</translation>
 <translation id="2086961585857038472">کلمه بعدی</translation>
 <translation id="2087981446621639008">جزئیات فهرست شرح</translation>
 <translation id="2089387485033699258">fa</translation>
@@ -464,7 +465,7 @@
 <translation id="4275397969489577657">فعال کردن گزارش‌گیری از جریان رویداد</translation>
 <translation id="4278486392851938658">پیوند بازدیدشده قبلی وجود ندارد</translation>
 <translation id="4281245629646759298">زرد روشن</translation>
-<translation id="4289540628985791613">مرور کلی</translation>
+<translation id="4289540628985791613">نمای کلی</translation>
 <translation id="4294967782363273192">مرتب‌شده به‌صورت صعودی</translation>
 <translation id="4300318234632215983">اعلان نشانی وب پشت یک پیوند</translation>
 <translation id="4322625298640984693">قهوه‌ای مایل به زرد</translation>
@@ -631,7 +632,7 @@
 <translation id="5597170376237141345">کادر انتخاب بعدی</translation>
 <translation id="5598905979683743333"><ph name="NAME" />، دکمه رادیویی انتخاب نشد</translation>
 <translation id="5601172225407283979">انجام عملکرد پیش‌فرض</translation>
-<translation id="5608798115546226984">تکمیل خودکار درون برنامه</translation>
+<translation id="5608798115546226984">تکمیل خودکار به‌خط</translation>
 <translation id="5616029807486814372">درس بعدی</translation>
 <translation id="561939826962581046">زمان</translation>
 <translation id="5623778242535476823">rbtn</translation>
@@ -986,7 +987,7 @@
 <translation id="8328063869313048659">خاموش/روشن کردن صفحه تاریک</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{پوند}one{# علامت پوند}other{# علامت پوند}}</translation>
 <translation id="8378855320830505539">منطقه</translation>
-<translation id="8382679411218029383">تکمیل خودکار درون خطی و فهرست</translation>
+<translation id="8382679411218029383">تکمیل خودکار به‌خط و فهرست</translation>
 <translation id="8394908167088220973">پخش/مکث رسانه</translation>
 <translation id="8428213095426709021">تنظیمات</translation>
 <translation id="8428603554127842284">سطح <ph name="DEPTH" /></translation>

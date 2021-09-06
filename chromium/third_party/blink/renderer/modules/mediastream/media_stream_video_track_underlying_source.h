@@ -7,6 +7,7 @@
 
 #include "base/threading/thread_checker.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_sink.h"
+#include "third_party/blink/renderer/core/streams/readable_stream_transferring_optimizer.h"
 #include "third_party/blink/renderer/core/streams/underlying_source_base.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
@@ -32,6 +33,9 @@ class MODULES_EXPORT MediaStreamVideoTrackUnderlyingSource
   ScriptPromise Start(ScriptState*) override;
   ScriptPromise Cancel(ScriptState*, ScriptValue reason) override;
 
+  // ExecutionLifecycleObserver
+  void ContextDestroyed() override;
+
   MediaStreamComponent* Track() const { return track_.Get(); }
   wtf_size_t MaxQueueSize() const { return max_queue_size_; }
 
@@ -44,14 +48,23 @@ class MODULES_EXPORT MediaStreamVideoTrackUnderlyingSource
   void Close();
   void Trace(Visitor*) const override;
 
+  std::unique_ptr<ReadableStreamTransferringOptimizer>
+  GetStreamTransferOptimizer();
+
  private:
-  void OnFrameFromTrack(scoped_refptr<media::VideoFrame> media_frame,
-                        base::TimeTicks estimated_capture_time);
+  void OnFrameFromTrack(
+      scoped_refptr<media::VideoFrame> media_frame,
+      std::vector<scoped_refptr<media::VideoFrame>> scaled_media_frames,
+      base::TimeTicks estimated_capture_time);
   void OnFrameFromTrackOnMainThread(
       scoped_refptr<media::VideoFrame> media_frame,
       base::TimeTicks estimated_capture_time);
   void SendFrameToStream(scoped_refptr<media::VideoFrame> media_frame);
   void ProcessPullRequest();
+
+  // Used when a stream endpoint was transferred to another realm, to
+  // automatically close frames as they are posted to the other stream.
+  bool stream_was_transferred_ = false;
 
   const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   const Member<MediaStreamComponent> track_;

@@ -17,6 +17,7 @@
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_drive_image_download_service.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_image_download_client.h"
@@ -24,8 +25,6 @@
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_metrics_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_test_helper.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -112,7 +111,9 @@ class SimpleFakeDriveService : public drive::DummyDriveService {
 
   void RunGetContentCallback(google_apis::DriveApiErrorCode error,
                              std::unique_ptr<std::string> content) {
-    get_content_callback_.Run(error, std::move(content));
+    get_content_callback_.Run(error, std::move(content),
+                              !get_content_callback_called_);
+    get_content_callback_called_ = true;
   }
 
   void RunProgressCallback(int64_t progress, int64_t total) {
@@ -146,6 +147,8 @@ class SimpleFakeDriveService : public drive::DummyDriveService {
   DownloadActionCallback download_action_callback_;
   GetContentCallback get_content_callback_;
   ProgressCallback progress_callback_;
+
+  bool get_content_callback_called_{false};
 };
 
 class PluginVmInstallerTestBase : public testing::Test {
@@ -583,6 +586,19 @@ TEST_F(PluginVmInstallerDownloadServiceTest, ImportNonExistingImageTest) {
 
   histogram_tester_->ExpectUniqueSample(kPluginVmImageDownloadedSizeHistogram,
                                         kDownloadedPluginVmImageSizeInMb, 1);
+}
+
+TEST_F(PluginVmInstallerDownloadServiceTest, ImportFailedOutOfSpaceTest) {
+  SetupConciergeForFailedDiskImageImport(
+      fake_concierge_client_,
+      vm_tools::concierge::DISK_STATUS_NOT_ENOUGH_SPACE);
+
+  ExpectObserverEventsUntil(InstallingState::kImporting);
+  EXPECT_CALL(*observer_, OnError(FailureReason::OUT_OF_DISK_SPACE));
+  StartAndRunToCompletion();
+
+  histogram_tester_->ExpectBucketCount(kPluginVmSetupResultHistogram,
+                                       PluginVmSetupResult::kError, 1);
 }
 
 TEST_F(PluginVmInstallerDownloadServiceTest, CancelledImportTest) {

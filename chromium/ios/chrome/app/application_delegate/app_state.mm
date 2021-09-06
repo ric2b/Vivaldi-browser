@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/critical_closure.h"
 #import "base/ios/crb_protocol_observers.h"
+#import "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
@@ -30,7 +31,6 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/browsing_data/sessions_storage_util.h"
 #include "ios/chrome/browser/chrome_constants.h"
-#include "ios/chrome/browser/crash_report/breakpad_helper.h"
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #include "ios/chrome/browser/crash_report/crash_loop_detection_util.h"
 #include "ios/chrome/browser/crash_report/features.h"
@@ -46,17 +46,18 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/help_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/main/browser_interface_provider.h"
 #import "ios/chrome/browser/ui/main/scene_delegate.h"
 #import "ios/chrome/browser/ui/safe_mode/safe_mode_coordinator.h"
 #import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
-#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/browser/web_state_list/session_metrics.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_metrics_browser_agent.h"
 #include "ios/net/cookies/cookie_store_ios.h"
 #include "ios/net/cookies/system_cookie_util.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/public/provider/chrome/browser/discover_feed/discover_feed_provider.h"
 #include "ios/public/provider/chrome/browser/distribution/app_distribution_provider.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
 #include "ios/web/public/thread/web_task_traits.h"
@@ -178,7 +179,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
     // Subscribe to scene-related notifications when using scenes.
     // Note these are also sent when not using scenes, so avoid subscribing to
     // them unless necessary.
-    if (IsSceneStartupSupported()) {
+    if (base::ios::IsSceneStartupSupported()) {
       if (@available(iOS 13, *)) {
         // Subscribe to scene connection notifications.
         [[NSNotificationCenter defaultCenter]
@@ -224,9 +225,6 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 - (void)applicationDidEnterBackground:(UIApplication*)application
                          memoryHelper:(MemoryWarningHelper*)memoryHelper {
   if ([self isInSafeMode]) {
-    // Force a crash when backgrounding and in safe mode, so users don't get
-    // stuck in safe mode.
-    breakpad_helper::SetEnabled(false);
     exit(0);
     return;
   }
@@ -379,7 +377,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
                        tabSwitcher:(id<TabSwitching>)tabSwitcher
              connectionInformation:
                  (id<ConnectionInformation>)connectionInformation {
-  DCHECK(!IsSceneStartupSupported());
+  DCHECK(!base::ios::IsSceneStartupSupported());
   DCHECK([_browserLauncher browserInitializationStage] ==
          INITIALIZATION_STAGE_FOREGROUND);
 
@@ -435,6 +433,11 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
       ->GetAppDistributionProvider()
       ->CancelDistributionNotifications();
 
+  if (IsDiscoverFeedEnabled()) {
+    // Stop the Discover feed so it disconnects its services.
+    ios::GetChromeBrowserProvider()->GetDiscoverFeedProvider()->StopFeed();
+  }
+
   // Halt the tabs, so any outstanding requests get cleaned up, without actually
   // closing the tabs. Set the BVC to inactive to cancel all the dialogs.
   // Don't do this if there are no scenes, since there's no defined interface
@@ -450,7 +453,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
   }
 
   // Trigger UI teardown on iOS 12.
-  if (!IsSceneStartupSupported()) {
+  if (!base::ios::IsSceneStartupSupported()) {
     self.mainSceneState.activationLevel = SceneActivationLevelUnattached;
   }
 
@@ -462,6 +465,19 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
     API_AVAILABLE(ios(13)) {
   NSMutableArray<NSString*>* sessionIDs =
       [NSMutableArray arrayWithCapacity:sceneSessions.count];
+  // This method is invoked by iOS to inform the application that the sessions
+  // for "closed windows" is garbage collected and that any data associated with
+  // them by the application needs to be deleted.
+  //
+  // Usually Chrome uses -[SceneState sceneSessionID] as identifier to properly
+  // support devices that do not support multi-window (and which use a constant
+  // identifier). For devices that do not support multi-window the session is
+  // saved at a constant path, so it is harmnless to delete files at a path
+  // derived from -persistentIdentifier (since there won't be files deleted).
+  // For devices that do support multi-window, there is data to delete once the
+  // session is garbage collected.
+  //
+  // Thus it is always correct to use -persistentIdentifier here.
   for (UISceneSession* session in sceneSessions) {
     [sessionIDs addObject:session.persistentIdentifier];
   }
@@ -549,7 +565,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 }
 
 - (NSArray<SceneState*>*)connectedScenes {
-  if (IsSceneStartupSupported()) {
+  if (base::ios::IsSceneStartupSupported()) {
     if (@available(iOS 13, *)) {
       NSMutableArray* sceneStates = [[NSMutableArray alloc] init];
       NSSet* connectedScenes =
@@ -598,7 +614,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 #pragma mark - Internal methods.
 
 - (void)startSafeMode {
-  if (!IsSceneStartupSupported()) {
+  if (!base::ios::IsSceneStartupSupported()) {
     self.mainSceneState.activationLevel = SceneActivationLevelForegroundActive;
   }
   DCHECK(self.foregroundActiveScene);
@@ -614,7 +630,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 
   [self.safeModeCoordinator start];
 
-  if (IsMultipleScenesSupported()) {
+  if (base::ios::IsMultipleScenesSupported()) {
     _safeModeBlocker =
         std::make_unique<ScopedUIBlocker>(self.foregroundActiveScene);
   }
@@ -634,7 +650,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 
   if ([SafeModeCoordinator shouldStart]) {
     self.inSafeMode = YES;
-    if (!IsMultiwindowSupported()) {
+    if (!base::ios::IsMultiwindowSupported()) {
       // Start safe mode immediately. Otherwise it should only start when a
       // scene is connected and activates to allow displaying the safe mode UI.
       [self startSafeMode];
@@ -723,7 +739,7 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 }
 
 - (void)sceneWillConnect:(NSNotification*)notification {
-  DCHECK(IsSceneStartupSupported());
+  DCHECK(base::ios::IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
     UIWindowScene* scene =
         base::mac::ObjCCastStrict<UIWindowScene>(notification.object);

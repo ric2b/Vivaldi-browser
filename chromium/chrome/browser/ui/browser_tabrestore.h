@@ -52,7 +52,7 @@ content::WebContents* AddRestoredTab(
     content::SessionStorageNamespace* storage_namespace,
     const sessions::SerializedUserAgentOverride& user_agent_override,
     bool from_session_restore,
-    const std::map<std::string, bool> page_action_overrides,
+    const std::map<std::string, bool> page_action_overrides = {},
     const std::string& ext_data = {});
 
 // Replaces the state of the currently selected tab with the session

@@ -40,7 +40,7 @@ class Configurator : public update_client::Configurator {
   Configurator& operator=(const Configurator&) = delete;
 
   // Configurator for update_client::Configurator.
-  int InitialDelay() const override;
+  double InitialDelay() const override;
   int NextCheckDelay() const override;
   int OnDemandDelay() const override;
   int UpdateDelay() const override;
@@ -69,6 +69,7 @@ class Configurator : public update_client::Configurator {
   bool IsPerUserInstall() const override;
   std::unique_ptr<update_client::ProtocolHandlerFactory>
   GetProtocolHandlerFactory() const override;
+  int ServerKeepAliveSeconds() const;
 
  private:
   friend class base::RefCountedThreadSafe<Configurator>;

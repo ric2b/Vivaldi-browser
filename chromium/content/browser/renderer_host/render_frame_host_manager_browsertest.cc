@@ -29,6 +29,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -2013,10 +2014,12 @@ IN_PROC_BROWSER_TEST_P(
   const GURL kCrossSiteURL =
       embedded_test_server()->GetURL("c.com", "/title1.html");
 
-  const GURL kOriginalSiteURL = SiteInstance::GetSiteForURL(
-      shell()->web_contents()->GetBrowserContext(), kOriginalURL);
-  const GURL kRedirectSiteURL = SiteInstance::GetSiteForURL(
-      shell()->web_contents()->GetBrowserContext(), kRedirectURL);
+  IsolationContext isolation_context(
+      shell()->web_contents()->GetBrowserContext());
+  const auto kOriginalSiteInfo =
+      SiteInfo::CreateForTesting(isolation_context, kOriginalURL);
+  const auto kRedirectSiteInfo =
+      SiteInfo::CreateForTesting(isolation_context, kRedirectURL);
 
   // First navigate to the initial URL.
   shell()->LoadURL(kOriginalURL);
@@ -2071,13 +2074,13 @@ IN_PROC_BROWSER_TEST_P(
   CHECK(speculative_rfh);
   EXPECT_TRUE(speculative_rfh->is_loading());
   if (AreAllSitesIsolatedForTesting()) {
-    EXPECT_EQ(kRedirectSiteURL,
-              speculative_rfh->GetSiteInstance()->GetSiteURL());
+    EXPECT_EQ(kRedirectSiteInfo,
+              speculative_rfh->GetSiteInstance()->GetSiteInfo());
   } else if (AreDefaultSiteInstancesEnabled()) {
     EXPECT_TRUE(speculative_rfh->GetSiteInstance()->IsDefaultSiteInstance());
   } else {
-    EXPECT_EQ(kOriginalSiteURL,
-              speculative_rfh->GetSiteInstance()->GetSiteURL());
+    EXPECT_EQ(kOriginalSiteInfo,
+              speculative_rfh->GetSiteInstance()->GetSiteInfo());
   }
   int site_instance_id = speculative_rfh->GetSiteInstance()->GetId();
 
@@ -2097,8 +2100,8 @@ IN_PROC_BROWSER_TEST_P(
   if (AreDefaultSiteInstancesEnabled()) {
     EXPECT_TRUE(speculative_rfh->GetSiteInstance()->IsDefaultSiteInstance());
   } else {
-    EXPECT_EQ(kRedirectSiteURL,
-              speculative_rfh->GetSiteInstance()->GetSiteURL());
+    EXPECT_EQ(kRedirectSiteInfo,
+              speculative_rfh->GetSiteInstance()->GetSiteInfo());
     if (AreAllSitesIsolatedForTesting())
       EXPECT_EQ(site_instance_id, speculative_rfh->GetSiteInstance()->GetId());
   }
@@ -2119,8 +2122,8 @@ IN_PROC_BROWSER_TEST_P(
   if (AreDefaultSiteInstancesEnabled()) {
     EXPECT_TRUE(speculative_rfh->GetSiteInstance()->IsDefaultSiteInstance());
   } else {
-    EXPECT_EQ(kOriginalSiteURL,
-              speculative_rfh->GetSiteInstance()->GetSiteURL());
+    EXPECT_EQ(kOriginalSiteInfo,
+              speculative_rfh->GetSiteInstance()->GetSiteInfo());
   }
   if (AreAllSitesIsolatedForTesting())
     EXPECT_NE(site_instance_id, speculative_rfh->GetSiteInstance()->GetId());
@@ -2293,7 +2296,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // view-source URL, we create a new SiteInstance.
   RenderViewHost* blank_rvh =
       shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
-  SiteInstance* blank_site_instance = blank_rvh->GetSiteInstance();
+  SiteInstance* blank_site_instance =
+      shell()->web_contents()->GetMainFrame()->GetSiteInstance();
   EXPECT_EQ(shell()->web_contents()->GetLastCommittedURL(), GURL::EmptyGURL());
   EXPECT_EQ(blank_site_instance->GetSiteURL(), GURL::EmptyGURL());
   rvh_observers.EnsureRVHGetsDestructed(blank_rvh);
@@ -2306,7 +2310,6 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   EXPECT_NE(blank_site_instance, shell()
                                      ->web_contents()
                                      ->GetMainFrame()
-                                     ->GetRenderViewHost()
                                      ->GetSiteInstance());
   rvh_observers.EnsureRVHGetsDestructed(
       shell()->web_contents()->GetMainFrame()->GetRenderViewHost());
@@ -2318,7 +2321,6 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   SiteInstance* site_instance1 = shell()
                                      ->web_contents()
                                      ->GetMainFrame()
-                                     ->GetRenderViewHost()
                                      ->GetSiteInstance();
   rvh_observers.EnsureRVHGetsDestructed(
       shell()->web_contents()->GetMainFrame()->GetRenderViewHost());
@@ -2329,7 +2331,6 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   SiteInstance* site_instance2 = shell()
                                      ->web_contents()
                                      ->GetMainFrame()
-                                     ->GetRenderViewHost()
                                      ->GetSiteInstance();
 
   // Ensure that view-source navigations force a new SiteInstance.
@@ -4050,10 +4051,12 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
                 kExpectedSiteURL.spec(),
             DepictFrameTree(*root));
 
-  EXPECT_EQ(GURL(url::kAboutBlankURL),
-            root->child_at(0)->child_at(0)->current_url());
+  EXPECT_EQ(url, root->child_at(0)->child_at(0)->current_url());
 
-  EXPECT_FALSE(root->child_at(0)->child_at(0)->has_committed_real_load());
+  // This is true because of the document.open() call, which makes the frame to
+  // be considered to have had committed a real load. The FrameTreeVisualizer
+  // test should be enough to ensure that the childmost frame is not loaded.
+  EXPECT_TRUE(root->child_at(0)->child_at(0)->has_committed_real_load());
 }
 
 // Ensure that navigating a subframe to the same URL as its parent twice in a
@@ -4525,8 +4528,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 
   scoped_refptr<SiteInstance> error_site_instance =
       child->current_frame_host()->GetSiteInstance();
-  EXPECT_EQ(success_site_instance, error_site_instance);
-  EXPECT_NE(GURL(kUnreachableWebDataURL), error_site_instance->GetSiteURL());
+  EXPECT_TRUE(IsExpectedSubframeErrorTransition(success_site_instance.get(),
+                                                error_site_instance.get()));
   EXPECT_TRUE(IsOriginOpaqueAndCompatibleWithURL(child, error_url));
 }
 
@@ -4816,6 +4819,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 
   // Reload the subframe while the network is down.
   {
+    scoped_refptr<SiteInstance> success_site_instance =
+        child->current_frame_host()->GetSiteInstance();
     std::unique_ptr<URLLoaderInterceptor> url_interceptor =
         SetupRequestFailForURL(test_url);
     TestNavigationObserver nav_observer(shell()->web_contents());
@@ -4829,10 +4834,9 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
     // Error pages should commit in an opaque origin.
     EXPECT_TRUE(IsOriginOpaqueAndCompatibleWithURL(child, test_url));
 
-    // Error page isolation should apply only to the main frame - subframes
-    // should commit in their usual process / SiteInstance.
-    EXPECT_EQ(child_site_url,
-              child->current_frame_host()->GetSiteInstance()->GetSiteURL());
+    EXPECT_TRUE(IsExpectedSubframeErrorTransition(
+        success_site_instance.get(),
+        child->current_frame_host()->GetSiteInstance()));
   }
 
   // Reload the subframe after the network is restored.
@@ -4906,6 +4910,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
         var child1 = window.open('', 'child1');
         child1.location = $1;
     )";
+    scoped_refptr<SiteInstance> initial_site_instance =
+        child2->current_frame_host()->GetSiteInstance();
     TestNavigationObserver nav_observer(shell()->web_contents());
     ASSERT_TRUE(ExecJs(child2, JsReplace(kScriptTemplate, test_url)));
     nav_observer.Wait();
@@ -4916,10 +4922,11 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
     // Error pages should commit in an opaque origin.
     EXPECT_TRUE(IsOriginOpaqueAndCompatibleWithURL(child1, test_url));
 
-    // net::ERR_BLOCKED_BY_CLIENT errors in subframes should commit in their
-    // initiator's process (not in their parent's process).
-    EXPECT_EQ(b_site_url,
-              child1->current_frame_host()->GetSiteInstance()->GetSiteURL());
+    // net::ERR_BLOCKED_BY_CLIENT errors in subframes should commit in the
+    // the correct process based on whether isolation is enabled or not.
+    EXPECT_TRUE(IsExpectedSubframeErrorTransition(
+        initial_site_instance.get(),
+        child1->current_frame_host()->GetSiteInstance()));
   }
 
   // Reload the subframe when no longer blocking the navigation.
@@ -6041,22 +6048,9 @@ class ProactivelySwapBrowsingInstancesSameSiteTest
     histogram_tester_.ExpectBucketCount(name, sample, expected_count);
   }
 
-  template <typename T>
-  void ExpectUniqueSample(base::StringPiece name,
-                          T sample,
-                          base::HistogramBase::Count expected_count) {
-    histogram_tester_.ExpectUniqueSample(name, sample, expected_count);
-  }
-
  protected:
   const char* kActionAfterPagehideHistogramName =
       "BackForwardCache.SameSite.ActionAfterPagehide2";
-  const char* kSameSiteNavigationDidSwapHistogramName =
-      "BackForwardCache.ProactiveSameSiteBISwap.SameSiteNavigationDidSwap";
-  const char* kEligibilityDuringCommitHistogramName =
-      "BackForwardCache.ProactiveSameSiteBISwap.EligibilityDuringCommit";
-  const char* kUnloadRunsAfterCommitHistogramName =
-      "BackForwardCache.ProactiveSameSiteBISwap.UnloadRunsAfterCommit";
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -6124,180 +6118,6 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   EXPECT_EQ(site_instance_1_history_nav, site_instance_1);
   EXPECT_EQ(site_instance_1_history_nav->GetProcess(),
             site_instance_1->GetProcess());
-}
-
-// Test that we're tracking whether we're doing same-site proactive
-// BrowsingInstance swap or not.
-IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
-                       SameSiteNavigationDidSwapHistogram) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
-  GURL url_b1(embedded_test_server()->GetURL("b.com", "/title1.html"));
-
-  // 1) Navigate to a.com/title1.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  // We won't do a proactive BrowsingInstance swap for the initial navigation.
-  // The initial navigation is a same-site navigation iff site isolation is on,
-  // so we will track it as  "same-site navigation but we did not swap BIs" in
-  // that case.
-  int initial_same_site_false_bucket_count =
-      AreAllSitesIsolatedForTesting() ? 1 : 0;
-  ExpectUniqueSample(kSameSiteNavigationDidSwapHistogramName, false,
-                     initial_same_site_false_bucket_count);
-
-  // 2) Navigate same-site to a.com/title2.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  // We did a same-site proactive BrowsingInstance swap and should record it.
-  ExpectBucketCount(kSameSiteNavigationDidSwapHistogramName, true, 1);
-  ExpectBucketCount(kSameSiteNavigationDidSwapHistogramName, false,
-                    initial_same_site_false_bucket_count);
-
-  // 3) Navigate cross-site to b.com/title1.html. This navigation is
-  // renderer-initiated and should trigger a proactive BrowsingInstance swap.
-  EXPECT_TRUE(NavigateToURLFromRenderer(shell(), url_a2));
-
-  // We did a cross-site proactive BrowsingInstance swap (instead of same-site),
-  // so we should record the navigation in the "false" bucket.
-  ExpectBucketCount(kSameSiteNavigationDidSwapHistogramName, true, 1);
-  ExpectBucketCount(kSameSiteNavigationDidSwapHistogramName, false,
-                    initial_same_site_false_bucket_count + 1);
-}
-
-// Test that we're tracking bfcache eligibility correctly for same-site
-// cross-BrowsingInstance navigations.
-IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
-                       EligibilityDuringCommitHistogramSameSite) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
-  GURL url_a3(embedded_test_server()->GetURL("a.com", "/title3.html"));
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-
-  // 1) Navigate to a.com/title1.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  ExpectTotalCount(kEligibilityDuringCommitHistogramName, 0);
-
-  // 2) Navigate same-site to a.com/title2.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-  // A1 should be eligible for back-forward cache during commit iff
-  // BackForwardCache is enabled and it should be counted in the
-  // EligibilityDuringCommitAfterBISwap histogram because we did a same-site
-  // navigation.
-  ExpectUniqueSample(kEligibilityDuringCommitHistogramName,
-                     IsBackForwardCacheEnabled() /* sample */, 1);
-
-  // Add unload handler to A2.
-  EXPECT_TRUE(
-      ExecJs(web_contents->GetMainFrame(), "window.onunload = () => {} "));
-
-  // 3) Navigate same-site from a.com/title2.html to a.com/title3.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a3));
-  // A2 should be eligible for back-forward cache during commit iff
-  // BackForwardCache is enabled and it should be counted in the
-  // EligibilityDuringCommitAfterBISwap histogram because we did a same-site
-  // navigation.
-  ExpectUniqueSample(kEligibilityDuringCommitHistogramName,
-                     IsBackForwardCacheEnabled() /* sample */, 2);
-}
-
-// Test that we're tracking whether unload runs after commit or not correctly
-// for same-site cross-BrowsingInstance navigations.
-IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
-                       UnloadRunsAfterCommitHistogramSameSite) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
-  GURL url_a3(embedded_test_server()->GetURL("a.com", "/title3.html"));
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-
-  // 1) Navigate to a.com/title1.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  ExpectTotalCount(kUnloadRunsAfterCommitHistogramName, 0);
-
-  // 2) Navigate same-site to a.com/title2.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a2));
-
-  // There's no unload handler in A1 so we should save "false" to
-  // UnloadRunsAfterCommit for the navigation.
-  ExpectUniqueSample(kUnloadRunsAfterCommitHistogramName, false, 1);
-
-  // Add unload handler to A2.
-  EXPECT_TRUE(
-      ExecJs(web_contents->GetMainFrame(), "window.onunload = () => {} "));
-
-  // 3) Navigate same-site from a.com/title2.html to a.com/title3.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a3));
-  // There's an unload handler in A2 and it will be run after commit iff the
-  // page is not bfcached (as we won't run unload handlers if the page gets
-  // bfcached).
-  ExpectBucketCount(kUnloadRunsAfterCommitHistogramName, true,
-                    IsBackForwardCacheEnabled() ? 0 : 1);
-  ExpectBucketCount(kUnloadRunsAfterCommitHistogramName, false,
-                    IsBackForwardCacheEnabled() ? 2 : 1);
-}
-
-// Test that we're not tracking bfcache eligibility and whether unload runs
-// after commit or not for cross-site navigations.
-IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
-                       ProactiveSameSiteBISwapHistogramsCrossSite) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  GURL url_b1(embedded_test_server()->GetURL("b.com", "/title1.html"));
-  GURL url_c1(embedded_test_server()->GetURL("c.com", "/title1.html"));
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-
-  // 1) Navigate to a.com/title1.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_a1));
-  // We won't do a proactive BrowsingInstance swap for the initial navigation.
-  // The initial navigation is a same-site navigation iff site isolation is on,
-  // so we will track it as  "same-site navigation but we did not swap BIs" in
-  // that case.
-  int initial_same_site_false_bucket_count =
-      AreAllSitesIsolatedForTesting() ? 1 : 0;
-  ExpectUniqueSample(kSameSiteNavigationDidSwapHistogramName, false,
-                     initial_same_site_false_bucket_count);
-  ExpectTotalCount(kUnloadRunsAfterCommitHistogramName, 0);
-  ExpectTotalCount(kEligibilityDuringCommitHistogramName, 0);
-
-  // Add unload handler to A1.
-  EXPECT_TRUE(
-      ExecJs(web_contents->GetMainFrame(), "window.onunload = () => {} "));
-
-  // 2) Navigate cross-site from a.com/title1.html to b.com/title1.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_b1));
-
-  // We didn't do a same-site proactive BrowsingInstance swap. Since this is
-  // not a same-site navigation, we shouldn't track it in any of the histograms.
-  ExpectUniqueSample(kSameSiteNavigationDidSwapHistogramName, false,
-                     initial_same_site_false_bucket_count);
-  // There's an unload handler in A1 but it's a cross-site navigation so we
-  // should not save anything to UnloadRunsAfterCommit (as it only cares about
-  // same site navigations).
-  ExpectTotalCount(kUnloadRunsAfterCommitHistogramName, 0);
-  // A1's eligibility/ineligibility for bfcache should not be counted in
-  // EligibilityDuringCommitAfterBISwap histogram (as it only cares about
-  // same site navigations).
-  ExpectTotalCount(kEligibilityDuringCommitHistogramName, 0);
-
-  // 3) Navigate cross-site from b.com/title1.html to c.com/title1.html.
-  EXPECT_TRUE(NavigateToURL(shell(), url_c1));
-
-  // We didn't do a same-site proactive BrowsingInstance swap. Since this is
-  // not a same-site navigation, we shouldn't track it in any of the histograms.
-  ExpectUniqueSample(kSameSiteNavigationDidSwapHistogramName, false,
-                     initial_same_site_false_bucket_count);
-  // There's no unload handler in B1 but it's a cross-site navigation so we
-  // should not save anything to UnloadRunsAfterCommit (as it only cares about
-  // same site navigations).
-  ExpectTotalCount(kUnloadRunsAfterCommitHistogramName, 0);
-  // B1's eligibility/ineligibility for bfcache should not be counted in
-  // EligibilityDuringCommitAfterBISwap histogram (as it only cares about
-  // same site navigations).
-  ExpectTotalCount(kEligibilityDuringCommitHistogramName, 0);
 }
 
 // Tests that navigations that started but haven't committed yet will be
@@ -6706,10 +6526,11 @@ class ProactivelySwapBrowsingInstancesSameSiteCoopTest
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
     std::vector<base::Feature> features;
     feature_list_.InitWithFeatures(
-        {network::features::kCrossOriginOpenerPolicy,
-         network::features::kCrossOriginOpenerPolicyReporting,
-         network::features::kCrossOriginEmbedderPolicy,
-         network::features::kCrossOriginIsolated},
+        {
+            network::features::kCrossOriginOpenerPolicy,
+            network::features::kCrossOriginOpenerPolicyReporting,
+            network::features::kCrossOriginIsolated,
+        },
         {});
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kIgnoreCertificateErrors);
@@ -6840,10 +6661,9 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteCoopTest,
             site_instance_2_history_nav->GetProcess());
 }
 
-// If the navigation is classified as NAVIGATION_TYPE_SAME_ENTRY, or is a same
-// document navigation, we should not do a proactive BrowsingInstance swap.
-// TODO(crbug.com/536102): NAVIGATION_TYPE_SAME_ENTRY will be removed in the
-// future, so we should update this test.
+// If the navigation is same-document or ends up using the same NavigationEntry
+// (e.g., enter in omnibox converted to a reload), we should not do a proactive
+// BrowsingInstance swap.
 IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
                        SameEntryAndSameDocumentNavigationDoesNotSwap) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -6858,7 +6678,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
           web_contents->GetMainFrame()->GetSiteInstance());
 
   // 2) Navigate from title1.html#foo to title1.html.
-  // This is a different-document, same-entry navigation.
+  // This is a same-document, different-entry navigation.
   EXPECT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
   scoped_refptr<SiteInstanceImpl> site_instance_2 =
@@ -6891,7 +6711,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   EXPECT_EQ(site_instance_3, site_instance_4);
 
   // 5) Navigate from title1.html#foo to title1.html#foo.
-  // This is a different-document, same page navigation.
+  // This is a different-document, same-entry navigation.
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("/title1.html#foo")));
   scoped_refptr<SiteInstanceImpl> site_instance_5 =
@@ -6913,7 +6733,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   EXPECT_EQ(site_instance_5, site_instance_6);
 
   // 7) Do a history navigation from title1.html#bar to title1.html#foo.
-  // This is a different-document, same-entry history navigation.
+  // This is a same-document, different-entry history navigation.
   shell()->web_contents()->GetController().GoBack();
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   scoped_refptr<SiteInstanceImpl> site_instance_7 =
@@ -7720,17 +7540,9 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   }
 }
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-// Quite flaky: https://crbug.com/1156218
-#define MAYBE_StorageModificationAfterPagehideHistogram \
-  DISABLED_StorageModificationAfterPagehideHistogram
-#else
-#define MAYBE_StorageModificationAfterPagehideHistogram \
-  StorageModificationAfterPagehideHistogram
-#endif
-
+// Flaky on all major platforms: https://crbug.com/1156218
 IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
-                       MAYBE_StorageModificationAfterPagehideHistogram) {
+                       DISABLED_StorageModificationAfterPagehideHistogram) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_a1(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL url_a2(embedded_test_server()->GetURL("a.com", "/title2.html"));
@@ -8540,8 +8352,10 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // either, so that it can be used for subsequent navigations.
   content::RenderProcessHost* new_process = new_instance->GetProcess();
   auto* policy = ChildProcessSecurityPolicy::GetInstance();
-  EXPECT_TRUE(policy->CanAccessDataForOrigin(new_process->GetID(), url1));
-  EXPECT_TRUE(policy->CanAccessDataForOrigin(new_process->GetID(), url2));
+  EXPECT_TRUE(policy->CanAccessDataForOrigin(new_process->GetID(),
+                                             url::Origin::Create(url1)));
+  EXPECT_TRUE(policy->CanAccessDataForOrigin(new_process->GetID(),
+                                             url::Origin::Create(url2)));
 
   SetBrowserClientForTesting(old_client);
 }
@@ -8581,8 +8395,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   TestNavigationManager foo_manager(web_contents, foo_url);
   auto& current_isolation_context =
       root->current_frame_host()->GetSiteInstance()->GetIsolationContext();
-  auto site_info = SiteInstanceImpl::ComputeSiteInfoForTesting(
-      current_isolation_context, GURL("http://foo.com"));
+  auto site_info = SiteInfo::CreateForTesting(current_isolation_context,
+                                              GURL("http://foo.com"));
   EXPECT_TRUE(site_info.RequiresDedicatedProcess(current_isolation_context));
 
   // Set up the work to be done after the renderer is asked to commit
@@ -9189,6 +9003,42 @@ void RenderFrameHostManagerTest::AssertCanRemoveSubframeInUnload(
   // TODO(https://crbug.com/1111191): Remove this. Without this, the crash in
   // the renderer in https://crbug.com/1148793 is usually not caught.
   ASSERT_TRUE(ExecJs(shell(), ""));
+}
+
+// From https://crbug.com/1169844. Verify that crashing a cross-site subframe
+// and navigating it to a new site does not cause the browser to crash.
+IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
+                       NavigateCrossSiteSubframeAfterCrash) {
+  StartEmbeddedServer();
+  // Ensure that all 3 pages are isolated from each other (even on
+  // Android, where site-per-process is not the default).
+  IsolateOriginsForTesting(embedded_test_server(), shell()->web_contents(),
+                           {"a.com", "b.com", "c.com"});
+
+  // Create a page with a subframe and navigate it cross-site.
+  GURL url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b)"));
+  ASSERT_TRUE(NavigateToURL(shell(), url));
+
+  // Crash the subframe.
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  FrameTreeNode* subframe = web_contents->GetMainFrame()->child_at(0);
+  RenderFrameHostImpl* rfh = subframe->current_frame_host();
+  RenderProcessHost* process = rfh->GetProcess();
+  {
+    RenderProcessHostWatcher crash_observer(
+        process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+    process->Shutdown(0);
+    crash_observer.Wait();
+  }
+  ASSERT_FALSE(rfh->IsRenderFrameLive());
+  subframe = web_contents->GetMainFrame()->child_at(0);
+
+  // Navigate the subframe cross-site.
+  GURL url_c(embedded_test_server()->GetURL("c.com", "/title1.html"));
+  ASSERT_TRUE(NavigateFrameToURL(subframe, url_c));
+  ASSERT_TRUE(subframe->current_frame_host()->IsRenderFrameLive());
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

@@ -43,6 +43,12 @@ const NSTimeInterval kRemindMeLaterPresentationDelay = 50 * 60 * 60;
 
 NSString* const kLastHTTPURLOpenTime = @"lastHTTPURLOpenTime";
 
+const char kDefaultBrowserFullscreenPromoCTAExperimentOpenLinksParam[] =
+    "show_open_links_title";
+
+const char kDefaultBrowserFullscreenPromoCTAExperimentSwitchParam[] =
+    "show_switch_title";
+
 // Helper function to clear all timestamps that occur later than 7 days ago.
 NSMutableArray<NSDate*>* SanitizePastUserEvents(
     NSMutableArray<NSDate*>* pastUserEvents) {
@@ -108,6 +114,20 @@ bool IsInModifiedStringsGroup() {
   return !paramValue.empty();
 }
 
+bool IsInCTAOpenLinksGroup() {
+  std::string field_trial_param = base::GetFieldTrialParamValueByFeature(
+      kDefaultBrowserFullscreenPromoCTAExperiment,
+      kDefaultBrowserFullscreenPromoCTAExperimentOpenLinksParam);
+  return field_trial_param == "true";
+}
+
+bool IsInCTASwitchGroup() {
+  std::string field_trial_param = base::GetFieldTrialParamValueByFeature(
+      kDefaultBrowserFullscreenPromoCTAExperiment,
+      kDefaultBrowserFullscreenPromoCTAExperimentSwitchParam);
+  return field_trial_param == "true";
+}
+
 bool HasUserInteractedWithFullscreenPromoBefore() {
   return [[NSUserDefaults standardUserDefaults]
       boolForKey:kUserHasInteractedWithFullscreenPromo];
@@ -145,5 +165,5 @@ bool IsLikelyInterestedDefaultBrowserUser() {
       [[[NSUserDefaults standardUserDefaults]
           arrayForKey:kLastSignificantUserEvent] mutableCopy];
   pastUserEvents = SanitizePastUserEvents(pastUserEvents);
-  return [pastUserEvents count] > 1 && base::ios::IsRunningOnIOS14OrLater();
+  return [pastUserEvents count] > 0 && base::ios::IsRunningOnIOS14OrLater();
 }

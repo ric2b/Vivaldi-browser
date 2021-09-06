@@ -41,6 +41,7 @@
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink.h"
@@ -48,12 +49,12 @@
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/public/web/web_view_observer.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/exported/web_page_popup_impl.h"
 #include "third_party/blink/renderer/core/frame/resize_viewport_anchor.h"
@@ -188,7 +189,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidCloseContextMenu() override;
   void CancelPagePopup() override;
   WebPagePopupImpl* GetPagePopup() const override { return page_popup_.get(); }
-  void AcceptLanguagesChanged() override;
   void SetPageFrozen(bool frozen) override;
   WebFrameWidget* MainFrameWidget() override;
   void SetBaseBackgroundColor(SkColor) override;
@@ -202,6 +202,10 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   const RendererPreferences& GetRendererPreferences() override;
   void SetWebPreferences(const web_pref::WebPreferences& preferences) override;
   const web_pref::WebPreferences& GetWebPreferences() override;
+
+  // Functions to add and remove observers for this object.
+  void AddObserver(WebViewObserver* observer);
+  void RemoveObserver(WebViewObserver* observer);
 
   // Overrides the page's background and base background color. You
   // can use this to enforce a transparent background, which is useful if you
@@ -232,7 +236,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
                                  cc::BrowserControlsParams);
 
   // Requests a page-scale animation based on the specified point/rect.
-  void AnimateDoubleTapZoom(const gfx::Point&, const WebRect& block_bounds);
+  void AnimateDoubleTapZoom(const gfx::Point&, const gfx::Rect& block_bounds);
 
   // mojom::blink::PageBroadcast method:
   void SetPageLifecycleState(
@@ -337,7 +341,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // notification unless the view did not need a layout.
   void MainFrameLayoutUpdated();
   void ResizeAfterLayout();
-
+  void DidCommitCompositorFrameForLocalMainFrame();
   void DidChangeContentsSize();
   void PageScaleFactorChanged();
   void MainFrameScrollOffsetChanged();
@@ -380,11 +384,11 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void FullFramePluginZoomLevelChanged(double zoom_level);
 
   // Requests a page-scale animation based on the specified rect.
-  void ZoomToFindInPageRect(const WebRect&);
+  void ZoomToFindInPageRect(const gfx::Rect&);
 
   void ComputeScaleAndScrollForBlockRect(
       const gfx::Point& hit_point,
-      const WebRect& block_rect,
+      const gfx::Rect& block_rect,
       float padding,
       float default_scale_when_already_legible,
       float& scale,
@@ -500,7 +504,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void TakeFocus(bool reverse);
 
   // Shows a previously created WebView (via window.open()).
-  void Show(const base::UnguessableToken& opener_frame_token,
+  void Show(const LocalFrameToken& opener_frame_token,
             NavigationPolicy policy,
             const gfx::Rect& rect,
             bool opened_by_user_gesture);
@@ -557,6 +561,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   friend class WebView;  // So WebView::Create can call our constructor
   friend class WTF::RefCounted<WebViewImpl>;
 
+  void AcceptLanguagesChanged();
   void ThemeChanged();
 
   // Update the target url locally and tell the browser that the target URL has
@@ -615,9 +620,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // while keeping it smaller than page width.
   //
   // This method can only be called if the main frame is local.
-  WebRect WidenRectWithinPageBounds(const WebRect& source,
-                                    int target_margin,
-                                    int minimum_margin);
+  gfx::Rect WidenRectWithinPageBounds(const gfx::Rect& source,
+                                      int target_margin,
+                                      int minimum_margin);
 
   void EnablePopupMouseWheelEventListener(WebLocalFrameImpl* local_root);
   void DisablePopupMouseWheelEventListener();
@@ -826,6 +831,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // keeping WorkerFetchContext in sync.
   mojo::RemoteSet<mojom::blink::RendererPreferenceWatcher>
       renderer_preference_watchers_;
+
+  // All the registered observers.
+  base::ObserverList<WebViewObserver> observers_;
 
   base::WeakPtrFactory<WebViewImpl> weak_ptr_factory_{this};
 };

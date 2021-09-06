@@ -44,36 +44,67 @@ JavaScriptFeature::FeatureScript
 JavaScriptFeature::FeatureScript::CreateWithFilename(
     const std::string& filename,
     InjectionTime injection_time,
-    TargetFrames target_frames) {
+    TargetFrames target_frames,
+    ReinjectionBehavior reinjection_behavior,
+    std::map<std::string, NSString*> replacements) {
   return JavaScriptFeature::FeatureScript(filename, injection_time,
-                                          target_frames);
+                                          target_frames, reinjection_behavior,
+                                          replacements);
 }
 
-JavaScriptFeature::FeatureScript::FeatureScript(const std::string& filename,
-                                                InjectionTime injection_time,
-                                                TargetFrames target_frames)
+JavaScriptFeature::FeatureScript::FeatureScript(
+    const std::string& filename,
+    InjectionTime injection_time,
+    TargetFrames target_frames,
+    ReinjectionBehavior reinjection_behavior,
+    std::map<std::string, NSString*> replacements)
     : script_filename_(filename),
       injection_time_(injection_time),
-      target_frames_(target_frames) {}
+      target_frames_(target_frames),
+      reinjection_behavior_(reinjection_behavior),
+      replacements_(replacements) {}
+
+JavaScriptFeature::FeatureScript::FeatureScript(const FeatureScript& other) =
+    default;
 
 JavaScriptFeature::FeatureScript::~FeatureScript() = default;
 
 NSString* JavaScriptFeature::FeatureScript::GetScriptString() const {
   NSString* script_filename = base::SysUTF8ToNSString(script_filename_);
-  NSString* injection_token = InjectionTokenForScript(script_filename);
-  return MakeScriptInjectableOnce(injection_token,
-                                  GetPageScript(script_filename));
+  if (reinjection_behavior_ ==
+      ReinjectionBehavior::kReinjectOnDocumentRecreation) {
+    return ReplacePlaceholders(GetPageScript(script_filename));
+  }
+  // WKUserScript instances will automatically be re-injected by WebKit when the
+  // document is re-created, even though the JavaScript context will not be
+  // re-created. So the script needs to be wrapped in |MakeScriptInjectableOnce|
+  // so that is is not re-injected.
+  return MakeScriptInjectableOnce(
+      InjectionTokenForScript(script_filename),
+      ReplacePlaceholders(GetPageScript(script_filename)));
+}
+
+NSString* JavaScriptFeature::FeatureScript::ReplacePlaceholders(
+    NSString* script) const {
+  for (auto item : replacements_) {
+    script = [script
+        stringByReplacingOccurrencesOfString:base::SysUTF8ToNSString(item.first)
+                                  withString:item.second];
+  }
+  return script;
 }
 
 #pragma mark - JavaScriptFeature
 
 JavaScriptFeature::JavaScriptFeature(ContentWorld supported_world)
-    : supported_world_(supported_world) {}
+    : supported_world_(supported_world), weak_factory_(this) {}
 
 JavaScriptFeature::JavaScriptFeature(
     ContentWorld supported_world,
     std::vector<const FeatureScript> feature_scripts)
-    : supported_world_(supported_world), scripts_(feature_scripts) {}
+    : supported_world_(supported_world),
+      scripts_(feature_scripts),
+      weak_factory_(this) {}
 
 JavaScriptFeature::JavaScriptFeature(
     ContentWorld supported_world,
@@ -81,7 +112,8 @@ JavaScriptFeature::JavaScriptFeature(
     std::vector<const JavaScriptFeature*> dependent_features)
     : supported_world_(supported_world),
       scripts_(feature_scripts),
-      dependent_features_(dependent_features) {}
+      dependent_features_(dependent_features),
+      weak_factory_(this) {}
 
 JavaScriptFeature::~JavaScriptFeature() = default;
 
@@ -98,6 +130,60 @@ JavaScriptFeature::GetScripts() const {
 const std::vector<const JavaScriptFeature*>
 JavaScriptFeature::GetDependentFeatures() const {
   return dependent_features_;
+}
+
+base::Optional<std::string> JavaScriptFeature::GetScriptMessageHandlerName()
+    const {
+  return base::nullopt;
+}
+
+base::Optional<JavaScriptFeature::ScriptMessageHandler>
+JavaScriptFeature::GetScriptMessageHandler() const {
+  if (!GetScriptMessageHandlerName()) {
+    return base::nullopt;
+  }
+
+  return base::BindRepeating(&JavaScriptFeature::ScriptMessageReceived,
+                             weak_factory_.GetWeakPtr());
+}
+
+void JavaScriptFeature::ScriptMessageReceived(BrowserState* browser_state,
+                                              WKScriptMessage* message) {}
+
+bool JavaScriptFeature::CallJavaScriptFunction(
+    WebFrame* web_frame,
+    const std::string& function_name,
+    const std::vector<base::Value>& parameters) {
+  WebFrameImpl* web_frame_impl = static_cast<WebFrameImpl*>(web_frame);
+  JavaScriptFeatureManager* feature_manager =
+      JavaScriptFeatureManager::FromBrowserState(
+          web_frame_impl->GetWebState()->GetBrowserState());
+  DCHECK(feature_manager);
+  JavaScriptContentWorld* content_world =
+      feature_manager->GetContentWorldForFeature(this);
+  // A feature can still ExecuteJavaScript even if there are no initial scripts,
+  // so a nil content_world here will execute JS in the main page content world.
+  return web_frame_impl->CallJavaScriptFunction(function_name, parameters,
+                                                content_world);
+}
+
+bool JavaScriptFeature::CallJavaScriptFunction(
+    WebFrame* web_frame,
+    const std::string& function_name,
+    const std::vector<base::Value>& parameters,
+    base::OnceCallback<void(const base::Value*)> callback,
+    base::TimeDelta timeout) {
+  WebFrameImpl* web_frame_impl = static_cast<WebFrameImpl*>(web_frame);
+  JavaScriptFeatureManager* feature_manager =
+      JavaScriptFeatureManager::FromBrowserState(
+          web_frame_impl->GetWebState()->GetBrowserState());
+  DCHECK(feature_manager);
+  JavaScriptContentWorld* content_world =
+      feature_manager->GetContentWorldForFeature(this);
+  // A feature can still ExecuteJavaScript even if there are no initial scripts,
+  // so a nil content_world here will execute JS in the main page content world.
+  return web_frame_impl->CallJavaScriptFunction(
+      function_name, parameters, content_world, std::move(callback), timeout);
 }
 
 }  // namespace web

@@ -24,7 +24,6 @@ extern const char kRemotingService[];
 
 // OAuth2 scopes.
 extern const char kOAuth1LoginScope[];
-extern const char kOAuthWrapBridgeUserInfoScope[];
 extern const char kDeviceManagementServiceOAuth[];
 extern const char kAnyApiOAuth2Scope[];
 extern const char kChromeSyncOAuth2Scope[];
@@ -41,6 +40,21 @@ extern const char kAuditRecordingOAuth2Scope[];
 extern const char kClearCutOAuth2Scope[];
 extern const char kFCMOAuthScope[];
 extern const char kTachyonOAuthScope[];
+extern const char kPhotosOAuth2Scope[];
+extern const char kCastBackdropOAuth2Scope[];
+extern const char kCloudTranslationOAuth2Scope[];
+extern const char kPasswordsLeakCheckOAuth2Scope[];
+extern const char kChromeSafeBrowsingOAuth2Scope[];
+extern const char kClassifyUrlKidPermissionOAuth2Scope[];
+extern const char kKidFamilyReadonlyOAuth2Scope[];
+extern const char kPaymentsOAuth2Scope[];
+extern const char kCryptAuthOAuth2Scope[];
+extern const char kDriveOAuth2Scope[];
+extern const char kDriveReadOnlyOAuth2Scope[];
+extern const char kAssistantOAuth2Scope[];
+extern const char kNearbyShareOAuth2Scope[];
+extern const char kGCMGroupServerOAuth2Scope[];
+extern const char kChromeWebstoreOAuth2Scope[];
 
 // Used with uber auth tokens when needed.
 extern const char kGaiaSid[];

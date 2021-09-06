@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/public/cpp/accessibility_controller_enums.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/tablet_mode.h"
@@ -300,11 +301,11 @@ const std::vector<SearchConcept>& GetA11yLabelsSearchConcepts() {
 const std::vector<SearchConcept>& GetA11yLiveCaptionSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_A11Y_LIVE_CAPTION,
-       mojom::kManageAccessibilitySubpagePath,
+       mojom::kCaptionsSubpagePath,
        mojom::SearchResultIcon::kA11y,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kLiveCaptions}},
+       {.setting = mojom::Setting::kLiveCaption}},
   });
   return *tags;
 }
@@ -327,7 +328,7 @@ bool AreExperimentalA11yLabelsAllowed() {
       ::features::kExperimentalAccessibilityLabels);
 }
 
-bool AreLiveCaptionsAllowed() {
+bool IsLiveCaptionEnabled() {
   return base::FeatureList::IsEnabled(media::kLiveCaption);
 }
 
@@ -335,9 +336,18 @@ bool IsMagnifierPanningImprovementsEnabled() {
   return features::IsMagnifierPanningImprovementsEnabled();
 }
 
+bool IsMagnifierContinuousMouseFollowingModeSettingEnabled() {
+  return features::IsMagnifierContinuousMouseFollowingModeSettingEnabled();
+}
+
 bool IsSwitchAccessTextAllowed() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnableExperimentalAccessibilitySwitchAccessText);
+}
+
+bool IsSwitchAccessSetupGuideAllowed() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      ::switches::kEnableExperimentalAccessibilitySwitchAccessSetupGuide);
 }
 
 bool AreTabletNavigationButtonsAllowed() {
@@ -430,6 +440,12 @@ void AccessibilitySection::AddLoadTimeData(
       {"chromeVoxLabel", IDS_SETTINGS_CHROMEVOX_LABEL},
       {"chromeVoxOptionsLabel", IDS_SETTINGS_CHROMEVOX_OPTIONS_LABEL},
       {"screenMagnifierLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_LABEL},
+      {"screenMagnifierMouseFollowingModeContinuous",
+       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_CONTINUOUS},
+      {"screenMagnifierMouseFollowingModeCentered",
+       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_CENTERED},
+      {"screenMagnifierMouseFollowingModeEdge",
+       IDS_SETTINGS_SCREEN_MANIFIER_MOUSE_FOLLOWING_MODE_EDGE},
       {"screenMagnifierFocusFollowingLabel",
        IDS_SETTINGS_SCREEN_MAGNIFIER_FOCUS_FOLLOWING_LABEL},
       {"screenMagnifierZoomLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_LABEL},
@@ -499,6 +515,8 @@ void AccessibilitySection::AddLoadTimeData(
       {"manageSwitchAccessSettings",
        IDS_SETTINGS_MANAGE_SWITCH_ACCESS_SETTINGS},
       {"switchAssignmentHeading", IDS_SETTINGS_SWITCH_ASSIGNMENT_HEADING},
+      {"switchAccessSetupGuideLabel",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_GUIDE_LABEL},
       {"assignSwitchSubLabel0Switches",
        IDS_SETTINGS_ASSIGN_SWITCH_SUB_LABEL_0_SWITCHES},
       {"assignSwitchSubLabel1Switch",
@@ -550,8 +568,15 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_DIALOG_WARN_CANNOT_REMOVE_LAST_SELECT_SWITCH},
       {"switchAndDeviceType", IDS_SETTINGS_SWITCH_AND_DEVICE_TYPE},
       {"noSwitchesAssigned", IDS_SETTINGS_NO_SWITCHES_ASSIGNED},
-      {"switchAccessActionAssignmentDialogExit",
-       IDS_SETTINGS_SWITCH_ACCESS_ACTION_ASSIGNMENT_DIALOG_EXIT},
+      {"switchAccessDialogExit", IDS_SETTINGS_SWITCH_ACCESS_DIALOG_EXIT},
+      {"switchAccessSetupIntroTitle",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_INTRO_TITLE},
+      {"switchAccessSetupIntroBody",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_INTRO_BODY},
+      {"switchAccessSetupPairBluetooth",
+       IDS_SETTINGS_SWITCH_ACCESS_SETUP_PAIR_BLUETOOTH},
+      {"switchAccessSetupNext", IDS_SETTINGS_SWITCH_ACCESS_SETUP_NEXT},
+      {"switchAccessSetupPrevious", IDS_SETTINGS_SWITCH_ACCESS_SETUP_PREVIOUS},
       {"switchAccessAutoScanHeading",
        IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_HEADING},
       {"switchAccessAutoScanLabel", IDS_SETTINGS_SWITCH_ACCESS_AUTO_SCAN_LABEL},
@@ -628,7 +653,7 @@ void AccessibilitySection::AddLoadTimeData(
       {"caretBrowsingSubtitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_SUBTITLE},
       {"cancel", IDS_CANCEL},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddString("a11yLearnMoreUrl",
                          chrome::kChromeAccessibilityHelpURL);
@@ -636,6 +661,9 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddBoolean(
       "showExperimentalAccessibilitySwitchAccessImprovedTextInput",
       IsSwitchAccessTextAllowed());
+
+  html_source->AddBoolean("showSwitchAccessSetupGuide",
+                          IsSwitchAccessSetupGuideAllowed());
 
   html_source->AddBoolean("showExperimentalA11yLabels",
                           AreExperimentalA11yLabelsAllowed());
@@ -648,6 +676,10 @@ void AccessibilitySection::AddLoadTimeData(
 
   html_source->AddBoolean("isMagnifierPanningImprovementsEnabled",
                           IsMagnifierPanningImprovementsEnabled());
+
+  html_source->AddBoolean(
+      "isMagnifierContinuousMouseFollowingModeSettingEnabled",
+      IsMagnifierContinuousMouseFollowingModeSettingEnabled());
 
   ::settings::AddCaptionSubpageStrings(html_source);
 }
@@ -683,12 +715,18 @@ std::string AccessibilitySection::GetSectionPath() const {
 bool AccessibilitySection::LogMetric(mojom::Setting setting,
                                      base::Value& value) const {
   // TODO(accessibility): Ensure to capture metrics for Switch Access's action
-  // idalog on detach.
+  // dialog on detach.
   switch (setting) {
     case mojom::Setting::kFullscreenMagnifierFocusFollowing:
       base::UmaHistogramBoolean(
           "ChromeOS.Settings.Accessibility.FullscreenMagnifierFocusFollowing",
           value.GetBool());
+      return true;
+    case mojom::Setting::kFullscreenMagnifierMouseFollowingMode:
+      base::UmaHistogramEnumeration(
+          "ChromeOS.Settings.Accessibility."
+          "FullscreenMagnifierMouseFollowingMode",
+          static_cast<ash::MagnifierMouseFollowingMode>(value.GetInt()));
       return true;
 
     default:
@@ -714,6 +752,7 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kHighContrastMode,
       mojom::Setting::kFullscreenMagnifier,
       mojom::Setting::kFullscreenMagnifierFocusFollowing,
+      mojom::Setting::kFullscreenMagnifierMouseFollowingMode,
       mojom::Setting::kDockedMagnifier,
       mojom::Setting::kStickyKeys,
       mojom::Setting::kOnScreenKeyboard,
@@ -727,7 +766,6 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kTabletNavigationButtons,
       mojom::Setting::kMonoAudio,
       mojom::Setting::kStartupSound,
-      mojom::Setting::kLiveCaptions,
       mojom::Setting::kEnableCursorColor,
   };
   RegisterNestedSettingBulk(mojom::Subpage::kManageAccessibility,
@@ -765,6 +803,11 @@ void AccessibilitySection::RegisterHierarchy(
       IDS_SETTINGS_CAPTIONS, mojom::Subpage::kCaptions,
       mojom::SearchResultIcon::kA11y, mojom::SearchResultDefaultRank::kMedium,
       mojom::kCaptionsSubpagePath);
+  static constexpr mojom::Setting kCaptionsSettings[] = {
+      mojom::Setting::kLiveCaption,
+  };
+  RegisterNestedSettingBulk(mojom::Subpage::kCaptions, kCaptionsSettings,
+                            generator);
 }
 
 void AccessibilitySection::OnVoicesChanged() {
@@ -824,7 +867,7 @@ void AccessibilitySection::UpdateSearchTags() {
   updater.RemoveSearchTags(GetA11ySwitchAccessOnSearchConcepts());
   updater.RemoveSearchTags(GetA11ySwitchAccessKeyboardSearchConcepts());
 
-  if (AreLiveCaptionsAllowed()) {
+  if (IsLiveCaptionEnabled()) {
     updater.AddSearchTags(GetA11yLiveCaptionSearchConcepts());
   } else {
     updater.RemoveSearchTags(GetA11yLiveCaptionSearchConcepts());

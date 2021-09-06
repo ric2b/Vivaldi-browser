@@ -147,7 +147,8 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
 
   LayoutUnit new_block_size = ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(), BorderPadding(), result.IntrinsicBlockSize(),
-      container_builder_.InitialBorderBoxSize().inline_size);
+      container_builder_.InitialBorderBoxSize().inline_size,
+      Node().ShouldBeConsideredAsReplaced());
 
   // Only block-flow is allowed to change its block-size during "simplified"
   // layout, all other layout types must remain the same size.
@@ -156,7 +157,11 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
   } else {
     LayoutUnit old_block_size =
         NGFragment(writing_direction_, physical_fragment).BlockSize();
-    DCHECK_EQ(old_block_size, new_block_size);
+#if DCHECK_IS_ON()
+    // Tables don't respect the typical block-sizing rules.
+    if (!physical_fragment.IsTableNG())
+      DCHECK_EQ(old_block_size, new_block_size);
+#endif
     container_builder_.SetFragmentBlockSize(old_block_size);
   }
 

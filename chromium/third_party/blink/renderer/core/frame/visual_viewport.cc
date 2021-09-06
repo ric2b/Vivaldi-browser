@@ -74,7 +74,8 @@
 namespace blink {
 
 VisualViewport::VisualViewport(Page& owner)
-    : page_(&owner),
+    : ScrollableArea(owner.GetAgentGroupScheduler().CompositorTaskRunner()),
+      page_(&owner),
       parent_property_tree_state_(PropertyTreeState::Uninitialized()),
       scale_(1),
       is_pinch_gesture_active_(false),
@@ -591,14 +592,13 @@ void VisualViewport::CreateLayers() {
   scroll_layer_->SetBounds(gfx::Size(ContentsSize()));
   scroll_layer_->SetElementId(GetScrollElementId());
 
-  ScrollingCoordinator* coordinator = GetPage().GetScrollingCoordinator();
-  DCHECK(coordinator);
-  LayerForScrollingDidChange(coordinator->GetCompositorAnimationTimeline());
-
   InitializeScrollbars();
 
-  if (LocalMainFrame())
+  if (LocalMainFrame()) {
+    ScrollingCoordinator* coordinator = GetPage().GetScrollingCoordinator();
+    DCHECK(coordinator);
     coordinator->UpdateCompositorScrollOffset(*LocalMainFrame(), *this);
+  }
 }
 
 void VisualViewport::InitializeScrollbars() {

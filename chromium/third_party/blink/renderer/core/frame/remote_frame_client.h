@@ -7,7 +7,9 @@
 
 #include "base/optional.h"
 #include "cc/paint/paint_canvas.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/policy_container.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_impression.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
@@ -16,43 +18,42 @@
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 
 namespace viz {
-class FrameSinkId;
-class LocalSurfaceId;
+class SurfaceId;
 }
 
 namespace blink {
 class AssociatedInterfaceProvider;
 class ResourceRequest;
-class WebLocalFrame;
 
 class RemoteFrameClient : public FrameClient {
  public:
   ~RemoteFrameClient() override = default;
 
-  virtual void Navigate(const ResourceRequest&,
-                        blink::WebLocalFrame* initiator_frame,
-                        bool should_replace_current_entry,
-                        bool is_opener_navigation,
-                        bool initiator_frame_has_download_sandbox_flag,
-                        bool initiator_frame_is_ad,
-                        mojo::PendingRemote<mojom::blink::BlobURLToken>,
-                        const base::Optional<WebImpression>& impression) = 0;
+  virtual void Navigate(
+      const ResourceRequest&,
+      bool should_replace_current_entry,
+      bool is_opener_navigation,
+      bool initiator_frame_has_download_sandbox_flag,
+      bool initiator_frame_is_ad,
+      mojo::PendingRemote<mojom::blink::BlobURLToken>,
+      const base::Optional<WebImpression>& impression,
+      const LocalFrameToken* initiator_frame_token,
+      mojo::PendingRemote<mojom::blink::PolicyContainerHostKeepAliveHandle>
+          initiator_policy_container_keep_alive_handle) = 0;
   unsigned BackForwardLength() override = 0;
 
   virtual void WillSynchronizeVisualProperties(
-      bool synchronized_props_changed,
       bool capture_sequence_number_changed,
+      const viz::SurfaceId& surface_id,
       const gfx::Size& compositor_viewport_size) = 0;
-
-  virtual const viz::LocalSurfaceId& GetLocalSurfaceId() const = 0;
 
   virtual bool RemoteProcessGone() const = 0;
 
+  // This is a temporary workaround for https://crbug.com/1166729.
+  // TODO(https://crbug.com/1166722): Remove this once the migration is done.
+  virtual void DidSetFrameSinkId() = 0;
+
   virtual AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() = 0;
-
-  virtual viz::FrameSinkId GetFrameSinkId() = 0;
-
-  virtual void WasEvicted() = 0;
 };
 
 }  // namespace blink

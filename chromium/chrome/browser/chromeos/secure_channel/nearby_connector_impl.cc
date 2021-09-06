@@ -16,6 +16,9 @@
 namespace chromeos {
 namespace secure_channel {
 
+using NearbyProcessShutdownReason =
+    nearby::NearbyProcessManager::NearbyProcessShutdownReason;
+
 NearbyConnectorImpl::ConnectionRequestMetadata::ConnectionRequestMetadata(
     const std::vector<uint8_t>& bluetooth_public_address,
     mojo::PendingRemote<mojom::NearbyMessageReceiver> message_receiver,
@@ -129,18 +132,45 @@ void NearbyConnectorImpl::ProcessQueuedConnectionRequests() {
                          base::Unretained(this), new_broker_id));
 }
 
-void NearbyConnectorImpl::OnNearbyProcessStopped() {
+void NearbyConnectorImpl::OnNearbyProcessStopped(
+    NearbyProcessShutdownReason shutdown_reason) {
   PA_LOG(WARNING) << "Nearby process stopped unexpectedly. Destroying active "
-                  << "connections.";
+                  << "connections. Shutdown reason: " << shutdown_reason;
 
-  // Record the disconnection reason for each of the active brokers.
-  for (size_t i = 0; i < id_to_brokers_map_.size(); ++i) {
-    util::RecordNearbyDisconnection(
-        util::NearbyDisconnectionReason::kNearbyProcessCrash);
-  }
-
+  RecordNearbyDisconnectionForActiveBrokers(shutdown_reason);
   ClearActiveAndPendingConnections();
   ProcessQueuedConnectionRequests();
+}
+
+void NearbyConnectorImpl::RecordNearbyDisconnectionForActiveBrokers(
+    NearbyProcessShutdownReason shutdown_reason) {
+  if (id_to_brokers_map_.empty())
+    return;
+
+  util::NearbyDisconnectionReason disconnection_reason;
+
+  switch (shutdown_reason) {
+    case NearbyProcessShutdownReason::kCrash:
+      disconnection_reason =
+          util::NearbyDisconnectionReason::kNearbyProcessCrash;
+      break;
+
+    case NearbyProcessShutdownReason::kMojoPipeDisconnection:
+      disconnection_reason =
+          util::NearbyDisconnectionReason::kNearbyProcessMojoDisconnection;
+      break;
+
+    case NearbyProcessShutdownReason::kNormal:
+      PA_LOG(WARNING) << "Neary process stopped normally. This is unexpected "
+                         "when there are active brokers.";
+      disconnection_reason =
+          util::NearbyDisconnectionReason::kDisconnectionRequestedByClient;
+      break;
+  }
+
+  for (size_t i = 0; i < id_to_brokers_map_.size(); ++i) {
+    util::RecordNearbyDisconnection(disconnection_reason);
+  }
 }
 
 void NearbyConnectorImpl::OnConnected(

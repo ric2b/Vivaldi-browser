@@ -13,6 +13,7 @@
 #include "components/autofill_assistant/browser/actions/collect_user_data_action.h"
 #include "components/autofill_assistant/browser/actions/configure_bottom_sheet_action.h"
 #include "components/autofill_assistant/browser/actions/configure_ui_state_action.h"
+#include "components/autofill_assistant/browser/actions/dispatch_js_event_action.h"
 #include "components/autofill_assistant/browser/actions/expect_navigation_action.h"
 #include "components/autofill_assistant/browser/actions/generate_password_for_form_field_action.h"
 #include "components/autofill_assistant/browser/actions/get_element_status_action.h"
@@ -44,36 +45,23 @@
 #include "components/autofill_assistant/browser/actions/wait_for_navigation_action.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
+#include "third_party/re2/src/re2/re2.h"
 #include "url/gurl.h"
 
 namespace autofill_assistant {
-
-namespace {
-
-void AppendScriptParametersToRepeatedField(
-    const std::map<std::string, std::string>& script_parameters,
-    google::protobuf::RepeatedPtrField<ScriptParameterProto>* dest) {
-  for (const auto& param_entry : script_parameters) {
-    ScriptParameterProto* parameter = dest->Add();
-    parameter->set_name(param_entry.first);
-    parameter->set_value(param_entry.second);
-  }
-}
-
-}  // namespace
 
 // static
 std::string ProtocolUtils::CreateGetScriptsRequest(
     const GURL& url,
     const ClientContextProto& client_context,
-    const std::map<std::string, std::string>& script_parameters) {
+    const ScriptParameters& script_parameters) {
   DCHECK(!url.is_empty());
 
   SupportsScriptRequestProto script_proto;
   script_proto.set_url(url.spec());
   *script_proto.mutable_client_context() = client_context;
-  AppendScriptParametersToRepeatedField(
-      script_parameters, script_proto.mutable_script_parameters());
+  *script_proto.mutable_script_parameters() =
+      script_parameters.ToProto(/* only_trigger_script_allowlisted = */ false);
   std::string serialized_script_proto;
   bool success = script_proto.SerializeToString(&serialized_script_proto);
   DCHECK(success);
@@ -123,7 +111,7 @@ std::string ProtocolUtils::CreateInitialScriptActionsRequest(
     const std::string& global_payload,
     const std::string& script_payload,
     const ClientContextProto& client_context,
-    const std::map<std::string, std::string>& script_parameters,
+    const ScriptParameters& script_parameters,
     const base::Optional<ScriptStoreConfig>& script_store_config) {
   ScriptActionRequestProto request_proto;
   InitialScriptActionsRequestProto* initial_request_proto =
@@ -138,8 +126,8 @@ std::string ProtocolUtils::CreateInitialScriptActionsRequest(
   query->set_url(url.spec());
   query->set_policy(PolicyType::SCRIPT);
   *request_proto.mutable_client_context() = client_context;
-  AppendScriptParametersToRepeatedField(
-      script_parameters, initial_request_proto->mutable_script_parameters());
+  *initial_request_proto->mutable_script_parameters() =
+      script_parameters.ToProto(/* only_trigger_script_allowlisted = */ false);
   if (!global_payload.empty()) {
     request_proto.set_global_payload(global_payload);
   }
@@ -336,6 +324,8 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
                          delegate->GetWebController()->GetWeakPtr()));
     case ActionProto::ActionInfoCase::kReleaseElements:
       return std::make_unique<ReleaseElementsAction>(delegate, action);
+    case ActionProto::ActionInfoCase::kDispatchJsEvent:
+      return std::make_unique<DispatchJsEventAction>(delegate, action);
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET: {
       VLOG(1) << "Encountered action with ACTION_INFO_NOT_SET";
       return std::make_unique<UnsupportedAction>(delegate, action);
@@ -393,14 +383,12 @@ bool ProtocolUtils::ParseActions(ActionDelegate* delegate,
 std::string ProtocolUtils::CreateGetTriggerScriptsRequest(
     const GURL& url,
     const ClientContextProto& client_context,
-    const std::map<std::string, std::string>& script_parameters) {
+    const ScriptParameters& script_parameters) {
   GetTriggerScriptsRequestProto request_proto;
   request_proto.set_url(url.spec());
   *request_proto.mutable_client_context() = client_context;
-  if (!script_parameters.empty()) {
-    AppendScriptParametersToRepeatedField(
-        script_parameters, request_proto.mutable_debug_script_parameters());
-  }
+  *request_proto.mutable_debug_script_parameters() =
+      script_parameters.ToProto(/* only_trigger_script_allowlisted = */ true);
 
   std::string serialized_request_proto;
   bool success = request_proto.SerializeToString(&serialized_request_proto);
@@ -426,6 +414,12 @@ bool ProtocolUtils::ParseTriggerScripts(
     return false;
   }
 
+  for (const auto& trigger_script_proto : response_proto.trigger_scripts()) {
+    if (!ValidateTriggerCondition(trigger_script_proto.trigger_condition())) {
+      return false;
+    }
+  }
+
   for (auto& trigger_script_proto : *response_proto.mutable_trigger_scripts()) {
     if (trigger_script_proto.user_interface().scroll_to_hide()) {
       // Turn off viewport resizing when scroll to hide is on as it causes
@@ -448,6 +442,68 @@ bool ProtocolUtils::ParseTriggerScripts(
     *timeout_ms = response_proto.timeout_ms();
   }
   return true;
+}
+
+// static
+bool ProtocolUtils::ValidateTriggerCondition(
+    const TriggerScriptConditionProto& trigger_condition) {
+  switch (trigger_condition.type_case()) {
+    case TriggerScriptConditionProto::kAllOf:
+      for (const auto& condition : trigger_condition.all_of().conditions()) {
+        if (!ValidateTriggerCondition(condition)) {
+          return false;
+        }
+      }
+      return true;
+    case TriggerScriptConditionProto::kAnyOf:
+      for (const auto& condition : trigger_condition.any_of().conditions()) {
+        if (!ValidateTriggerCondition(condition)) {
+          return false;
+        }
+      }
+      return true;
+    case TriggerScriptConditionProto::kNoneOf:
+      for (const auto& condition : trigger_condition.none_of().conditions()) {
+        if (!ValidateTriggerCondition(condition)) {
+          return false;
+        }
+      }
+      return true;
+    case TriggerScriptConditionProto::kPathPattern: {
+      const re2::RE2 re(trigger_condition.path_pattern());
+      if (!re.ok()) {
+#ifdef NDEBUG
+        VLOG(1) << "Invalid regexp in trigger condition";
+#else
+        VLOG(1) << "Invalid regexp in trigger condition "
+                << trigger_condition.path_pattern();
+#endif
+        return false;
+      }
+      return true;
+    }
+    case TriggerScriptConditionProto::kDomainWithScheme: {
+      const GURL domain(trigger_condition.domain_with_scheme());
+      if (!domain.is_valid()) {
+#ifdef NDEBUG
+        VLOG(1) << "Invalid domain format in trigger condition";
+#else
+        VLOG(1) << "Invalid domain format in trigger condition "
+                << trigger_condition.domain_with_scheme();
+#endif
+        return false;
+      }
+      return true;
+    }
+    case TriggerScriptConditionProto::kStoredLoginCredentials:
+    case TriggerScriptConditionProto::kIsFirstTimeUser:
+    case TriggerScriptConditionProto::kExperimentId:
+    case TriggerScriptConditionProto::kKeyboardHidden:
+    case TriggerScriptConditionProto::kScriptParameterMatch:
+    case TriggerScriptConditionProto::kSelector:
+    case TriggerScriptConditionProto::TYPE_NOT_SET:
+      return true;
+  }
 }
 
 }  // namespace autofill_assistant

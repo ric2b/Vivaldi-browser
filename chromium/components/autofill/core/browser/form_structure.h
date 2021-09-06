@@ -24,6 +24,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
+#include "components/autofill/core/common/dense_set.h"
 #include "components/autofill/core/common/language_code.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/renderer_id.h"
@@ -67,7 +68,9 @@ class FormStructure {
 
   // Runs several heuristics against the form fields to determine their possible
   // types.
-  void DetermineHeuristicTypes(LogManager* log_manager = nullptr);
+  void DetermineHeuristicTypes(
+      AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
+      LogManager* log_manager);
 
   // Encodes the proto |upload| request from this FormStructure, and stores
   // the (single) FormSignature and the signatures of the fields to be uploaded
@@ -79,6 +82,7 @@ class FormStructure {
       bool form_was_autofilled,
       const std::string& login_form_signature,
       bool observed_submission,
+      bool is_raw_metadata_uploading_enabled,
       autofill::AutofillUploadContents* upload,
       std::vector<FormSignature>* encoded_signatures) const;
 
@@ -104,9 +108,6 @@ class FormStructure {
   // their fields' predicted types.
   static std::vector<FormDataPredictions> GetFieldTypePredictions(
       const std::vector<FormStructure*>& form_structures);
-
-  // Returns whether sending autofill field metadata to the server is enabled.
-  static bool IsAutofillFieldMetadataEnabled();
 
   // Creates FormStructure that has bare minimum information for uploading
   // votes, namely form and field signatures. Warning: do not use for Autofill
@@ -282,7 +283,7 @@ class FormStructure {
   FormData ToFormData() const;
 
   // Returns the possible form types.
-  std::set<FormType> GetFormTypes() const;
+  DenseSet<FormType> GetFormTypes() const;
 
   bool passwords_were_revealed() const { return passwords_were_revealed_; }
   void set_passwords_were_revealed(bool passwords_were_revealed) {
@@ -494,6 +495,7 @@ class FormStructure {
       std::vector<FormSignature>* queried_form_signatures) const;
 
   void EncodeFormForUpload(
+      bool is_raw_metadata_uploading_enabled,
       autofill::AutofillUploadContents* upload,
       std::vector<FormSignature>* encoded_signatures) const;
 
@@ -518,34 +520,12 @@ class FormStructure {
   // Further processes the extracted |fields_|.
   void ProcessExtractedFields();
 
-  // Tries to set |parseable_name| fields by stripping the given offsets from
-  // both sides of the |name| fields.
-  // Sets |parseable_name| to |name| if the sum of offsets is bigger than
-  // |name|.
-  // Sets all |parseable_name| to |name| without modification and returns
-  // false if a name fails the |IsValidParseableName()| check after stripping.
-  bool SetStrippedParseableNames(size_t offset_left, size_t offset_right);
+  // Extracts the parseable field name by removing a common affix.
+  void ExtractParseableFieldNames();
 
-  // Returns true if |string| is a valid parseable_name. Current criterion
-  // is the |autofill::kParseableNameValidationRe| regex.
-  static bool IsValidParseableName(base::string16 string);
-
-  // Returns the length of the longest common prefix found within |strings|
-  // if |findCommonSuffix| is false. Otherwise returns longest common suffix.
-  static size_t FindLongestCommonAffixLength(
-      const std::vector<base::StringPiece16>& strings,
-      bool findCommonSuffix = false);
-
-  // Returns the longest common prefix found within |strings|. Strings below a
-  // threshold length defined by |kMinCommonNamePrefixLength| are excluded
-  // when performing this check; this is needed because an exceptional
-  // field may be missing a prefix which is otherwise consistently applied.
-  // For instance, a framework may only apply a prefix to those fields
-  // which are bound when POSTing.
-  //
-  // Soon to be replaced by FindLongestCommonPrefixLength
-  static base::string16 FindLongestCommonPrefix(
-      const std::vector<base::string16>& strings);
+  // Extract parseable field labels by potentially splitting labels between
+  // adjacent fields.
+  void ExtractParseableFieldLabels();
 
   // The language detected for this form's page, before any translations
   // performed by Chrome.

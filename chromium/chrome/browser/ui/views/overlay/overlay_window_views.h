@@ -7,6 +7,7 @@
 
 #include "content/public/browser/overlay_window.h"
 
+#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/gfx/geometry/size.h"
@@ -88,6 +89,8 @@ class OverlayWindowViews : public content::OverlayWindow,
   // visible.
   bool AreControlsVisible() const;
 
+  void ForceControlsVisibleForTesting(bool visible);
+
   // Determines whether a layout of the window controls has been scheduled but
   // is not done yet.
   bool IsLayoutPendingForTesting() const;
@@ -152,12 +155,6 @@ class OverlayWindowViews : public content::OverlayWindow,
   gfx::Rect CalculateControlsBounds(int x, const gfx::Size& size);
   void UpdateControlsPositions();
 
-  ui::Layer* GetControlsScrimLayer();
-  ui::Layer* GetBackToTabControlsLayer();
-  ui::Layer* GetCloseControlsLayer();
-  ui::Layer* GetResizeHandleLayer();
-  ui::Layer* GetControlsParentLayer();
-
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
   enum class OverlayWindowControl {
@@ -220,6 +217,7 @@ class OverlayWindowViews : public content::OverlayWindow,
   views::View* window_background_view_ = nullptr;
   views::View* video_view_ = nullptr;
   views::View* controls_scrim_view_ = nullptr;
+  views::View* controls_container_view_ = nullptr;
   views::CloseImageButton* close_controls_view_ = nullptr;
   views::BackToTabImageButton* back_to_tab_controls_view_ = nullptr;
   views::TrackImageButton* previous_track_controls_view_ = nullptr;
@@ -252,6 +250,11 @@ class OverlayWindowViews : public content::OverlayWindow,
   // Whether or not the previous track button will be shown. This is the
   // case when Media Session "previoustrack" action is handled by the website.
   bool show_previous_track_button_ = false;
+
+  // If set, controls will always either be shown or hidden, instead of showing
+  // and hiding automatically. Only used for testing via
+  // ForceControlsVisibleForTesting().
+  base::Optional<bool> force_controls_visible_;
 
   // Vivaldi
   vivaldi::VideoProgress* progress_view_ = nullptr;

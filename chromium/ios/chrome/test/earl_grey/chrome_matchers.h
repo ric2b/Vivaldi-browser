@@ -21,6 +21,11 @@ namespace chrome_test_util {
 // test will have consecutive numbers.
 id<GREYMatcher> WindowWithNumber(int window_number);
 
+// Shorthand matcher for creating a matcher that ensures the given matcher
+// matches elements under the given window.
+id<GREYMatcher> MatchInWindowWithNumber(int window_number,
+                                        id<GREYMatcher> matcher);
+
 // Matcher for element with accessibility label corresponding to |message_id|
 // and accessibility trait UIAccessibilityTraitButton.
 id<GREYMatcher> ButtonWithAccessibilityLabelId(int message_id);
@@ -271,6 +276,10 @@ id<GREYMatcher> GoogleServicesSettingsView();
 
 // Returns matcher for the back button on a settings menu.
 id<GREYMatcher> SettingsMenuBackButton();
+
+// Returns matcher for the back button on a settings menu in given window
+// number.
+id<GREYMatcher> SettingsMenuBackButton(int window_number);
 
 // Returns matcher for the Privacy cell on the main Settings screen.
 id<GREYMatcher> SettingsMenuPrivacyButton();

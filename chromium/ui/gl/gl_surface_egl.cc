@@ -9,10 +9,12 @@
 
 #include <map>
 #include <memory>
+#include <sstream>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -27,6 +29,7 @@
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gl/angle_platform_impl.h"
 #include "ui/gl/egl_util.h"
+#include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_context_egl.h"
 #include "ui/gl/gl_display_egl_util.h"
@@ -205,6 +208,7 @@ bool g_egl_android_native_fence_sync_supported = false;
 bool g_egl_ext_pixel_format_float_supported = false;
 bool g_egl_angle_feature_control_supported = false;
 bool g_egl_angle_power_preference_supported = false;
+bool g_egl_angle_external_context_and_surface_supported = false;
 EGLGpuSwitchingObserver* g_egl_gpu_switching_observer = nullptr;
 
 constexpr const char kSwapEventTraceCategories[] = "gpu";
@@ -823,6 +827,11 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
     AddInitDisplay(init_displays, ANGLE_METAL);
   }
 
+  if (supports_angle_vulkan && use_angle_default &&
+      features::IsDefaultANGLEVulkan()) {
+    AddInitDisplay(init_displays, ANGLE_VULKAN);
+  }
+
   if (supports_angle_d3d) {
     if (use_angle_default) {
       // Default mode for ANGLE - try D3D11, else try D3D9
@@ -1061,6 +1070,9 @@ bool GLSurfaceEGL::InitializeOneOffCommon() {
   g_egl_angle_power_preference_supported =
       HasEGLExtension("EGL_ANGLE_power_preference");
 
+  g_egl_angle_external_context_and_surface_supported =
+      HasEGLExtension("EGL_ANGLE_external_context_and_surface");
+
   if (g_egl_angle_power_preference_supported) {
     g_egl_gpu_switching_observer = new EGLGpuSwitchingObserver();
     ui::GpuSwitchingManager::GetInstance()->AddObserver(
@@ -1213,7 +1225,11 @@ bool GLSurfaceEGL::IsANGLEPowerPreferenceSupported() {
   return g_egl_angle_power_preference_supported;
 }
 
-GLSurfaceEGL::~GLSurfaceEGL() {}
+bool GLSurfaceEGL::IsANGLEExternalContextAndSurfaceSupported() {
+  return g_egl_angle_external_context_and_surface_supported;
+}
+
+GLSurfaceEGL::~GLSurfaceEGL() = default;
 
 // InitializeDisplay is necessary because the static binding code
 // needs a full Display init before it can query the Display extensions.
@@ -1329,12 +1345,25 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
       LOG(ERROR) << "eglInitialize " << DisplayTypeString(display_type)
                  << " failed with error " << GetLastEGLErrorString()
                  << (is_last ? "" : ", trying next display type");
-    } else {
-      UMA_HISTOGRAM_ENUMERATION("GPU.EGLDisplayType", display_type,
-                                DISPLAY_TYPE_MAX);
-      g_egl_display = display;
-      break;
+      continue;
     }
+
+    std::ostringstream display_type_string;
+    auto gl_implementation = GetGLImplementation();
+    display_type_string << GetGLImplementationName(gl_implementation);
+    if (gl_implementation == kGLImplementationEGLANGLE) {
+      display_type_string << ":" << DisplayTypeString(display_type);
+    }
+
+    static auto* egl_display_type_key = base::debug::AllocateCrashKeyString(
+        "egl-display-type", base::debug::CrashKeySize::Size32);
+    base::debug::SetCrashKeyString(egl_display_type_key,
+                                   display_type_string.str());
+
+    UMA_HISTOGRAM_ENUMERATION("GPU.EGLDisplayType", display_type,
+                              DISPLAY_TYPE_MAX);
+    g_egl_display = display;
+    break;
   }
 
   return g_egl_display;

@@ -368,7 +368,11 @@ bool MenuUpgrade::Remove(const base::Value& profile_value,
         const auto& item = profile_root->GetList()[i];
         const std::string* item_guid = item.FindStringPath("guid");
         if (item_guid && *item_guid == *guid) {
-          return profile_root->EraseListValue(profile_value) == 1;
+          // We used to return true when excatly one element was removed, but
+          // due to some duplicate ids that got added to a bundled file, some
+          // in the same sub menu, we now accept that we can delete more than
+          // one.
+          return profile_root->EraseListValue(profile_value) >= 1;
         }
       }
     }
@@ -378,7 +382,10 @@ bool MenuUpgrade::Remove(const base::Value& profile_value,
     if (matched_value) {
       base::Value* children = matched_value->FindPath("children");
       if (children && children->is_list()) {
-        return children->EraseListValue(profile_value) == 1;
+        // We used to return true when excatly one element was removed, but
+        // due to some duplicate ids that got added to a bundled file, some
+        // in the same sub menu, we now accept that we can delete more than one.
+        return children->EraseListValue(profile_value) >= 1;
       }
     }
   }

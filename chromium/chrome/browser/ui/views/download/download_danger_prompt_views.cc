@@ -27,6 +27,8 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "url/gurl.h"
 
@@ -41,6 +43,7 @@ class DownloadDangerPromptViews : public DownloadDangerPrompt,
                                   public download::DownloadItem::Observer,
                                   public views::DialogDelegateView {
  public:
+  METADATA_HEADER(DownloadDangerPromptViews);
   DownloadDangerPromptViews(download::DownloadItem* item,
                             Profile* profile,
                             bool show_context,
@@ -52,7 +55,6 @@ class DownloadDangerPromptViews : public DownloadDangerPrompt,
 
   // views::DialogDelegateView:
   base::string16 GetWindowTitle() const override;
-  ui::ModalType GetModalType() const override;
 
   // download::DownloadItem::Observer:
   void OnDownloadUpdated(download::DownloadItem* download) override;
@@ -86,6 +88,7 @@ DownloadDangerPromptViews::DownloadDangerPromptViews(
                  show_context_
                      ? l10n_util::GetStringUTF16(IDS_CONFIRM_DOWNLOAD)
                      : l10n_util::GetStringUTF16(IDS_CONFIRM_DOWNLOAD_AGAIN));
+  SetModalType(ui::MODAL_TYPE_CHILD);
 
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
@@ -165,10 +168,6 @@ base::string16 DownloadDangerPromptViews::GetWindowTitle() const {
           IDS_CONFIRM_KEEP_DANGEROUS_DOWNLOAD_TITLE);
     }
   }
-}
-
-ui::ModalType DownloadDangerPromptViews::GetModalType() const {
-  return ui::MODAL_TYPE_CHILD;
 }
 
 // download::DownloadItem::Observer:
@@ -285,6 +284,10 @@ void DownloadDangerPromptViews::RunDone(Action action) {
   if (done)
     std::move(done).Run(action);
 }
+
+BEGIN_METADATA(DownloadDangerPromptViews, views::DialogDelegateView)
+ADD_READONLY_PROPERTY_METADATA(base::string16, MessageBody)
+END_METADATA
 
 }  // namespace
 

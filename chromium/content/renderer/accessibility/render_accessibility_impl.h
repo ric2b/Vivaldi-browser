@@ -53,8 +53,7 @@ class AXImageAnnotator;
 class RenderFrameImpl;
 class RenderAccessibilityManager;
 
-using BlinkAXTreeSerializer =
-    ui::AXTreeSerializer<blink::WebAXObject, ui::AXNodeData, ui::AXTreeData>;
+using BlinkAXTreeSerializer = ui::AXTreeSerializer<blink::WebAXObject>;
 
 // The browser process implements native accessibility APIs, allowing assistive
 // technology (e.g., screen readers, magnifiers) to access and control the web
@@ -111,7 +110,10 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
 
   // Called when an accessibility notification occurs in Blink.
   void HandleWebAccessibilityEvent(const ui::AXEvent& event);
-  void MarkWebAXObjectDirty(const blink::WebAXObject& obj, bool subtree);
+  void MarkWebAXObjectDirty(
+      const blink::WebAXObject& obj,
+      bool subtree,
+      ax::mojom::Action event_from_action = ax::mojom::Action::kNone);
 
   void HandleAXEvent(const ui::AXEvent& event);
 
@@ -150,6 +152,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
     ~DirtyObject();
     blink::WebAXObject obj;
     ax::mojom::EventFrom event_from;
+    ax::mojom::Action event_from_action;
     std::vector<ui::AXEventIntent> event_intents;
   };
 
@@ -190,7 +193,8 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   void StartOrStopLabelingImages(ui::AXMode old_mode, ui::AXMode new_mode);
 
   // Marks all AXObjects with the given role in the current tree dirty.
-  void MarkAllAXObjectsDirty(ax::mojom::Role role);
+  void MarkAllAXObjectsDirty(ax::mojom::Role role,
+                             ax::mojom::Action event_from_action);
 
   void Scroll(const ui::AXActionTarget* target,
               ax::mojom::Action scroll_action);
@@ -257,9 +261,7 @@ class CONTENT_EXPORT RenderAccessibilityImpl : public RenderAccessibility,
   // The serializer that sends accessibility messages to the browser process.
   std::unique_ptr<BlinkAXTreeSerializer> serializer_;
 
-  using PluginAXTreeSerializer = ui::AXTreeSerializer<const ui::AXNode*,
-                                                      ui::AXNodeData,
-                                                      ui::AXTreeData>;
+  using PluginAXTreeSerializer = ui::AXTreeSerializer<const ui::AXNode*>;
   std::unique_ptr<PluginAXTreeSerializer> plugin_serializer_;
   PluginAXTreeSource* plugin_tree_source_;
   blink::WebAXObject plugin_host_node_;

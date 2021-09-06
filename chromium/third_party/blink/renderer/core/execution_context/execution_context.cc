@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "build/build_config.h"
 #include "third_party/blink/public/common/feature_policy/document_policy_features.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
@@ -48,6 +49,7 @@
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
+#include "third_party/blink/renderer/platform/context_lifecycle_notifier.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
@@ -73,7 +75,9 @@ ExecutionContext::ExecutionContext(v8::Isolate* isolate, Agent* agent)
   DCHECK(agent_);
 }
 
-ExecutionContext::~ExecutionContext() = default;
+ExecutionContext::~ExecutionContext() {
+  DCHECK(is_context_destroyed_);
+}
 
 // static
 ExecutionContext* ExecutionContext::From(const ScriptState* script_state) {
@@ -124,7 +128,7 @@ void ExecutionContext::SetLifecycleState(mojom::FrameLifecycleState state) {
   if (lifecycle_state_ == state)
     return;
   lifecycle_state_ = state;
-  context_lifecycle_observer_set_.ForEachObserver(
+  ContextLifecycleNotifier::observers().ForEachObserver(
       [&](ContextLifecycleObserver* observer) {
         if (!observer->IsExecutionContextLifecycleObserver())
           return;
@@ -146,30 +150,14 @@ void ExecutionContext::SetLifecycleState(mojom::FrameLifecycleState state) {
 
 void ExecutionContext::NotifyContextDestroyed() {
   is_context_destroyed_ = true;
-  context_lifecycle_observer_set_.ForEachObserver(
-      [](ContextLifecycleObserver* observer) {
-        observer->ContextDestroyed();
-        observer->ObserverSetWillBeCleared();
-      });
-  context_lifecycle_observer_set_.Clear();
-}
-
-void ExecutionContext::AddContextLifecycleObserver(
-    ContextLifecycleObserver* observer) {
-  context_lifecycle_observer_set_.AddObserver(observer);
-}
-
-void ExecutionContext::RemoveContextLifecycleObserver(
-    ContextLifecycleObserver* observer) {
-  DCHECK(context_lifecycle_observer_set_.HasObserver(observer));
-  context_lifecycle_observer_set_.RemoveObserver(observer);
+  ContextLifecycleNotifier::NotifyContextDestroyed();
 }
 
 unsigned ExecutionContext::ContextLifecycleStateObserverCountForTesting()
     const {
-  DCHECK(!context_lifecycle_observer_set_.IsIteratingOverObservers());
+  DCHECK(!ContextLifecycleNotifier::observers().IsIteratingOverObservers());
   unsigned lifecycle_state_observers = 0;
-  context_lifecycle_observer_set_.ForEachObserver(
+  ContextLifecycleNotifier::observers().ForEachObserver(
       [&](ContextLifecycleObserver* observer) {
         if (!observer->IsExecutionContextLifecycleObserver())
           return;
@@ -183,9 +171,35 @@ unsigned ExecutionContext::ContextLifecycleStateObserverCountForTesting()
 }
 
 bool ExecutionContext::SharedArrayBufferTransferAllowed() const {
-  return RuntimeEnabledFeatures::SharedArrayBufferEnabled(this) ||
-         CrossOriginIsolatedCapability();
+  if (RuntimeEnabledFeatures::SharedArrayBufferEnabled(this) ||
+      CrossOriginIsolatedCapability()) {
+    return true;
+  }
+#if defined(OS_ANDROID)
+  return false;
+#else
+  return RuntimeEnabledFeatures::UnrestrictedSharedArrayBufferEnabled(this);
+#endif
 }
+
+namespace {
+mojom::blink::InspectorIssueInfoPtr CreateSharedArrayBufferIssue(
+    const SourceLocation* source_location) {
+  auto details = mojom::blink::InspectorIssueDetails::New();
+  auto issue_details = mojom::blink::SharedArrayBufferIssueDetails::New();
+  auto affected_location = mojom::blink::AffectedLocation::New();
+  affected_location->url = source_location->Url();
+  affected_location->line = source_location->LineNumber() - 1;
+  affected_location->column = source_location->ColumnNumber();
+  affected_location->script_id =
+      WTF::String::Number(source_location->ScriptId());
+  issue_details->affected_location = std::move(affected_location);
+  details->sab_issue_details = std::move(issue_details);
+  return mojom::blink::InspectorIssueInfo::New(
+      mojom::blink::InspectorIssueCode::kSharedArrayBufferIssue,
+      std::move(details));
+}
+}  // namespace
 
 bool ExecutionContext::CheckSharedArrayBufferTransferAllowedAndReport() {
   const bool allowed = SharedArrayBufferTransferAllowed();
@@ -197,21 +211,27 @@ bool ExecutionContext::CheckSharedArrayBufferTransferAllowedAndReport() {
                    !CrossOriginIsolatedCapability())) {
     has_filed_shared_array_buffer_transfer_issue_ = true;
     auto source_location = SourceLocation::Capture(this);
-    auto details = mojom::blink::InspectorIssueDetails::New();
-    auto issue_details =
-        mojom::blink::SharedArrayBufferTransferIssueDetails::New();
-    issue_details->is_warning = allowed;
-    auto mojo_source_location = network::mojom::blink::SourceLocation::New();
-    mojo_source_location->url = source_location->Url();
-    mojo_source_location->line = source_location->LineNumber();
-    mojo_source_location->column = source_location->ColumnNumber();
-    issue_details->source_location = std::move(mojo_source_location);
-    details->sab_transfer_details = std::move(issue_details);
-    AddInspectorIssue(mojom::blink::InspectorIssueInfo::New(
-        mojom::blink::InspectorIssueCode::kSharedArrayBufferTransferIssue,
-        std::move(details)));
+    auto issue = CreateSharedArrayBufferIssue(source_location.get());
+    issue->details->sab_issue_details->is_warning = allowed;
+    issue->details->sab_issue_details->type =
+        mojom::blink::SharedArrayBufferIssueType::kTransferIssue;
+    AddInspectorIssue(std::move(issue));
   }
   return allowed;
+}
+
+void ExecutionContext::FileSharedArrayBufferCreationIssue() {
+  // This is performance critical, only do it once per context.
+  if (has_filed_shared_array_buffer_creation_issue_)
+    return;
+  has_filed_shared_array_buffer_creation_issue_ = true;
+  auto source_location = SourceLocation::Capture(this);
+  auto issue = CreateSharedArrayBufferIssue(source_location.get());
+  // In enforced mode, the SAB constructor isn't available.
+  issue->details->sab_issue_details->is_warning = true;
+  issue->details->sab_issue_details->type =
+      mojom::blink::SharedArrayBufferIssueType::kCreationIssue;
+  AddInspectorIssue(std::move(issue));
 }
 
 void ExecutionContext::AddConsoleMessageImpl(mojom::ConsoleMessageSource source,
@@ -449,7 +469,6 @@ void ExecutionContext::Trace(Visitor* visitor) const {
   visitor->Trace(pending_exceptions_);
   visitor->Trace(csp_delegate_);
   visitor->Trace(timers_);
-  visitor->Trace(context_lifecycle_observer_set_);
   visitor->Trace(origin_trial_context_);
   ContextLifecycleNotifier::Trace(visitor);
   ConsoleLogger::Trace(visitor);

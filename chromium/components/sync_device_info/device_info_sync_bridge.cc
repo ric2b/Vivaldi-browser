@@ -416,7 +416,14 @@ void DeviceInfoSyncBridge::ApplyStopSyncChanges(
 }
 
 bool DeviceInfoSyncBridge::IsSyncing() const {
-  return !all_data_.empty();
+  // Both conditions are neecessary due to the following possible cases:
+  // 1. This method is called from MergeSyncData() when IsTrackingMetadata()
+  // returns true but |all_data_| is not initialized.
+  // 2. |all_data_| is initialized during loading data from the persistent
+  // storage on startup but |change_processor| is not initialized yet. It
+  // happens when OnReadAllData() is called but OnReadAllMetadata() is not
+  // called.
+  return change_processor()->IsTrackingMetadata() && !all_data_.empty();
 }
 
 std::unique_ptr<DeviceInfo> DeviceInfoSyncBridge::GetDeviceInfo(
@@ -613,7 +620,13 @@ void DeviceInfoSyncBridge::OnReadAllMetadata(
   // we save the new one to prefs.
   device_info_prefs_->AddLocalCacheGuid(local_cache_guid_);
   ExpireOldEntries();
-  ReconcileLocalAndStored();
+  if (!ReconcileLocalAndStored()) {
+    // If the device info list has not been changed, notify observers explicitly
+    // that the list of devices has been successfully loaded from the storage.
+    // Otherwise, all observers should already have been notified during
+    // ReconcileLocalAndStored().
+    NotifyObservers();
+  }
 }
 
 void DeviceInfoSyncBridge::OnCommit(

@@ -33,13 +33,14 @@ in the web test infrastructure.
 
 import time
 import collections
-import itertools
 import json
 import logging
 import optparse
 import re
 import sys
 import tempfile
+
+from six.moves import zip_longest
 
 from blinkpy.common import exit_codes
 from blinkpy.common import find_files
@@ -184,7 +185,7 @@ class Port(object):
     WEBDRIVER_SUBTEST_PYTEST_SEPARATOR = '::'
 
     # The following two constants must match. When adding a new WPT root, also
-    # remember to add an alias rule to third_party/wpt/wpt.config.json.
+    # remember to add an alias rule to //third_party/wpt_tools/wpt.config.json.
     # WPT_DIRS maps WPT roots on the file system to URL prefixes on wptserve.
     # The order matters: '/' MUST be the last URL prefix.
     WPT_DIRS = collections.OrderedDict([
@@ -2045,8 +2046,8 @@ class Port(object):
         # This walks through the set of paths where we should look for tests.
         # For each path, a map can be provided that we replace 'path' with in
         # the result.
-        for filter_path, virtual_prefix in itertools.izip_longest(
-                filter_paths, virtual_prefixes):
+        for filter_path, virtual_prefix in zip_longest(filter_paths,
+                                                       virtual_prefixes):
             # This is to make sure "external[\\/]?" can also match to
             # external/wpt.
             # TODO(robertma): Remove this special case when external/wpt is

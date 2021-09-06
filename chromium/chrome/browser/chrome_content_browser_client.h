@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -108,17 +109,6 @@ class ChromeXrIntegrationClient;
 }
 #endif
 
-// Returns the user agent of Chrome.
-std::string GetUserAgent();
-
-blink::UserAgentMetadata GetUserAgentMetadata();
-
-blink::UserAgentBrandList GenerateBrandVersionList(
-    int seed,
-    base::Optional<std::string> brand,
-    std::string major_version,
-    base::Optional<std::string> maybe_greasey_brand);
-
 class ChromeContentBrowserClient : public content::ContentBrowserClient {
  public:
   ChromeContentBrowserClient();
@@ -192,6 +182,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) override;
   void GetAdditionalViewSourceSchemes(
+      std::vector<std::string>* additional_schemes) override;
+  void GetAdditionalLocalAddressSpaceSchemes(
       std::vector<std::string>* additional_schemes) override;
   bool LogWebUIUrl(const GURL& web_ui_url) override;
   bool IsWebUIAllowedToMakeNetworkRequests(const url::Origin& origin) override;
@@ -306,6 +298,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   GetSystemSharedURLLoaderFactory() override;
   network::mojom::NetworkContext* GetSystemNetworkContext() override;
   std::string GetGeolocationApiKey() override;
+  device::GeolocationSystemPermissionManager* GetLocationPermissionManager()
+      override;
 
 #if defined(OS_ANDROID)
   bool ShouldUseGmsCoreGeolocationProvider() override;
@@ -354,7 +348,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   content::TtsControllerDelegate* GetTtsControllerDelegate() override;
 #endif
   content::TtsPlatform* GetTtsPlatform() override;
-  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
+  void OverrideWebkitPrefs(content::WebContents* web_contents,
                            blink::web_pref::WebPreferences* prefs) override;
   bool OverrideWebPreferencesAfterNavigation(
       content::WebContents* web_contents,
@@ -414,11 +408,14 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::PosixFileDescriptorInfo* mappings) override;
 #endif  // defined(OS_POSIX) && !defined(OS_MAC)
 #if defined(OS_WIN)
-  bool PreSpawnRenderer(sandbox::TargetPolicy* policy,
-                        RendererSpawnFlags flags) override;
-  base::string16 GetAppContainerSidForSandboxType(
+  bool PreSpawnChild(sandbox::TargetPolicy* policy,
+                     sandbox::policy::SandboxType sandbox_type,
+                     ChildSpawnFlags flags) override;
+  std::wstring GetAppContainerSidForSandboxType(
       sandbox::policy::SandboxType sandbox_type) override;
   bool IsRendererCodeIntegrityEnabled() override;
+  void SessionEnding() override;
+  bool ShouldEnableAudioProcessHighPriority() override;
 #endif
   void ExposeInterfacesToRenderer(
       service_manager::BinderRegistry* registry,
@@ -541,8 +538,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       bool in_memory,
       const base::FilePath& relative_partition_path,
       network::mojom::NetworkContextParams* network_context_params,
-      network::mojom::CertVerifierCreationParams* cert_verifier_creation_params)
-      override;
+      cert_verifier::mojom::CertVerifierCreationParams*
+          cert_verifier_creation_params) override;
   std::vector<base::FilePath> GetNetworkContextsParentDirectory() override;
   base::DictionaryValue GetNetLogConstants() override;
   bool AllowRenderingMhtmlOverHttp(
@@ -645,7 +642,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::WebContents* web_contents,
       content::RenderFrameHost* frame_host,
       bool user_gesture,
-      content::NavigationDownloadPolicy* download_policy) override;
+      blink::NavigationDownloadPolicy* download_policy) override;
 
   blink::mojom::InterestCohortPtr GetInterestCohortForJsApi(
       content::WebContents* web_contents,
@@ -721,10 +718,11 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const GURL& url) override;
   bool ShouldAllowInsecurePrivateNetworkRequests(
       content::BrowserContext* browser_context,
-      const GURL& url) override;
+      const url::Origin& origin) override;
   ukm::UkmService* GetUkmService() override;
 
-  void OnKeepaliveRequestStarted() override;
+  void OnKeepaliveRequestStarted(
+      content::BrowserContext* browser_context) override;
   void OnKeepaliveRequestFinished() override;
 
 #if defined(OS_MAC)
@@ -741,6 +739,13 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   std::unique_ptr<content::IdentityRequestDialogController>
   CreateIdentityRequestDialogController() override;
+
+#if !defined(OS_ANDROID)
+  base::TimeDelta GetKeepaliveTimerTimeout(content::BrowserContext* context);
+#endif  // !defined(OS_ANDROID)
+
+  bool SuppressDifferentOriginSubframeJSDialogs(
+      content::BrowserContext* browser_context) override;
 
  protected:
   static bool HandleWebUI(GURL* url, content::BrowserContext* browser_context);
@@ -782,15 +787,18 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #endif
 
   // Returns the existing UrlCheckerDelegate object if it is already created.
-  // Otherwise, creates a new one and returns it. It returns nullptr if
-  // |safe_browsing_enabled_for_profile| is false, because it should bypass safe
-  // browsing check when safe browsing is disabled. Set
+  // Otherwise, creates a new one and returns it. Updates the
+  // |allowlist_domains| in the UrlCheckerDelegate object before returning. It
+  // returns nullptr if |safe_browsing_enabled_for_profile| is false, because it
+  // should bypass safe browsing check when safe browsing is disabled. Set
   // |should_check_on_sb_disabled| to true if you still want to perform safe
   // browsing check when safe browsing is disabled(e.g. for enterprise real time
   // URL check).
   scoped_refptr<safe_browsing::UrlCheckerDelegate>
-  GetSafeBrowsingUrlCheckerDelegate(bool safe_browsing_enabled_for_profile,
-                                    bool should_check_on_sb_disabled);
+  GetSafeBrowsingUrlCheckerDelegate(
+      bool safe_browsing_enabled_for_profile,
+      bool should_check_on_sb_disabled,
+      const std::vector<std::string>& allowlist_domains);
 
   // Returns a RealTimeUrlLookupServiceBase object used for real time URL check.
   // Returns an enterprise version if |is_enterprise_lookup_enabled| is true.
@@ -801,8 +809,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       bool is_enterprise_lookup_enabled,
       bool is_consumer_lookup_enabled);
 
+#if !defined(OS_ANDROID)
   void OnKeepaliveTimerFired(
       std::unique_ptr<ScopedKeepAlive> keep_alive_handle);
+#endif
 
   // Vector of additional ChromeContentBrowserClientParts.
   // Parts are deleted in the reverse order they are added.
@@ -832,7 +842,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #if !defined(OS_ANDROID)
   uint64_t num_keepalive_requests_ = 0;
   base::OneShotTimer keepalive_timer_;
-  base::TimeTicks last_keepalive_request_time_;
+  base::TimeTicks keepalive_deadline_;
 #endif
 
   base::WeakPtrFactory<ChromeContentBrowserClient> weak_factory_{this};

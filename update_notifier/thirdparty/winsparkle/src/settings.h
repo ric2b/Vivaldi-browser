@@ -35,21 +35,20 @@ namespace winsparkle {
 
 enum class ConfigKey {
   kDeltaPatchFailed,
-  kLastCheckTime,
   kSkipThisVersion,
 };
 
 class Settings {
  public:
   static void WriteConfigValue(ConfigKey key, const std::string& value) {
-    WriteConfigValue(key, base::UTF8ToUTF16(value).c_str());
+    WriteConfigValue(key, base::UTF8ToWide(value).c_str());
   }
 
   static void WriteConfigValue(ConfigKey key, const std::wstring& value);
 
   static std::string ReadConfigValue(ConfigKey key) {
     const std::wstring v = ReadConfigValueW(key);
-    return base::UTF16ToUTF8(v);
+    return base::WideToUTF8(v);
   }
 
   static std::wstring ReadConfigValueW(ConfigKey key);

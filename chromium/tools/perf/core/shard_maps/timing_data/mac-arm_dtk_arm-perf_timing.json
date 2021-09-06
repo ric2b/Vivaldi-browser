@@ -900,14 +900,6 @@
         "name": "blink_perf.owp_storage/idb-load-docs.html"
     },
     {
-        "duration": "56.0",
-        "name": "blink_perf.owp_storage/idb-put-all.html"
-    },
-    {
-        "duration": "59.0",
-        "name": "blink_perf.owp_storage/idb-put.html"
-    },
-    {
         "duration": "14.0",
         "name": "blink_perf.paint/appending-text.html"
     },
@@ -3353,7 +3345,7 @@
     },
     {
         "duration": "44.0",
-        "name": "system_health.common_desktop/browse:media:googleplaystore:2018"
+        "name": "system_health.common_desktop/browse:media:googleplaystore:2021"
     },
     {
         "duration": "75.0",
@@ -3380,14 +3372,6 @@
         "name": "system_health.common_desktop/browse:media:youtubetv_watch:2020"
     },
     {
-        "duration": "47.0",
-        "name": "system_health.common_desktop/browse:news:cnn:2020"
-    },
-    {
-        "duration": "55.0",
-        "name": "system_health.common_desktop/browse:news:flipboard:2018"
-    },
-    {
         "duration": "9.0",
         "name": "system_health.common_desktop/browse:news:hackernews:2020"
     },
@@ -3402,10 +3386,6 @@
     {
         "duration": "54.0",
         "name": "system_health.common_desktop/browse:search:google:2020"
-    },
-    {
-        "duration": "39.0",
-        "name": "system_health.common_desktop/browse:search:google_india:2018"
     },
     {
         "duration": "74.0",
@@ -3669,7 +3649,7 @@
     },
     {
         "duration": "39.0",
-        "name": "system_health.memory_desktop/browse:media:googleplaystore:2018"
+        "name": "system_health.memory_desktop/browse:media:googleplaystore:2021"
     },
     {
         "duration": "70.0",
@@ -3696,14 +3676,6 @@
         "name": "system_health.memory_desktop/browse:media:youtubetv_watch:2020"
     },
     {
-        "duration": "42.0",
-        "name": "system_health.memory_desktop/browse:news:cnn:2020"
-    },
-    {
-        "duration": "49.0",
-        "name": "system_health.memory_desktop/browse:news:flipboard:2018"
-    },
-    {
         "duration": "53.0",
         "name": "system_health.memory_desktop/browse:news:hackernews:2020"
     },
@@ -3718,10 +3690,6 @@
     {
         "duration": "49.0",
         "name": "system_health.memory_desktop/browse:search:google:2020"
-    },
-    {
-        "duration": "35.0",
-        "name": "system_health.memory_desktop/browse:search:google_india:2018"
     },
     {
         "duration": "68.0",
@@ -4025,7 +3993,7 @@
     },
     {
         "duration": "51.0",
-        "name": "v8.browsing_desktop-future/browse:media:googleplaystore:2018"
+        "name": "v8.browsing_desktop-future/browse:media:googleplaystore:2021"
     },
     {
         "duration": "16.0",
@@ -4053,14 +4021,6 @@
     },
     {
         "duration": "16.0",
-        "name": "v8.browsing_desktop-future/browse:news:cnn:2020"
-    },
-    {
-        "duration": "61.0",
-        "name": "v8.browsing_desktop-future/browse:news:flipboard:2018"
-    },
-    {
-        "duration": "16.0",
         "name": "v8.browsing_desktop-future/browse:news:hackernews:2020"
     },
     {
@@ -4074,10 +4034,6 @@
     {
         "duration": "61.0",
         "name": "v8.browsing_desktop-future/browse:search:google:2020"
-    },
-    {
-        "duration": "46.0",
-        "name": "v8.browsing_desktop-future/browse:search:google_india:2018"
     },
     {
         "duration": "83.0",
@@ -4133,7 +4089,7 @@
     },
     {
         "duration": "53.0",
-        "name": "v8.browsing_desktop/browse:media:googleplaystore:2018"
+        "name": "v8.browsing_desktop/browse:media:googleplaystore:2021"
     },
     {
         "duration": "17.0",
@@ -4160,14 +4116,6 @@
         "name": "v8.browsing_desktop/browse:media:youtubetv_watch:2020"
     },
     {
-        "duration": "59.0",
-        "name": "v8.browsing_desktop/browse:news:cnn:2020"
-    },
-    {
-        "duration": "63.0",
-        "name": "v8.browsing_desktop/browse:news:flipboard:2018"
-    },
-    {
         "duration": "17.0",
         "name": "v8.browsing_desktop/browse:news:hackernews:2020"
     },
@@ -4182,10 +4130,6 @@
     {
         "duration": "63.0",
         "name": "v8.browsing_desktop/browse:search:google:2020"
-    },
-    {
-        "duration": "48.0",
-        "name": "v8.browsing_desktop/browse:search:google_india:2018"
     },
     {
         "duration": "85.0",
@@ -4269,10 +4213,6 @@
     },
     {
         "duration": "26.0",
-        "name": "webrtc/insertable_streams_video_processing_camera_drop_video"
-    },
-    {
-        "duration": "26.0",
         "name": "webrtc/insertable_streams_video_processing_camera_webgl_pc"
     },
     {
@@ -4298,10 +4238,6 @@
     {
         "duration": "300.0",
         "name": "base_perftests/_gtest_"
-    },
-    {
-        "duration": "16.0",
-        "name": "media_perftests/_gtest_"
     },
     {
         "duration": "330.0",

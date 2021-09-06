@@ -174,9 +174,9 @@ bool ZoomController::SetZoomLevelByClient(
   } else {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     if (vivaldi::IsVivaldiRunning()) {
-      bool tabZoom = vivaldi::isTabZoomEnabled(web_contents());
+      bool tab_zoom = vivaldi::IsTabZoomEnabled(web_contents());
       std::string host = net::GetHostOrSpecFromURL(web_contents()->GetURL());
-      if (tabZoom && !vivaldi::IsVivaldiApp(host)) {
+      if (tab_zoom && !vivaldi::IsVivaldiApp(host)) {
         int render_process_id = web_contents()->GetMainFrame()
                                               ->GetProcess()->GetID();
         int render_view_id =

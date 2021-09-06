@@ -1,0 +1,14 @@
+# Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
+
+static_library("renderer") {
+  sources = [
+    "vivaldi_translate_agent.cc",
+    "vivaldi_translate_agent.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/common",
+    "//content/public/renderer",
+    "//components/translate/content/renderer",
+  ]
+}

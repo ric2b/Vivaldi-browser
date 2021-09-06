@@ -4,12 +4,13 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/multidevice_section.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/android_sms/android_sms_service.h"
-#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
+#include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/nearby_share/shared_resources.h"
 #include "chrome/browser/ui/webui/settings/chromeos/multidevice_handler.h"
@@ -21,7 +22,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/components/phonehub/phone_hub_manager.h"
 #include "chromeos/components/phonehub/url_constants.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "chromeos/services/multidevice_setup/public/cpp/url_provider.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
@@ -236,7 +236,7 @@ void AddEasyUnlockStrings(content::WebUIDataSource* html_source) {
       {"easyUnlockUnlockDeviceAndAllowSignin",
        IDS_SETTINGS_EASY_UNLOCK_UNLOCK_DEVICE_AND_ALLOW_SIGNIN},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 }
 
 bool IsOptedIn(multidevice_setup::mojom::HostStatus host_status) {
@@ -259,7 +259,8 @@ MultiDeviceSection::MultiDeviceSection(
       phone_hub_manager_(phone_hub_manager),
       android_sms_service_(android_sms_service),
       pref_service_(pref_service) {
-  if (base::FeatureList::IsEnabled(::features::kNearbySharing)) {
+  if (NearbySharingServiceFactory::IsNearbyShareSupportedForBrowserContext(
+          profile)) {
     pref_change_registrar_.Init(pref_service_);
     pref_change_registrar_.Add(
         ::prefs::kNearbySharingEnabledPrefName,
@@ -350,7 +351,7 @@ void MultiDeviceSection::AddLoadTimeData(
       {"multideviceForgetDeviceDisconnect",
        IDS_SETTINGS_MULTIDEVICE_FORGET_THIS_DEVICE_DISCONNECT},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   html_source->AddBoolean(
       "multideviceAllowedByPolicy",
@@ -448,8 +449,16 @@ void MultiDeviceSection::AddLoadTimeData(
           GetHelpUrlWithBoard(phonehub::kPhoneHubLearnMoreLink)));
 
   AddEasyUnlockStrings(html_source);
+
+  // We still need to register strings even if Nearby Share is not supported.
+  // For example, the HTML is always built but only displayed if Nearby Share is
+  // supported.
   ::settings::AddNearbyShareData(html_source);
   RegisterNearbySharedStrings(html_source);
+  html_source->AddBoolean(
+      "isNearbyShareSupported",
+      NearbySharingServiceFactory::IsNearbyShareSupportedForBrowserContext(
+          profile()));
 }
 
 void MultiDeviceSection::AddHandlers(content::WebUI* web_ui) {

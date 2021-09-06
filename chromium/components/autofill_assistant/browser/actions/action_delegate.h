@@ -19,6 +19,7 @@
 #include "components/autofill_assistant/browser/top_padding.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/viewport_mode.h"
+#include "components/autofill_assistant/browser/wait_for_dom_observer.h"
 #include "components/autofill_assistant/browser/web/element_finder.h"
 #include "third_party/blink/public/mojom/payments/payment_request.mojom.h"
 #include "third_party/icu/source/common/unicode/umachine.h"
@@ -84,6 +85,13 @@ class ActionDelegate {
       base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>
           callback) = 0;
 
+  // Same as the above, but will show a warning to the user if the website
+  // causes the checks to take longer than a given timeout.
+  virtual void ShortWaitForElementWithSlowWarning(
+      const Selector& selector,
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>
+          callback) = 0;
+
   // Wait for up to |max_wait_time| for element conditions to match on the page,
   // then call |callback| with the last status.
   //
@@ -95,6 +103,19 @@ class ActionDelegate {
   virtual void WaitForDom(
       base::TimeDelta max_wait_time,
       bool allow_interrupt,
+      WaitForDomObserver* observer,
+      base::RepeatingCallback<
+          void(BatchElementChecker*,
+               base::OnceCallback<void(const ClientStatus&)>)> check_elements,
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)>
+          callback) = 0;
+
+  // Same as the above, but will show a warning to the user if the website
+  // causes the checks to take longer than a given timeout.
+  virtual void WaitForDomWithSlowWarning(
+      base::TimeDelta max_wait_time,
+      bool allow_interrupt,
+      WaitForDomObserver* observer,
       base::RepeatingCallback<
           void(BatchElementChecker*,
                base::OnceCallback<void(const ClientStatus&)>)> check_elements,
@@ -212,6 +233,8 @@ class ActionDelegate {
 
   // Scroll to an |element|'s position. |top_padding| specifies the padding
   // between the focused element and the top.
+  // If |container| is specified, that container will be scrolled, if
+  // it's null the window will be scrolled.
   // TODO(b/168107066): The selector is only used for storing the previously
   // selected element and is not being used to resolve it. This is required for
   // the current implementation of |ScriptExecutor| that repeats the focus
@@ -219,6 +242,7 @@ class ActionDelegate {
   virtual void ScrollToElementPosition(
       const Selector& selector,
       const TopPadding& top_padding,
+      std::unique_ptr<ElementFinder::Result> container,
       const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
@@ -454,10 +478,16 @@ class ActionDelegate {
   // detected, depending on the current settings.
   virtual void MaybeShowSlowConnectionWarning() = 0;
 
+  // Dispatches a custom JS event 'duplexweb' on document.
+  virtual void DispatchJsEvent(
+      base::OnceCallback<void(const ClientStatus&)> callback) const = 0;
+
   virtual base::WeakPtr<ActionDelegate> GetWeakPtr() const = 0;
 
  protected:
   ActionDelegate() = default;
 };
+
 }  // namespace autofill_assistant
+
 #endif  // COMPONENTS_AUTOFILL_ASSISTANT_BROWSER_ACTIONS_ACTION_DELEGATE_H_

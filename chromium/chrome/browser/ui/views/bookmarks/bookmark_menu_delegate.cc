@@ -43,6 +43,7 @@
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 
 using base::UserMetricsAction;
 using bookmarks::BookmarkModel;
@@ -290,13 +291,13 @@ bool BookmarkMenuDelegate::CanDrop(MenuItemView* menu,
   return (drop_node == NULL);
 }
 
-int BookmarkMenuDelegate::GetDropOperation(
+ui::mojom::DragOperation BookmarkMenuDelegate::GetDropOperation(
     MenuItemView* item,
     const ui::DropTargetEvent& event,
     views::MenuDelegate::DropPosition* position) {
   if (vivaldi::IsVivaldiRunning() &&
       vivaldi::IsVivaldiMenuItem(item->GetCommand())) {
-    return ui::DragDropTypes::DRAG_NONE;
+    return ui::mojom::DragOperation::kNone;
   }
   // Should only get here if we have drop data.
   DCHECK(drop_data_.is_valid());
@@ -334,7 +335,7 @@ int BookmarkMenuDelegate::GetDropOperation(
       profile_, event, drop_data_, drop_parent, index_to_drop_at);
 }
 
-int BookmarkMenuDelegate::OnPerformDrop(
+ui::mojom::DragOperation BookmarkMenuDelegate::OnPerformDrop(
     MenuItemView* menu,
     views::MenuDelegate::DropPosition position,
     const ui::DropTargetEvent& event) {

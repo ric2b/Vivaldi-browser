@@ -42,8 +42,16 @@ class MEDIA_EXPORT RendererFactory {
       AudioRendererSink* audio_renderer_sink,
       VideoRendererSink* video_renderer_sink,
       RequestOverlayInfoCB request_overlay_info_cb,
+      const gfx::ColorSpace& target_color_space);
+
+  virtual std::unique_ptr<Renderer> CreateRenderer(
+      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+      const scoped_refptr<base::TaskRunner>& worker_task_runner,
+      AudioRendererSink* audio_renderer_sink,
+      VideoRendererSink* video_renderer_sink,
+      RequestOverlayInfoCB request_overlay_info_cb,
       const gfx::ColorSpace& target_color_space,
-      bool use_platform_media_pipeline = false) = 0;
+      bool use_platform_media_pipeline);
 
   // Returns the MediaResource::Type that should be used with the renderers
   // created by this factory.

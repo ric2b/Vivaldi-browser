@@ -184,14 +184,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSettings.DefaultAutoplaySetting" enum="ContentSetting"
-    expires_after="2021-06-19">
+    expires_after="2021-08-22">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default autoplay setting at profile open.</summary>
 </histogram>
 
 <histogram name="ContentSettings.DefaultCookiesSetting" enum="ContentSetting"
-    expires_after="2021-06-19">
+    expires_after="2021-08-22">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default cookies setting at profile open.</summary>
@@ -214,14 +214,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSettings.DefaultJavaScriptSetting"
-    enum="ContentSetting" expires_after="2021-06-19">
+    enum="ContentSetting" expires_after="2021-08-22">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default JavaScript setting at profile open.</summary>
 </histogram>
 
 <histogram name="ContentSettings.DefaultLocationSetting" enum="ContentSetting"
-    expires_after="2021-06-19">
+    expires_after="2021-08-22">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default location setting at profile open.</summary>
@@ -283,7 +283,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSettings.DefaultSubresourceFilterSetting"
-    enum="ContentSetting" expires_after="2021-06-19">
+    enum="ContentSetting" expires_after="2021-08-22">
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default subresource filter setting at profile open</summary>
@@ -411,7 +411,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSettings.NumberOfExceptions" units="units"
-    expires_after="M90">
+    expires_after="2021-07-18">
   <owner>battre@chromium.org</owner>
   <summary>
     The number of user defined hostname patterns for content settings at browser
@@ -571,7 +571,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSettings.Popups.StrongBlockerActions"
-    enum="StrongPopupBlockerAction" expires_after="2021-06-13">
+    enum="StrongPopupBlockerAction" expires_after="2021-08-15">
   <owner>csharrison@chromium.org</owner>
   <summary>
     Counts of various events related to the strong popup blocker (aka abusive
@@ -580,7 +580,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.ActivityLoggingEnabled" enum="Boolean"
-    expires_after="2021-06-01">
+    expires_after="2021-08-01">
   <owner>rogerm@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -706,7 +706,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.DisplayStatusOnOpen"
-    enum="ContentSuggestionsDisplayStatus" expires_after="2021-06-20">
+    enum="ContentSuggestionsDisplayStatus" expires_after="2021-08-22">
   <owner>carlosk@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -719,7 +719,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.EngagementType"
-    enum="FeedEngagementType" expires_after="2021-03-01">
+    enum="FeedEngagementType" expires_after="never">
+<!-- expires-never: key feature metric.  We will need the Engagement
+       type as long as we have a feed, and it will be removed with the
+       feed code if the feed is ever removed. -->
+
   <owner>petewil@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -777,7 +781,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.ImageFetchStatus"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2021-06-01">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2021-08-09">
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -828,7 +832,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="ContentSuggestions.Feed.LoadStepLatency"
-    units="ms" expires_after="2021-06-01">
+    units="ms" expires_after="2021-08-01">
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -1000,7 +1004,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.NoticeCardFulfilled2" enum="Boolean"
-    expires_after="2021-06-16">
+    expires_after="2021-08-15">
   <owner>vincb@google.com</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -1154,7 +1158,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.SendFeedback"
-    enum="FeedSendFeedbackType" expires_after="2021-02-01">
+    enum="FeedSendFeedbackType" expires_after="2022-02-01">
   <owner>carlosk@chromium.org</owner>
   <owner>petewil@chromium.org</owner>
   <owner>feed@chromium.org</owner>

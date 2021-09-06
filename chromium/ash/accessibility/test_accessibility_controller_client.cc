@@ -32,7 +32,7 @@ void TestAccessibilityControllerClient::TriggerAccessibilityAlertWithMessage(
   last_alert_message_ = message;
 }
 
-void TestAccessibilityControllerClient::PlayEarcon(chromeos::Sound sound_key) {
+void TestAccessibilityControllerClient::PlayEarcon(Sound sound_key) {
   sound_key_ = sound_key;
 }
 
@@ -87,7 +87,7 @@ void TestAccessibilityControllerClient::OnSelectToSpeakPanelAction(
 void TestAccessibilityControllerClient::SetA11yOverrideWindow(
     aura::Window* a11y_override_window) {}
 
-base::Optional<chromeos::Sound>
+base::Optional<Sound>
 TestAccessibilityControllerClient::GetPlayedEarconAndReset() {
   return std::exchange(sound_key_, base::nullopt);
 }

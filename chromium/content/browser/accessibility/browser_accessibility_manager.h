@@ -18,7 +18,7 @@
 #include "base/macros.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
-#include "content/browser/accessibility/browser_accessibility_position.h"
+#include "content/browser/accessibility/browser_accessibility.h"
 #include "content/common/content_export.h"
 #include "content/common/render_accessibility.mojom-forward.h"
 #include "content/public/browser/ax_event_notification_details.h"
@@ -28,6 +28,7 @@
 #include "ui/accessibility/ax_event_generator.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_node_position.h"
 #include "ui/accessibility/ax_range.h"
 #include "ui/accessibility/ax_serializable_tree.h"
 #include "ui/accessibility/ax_tree.h"
@@ -40,7 +41,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 namespace content {
-class BrowserAccessibility;
+
 class BrowserAccessibilityDelegate;
 class BrowserAccessibilityManager;
 #if defined(OS_ANDROID)
@@ -135,12 +136,6 @@ struct BrowserAccessibilityFindInPageInfo {
 class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
                                                    public ui::AXTreeManager,
                                                    public WebContentsObserver {
- protected:
-  using BrowserAccessibilityPositionInstance =
-      BrowserAccessibilityPosition::AXPositionInstance;
-  using BrowserAccessibilityRange =
-      ui::AXRange<BrowserAccessibilityPositionInstance::element_type>;
-
  public:
   // Creates the platform-specific BrowserAccessibilityManager.
   static BrowserAccessibilityManager* Create(
@@ -261,11 +256,9 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   // had focus.
   static void NeverSuppressOrDelayEventsForTesting();
 
-  // Extra mac nodes are temporarily disabled, except for in tests.
-  static void AllowExtraMacNodesForTesting();
-  // Are extra mac nodes allowed at all? Currently only allowed in tests.
-  // Even when returning true, platforms other than Mac OS do not enable them.
-  static bool GetExtraMacNodesAllowed();
+  // Some tests are temporarily allowed to disable extra mac nodes.
+  static void DisableExtraMacNodesForTesting();
+  static bool GetExtraMacNodesDisabled();
 
   // Accessibility actions. All of these are implemented asynchronously
   // by sending a message to the renderer to perform the respective action
@@ -300,7 +293,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   void SetScrollOffset(const BrowserAccessibility& node, gfx::Point offset);
   void SetValue(const BrowserAccessibility& node, const std::string& value);
   void SetSelection(const ui::AXActionData& action_data);
-  void SetSelection(const BrowserAccessibilityRange& range);
+  void SetSelection(const BrowserAccessibility::AXRange& range);
   void ShowContextMenu(const BrowserAccessibility& node);
   void SignalEndOfTest();
 
@@ -466,12 +459,12 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
 
   // AXTreeManager overrides.
   ui::AXNode* GetNodeFromTree(ui::AXTreeID tree_id,
-                              ui::AXNode::AXID node_id) const override;
-  ui::AXNode* GetNodeFromTree(ui::AXNode::AXID node_id) const override;
+                              ui::AXNodeID node_id) const override;
+  ui::AXNode* GetNodeFromTree(ui::AXNodeID node_id) const override;
   void AddObserver(ui::AXTreeObserver* observer) override;
   void RemoveObserver(ui::AXTreeObserver* observer) override;
-  AXTreeID GetTreeID() const override;
-  AXTreeID GetParentTreeID() const override;
+  ui::AXTreeID GetTreeID() const override;
+  ui::AXTreeID GetParentTreeID() const override;
   ui::AXNode* GetRootAsAXNode() const override;
   ui::AXNode* GetParentNodeFromParentTreeAsAXNode() const override;
   void WillBeRemovedFromMap() override;
@@ -599,8 +592,8 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   // flakiness. See NeverSuppressOrDelayEventsForTesting() for details.
   static bool never_suppress_or_delay_events_for_testing_;
 
-  // Extra mac nodes are disabled even on mac currently, except for in tests.
-  static bool allow_extra_mac_nodes_for_testing_;
+  // Some tests disable extra mac nodes.
+  static bool disable_extra_mac_nodes_for_testing_;
 
   const ui::AXEventGenerator& event_generator() const {
     return event_generator_;

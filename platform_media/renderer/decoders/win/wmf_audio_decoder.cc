@@ -39,4 +39,8 @@ void WMFAudioDecoder::Reset(base::OnceClosure closure) {
   impl_.Reset(std::move(closure));
 }
 
+AudioDecoderType WMFAudioDecoder::GetDecoderType() const {
+  return AudioDecoderType::kDecrypting;
+}
+
 }  // namespace media

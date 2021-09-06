@@ -32,6 +32,7 @@
 #include "chrome/browser/android/autofill_assistant/client_android.h"
 #include "chrome/browser/android/autofill_assistant/generic_ui_root_controller_android.h"
 #include "chrome/browser/android/autofill_assistant/ui_controller_android_utils.h"
+#include "chrome/browser/android/feedback/screenshot_mode.h"
 #include "chrome/browser/autofill/android/personal_data_manager_android.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
@@ -65,6 +66,7 @@ using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::JavaRef;
+using chrome::android::ScreenshotMode;
 
 namespace autofill_assistant {
 
@@ -333,8 +335,7 @@ void UiControllerAndroid::Attach(content::WebContents* web_contents,
   Java_AssistantCollectUserDataModel_setWebContents(
       env, GetCollectUserDataModel(), java_web_contents);
   OnClientSettingsChanged(ui_delegate_->GetClientSettings());
-  Java_AssistantModel_setPeekModeDisabled(env, GetModel(),
-                                          ui_delegate->IsRunningLiteScript());
+  Java_AssistantModel_setPeekModeDisabled(env, GetModel(), false);
 
   if (ui_delegate->GetState() != AutofillAssistantState::INACTIVE &&
       ui_delegate->IsTabSelected()) {
@@ -531,15 +532,15 @@ void UiControllerAndroid::SetSpinPoodle(bool enabled) {
   header_model_->SetSpinPoodle(enabled);
 }
 
-void UiControllerAndroid::OnFeedbackButtonClicked() {
+void UiControllerAndroid::OnHeaderFeedbackButtonClicked() {
   JNIEnv* env = AttachCurrentThread();
+  // If the feedback is sent by interacting with the header, it's more likely
+  // that there is a problem with the bottomsheet, so in this case we don't send
+  // the website's screenshot (COMPOSITOR).
   Java_AutofillAssistantUiController_showFeedback(
       env, java_object_,
-      ConvertUTF8ToJavaString(env, ui_delegate_->GetDebugContext()));
-}
-
-void UiControllerAndroid::OnFeedbackFormRequested() {
-  OnFeedbackButtonClicked();
+      ConvertUTF8ToJavaString(env, ui_delegate_->GetDebugContext()),
+      ScreenshotMode::DEFAULT);
 }
 
 void UiControllerAndroid::OnViewEvent(const EventHandler::EventKey& key) {
@@ -686,13 +687,6 @@ void UiControllerAndroid::OnTabSwitched(
     jint state,
     jboolean activity_changed) {
   if (ui_delegate_ == nullptr) {
-    return;
-  }
-
-  // TODO(b/167947210) Allow lite scripts to transition from CCT to regular
-  // scripts.
-  if (activity_changed && ui_delegate_->IsRunningLiteScript()) {
-    Shutdown(Metrics::DropOutReason::CUSTOM_TAB_CLOSED);
     return;
   }
 
@@ -863,7 +857,7 @@ void UiControllerAndroid::OnCancelButtonClicked(
     return;
   }
 
-  CloseOrCancel(index, TriggerContext::CreateEmpty(),
+  CloseOrCancel(index, std::make_unique<TriggerContext>(),
                 Metrics::DropOutReason::SHEET_CLOSED);
 }
 
@@ -884,7 +878,8 @@ void UiControllerAndroid::OnFeedbackButtonClicked(
   // directly stop.
   Java_AutofillAssistantUiController_showFeedback(
       env, java_object_,
-      ConvertUTF8ToJavaString(env, ui_delegate_->GetDebugContext()));
+      ConvertUTF8ToJavaString(env, ui_delegate_->GetDebugContext()),
+      ScreenshotMode::COMPOSITOR);
 
   OnUserActionSelected(env, jcaller, index);
 }
@@ -914,17 +909,10 @@ bool UiControllerAndroid::OnBackButtonClicked() {
   }
 
   if (ui_delegate_ == nullptr ||
-      ui_delegate_->GetState() == AutofillAssistantState::STOPPED ||
-      ui_delegate_->IsRunningLiteScript()) {
+      ui_delegate_->GetState() == AutofillAssistantState::STOPPED) {
     if (client_->GetWebContents() != nullptr &&
         client_->GetWebContents()->GetController().CanGoBack()) {
       client_->GetWebContents()->GetController().GoBack();
-    }
-
-    // Lite scripts should not shut down here. The navigation will be handled
-    // by the lite script coordinator.
-    if (!ui_delegate_ || !ui_delegate_->IsRunningLiteScript()) {
-      Shutdown(Metrics::DropOutReason::BACK_BUTTON_CLICKED);
     }
 
     return true;
@@ -937,16 +925,14 @@ bool UiControllerAndroid::OnBackButtonClicked() {
     ui_delegate_->OnStop(back_button_settings->message(),
                          back_button_settings->undo_label());
   } else {
-    CloseOrCancel(-1, TriggerContext::CreateEmpty(),
+    CloseOrCancel(-1, std::make_unique<TriggerContext>(),
                   Metrics::DropOutReason::BACK_BUTTON_CLICKED);
   }
   return true;
 }
 
 void UiControllerAndroid::OnBottomSheetClosedWithSwipe() {
-  if (ui_delegate_->IsTabSelected() && ui_delegate_->IsRunningLiteScript()) {
-    Shutdown(Metrics::DropOutReason::SHEET_CLOSED);
-  }
+  // Nothing to do
 }
 
 void UiControllerAndroid::CloseOrCancel(

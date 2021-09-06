@@ -158,13 +158,6 @@ def main():
                       help='Upload the target archive to Google Cloud Storage.')
   args = parser.parse_args()
 
-  # Check that the script is not going to upload a toolchain built from HEAD.
-  use_head_revision = bool(int(os.environ.get('LLVM_FORCE_HEAD_REVISION', '0')))
-  if args.upload and use_head_revision:
-    print ("--upload and LLVM_FORCE_HEAD_REVISION could not be used "
-           "at the same time.")
-    return 1
-
   expected_stamp = GetExpectedStamp()
   pdir = 'clang-' + expected_stamp
   print(pdir)
@@ -189,7 +182,7 @@ def main():
         os.path.join(THIS_DIR, 'build.py'), '--bootstrap', '--disable-asserts',
         '--run-tests', '--pgo'
     ]
-    if sys.platform.startswith('linux'):
+    if sys.platform != 'darwin':
       build_cmd.append('--thinlto')
 
     TeeCmd(build_cmd, log)
@@ -226,6 +219,7 @@ def main():
       # Include libclang_rt.builtins.a for Fuchsia targets.
       'lib/clang/$V/lib/aarch64-fuchsia/libclang_rt.builtins.a',
       'lib/clang/$V/lib/x86_64-fuchsia/libclang_rt.builtins.a',
+      'lib/clang/$V/lib/x86_64-fuchsia/libclang_rt.profile.a',
     ])
   if sys.platform == 'darwin':
     want.extend([

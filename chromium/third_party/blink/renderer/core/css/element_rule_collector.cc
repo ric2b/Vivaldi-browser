@@ -204,12 +204,11 @@ void ElementRuleCollector::CollectMatchingRulesForList(
       continue;
     }
     if (auto* container_query = rule_data->GetContainerQuery()) {
-      // TODO(crbug.com/1145970): Propagate actual ContainerQueryEvaluator
-      // instance from the container.
-      // For now a fixed container size of 500x500 is used.
-      auto* eval = MakeGarbageCollected<ContainerQueryEvaluator>(500.0, 500.0);
+      result_.SetDependsOnContainerQueries();
 
-      if (!eval->Eval(*container_query)) {
+      auto* evaluator = style_recalc_context_.cq_evaluator;
+
+      if (!evaluator || !evaluator->EvalAndAdd(*container_query)) {
         rejected++;
         continue;
       }
@@ -286,6 +285,10 @@ void ElementRuleCollector::CollectMatchingRules(
   if (SelectorChecker::MatchesFocusPseudoClass(element)) {
     CollectMatchingRulesForList(match_request.rule_set->FocusPseudoClassRules(),
                                 match_request);
+  }
+  if (SelectorChecker::MatchesFocusVisiblePseudoClass(element)) {
+    CollectMatchingRulesForList(
+        match_request.rule_set->FocusVisiblePseudoClassRules(), match_request);
   }
   if (SelectorChecker::MatchesSpatialNavigationInterestPseudoClass(element)) {
     CollectMatchingRulesForList(

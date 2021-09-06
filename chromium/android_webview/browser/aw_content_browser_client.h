@@ -69,8 +69,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       bool in_memory,
       const base::FilePath& relative_partition_path,
       network::mojom::NetworkContextParams* network_context_params,
-      network::mojom::CertVerifierCreationParams* cert_verifier_creation_params)
-      override;
+      cert_verifier::mojom::CertVerifierCreationParams*
+          cert_verifier_creation_params) override;
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
       const content::MainFunctionParams& parameters) override;
   content::WebContentsViewDelegate* GetWebContentsViewDelegate(
@@ -134,7 +134,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const base::CommandLine& command_line,
       int child_process_id,
       content::PosixFileDescriptorInfo* mappings) override;
-  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
+  void OverrideWebkitPrefs(content::WebContents* web_contents,
                            blink::web_pref::WebPreferences* web_prefs) override;
   std::vector<std::unique_ptr<content::NavigationThrottle>>
   CreateThrottlesForNavigation(
@@ -166,7 +166,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                 bool is_main_frame,
                                 ui::PageTransition transition,
                                 bool* ignore_navigation) override;
-  bool ShouldCreateThreadPool() override;
+  bool CreateThreadPool(base::StringPiece name) override;
   std::unique_ptr<content::LoginDelegate> CreateLoginDelegate(
       const net::AuthChallengeInfo& auth_info,
       content::WebContents* web_contents,

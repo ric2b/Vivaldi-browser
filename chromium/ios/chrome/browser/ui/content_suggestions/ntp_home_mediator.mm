@@ -16,9 +16,11 @@
 #include "components/ntp_snippets/features.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #include "components/strings/grit/components_strings.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
@@ -168,8 +170,7 @@ const char kNTPHelpURL[] =
 
 - (void)shutdown {
   _searchEngineObserver.reset();
-  DCHECK(_webStateObserver);
-  if (_webState) {
+  if (_webState && _webStateObserver) {
     [self saveContentOffsetForWebState:_webState];
     _webState->RemoveObserver(_webStateObserver.get());
     _webStateObserver.reset();
@@ -178,6 +179,7 @@ const char kNTPHelpURL[] =
     _voiceSearchAvailability->RemoveObserver(self);
     _voiceSearchAvailability = nullptr;
   }
+  _identityObserverBridge.reset();
 }
 
 - (void)locationBarDidBecomeFirstResponder {
@@ -493,6 +495,12 @@ const char kNTPHelpURL[] =
 - (void)openNewTabWithMostVisitedItem:(ContentSuggestionsMostVisitedItem*)item
                             incognito:(BOOL)incognito
                               atIndex:(NSInteger)index {
+  if (incognito &&
+      IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs())) {
+    // This should only happen when the policy changes while the option is
+    // presented.
+    return;
+  }
   [self logMostVisitedOpening:item atIndex:index];
   CGPoint cellCenter = [self cellCenterForItem:item];
   [self openNewTabWithURL:item.URL incognito:incognito originPoint:cellCenter];
@@ -552,13 +560,16 @@ const char kNTPHelpURL[] =
 
 #pragma mark - IdentityManagerObserverBridgeDelegate
 
-- (void)onPrimaryAccountSet:(const CoreAccountInfo&)primaryAccountInfo {
-  [self updateAccountImage];
-}
-
-- (void)onPrimaryAccountCleared:
-    (const CoreAccountInfo&)previousPrimaryAccountInfo {
-  [self updateAccountImage];
+- (void)onPrimaryAccountChanged:
+    (const signin::PrimaryAccountChangeEvent&)event {
+  switch (event.GetEventTypeFor(signin::ConsentLevel::kNotRequired)) {
+    case signin::PrimaryAccountChangeEvent::Type::kSet:
+    case signin::PrimaryAccountChangeEvent::Type::kCleared:
+      [self updateAccountImage];
+      break;
+    case signin::PrimaryAccountChangeEvent::Type::kNone:
+      break;
+  }
 }
 
 #pragma mark - VoiceSearchAvailabilityObserver
@@ -679,7 +690,7 @@ const char kNTPHelpURL[] =
   // both of these ViewControllers directly.
   if (offset > minimumOffset) {
     if ([self isRefactoredFeedVisible]) {
-      [self.ntpViewController setContentOffset:offset];
+      [self.ntpViewController setSavedContentOffset:offset];
     } else {
       [self.suggestionsViewController setContentOffset:offset];
     }

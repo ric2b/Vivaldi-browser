@@ -8,7 +8,7 @@ import androidx.annotation.MainThread;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.annotations.RemovableInRelease;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.profiles.Profile;
 
 import java.util.Locale;
@@ -40,11 +40,10 @@ public class LevelDBPersistedTabDataStorage implements PersistedTabDataStorage {
 
     @MainThread
     @Override
-    public void save(int tabId, String dataId, byte[] data) {
-        mPersistedDataStorage.save(getKey(tabId, dataId), data);
+    public void save(int tabId, String dataId, Supplier<byte[]> dataSupplier) {
+        mPersistedDataStorage.save(getKey(tabId, dataId), dataSupplier.get());
     }
 
-    @RemovableInRelease
     @MainThread
     public void saveForTesting(int tabId, String dataId, byte[] data, Runnable onComplete) {
         mPersistedDataStorage.saveForTesting(getKey(tabId, dataId), data, onComplete); // IN-TEST
@@ -74,7 +73,6 @@ public class LevelDBPersistedTabDataStorage implements PersistedTabDataStorage {
         mPersistedDataStorage.delete(getKey(tabId, dataId));
     }
 
-    @RemovableInRelease
     @MainThread
     public void deleteForTesting(int tabId, String dataId, Runnable onComplete) {
         mPersistedDataStorage.deleteForTesting(getKey(tabId, dataId), onComplete); // IN-TEST

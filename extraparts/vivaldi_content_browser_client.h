@@ -1,9 +1,14 @@
-// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2019-2020 Vivaldi Technologies AS. All rights reserved
 
-#ifndef COMPONENTS_ADVERSE_ADBLOCKING_VIVALDI_CONTENT_BROWSER_CLIENT_H_
-#define COMPONENTS_ADVERSE_ADBLOCKING_VIVALDI_CONTENT_BROWSER_CLIENT_H_
+#ifndef EXTRAPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_H_
+#define EXTRAPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_H_
 
 #include "chrome/browser/chrome_content_browser_client.h"
+#include "mojo/public/cpp/bindings/binder_map.h"
+
+namespace content {
+class RenderFrameHost;
+}
 
 class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
  public:
@@ -26,6 +31,11 @@ class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
   std::string GetStoragePartitionIdForSite(
       content::BrowserContext* browser_context,
       const GURL& site) override;
+
+  void RegisterBrowserInterfaceBindersForFrame(
+      content::RenderFrameHost* render_frame_host,
+      mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
+
 };
 
-#endif  // COMPONENTS_ADVERSE_ADBLOCKING_VIVALDI_CONTENT_BROWSER_CLIENT_H_
+#endif  // EXTRAPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_H_

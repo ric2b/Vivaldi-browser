@@ -38,23 +38,26 @@ class CONTENT_EXPORT FileSystemChooser : public ui::SelectFileDialog::Listener {
 
   class CONTENT_EXPORT Options {
    public:
-    Options(blink::mojom::ChooseFileSystemEntryType type,
-            std::vector<blink::mojom::ChooseFileSystemEntryAcceptsOptionPtr>
-                accepts,
-            bool include_accepts_all,
-            base::FilePath default_directory);
+    Options(ui::SelectFileDialog::Type type,
+            blink::mojom::AcceptsTypesInfoPtr accepts_types_info,
+            base::FilePath default_directory,
+            base::FilePath suggested_name);
     Options(const Options&) = default;
     Options& operator=(const Options&) = default;
 
-    blink::mojom::ChooseFileSystemEntryType type() const { return type_; }
+    ui::SelectFileDialog::Type type() const { return type_; }
     const ui::SelectFileDialog::FileTypeInfo& file_type_info() const {
       return file_types_;
     }
-    int default_file_type_index() const { return default_file_type_index_; }
     const base::FilePath& default_path() const { return default_path_; }
+    int default_file_type_index() const { return default_file_type_index_; }
 
    private:
-    blink::mojom::ChooseFileSystemEntryType type_;
+    base::FilePath ResolveSuggestedNameExtension(
+        base::FilePath suggested_name,
+        ui::SelectFileDialog::FileTypeInfo& file_types);
+
+    ui::SelectFileDialog::Type type_;
     ui::SelectFileDialog::FileTypeInfo file_types_;
     int default_file_type_index_ = 0;
     base::FilePath default_path_;
@@ -65,7 +68,7 @@ class CONTENT_EXPORT FileSystemChooser : public ui::SelectFileDialog::Listener {
                             ResultCallback callback,
                             base::ScopedClosureRunner fullscreen_block);
 
-  FileSystemChooser(blink::mojom::ChooseFileSystemEntryType type,
+  FileSystemChooser(ui::SelectFileDialog::Type type,
                     ResultCallback callback,
                     base::ScopedClosureRunner fullscreen_block);
 
@@ -87,7 +90,7 @@ class CONTENT_EXPORT FileSystemChooser : public ui::SelectFileDialog::Listener {
   void FileSelectionCanceled(void* params) override;
 
   ResultCallback callback_;
-  blink::mojom::ChooseFileSystemEntryType type_;
+  ui::SelectFileDialog::Type type_;
   base::ScopedClosureRunner fullscreen_block_;
 
   scoped_refptr<ui::SelectFileDialog> dialog_;
@@ -95,4 +98,4 @@ class CONTENT_EXPORT FileSystemChooser : public ui::SelectFileDialog::Listener {
 
 }  // namespace content
 
-#endif  // CONTENT_BROWSER_NATIVE_FILE_SYSTEM_FILE_SYSTEM_CHOOSER_H_
+#endif  // CONTENT_BROWSER_FILE_SYSTEM_ACCESS_FILE_SYSTEM_CHOOSER_H_

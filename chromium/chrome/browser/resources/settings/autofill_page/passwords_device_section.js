@@ -124,6 +124,20 @@ Polymer({
       observer: 'onAllDevicePasswordsChanged_',
     },
 
+    /**
+     * Whether the entry point leading to the dialog to move multiple passwords
+     * to the Google Account should be shown. It's shown only where there is at
+     * least one password store on device.
+     * @private
+     */
+    shouldShowMoveMultiplePasswordsBanner_: {
+      type: Boolean,
+      value: false,
+      computed: 'computeShouldShowMoveMultiplePasswordsBanner_(' +
+          'savedPasswords, savedPasswords.splices)',
+    },
+
+
     /** @private {!MultiStorePasswordUiEntry} */
     lastFocused_: Object,
 
@@ -183,14 +197,6 @@ Polymer({
       value: '',
     },
 
-    /** @private */
-    movingMultiplePasswordsToAccountFeatureEnabled_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean(
-            'enableMovingMultiplePasswordsToAccount');
-      }
-    },
   },
 
   keyBindings: {
@@ -267,6 +273,34 @@ Polymer({
         (this.syncDisabled_ === null || !!this.syncDisabled_) &&
         (this.optedInForAccountStorage_ === null ||
          !!this.optedInForAccountStorage_);
+  },
+
+  /**
+   * @private
+   * @return {boolean}
+   */
+  computeShouldShowMoveMultiplePasswordsBanner_() {
+    if (!loadTimeData.getBoolean('enableMovingMultiplePasswordsToAccount')) {
+      return false;
+    }
+
+    if (this.allDevicePasswords_.length === 0) {
+      return false;
+    }
+
+    // Check if all username, and urls are unique. The existence of two entries
+    // with the same url and username indicate that they must have conflicting
+    // passwords, otherwise, they would have been deduped in
+    // MergePasswordsStoreCopiesBehavior. This however may mistakenly exclude
+    // users who have conflicting duplicates within the same store, which is an
+    // acceptable compromise.
+    return this.savedPasswords.every(
+        p1 =>
+            (this.savedPasswords
+                 .filter(
+                     p2 => p1.username === p2.username &&
+                         p1.urls.origin === p2.urls.origin)
+                 .length === 1));
   },
 
   /**

@@ -445,38 +445,6 @@ void WebViewGuest::PasteAndGo(const base::ListValue& search) {
       new GuestViewEvent(webview::kEventPasteAndGo, std::move(args))));
 }
 
-void WebViewGuest::SimpleAction(const base::ListValue& list) {
-  std::string command;
-  std::string text;
-  std::string url;
-  std::string modifiers;
-
-  if (!list.GetString(0, &command)) {
-    NOTREACHED();
-    return;
-  }
-  if (!list.GetString(1, &text)) {
-    NOTREACHED();
-    return;
-  }
-  if (!list.GetString(2, &url)) {
-    NOTREACHED();
-    return;
-  }
-  if (!list.GetString(3, &modifiers)) {
-    NOTREACHED();
-    return;
-  }
-
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetString(webview::kGenCommand, command);
-  args->SetString(webview::kGenText, text);
-  args->SetString(webview::kGenUrl, url);
-  args->SetString(webview::kModifiers, modifiers);
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventSimpleAction, std::move(args))));
-}
-
 void WebViewGuest::ParseNewWindowUserInput(const std::string& user_input,
                                            int& window_id,
                                            bool& foreground,

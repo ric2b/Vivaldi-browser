@@ -6,9 +6,8 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
-#include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
-#include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
-#include "chrome/browser/chromeos/settings/stub_cros_settings_provider.h"
+#include "chrome/browser/ash/settings/device_settings_test_helper.h"
+#include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -33,6 +32,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/url_request/url_request_context.h"
+#include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -61,7 +61,7 @@ CreateNetworkContextForDefaultStoragePartition(
   mojo::PendingRemote<network::mojom::NetworkContext> network_context_remote;
   auto params = network::mojom::NetworkContextParams::New();
   params->cert_verifier_params = content::GetCertVerifierParams(
-      network::mojom::CertVerifierCreationParams::New());
+      cert_verifier::mojom::CertVerifierCreationParams::New());
   auto network_context = std::make_unique<network::NetworkContext>(
       network_service, network_context_remote.InitWithNewPipeAndPassReceiver(),
       std::move(params));

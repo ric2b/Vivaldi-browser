@@ -565,6 +565,10 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             public void onAccessibilitySnapshot(AccessibilitySnapshotNode root) {
                 viewRoot.setClassName("");
                 viewRoot.setHint(mProductVersion);
+
+                Bundle extras = viewRoot.getExtras();
+                extras.putCharSequence("url", mWebContents.getVisibleUrl().getSpec());
+
                 if (root == null) {
                     viewRoot.asyncCommit();
                     return;
@@ -576,7 +580,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
 
     // When creating the View structure, the left and top are relative to the parent node.
     @TargetApi(Build.VERSION_CODES.M)
-    private void createVirtualStructure(ViewStructure viewNode, AccessibilitySnapshotNode node,
+    protected void createVirtualStructure(ViewStructure viewNode, AccessibilitySnapshotNode node,
             final boolean ignoreScrollOffset) {
         viewNode.setClassName(node.className);
         if (node.hasSelection) {
@@ -612,6 +616,13 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                     | (node.lineThrough ? ViewNode.TEXT_STYLE_STRIKE_THRU : 0);
             viewNode.setTextStyle(textSize, node.color, node.bgcolor, style);
         }
+
+        // Note: OWebContentsAccessibility.createVirtualStructure also stores this in
+        // HtmlInfo, but putting it in the extras bundle is useful for earlier API
+        // versions, and for scenarios where HtmlInfo is stripped.
+        Bundle extras = viewNode.getExtras();
+        extras.putCharSequence("htmlTag", node.htmlTag);
+
         for (int i = 0; i < node.children.size(); i++) {
             createVirtualStructure(viewNode.asyncNewChild(i), node.children.get(i), true);
         }
@@ -674,7 +685,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                         AccessibilityNodeInfo.ACTION_ARGUMENT_HTML_ELEMENT_STRING);
                 if (elementType == null) return false;
                 elementType = elementType.toUpperCase(Locale.US);
-                return jumpToElementType(virtualViewId, elementType, true);
+                return jumpToElementType(
+                        virtualViewId, elementType, /*forwards*/ true, /*canWrap*/ false);
             }
             case AccessibilityNodeInfo.ACTION_PREVIOUS_HTML_ELEMENT: {
                 if (arguments == null) return false;
@@ -682,7 +694,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                         AccessibilityNodeInfo.ACTION_ARGUMENT_HTML_ELEMENT_STRING);
                 if (elementType == null) return false;
                 elementType = elementType.toUpperCase(Locale.US);
-                return jumpToElementType(virtualViewId, elementType, false);
+                return jumpToElementType(virtualViewId, elementType, /*forwards*/ false,
+                        /*canWrap*/ virtualViewId == mCurrentRootId);
             }
             case ACTION_SET_TEXT: {
                 if (!WebContentsAccessibilityImplJni.get().isEditableText(
@@ -897,9 +910,10 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         }
     }
 
-    private boolean jumpToElementType(int virtualViewId, String elementType, boolean forwards) {
+    private boolean jumpToElementType(
+            int virtualViewId, String elementType, boolean forwards, boolean canWrap) {
         int id = WebContentsAccessibilityImplJni.get().findElementType(mNativeObj,
-                WebContentsAccessibilityImpl.this, virtualViewId, elementType, forwards);
+                WebContentsAccessibilityImpl.this, virtualViewId, elementType, forwards, canWrap);
         if (id == 0) return false;
 
         moveAccessibilityFocusToId(id);
@@ -1595,17 +1609,18 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             int[] suggestionEnds, String[] suggestions, String stateDescription) {
         CharSequence computedText = computeText(
                 text, isEditableText, language, suggestionStarts, suggestionEnds, suggestions);
+
+        // For pre-Android R, we add stateDescription to text for backwards compatibility.
+        if (stateDescription != null && !stateDescription.isEmpty()) {
+            computedText = computedText + ", " + stateDescription;
+        }
+
         // We expose the nested structure of links, which results in the roles of all nested nodes
         // being read. Use content description in the case of links to prevent verbose TalkBack
         if (annotateAsLink) {
             node.setContentDescription(computedText);
         } else {
             node.setText(computedText);
-        }
-
-        // For pre-Android R, we add stateDescription to text for backwards compatibility.
-        if (stateDescription != null && !stateDescription.isEmpty()) {
-            node.setText(computedText + ", " + stateDescription);
         }
     }
 
@@ -1986,7 +2001,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                 WebContentsAccessibilityImpl caller, int id);
         int findElementType(long nativeWebContentsAccessibilityAndroid,
                 WebContentsAccessibilityImpl caller, int startId, String elementType,
-                boolean forwards);
+                boolean forwards, boolean canWrapToLastElement);
         void setTextFieldValue(long nativeWebContentsAccessibilityAndroid,
                 WebContentsAccessibilityImpl caller, int id, String newValue);
         void setSelection(long nativeWebContentsAccessibilityAndroid,

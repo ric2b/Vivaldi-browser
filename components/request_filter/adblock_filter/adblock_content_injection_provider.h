@@ -5,13 +5,23 @@
 
 #include "base/memory/weak_ptr.h"
 #include "components/content_injection/content_injection_provider.h"
+#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/request_filter/adblock_filter/adblock_resources.h"
+
+namespace content {
+class BrowserContext;
+}
 
 namespace adblock_filter {
 class RulesIndexManager;
 
-class ContentInjectionProvider : public content_injection::Provider {
+class ContentInjectionProvider : public content_injection::Provider,
+                                 public Resources::Observer {
  public:
-  ContentInjectionProvider(RulesIndexManager* index_manager);
+  ContentInjectionProvider(
+      content::BrowserContext* context,
+      std::array<RulesIndexManager*, kRuleGroupCount> index_managers,
+      Resources* resources);
   ~ContentInjectionProvider() override;
   ContentInjectionProvider(const ContentInjectionProvider&) = delete;
   ContentInjectionProvider& operator=(const ContentInjectionProvider&) = delete;
@@ -23,8 +33,15 @@ class ContentInjectionProvider : public content_injection::Provider {
   const std::map<std::string, content_injection::StaticInjectionItem>&
   GetStaticContent() override;
 
+  // Implementing Resources::Observer
+  void OnResourcesLoaded() override;
+
  private:
-  RulesIndexManager* index_manager_;
+  void BuildStaticContent();
+
+  content::BrowserContext* context_;
+  std::array<RulesIndexManager*, kRuleGroupCount> index_managers_;
+  Resources* resources_;
 
   base::Optional<int> javascript_world_id_;
   std::map<std::string, content_injection::StaticInjectionItem> static_content_;

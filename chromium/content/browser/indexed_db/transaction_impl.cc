@@ -83,9 +83,6 @@ void TransactionImpl::DeleteObjectStore(int64_t object_store_id) {
   if (!connection->IsConnected())
     return;
 
-  if (!connection->database()->IsObjectStoreIdInMetadata(object_store_id))
-    return;
-
   transaction_->ScheduleTask(
       BindWeakOperation(&IndexedDBDatabase::DeleteObjectStoreOperation,
                         connection->database()->AsWeakPtr(), object_store_id));
@@ -284,8 +281,8 @@ void TransactionImpl::Commit(int64_t num_errors_handled) {
   }
 
   indexed_db_context_->quota_manager_proxy()->GetUsageAndQuota(
-      indexed_db_context_->IDBTaskRunner(), origin_,
-      blink::mojom::StorageType::kTemporary,
+      origin_, blink::mojom::StorageType::kTemporary,
+      indexed_db_context_->IDBTaskRunner(),
       base::BindOnce(&TransactionImpl::OnGotUsageAndQuotaForCommit,
                      weak_factory_.GetWeakPtr()));
 }

@@ -31,6 +31,8 @@
 <translation id="2486841023299517366">動物４</translation>
 <translation id="2612127540243995147">インストール準備できたわ。Vivaldi閉じて再起動するで。</translation>
 <translation id="2613387515621326337">アップデートサイト出す</translation>
+<translation id="2647368062414805334">Edge立ち上がってる間はVivaldiに設定インポートできへんねん。Edgeでやってること保存できたらそのウィンドウ閉じて、もう一回インポートしてみて。</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">動物３</translation>
 <translation id="2873951654529031587">ごみ箱</translation>
 <translation id="292258461174562431">怪獣４</translation>
@@ -61,6 +63,7 @@
 <translation id="3732157130969736834">リンク先をブックマークに入れとく</translation>
 <translation id="3732388226447288666">動物２</translation>
 <translation id="3732439195215136813">動物５</translation>
+<translation id="3795800845758778870">Brave立ち上がってる間はVivaldiに設定インポートできへんねん。Braveでやってること保存できたらそのウィンドウ閉じて、もう一回インポートしてみて。</translation>
 <translation id="3832132597516774400">風景５</translation>
 <translation id="3914946330804881301">Operaからインポート</translation>
 <translation id="3921292902397893431">怪獣８</translation>
@@ -115,6 +118,8 @@
 <translation id="6551219277044048123">検索エンジンに追加... (&amp;G)</translation>
 <translation id="6630781781151951863">風景１８</translation>
 <translation id="6635049669875534328">リリースノート:</translation>
+<translation id="6693585104974197539">どのEdgeプロファイルフォルダインポートするか選んで</translation>
+<translation id="6726279523566323394">どのBraveプロファイルフォルダインポートするか選んで</translation>
 <translation id="6804831687363620480">ごめん、Opera 15+起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存して全部のOpera 15+ウィンドウ閉じてからやってみて。</translation>
 <translation id="6892812721183419409"><ph name="USER" />でリンク開く</translation>
 <translation id="6896758677409633944">コピー</translation>
@@ -160,5 +165,6 @@
 <translation id="912022491595344261"><ph name="USER" />で画像開く</translation>
 <translation id="9157539936604258187">リンク開く</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">風景１６</translation>
 </translationbundle>

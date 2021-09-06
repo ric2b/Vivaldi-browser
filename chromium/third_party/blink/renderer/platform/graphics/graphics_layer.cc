@@ -343,10 +343,12 @@ void GraphicsLayer::Paint(Vector<PreCompositedLayerInfo>& pre_composited_layers,
 #endif
   DCHECK(layer_state_) << "No layer state for GraphicsLayer: " << DebugName();
 
-  IntRect new_interest_rect =
-      interest_rect
-          ? *interest_rect
-          : client_.ComputeInterestRect(this, previous_interest_rect_);
+  IntRect new_interest_rect;
+  if (!RuntimeEnabledFeatures::CullRectUpdateEnabled()) {
+    new_interest_rect = interest_rect ? *interest_rect
+                                      : client_.ComputeInterestRect(
+                                            this, previous_interest_rect_);
+  }
 
   auto& paint_controller = GetPaintController();
   PaintController::ScopedBenchmarkMode scoped_benchmark_mode(paint_controller,
@@ -362,6 +364,10 @@ void GraphicsLayer::Paint(Vector<PreCompositedLayerInfo>& pre_composited_layers,
     DCHECK(layer_state_) << "No layer state for GraphicsLayer: " << DebugName();
     paint_controller.UpdateCurrentPaintChunkProperties(
         nullptr, layer_state_->state.GetPropertyTreeState());
+    // If this uses pre-CAP compositing, contents_opaque will be calculated by
+    // CompositedLayerMapping; otherwise, it is calculated by PaintChunker.
+    paint_controller.SetShouldComputeContentsOpaque(
+        ShouldCreateLayersAfterPaint());
     previous_interest_rect_ = new_interest_rect;
     client_.PaintContents(this, context, painting_phase_, new_interest_rect);
     paint_controller.CommitNewDisplayItems();
@@ -682,6 +688,12 @@ void GraphicsLayer::SetContentsLayerState(
 
   ContentsLayer()->SetSubtreePropertyChanged();
   client_.GraphicsLayersDidChange();
+}
+
+gfx::Rect GraphicsLayer::PaintableRegion() const {
+  return RuntimeEnabledFeatures::CullRectUpdateEnabled()
+             ? client_.PaintableRegion(this)
+             : previous_interest_rect_;
 }
 
 scoped_refptr<cc::DisplayItemList> GraphicsLayer::PaintContentsToDisplayList() {

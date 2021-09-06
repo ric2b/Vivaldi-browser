@@ -21,7 +21,6 @@
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
   void CreateSearch(const base::ListValue& search) override;
   void PasteAndGo(const base::ListValue& search) override;
-  void SimpleAction(const base::ListValue& search);
   void ToggleFullscreenModeForTab(content::WebContents* web_contents,
                                   bool enter_fullscreen);
   void BeforeUnloadFired(content::WebContents* web_contents, bool proceed,

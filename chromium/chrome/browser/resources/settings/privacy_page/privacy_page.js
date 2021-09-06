@@ -315,9 +315,10 @@ Polymer({
 
   /** @private */
   onPrivacySandboxClick_() {
-    // TODO(crbug/1159942): Replace this with an ordinary OpenWindowProxy call
-    // once crbug/1159942 is fixed.
-    window.location = 'chrome://settings/privacySandbox';
+    this.metricsBrowserProxy_.recordAction(
+        'Settings.PrivacySandbox.OpenedFromSettingsParent');
+    // TODO(crbug/1159942): Replace this with an ordinary OpenWindowProxy call.
+    this.shadowRoot.getElementById('privacySandboxLink').click();
   },
 
   /** @private */
@@ -335,5 +336,15 @@ Polymer({
   /** @private */
   tryShowHatsSurvey_() {
     HatsBrowserProxyImpl.getInstance().tryShowSurvey();
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  computePrivacySandboxSublabel_() {
+    return this.getPref('privacy_sandbox.apis_enabled').value ?
+        this.i18n('privacySandboxTrialsEnabled') :
+        this.i18n('privacySandboxTrialsDisabled');
   },
 });

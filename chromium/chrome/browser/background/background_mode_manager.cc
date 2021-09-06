@@ -52,11 +52,12 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
-#include "chrome/browser/ui/user_manager.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -175,7 +176,8 @@ Browser* BackgroundModeManager::BackgroundModeData::GetBrowserWindow() {
 
 bool BackgroundModeManager::BackgroundModeData::HasPersistentBackgroundClient()
     const {
-  return applications_->HasPersistentBackgroundApps();
+  return applications_->HasPersistentBackgroundApps() ||
+         manager_->keep_alive_for_test_;
 }
 
 bool BackgroundModeManager::BackgroundModeData::HasAnyBackgroundClient() const {
@@ -373,9 +375,9 @@ void BackgroundModeManager::RegisterProfile(Profile* profile) {
 
   // Initially set the name for this background mode data.
   base::string16 name = l10n_util::GetStringUTF16(IDS_PROFILES_DEFAULT_NAME);
-  ProfileAttributesEntry* entry;
-  if (profile_storage_->GetProfileAttributesWithPath(
-      profile->GetPath(), &entry)) {
+  ProfileAttributesEntry* entry =
+      profile_storage_->GetProfileAttributesWithPath(profile->GetPath());
+  if (entry) {
     name = entry->GetName();
   }
   bmd_ptr->SetName(name);
@@ -516,10 +518,9 @@ void BackgroundModeManager::OnApplicationListChanged(const Profile* profile) {
 ///////////////////////////////////////////////////////////////////////////////
 //  BackgroundModeManager, ProfileAttributesStorage::Observer overrides
 void BackgroundModeManager::OnProfileAdded(const base::FilePath& profile_path) {
-  ProfileAttributesEntry* entry;
-  bool success =
-      profile_storage_->GetProfileAttributesWithPath(profile_path, &entry);
-  DCHECK(success);
+  ProfileAttributesEntry* entry =
+      profile_storage_->GetProfileAttributesWithPath(profile_path);
+  DCHECK(entry);
   base::string16 profile_name = entry->GetName();
   // At this point, the profile should be registered with the background mode
   // manager, but when it's actually added to the ProfileAttributesStorage is
@@ -536,10 +537,9 @@ void BackgroundModeManager::OnProfileAdded(const base::FilePath& profile_path) {
 
 void BackgroundModeManager::OnProfileWillBeRemoved(
     const base::FilePath& profile_path) {
-  ProfileAttributesEntry* entry;
-  bool success =
-      profile_storage_->GetProfileAttributesWithPath(profile_path, &entry);
-  DCHECK(success);
+  ProfileAttributesEntry* entry =
+      profile_storage_->GetProfileAttributesWithPath(profile_path);
+  DCHECK(entry);
   base::string16 profile_name = entry->GetName();
   // Remove the profile from our map of profiles.
   auto it = GetBackgroundModeIterator(profile_name);
@@ -560,10 +560,9 @@ void BackgroundModeManager::OnProfileWillBeRemoved(
 void BackgroundModeManager::OnProfileNameChanged(
     const base::FilePath& profile_path,
     const base::string16& old_profile_name) {
-  ProfileAttributesEntry* entry;
-  bool success =
-      profile_storage_->GetProfileAttributesWithPath(profile_path, &entry);
-  DCHECK(success);
+  ProfileAttributesEntry* entry =
+      profile_storage_->GetProfileAttributesWithPath(profile_path);
+  DCHECK(entry);
   base::string16 new_profile_name = entry->GetName();
   BackgroundModeInfoMap::const_iterator it =
       GetBackgroundModeIterator(old_profile_name);
@@ -587,10 +586,10 @@ BackgroundModeManager::GetBackgroundModeDataForLastProfile() const {
     return nullptr;
 
   // Do not permit a locked profile to be used to open a browser.
-  ProfileAttributesEntry* entry;
-  bool success = profile_storage_->GetProfileAttributesWithPath(
-      profile_background_data->first->GetPath(), &entry);
-  DCHECK(success);
+  ProfileAttributesEntry* entry =
+      profile_storage_->GetProfileAttributesWithPath(
+          profile_background_data->first->GetPath());
+  DCHECK(entry);
   if (entry->IsSigninRequired())
     return nullptr;
 
@@ -607,8 +606,8 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
       if (bmd) {
         chrome::ShowAboutChrome(bmd->GetBrowserWindow());
       } else {
-        UserManager::Show(base::FilePath(),
-                          profiles::USER_MANAGER_SELECT_PROFILE_ABOUT_CHROME);
+        ProfilePicker::Show(ProfilePicker::EntryPoint::kBackgroundModeManager,
+                            GURL(chrome::kChromeUIHelpURL));
       }
       break;
     case IDC_TASK_MANAGER:
@@ -616,8 +615,8 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
       if (bmd) {
         chrome::OpenTaskManager(bmd->GetBrowserWindow());
       } else {
-        UserManager::Show(base::FilePath(),
-                          profiles::USER_MANAGER_SELECT_PROFILE_TASK_MANAGER);
+        ProfilePicker::Show(ProfilePicker::EntryPoint::kBackgroundModeManager,
+                            GURL(ProfilePicker::kTaskManagerUrl));
       }
       break;
     case IDC_EXIT:
@@ -644,8 +643,7 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
       if (bmd) {
         bmd->ExecuteCommand(command_id, event_flags);
       } else {
-        UserManager::Show(base::FilePath(),
-                          profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
+        ProfilePicker::Show(ProfilePicker::EntryPoint::kBackgroundModeManager);
       }
       break;
   }
@@ -766,9 +764,9 @@ void BackgroundModeManager::OnClientsChanged(
 
   // Update the ProfileAttributesStorage with the fact whether background
   // clients are running for this profile.
-  ProfileAttributesEntry* entry;
-  if (profile_storage_->
-      GetProfileAttributesWithPath(profile->GetPath(), &entry)) {
+  ProfileAttributesEntry* entry =
+      profile_storage_->GetProfileAttributesWithPath(profile->GetPath());
+  if (entry) {
     entry->SetBackgroundStatus(
         HasPersistentBackgroundClientForProfile(profile));
   }

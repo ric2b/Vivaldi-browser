@@ -40,6 +40,7 @@ class CONTENT_EXPORT DedicatedWorkerHostFactoryImpl
       const blink::DedicatedWorkerToken& token,
       mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
           broker_receiver,
+      mojo::PendingReceiver<blink::mojom::DedicatedWorkerHost> host_receiver,
       base::OnceCallback<void(const network::CrossOriginEmbedderPolicy&)>
           callback) override;
 

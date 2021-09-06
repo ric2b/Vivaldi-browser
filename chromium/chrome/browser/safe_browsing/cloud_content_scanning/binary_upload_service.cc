@@ -161,10 +161,13 @@ net::NetworkTrafficAnnotationTag GetTrafficAnnotationTag(bool is_app) {
             "policy."
           chrome_policy {
             OnFileAttachedEnterpriseConnector {
+              OnFileAttachedEnterpriseConnector: "[]"
             }
             OnFileDownloadedEnterpriseConnector {
+              OnFileDownloadedEnterpriseConnector: "[]"
             }
             OnBulkDataEntryEnterpriseConnector {
+              OnBulkDataEntryEnterpriseConnector: "[]"
             }
           }
         }
@@ -740,6 +743,11 @@ void BinaryUploadService::ResetAuthorizationData(const GURL& url) {
 }
 
 void BinaryUploadService::Shutdown() {
+  if (!active_requests_.empty()) {
+    base::UmaHistogramCounts10000(
+        "SafeBrowsingBinaryUploadService.ActiveRequestsAtShutdown",
+        active_requests_.size());
+  }
   if (binary_fcm_service_)
     binary_fcm_service_->Shutdown();
 }

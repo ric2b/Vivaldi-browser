@@ -267,6 +267,7 @@ source_set("winsparkle_no_gui") {
     "//base:base",
     "//crypto",
     "//url:url",
+    "//vivaldi/update_notifier:translation_strings",
   ]
 }
 

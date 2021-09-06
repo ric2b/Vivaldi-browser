@@ -527,7 +527,6 @@ TEST_F(NinjaCBinaryTargetWriterTest, FrameworksAndFrameworkDirs) {
   // A config that force linking with the framework.
   Config framework_config(setup.settings(),
                           Label(SourceDir("//bar"), "framework_config"));
-  framework_config.visibility().SetPublic();
   framework_config.own_values().frameworks().push_back("Bar.framework");
   framework_config.own_values().framework_dirs().push_back(
       SourceDir("//out/Debug/"));
@@ -1223,7 +1222,6 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
     ASSERT_TRUE(far_config.OnResolved(&err));
 
     Config config(setup.settings(), Label(SourceDir("//foo/"), "baz"));
-    config.visibility().SetPublic();
     config.own_values().inputs().push_back(SourceFile("//foo/input2.data"));
     config.configs().push_back(LabelConfigPair(&far_config));
     ASSERT_TRUE(config.OnResolved(&err));
@@ -1420,14 +1418,14 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDeps) {
         "build obj/bar/bar.bar.o: cxx ../../bar/bar.cc\n"
         "\n"
         "build ./bar: link obj/bar/bar.bar.o obj/foo/libfoo.a | "
-        "obj/baz/lib.rlib obj/quux/lib4.rlib obj/qux/lib2.rlib\n"
+        "obj/quux/lib4.rlib obj/qux/lib2.rlib\n"
         "  ldflags =\n"
         "  libs =\n"
         "  frameworks =\n"
         "  swiftmodules =\n"
         "  output_extension = \n"
         "  output_dir = \n"
-        "  rlibs = obj/baz/lib.rlib obj/quux/lib4.rlib obj/qux/lib2.rlib\n";
+        "  rlibs = obj/quux/lib4.rlib obj/qux/lib2.rlib\n";
 
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -1506,9 +1504,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
   setup.toolchain()->SetTool(std::move(cxx_module_tool));
 
   TestTarget target(setup, "//foo:bar", Target::STATIC_LIBRARY);
-  target.sources().push_back(SourceFile("//foo/bar.cc"));
   target.sources().push_back(SourceFile("//foo/bar.modulemap"));
-  target.source_types_used().Set(SourceFile::SOURCE_CPP);
   target.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
   ASSERT_TRUE(target.OnResolved(&err));
 
@@ -1519,16 +1515,13 @@ TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
   const char expected[] =
       "defines =\n"
       "include_dirs =\n"
-      "cflags =\n"
-      "cflags_cc =\n"
       "root_out_dir = .\n"
       "target_out_dir = obj/foo\n"
       "target_output_name = libbar\n"
       "\n"
-      "build obj/foo/libbar.bar.o: cxx ../../foo/bar.cc | obj/foo/libbar.bar.pcm\n"
       "build obj/foo/libbar.bar.pcm: cxx_module ../../foo/bar.modulemap\n"
       "\n"
-      "build obj/foo/libbar.a: alink obj/foo/libbar.bar.o\n"
+      "build obj/foo/libbar.a: alink obj/foo/libbar.bar.pcm\n"
       "  arflags =\n"
       "  output_extension = \n"
       "  output_dir = \n";
@@ -1694,229 +1687,6 @@ TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
         "  output_dir = \n";
 
     const std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
-}
-
-TEST_F(NinjaCBinaryTargetWriterTest, DependOnModule) {
-  TestWithScope setup;
-  Err err;
-
-  // There's no cxx_module or flags in the test toolchain, set up a
-  // custom one here.
-  Settings module_settings(setup.build_settings(), "withmodules/");
-  Toolchain module_toolchain(&module_settings,
-                             Label(SourceDir("//toolchain/"), "withmodules"));
-  module_settings.set_toolchain_label(module_toolchain.label());
-  module_settings.set_default_toolchain_label(module_toolchain.label());
-
-  std::unique_ptr<Tool> cxx = std::make_unique<CTool>(CTool::kCToolCxx);
-  CTool* cxx_tool = cxx->AsC();
-  TestWithScope::SetCommandForTool(
-      "c++ {{source}} {{cflags}} {{cflags_cc}} {{module_deps}} "
-      "{{defines}} {{include_dirs}} -o {{output}}",
-      cxx_tool);
-  cxx_tool->set_outputs(SubstitutionList::MakeForTest(
-      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.o"));
-  cxx_tool->set_precompiled_header_type(CTool::PCH_GCC);
-  module_toolchain.SetTool(std::move(cxx));
-
-  std::unique_ptr<Tool> cxx_module_tool =
-      Tool::CreateTool(CTool::kCToolCxxModule);
-  TestWithScope::SetCommandForTool(
-      "c++ {{source}} {{cflags}} {{cflags_cc}} {{module_deps_no_self}} "
-      "{{defines}} {{include_dirs}} -fmodule-name={{label}} -c -x c++ "
-      "-Xclang -emit-module -o {{output}}",
-      cxx_module_tool.get());
-  cxx_module_tool->set_outputs(SubstitutionList::MakeForTest(
-      "{{source_out_dir}}/{{target_output_name}}.{{source_name_part}}.pcm"));
-  module_toolchain.SetTool(std::move(cxx_module_tool));
-
-  std::unique_ptr<Tool> alink = Tool::CreateTool(CTool::kCToolAlink);
-  CTool* alink_tool = alink->AsC();
-  TestWithScope::SetCommandForTool("ar {{output}} {{source}}", alink_tool);
-  alink_tool->set_lib_switch("-l");
-  alink_tool->set_lib_dir_switch("-L");
-  alink_tool->set_output_prefix("lib");
-  alink_tool->set_outputs(SubstitutionList::MakeForTest(
-      "{{target_out_dir}}/{{target_output_name}}.a"));
-  module_toolchain.SetTool(std::move(alink));
-
-  std::unique_ptr<Tool> link = Tool::CreateTool(CTool::kCToolLink);
-  CTool* link_tool = link->AsC();
-  TestWithScope::SetCommandForTool(
-      "ld -o {{target_output_name}} {{source}} "
-      "{{ldflags}} {{libs}}",
-      link_tool);
-  link_tool->set_lib_switch("-l");
-  link_tool->set_lib_dir_switch("-L");
-  link_tool->set_outputs(
-      SubstitutionList::MakeForTest("{{root_out_dir}}/{{target_output_name}}"));
-  module_toolchain.SetTool(std::move(link));
-
-  module_toolchain.ToolchainSetupComplete();
-
-  Target target(&module_settings, Label(SourceDir("//blah/"), "a"));
-  target.set_output_type(Target::STATIC_LIBRARY);
-  target.visibility().SetPublic();
-  target.sources().push_back(SourceFile("//blah/a.modulemap"));
-  target.sources().push_back(SourceFile("//blah/a.cc"));
-  target.sources().push_back(SourceFile("//blah/a.h"));
-  target.source_types_used().Set(SourceFile::SOURCE_CPP);
-  target.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
-  target.SetToolchain(&module_toolchain);
-  ASSERT_TRUE(target.OnResolved(&err));
-
-  // The library first.
-  {
-    std::ostringstream out;
-    NinjaCBinaryTargetWriter writer(&target, out);
-    writer.Run();
-
-    const char expected[] = R"(defines =
-include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files
-cflags =
-cflags_cc =
-label = //blah$:a
-root_out_dir = withmodules
-target_out_dir = obj/blah
-target_output_name = liba
-
-build obj/blah/liba.a.pcm: cxx_module ../../blah/a.modulemap
-build obj/blah/liba.a.o: cxx ../../blah/a.cc | obj/blah/liba.a.pcm
-
-build obj/blah/liba.a: alink obj/blah/liba.a.o
-  arflags =
-  output_extension = 
-  output_dir = 
-)";
-
-    std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
-
-  Target target2(&module_settings, Label(SourceDir("//stuff/"), "b"));
-  target2.set_output_type(Target::STATIC_LIBRARY);
-  target2.visibility().SetPublic();
-  target2.sources().push_back(SourceFile("//stuff/b.modulemap"));
-  target2.sources().push_back(SourceFile("//stuff/b.cc"));
-  target2.sources().push_back(SourceFile("//stuff/b.h"));
-  target2.source_types_used().Set(SourceFile::SOURCE_CPP);
-  target2.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
-  target2.SetToolchain(&module_toolchain);
-  ASSERT_TRUE(target2.OnResolved(&err));
-
-  // A second library to make sure the depender includes both.
-  {
-    std::ostringstream out;
-    NinjaCBinaryTargetWriter writer(&target2, out);
-    writer.Run();
-
-    const char expected[] = R"(defines =
-include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libb.b.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files
-cflags =
-cflags_cc =
-label = //stuff$:b
-root_out_dir = withmodules
-target_out_dir = obj/stuff
-target_output_name = libb
-
-build obj/stuff/libb.b.pcm: cxx_module ../../stuff/b.modulemap
-build obj/stuff/libb.b.o: cxx ../../stuff/b.cc | obj/stuff/libb.b.pcm
-
-build obj/stuff/libb.a: alink obj/stuff/libb.b.o
-  arflags =
-  output_extension = 
-  output_dir = 
-)";
-
-    std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
-
-  Target target3(&module_settings, Label(SourceDir("//things/"), "c"));
-  target3.set_output_type(Target::STATIC_LIBRARY);
-  target3.visibility().SetPublic();
-  target3.sources().push_back(SourceFile("//stuff/c.modulemap"));
-  target3.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
-  target3.private_deps().push_back(LabelTargetPair(&target));
-  target3.SetToolchain(&module_toolchain);
-  ASSERT_TRUE(target3.OnResolved(&err));
-
-  // A third library that depends on one of the previous static libraries, to
-  // check module_deps_no_self.
-  {
-    std::ostringstream out;
-    NinjaCBinaryTargetWriter writer(&target3, out);
-    writer.Run();
-
-    const char expected[] = R"(defines =
-include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/stuff/libc.c.pcm -fmodule-file=obj/blah/liba.a.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm
-cflags =
-cflags_cc =
-label = //things$:c
-root_out_dir = withmodules
-target_out_dir = obj/things
-target_output_name = libc
-
-build obj/stuff/libc.c.pcm: cxx_module ../../stuff/c.modulemap | obj/blah/liba.a.pcm
-
-build obj/things/libc.a: alink || obj/blah/liba.a
-  arflags =
-  output_extension = 
-  output_dir = 
-)";
-
-    std::string out_str = out.str();
-    EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
-  }
-
-  Target depender(&module_settings, Label(SourceDir("//zap/"), "c"));
-  depender.set_output_type(Target::EXECUTABLE);
-  depender.sources().push_back(SourceFile("//zap/x.cc"));
-  depender.sources().push_back(SourceFile("//zap/y.cc"));
-  depender.source_types_used().Set(SourceFile::SOURCE_CPP);
-  depender.private_deps().push_back(LabelTargetPair(&target));
-  depender.private_deps().push_back(LabelTargetPair(&target2));
-  depender.SetToolchain(&module_toolchain);
-  ASSERT_TRUE(depender.OnResolved(&err));
-
-  // Then the executable that depends on it.
-  {
-    std::ostringstream out;
-    NinjaCBinaryTargetWriter writer(&depender, out);
-    writer.Run();
-
-    const char expected[] = R"(defines =
-include_dirs =
-module_deps = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
-module_deps_no_self = -Xclang -fmodules-embed-all-files -fmodule-file=obj/blah/liba.a.pcm -fmodule-file=obj/stuff/libb.b.pcm
-cflags =
-cflags_cc =
-label = //zap$:c
-root_out_dir = withmodules
-target_out_dir = obj/zap
-target_output_name = c
-
-build obj/zap/c.x.o: cxx ../../zap/x.cc | obj/blah/liba.a.pcm obj/stuff/libb.b.pcm
-build obj/zap/c.y.o: cxx ../../zap/y.cc | obj/blah/liba.a.pcm obj/stuff/libb.b.pcm
-
-build withmodules/c: link obj/zap/c.x.o obj/zap/c.y.o obj/blah/liba.a obj/stuff/libb.a
-  ldflags =
-  libs =
-  frameworks =
-  swiftmodules =
-  output_extension = 
-  output_dir = 
-)";
-
-    std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
 }

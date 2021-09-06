@@ -63,7 +63,10 @@ class BASE_EXPORT PCScan final {
   PCScan& operator=(const PCScan&) = delete;
 
   // Registers a root for scanning.
-  void RegisterRoot(Root* root);
+  void RegisterScannableRoot(Root* root);
+  // Registers a root that doesn't need to be scanned but still contains
+  // quarantined objects.
+  void RegisterNonScannableRoot(Root* root);
 
   ALWAYS_INLINE void MoveToQuarantine(void* ptr, SlotSpan* slot_span);
 
@@ -144,9 +147,13 @@ class BASE_EXPORT PCScan final {
   // Performs scanning unconditionally.
   void PerformScan(InvocationMode invocation_mode);
 
+  // Get size of all committed pages from scannable and nonscannable roots.
+  size_t CalculateTotalHeapSize() const;
+
   static PCScan instance_ PA_CONSTINIT;
 
-  Roots roots_{};
+  Roots scannable_roots_{};
+  Roots nonscannable_roots_{};
   QuarantineData quarantine_data_{};
   std::atomic<bool> in_progress_{false};
 };
@@ -168,7 +175,10 @@ ALWAYS_INLINE void PCScan<thread_safe>::MoveToQuarantine(void* ptr,
 
   const bool is_limit_reached =
       quarantine_data_.Account(slot_span->bucket->slot_size);
-  if (is_limit_reached) {
+  if (UNLIKELY(is_limit_reached)) {
+    // Perform a quick check if another scan is already in progress.
+    if (in_progress_.load(std::memory_order_relaxed))
+      return;
     // Avoid blocking the current thread for regular scans.
     PerformScan(InvocationMode::kNonBlocking);
   }

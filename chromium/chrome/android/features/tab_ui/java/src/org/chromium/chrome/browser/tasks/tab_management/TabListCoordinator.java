@@ -51,7 +51,7 @@ import org.chromium.chrome.browser.ChromeApplication;
  * Coordinator for showing UI for a list of tabs. Can be used in GRID or STRIP modes.
  */
 public class TabListCoordinator
-        implements PriceWelcomeMessageService.PriceWelcomeMessageProvider, Destroyable {
+        implements PriceMessageService.PriceWelcomeMessageProvider, Destroyable {
     /**
      * Modes of showing the list of tabs.
      *
@@ -131,10 +131,6 @@ public class TabListCoordinator
                         R.layout.selectable_tab_grid_card_item, parentView, false);
                 group.setClickable(true);
 
-                if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
-                    setThumbnailViewAspectRatio(group);
-                }
-
                 return group;
             }, TabGridViewBinder::bindSelectableTab);
 
@@ -144,10 +140,6 @@ public class TabListCoordinator
                 if (mMode == TabListMode.CAROUSEL) {
                     group.getLayoutParams().width = context.getResources().getDimensionPixelSize(
                             R.dimen.tab_carousel_card_width);
-                }
-
-                if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
-                    setThumbnailViewAspectRatio(group);
                 }
 
                 group.setClickable(true);
@@ -272,15 +264,6 @@ public class TabListCoordinator
             mGlobalLayoutListener = this::updateThumbnailLocation;
             mRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(mGlobalLayoutListener);
         }
-    }
-
-    private static void setThumbnailViewAspectRatio(View view) {
-        float mExpectedThumbnailAspectRatio =
-                (float) TabUiFeatureUtilities.THUMBNAIL_ASPECT_RATIO.getValue();
-        mExpectedThumbnailAspectRatio = MathUtils.clamp(mExpectedThumbnailAspectRatio, 0.5f, 2.0f);
-        TabGridThumbnailView thumbnailView =
-                (TabGridThumbnailView) view.findViewById(R.id.tab_thumbnail);
-        thumbnailView.setAspectRatio(mExpectedThumbnailAspectRatio);
     }
 
     @NonNull

@@ -21,6 +21,8 @@ const char kCrashHandlerSwitch[] = "crash-handler";
 const char kUpdateSwitch[] = "update";
 const char kInstallSwitch[] = "install";
 const char kUninstallSwitch[] = "uninstall";
+const char kUninstallSelfSwitch[] = "uninstall-self";
+const char kUninstallIfUnusedSwitch[] = "uninstall-if-unused";
 const char kSystemSwitch[] = "system";
 const char kTestSwitch[] = "test";
 const char kInitDoneNotifierSwitch[] = "init-done-notifier";
@@ -49,6 +51,10 @@ const char kUninstallScript[] = "uninstall.cmd";
 const char kDevOverrideKeyUrl[] = "url";
 const char kDevOverrideKeyUseCUP[] = "use_cup";
 const char kDevOverrideKeyInitialDelay[] = "initial_delay";
+const char kDevOverrideKeyServerKeepAliveSeconds[] = "server_keep_alive";
+
+// Developer override file name, relative to app data directory.
+const char kDevOverrideFileName[] = "overrides.json";
 
 // Policy Management constants.
 const char kProxyModeDirect[] = "direct";

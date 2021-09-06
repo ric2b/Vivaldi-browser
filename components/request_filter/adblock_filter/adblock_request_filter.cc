@@ -212,7 +212,7 @@ bool AdBlockRequestFilter::OnBeforeRequest(
 
   if (rule->redirect() && rule->redirect()->size() && resources_) {
     base::Optional<std::string> resource(
-        resources_->Get(rule->redirect()->c_str(), reource_type));
+        resources_->GetRedirect(rule->redirect()->c_str(), reource_type));
     if (resource) {
       std::move(callback).Run(false, false, GURL(resource.value()));
       return true;

@@ -23,7 +23,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/sync/engine_impl/net/server_connection_manager.h"
+#include "components/sync/engine/net/server_connection_manager.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
@@ -34,6 +34,9 @@ using syncer::LoopbackServer;
 using syncer::LoopbackServerEntity;
 using syncer::ModelType;
 using syncer::ModelTypeSet;
+
+const char switches::kDisableFakeServerFailureOutput[] =
+    "disable-fake-server-failure-output";
 
 namespace fake_server {
 
@@ -654,7 +657,7 @@ void FakeServer::LogForTestFailure(const base::Location& location,
                                    const std::string& title,
                                    const std::string& body) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          "disable-fake-server-failure-output")) {
+          switches::kDisableFakeServerFailureOutput)) {
     return;
   }
   gtest_scoped_traces_.push_back(std::make_unique<testing::ScopedTrace>(

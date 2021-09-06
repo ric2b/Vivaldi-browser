@@ -27,10 +27,17 @@
   XRLightEstimate? getLightEstimate(XRLightProbe lightProbe);
 
   [RuntimeEnabled=WebXRDepth, RaisesException, MeasureAs=XRFrameGetDepthInformation]
-  XRDepthInformation getDepthInformation(XRView view);
+  XRCPUDepthInformation? getDepthInformation(XRView view);
 
   [RuntimeEnabled=WebXRImageTracking, RaisesException]
   FrozenArray<XRImageTrackingResult> getImageTrackingResults();
+
+  [RuntimeEnabled=WebXRHandInput, RaisesException]
+  XRJointPose? getJointPose(XRJointSpace joint, XRSpace baseSpace);
+  [RuntimeEnabled=WebXRHandInput, RaisesException]
+  boolean fillJointRadii(sequence<XRJointSpace> jointSpaces, Float32Array radii);
+  [RuntimeEnabled=WebXRHandInput, RaisesException]
+  boolean fillPoses(sequence<XRSpace> spaces, XRSpace baseSpace, Float32Array transforms);
 
   // More details about the real-world understanding APIs can be found here:
   // https://github.com/immersive-web/real-world-geometry/blob/master/plane-detection-explainer.md

@@ -437,13 +437,16 @@ public class BrowserControlsManager
 
         if (getTopControlsHeight() == 0) {
             // Treat the case of 0 height as controls being totally offscreen.
-            // Note(david@vivaldi.com): Don't change the osset ratio here.
-            if (!ChromeApplication.isVivaldi())
-            mControlOffsetRatio = 1.0f;
         } else {
             mControlOffsetRatio =
                     Math.abs((float) mRendererTopControlOffset / getTopControlsHeight());
         }
+
+        // Note(david@vivaldi.com): Calculate correct control offset ratio when toolbar is at the
+        // bottom.
+        if (!VivaldiUtils.isTopToolbarOn())
+            mControlOffsetRatio =
+                    Math.abs((float) mRendererBottomControlOffset / getBottomControlsHeight());
     }
 
     @Override

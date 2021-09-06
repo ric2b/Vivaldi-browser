@@ -83,6 +83,12 @@ extern const char kInstallFromOutDir[];
 // Uninstalls the updater.
 extern const char kUninstallSwitch[];
 
+// Uninstalls this version of the updater.
+extern const char kUninstallSelfSwitch[];
+
+// Uninstalls the updater if no apps are managed by it.
+extern const char kUninstallIfUnusedSwitch[];
+
 // Kicks off the update service. This switch is typically used for by a
 // scheduled to invoke the updater periodically.
 extern const char kWakeSwitch[];
@@ -127,6 +133,10 @@ extern const char kUninstallScript[];
 extern const char kDevOverrideKeyUrl[];
 extern const char kDevOverrideKeyUseCUP[];
 extern const char kDevOverrideKeyInitialDelay[];
+extern const char kDevOverrideKeyServerKeepAliveSeconds[];
+
+// File name of developer overrides file.
+extern const char kDevOverrideFileName[];
 
 // Timing constants.
 #if defined(OS_WIN)
@@ -206,7 +216,8 @@ constexpr int kUninstallPingReasonUserNotAnOwner = 1;
 // The file downloaded to a temporary location could not be moved.
 constexpr int kErrorFailedToMoveDownloadedFile = 5;
 
-constexpr int kInitialDelay = 60;
+constexpr double kInitialDelay = 60;
+constexpr int kServerKeepAliveSeconds = 10;
 
 }  // namespace updater
 

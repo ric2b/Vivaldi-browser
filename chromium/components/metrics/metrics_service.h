@@ -140,14 +140,6 @@ class MetricsService : public base::HistogramFlattener {
   void LogNeedForCleanShutdown();
 #endif  // defined(OS_ANDROID) || defined(OS_IOS)
 
-  // Saves in the preferences if the crash report registration was successful.
-  // This count is eventually send via UMA logs.
-  void RecordBreakpadRegistration(bool success);
-
-  // Saves in the preferences if the browser is running under a debugger.
-  // This count is eventually send via UMA logs.
-  void RecordBreakpadHasDebugger(bool has_debugger);
-
   bool recording_active() const;
   bool reporting_active() const;
   bool has_unsent_logs() const;
@@ -206,7 +198,8 @@ class MetricsService : public base::HistogramFlattener {
   // The MetricsService has a lifecycle that is stored as a state.
   // See metrics_service.cc for description of this lifecycle.
   enum State {
-    INITIALIZED,          // Constructor was called.
+    CONSTRUCTED,          // Constructor was called.
+    INITIALIZED,          // InitializeMetricsRecordingState() was called.
     INIT_TASK_SCHEDULED,  // Waiting for deferred init tasks to finish.
     INIT_TASK_DONE,       // Waiting for timer to send initial log.
     SENDING_LOGS,         // Sending logs an creating new ones when we run out.

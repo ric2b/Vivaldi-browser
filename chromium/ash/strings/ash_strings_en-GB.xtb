@@ -11,6 +11,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="1037492556044956303"><ph name="DEVICE_NAME" /> added</translation>
 <translation id="1047017786576569492">partial</translation>
 <translation id="1047773237499189053">New feature available; use the up arrow key to learn more.</translation>
+<translation id="1052916631016577720">Item scan</translation>
 <translation id="1056775291175587022">No networks</translation>
 <translation id="1059194134494239015"><ph name="DISPLAY_NAME" />: <ph name="RESOLUTION" /></translation>
 <translation id="108486256082349153">Mobile: <ph name="ADDRESS" /></translation>
@@ -24,6 +25,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="1165712434476988950">Device restart is required to apply the update.</translation>
 <translation id="1175572348579024023">Scroll</translation>
 <translation id="1178581264944972037">Pause</translation>
+<translation id="1181037720776840403">Remove</translation>
 <translation id="118532027333893379">Tap anywhere to capture full screen</translation>
 <translation id="1190609913194133056">Notification Centre</translation>
 <translation id="1195412055398077112">overscan</translation>
@@ -147,6 +149,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="2220572644011485463">PIN or password</translation>
 <translation id="2222338659135520253">Sign-in required</translation>
 <translation id="2222841058024245321">Desk 7</translation>
+<translation id="2224075387478458881">Screen recording is not allowed when protected content is visible</translation>
 <translation id="225680501294068881">Scanning for devices...</translation>
 <translation id="2268130516524549846">Bluetooth disabled</translation>
 <translation id="2268813581635650749">Sign out all</translation>
@@ -239,7 +242,6 @@ Here are some things that you can try to get started.</translation>
 <translation id="3038571455154067151">To sign in, enter your Family Link parental access code</translation>
 <translation id="3039939407102840004">Stylus battery at <ph name="PERCENTAGE" /> per cent.</translation>
 <translation id="3045488863354895414">Good afternoon,</translation>
-<translation id="3051128274746680507">Your supervised user profile will be removed soon. Sign in to find out more.</translation>
 <translation id="3055162170959710888">You used this device for <ph name="USED_TIME" /> today</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3081696990447829002">Expand menu</translation>
@@ -252,13 +254,11 @@ Here are some things that you can try to get started.</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
 <translation id="3126069444801937830">Restart to update</translation>
 <translation id="3139942575505304791">Desk 1</translation>
-<translation id="3147157020428159854">Screen recording stopped</translation>
 <translation id="315116470104423982">Mobile data</translation>
 <translation id="3151786313568798007">Orientation</translation>
 <translation id="3153444934357957346">You can only have up to <ph name="MULTI_PROFILE_USER_LIMIT" /> accounts in multiple sign-in.</translation>
 <translation id="3154351730702813399">The device admin may monitor your browsing activity.</translation>
 <translation id="3181441307743005334">Restart may take a while</translation>
-<translation id="3190230207529484457">Screen capture is not allowed while protected content is present</translation>
 <translation id="3202010236269062730">{NUM_DEVICES,plural, =1{Connected to a device}other{Connected to # devices}}</translation>
 <translation id="320207200541803018">Set timer</translation>
 <translation id="3203405173652969239">Switch access enabled</translation>
@@ -267,7 +267,6 @@ Here are some things that you can try to get started.</translation>
 <translation id="3226991577105957773">+<ph name="COUNT" /> more</translation>
 <translation id="3236488194889173876">No mobile network available</translation>
 <translation id="3249513730522716925">Window <ph name="WINDOW_TITLE" /> moved from Desk <ph name="ACTIVE_DESK" /> to Desk <ph name="TARGET_DESK" /></translation>
-<translation id="3252068179161473151"><ph name="WIRELESS_PROVIDER" />, signal strength <ph name="SIGNAL_STRENGTH" /> per cent.</translation>
 <translation id="3255483164551725916">What can you do?</translation>
 <translation id="3269597722229482060">Right-click</translation>
 <translation id="3289674678944039601">Charging via adaptor</translation>
@@ -306,6 +305,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="3571734092741541777">Set up</translation>
 <translation id="3573179567135747900">Change back to "<ph name="FROM_LOCALE" />" (requires restart)</translation>
 <translation id="3576141592585647168">Change timezone</translation>
+<translation id="3593039967545720377">Access your clipboard history by pressing <ph name="SHORTCUT_KEY_NAME" /> + V to view your clipboard. Copy an item to get started.</translation>
 <translation id="3593646411856133110">Swipe up and hold to see open apps</translation>
 <translation id="3595596368722241419">Battery full</translation>
 <translation id="3604801046548457007">Desk <ph name="DESK_TITILE" /> created</translation>
@@ -349,6 +349,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="3901991538546252627">Connecting to <ph name="NAME" /></translation>
 <translation id="3943857333388298514">Paste</translation>
 <translation id="394485226368336402">Audio settings</translation>
+<translation id="3945319193631853098">Tap to complete setup</translation>
 <translation id="3945867833895287237">Connecting to hotspot…</translation>
 <translation id="3962859241508114581">Previous track</translation>
 <translation id="3969043077941541451">Off</translation>
@@ -393,10 +394,12 @@ Here are some things that you can try to get started.</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4321776623976362024">You pressed the keyboard shortcut for high contrast. Do you want to turn it on?</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
+<translation id="4333628967105022692">Lacros is not supported while multiple users are signed in.</translation>
 <translation id="4338109981321384717">Magnifying glass</translation>
 <translation id="4351433414020964307">Assistant is loading...</translation>
 <translation id="4356930093361201197">high-contrast mode</translation>
 <translation id="4371348193907997655">Cast settings</translation>
+<translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, signal strength <ph name="SIGNAL_STRENGTH" /> per cent.</translation>
 <translation id="4378551569595875038">Connecting...</translation>
 <translation id="4379531060876907730">These are your stylus tools</translation>
 <translation id="4389184120735010762">You pressed the keyboard shortcut for the docked magnifier. Do you want to turn it on?</translation>
@@ -404,6 +407,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="4421231901400348175">Sharing control of your screen with <ph name="HELPER_NAME" /> via Remote Assistance.</translation>
 <translation id="4424159417645388645">Desk 5</translation>
 <translation id="4430019312045809116">volume</translation>
+<translation id="4449692009715125625">{NUM_NOTIFICATIONS,plural, =1{1 important notification}other{# important notifications}}</translation>
 <translation id="4450893287417543264">Don't show again</translation>
 <translation id="445864333228800152">Good evening,</translation>
 <translation id="4458688154122353284">Stop screen recording</translation>
@@ -475,6 +479,10 @@ Here are some things that you can try to get started.</translation>
 <translation id="4961318399572185831">Cast screen</translation>
 <translation id="4969092041573468113"><ph name="HOURS" />h <ph name="MINUTES" />m <ph name="SECONDS" />s</translation>
 <translation id="4975771730019223894">App badging</translation>
+<translation id="4977493774330778463"><ph name="NUM_IMPORTANT_NOTIFICATION" />:
+        <ph name="NOTIFICATION_1" />,
+        <ph name="NOTIFICATION_2" />,
+        <ph name="NUM_OTHER_NOTIFICATION" /></translation>
 <translation id="5003993274120026347">Next sentence</translation>
 <translation id="5030687792513154421">Time is up</translation>
 <translation id="5033299697334913360">Click anywhere to capture full screen</translation>
@@ -488,6 +496,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="5168181903108465623">Cast devices available</translation>
 <translation id="5170568018924773124">Show in folder</translation>
 <translation id="5176318573511391780">Record partial screen</translation>
+<translation id="5206057955438543357">{NUM_NOTIFICATIONS,plural, =1{1 other notification}other{# other notifications}}</translation>
 <translation id="5207949376430453814">Highlight text caret</translation>
 <translation id="5208059991603368177">On</translation>
 <translation id="5222676887888702881">Sign out</translation>
@@ -556,6 +565,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="5825969630400862129">Connected devices settings</translation>
 <translation id="5837036133683224804">Stop <ph name="ROUTE_TITLE" /> on <ph name="RECEIVER_NAME" /></translation>
 <translation id="5860033963881614850">Off</translation>
+<translation id="5860491529813859533">Turn on</translation>
 <translation id="5876666360658629066">Enter parental code</translation>
 <translation id="5881540930187678962">Set up Phone Hub later</translation>
 <translation id="5895138241574237353">Restart</translation>
@@ -587,6 +597,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="6043212731627905357">This monitor isn't getting along with your <ph name="DEVICE_TYPE" /> (the monitor is not supported).</translation>
 <translation id="6043994281159824495">Sign out now</translation>
 <translation id="6047696787498798094">Screen sharing will stop when you switch to another user. Do you want to continue?</translation>
+<translation id="6050368268239407309">Presentation tools</translation>
 <translation id="6054305421211936131">Sign in with smart card</translation>
 <translation id="6059276912018042191">Recent Chrome tabs</translation>
 <translation id="6062360702481658777">You will automatically be signed out in <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -597,10 +608,10 @@ Here are some things that you can try to get started.</translation>
 <translation id="612734058257491180">The Google Assistant is not available in a guest session.</translation>
 <translation id="6137566720514957455">Open remove dialogue for <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="615957422585914272">Show on-screen keyboard</translation>
-<translation id="6164005077879661055">All files and local data associated with the supervised user will be permanently deleted once this supervised user is removed. Visited websites and settings for this supervised user may still be visible by the manager at <ph name="MANAGEMENT_URL" />.</translation>
 <translation id="6165508094623778733">Learn more</translation>
 <translation id="6179832488876878285">You can pin your important files here. Open Files app to get started.</translation>
 <translation id="622484624075952240">Down</translation>
+<translation id="6231419273573514727">Peripheral performance may be limited</translation>
 <translation id="6236290670123303279">Manage settings</translation>
 <translation id="6237231532760393653">1X</translation>
 <translation id="6254629735336163724">Locked to horizontal</translation>
@@ -617,6 +628,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="6376931439017688372">Bluetooth is on</translation>
 <translation id="6381109794406942707">To unlock the device, enter your PIN.</translation>
 <translation id="639644700271529076">CAPS LOCK is off</translation>
+<translation id="6396835948284782440">Press and hold [Esc] to exit.</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6424520630891723617"><ph name="SECURITY_STATUS" />, signal strength <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">Clear all notifications</translation>
@@ -661,6 +673,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="6715542151869432661">No mobile devices found.</translation>
 <translation id="6723839937902243910">Power</translation>
 <translation id="6727969043791803658">Connected, <ph name="BATTERY_PERCENTAGE" />% battery</translation>
+<translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6751052314767925245">Enforced by your administrator</translation>
 <translation id="6751826523481687655">Performance tracing is turned on</translation>
 <translation id="6752912906630585008">Desk <ph name="REMOVED_DESK" /> removed and merged with Desk <ph name="RECEIVE_DESK" /></translation>
@@ -672,6 +685,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="6818242057446442178">Back by word</translation>
 <translation id="6820676911989879663">Take a break!</translation>
 <translation id="6850010208275816200">Your current app is full screen. If the app asks for your password, exit full screen first.</translation>
+<translation id="6852052252232534364">Click to activate</translation>
 <translation id="6857725247182211756"><ph name="SECONDS" /> sec</translation>
 <translation id="6857811139397017780">Activate <ph name="NETWORKSERVICE" /></translation>
 <translation id="685782768769951078">{NUM_DIGITS,plural, =1{One digit remaining}other{# digits remaining}}</translation>
@@ -695,6 +709,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="7029814467594812963">Exit session</translation>
 <translation id="703425375924687388"><ph name="QUERY_NAME" />, Google Assistant</translation>
 <translation id="7042322267639375032">Collapse status area</translation>
+<translation id="7055910611768509537">Stylus has not been used in over a week</translation>
 <translation id="7066646422045619941">This network is disabled by your administrator.</translation>
 <translation id="7067196344162293536">Auto rotate</translation>
 <translation id="7068360136237591149">Open files</translation>
@@ -720,6 +735,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="7346909386216857016">OK, got it</translation>
 <translation id="7348093485538360975">On-Screen Keyboard</translation>
 <translation id="735745346212279324">VPN disconnected</translation>
+<translation id="7360036564632145207">Changing your data access protection for peripherals setting can optimise performance</translation>
 <translation id="7371404428569700291">Record window</translation>
 <translation id="7377169924702866686">Caps Lock is on.</translation>
 <translation id="7378203170292176219">Drag to select an area to record</translation>
@@ -728,11 +744,13 @@ Here are some things that you can try to get started.</translation>
 <translation id="7392563512730092880">You can always perform setup later from Settings.</translation>
 <translation id="7398254312354928459">Switched network connection</translation>
 <translation id="7405710164030118432">To unlock the device, enter your Family Link parent access code</translation>
+<translation id="7406608787870898861">Finish setting up your mobile network</translation>
 <translation id="741244894080940828">conversion</translation>
 <translation id="7413851974711031813">Press escape to close</translation>
 <translation id="742594950370306541">Camera is in use.</translation>
 <translation id="742608627846767349">Good morning,</translation>
 <translation id="743058460480092004">Camera and microphone are in use.</translation>
+<translation id="7434543979546293336">Marked as a key idea</translation>
 <translation id="7452560014878697800">An application is using your camera</translation>
 <translation id="7456049842111127849">Capture mode, default is <ph name="SOURCE" /> <ph name="TYPE" />.</translation>
 <translation id="7461924472993315131">Pin</translation>
@@ -776,6 +794,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="7780159184141939021">Rotate screen</translation>
 <translation id="7796353162336583443">Tap the stylus button on the shelf to take a note, screenshot, use the Google Assistant, laser pointer or magnifying glass.</translation>
 <translation id="7798302898096527229">Press Search or Shift to cancel.</translation>
+<translation id="7807966291075028781">Peripheral not supported in Guest mode for security reasons</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> and <ph name="MINUTE" /></translation>
 <translation id="7829386189513694949">Strong signal</translation>
 <translation id="7837740436429729974">Time's up</translation>
@@ -844,6 +863,7 @@ Here are some things that you can try to get started.</translation>
 <translation id="8345019317483336363"><ph name="WINDOW_TITLE" /> window selected</translation>
 <translation id="8351131234907093545">Create note</translation>
 <translation id="8371779926711439835">Forward by letter</translation>
+<translation id="8371991222807690464">Peripheral performance may be limited in Guest mode</translation>
 <translation id="8375916635258623388">This <ph name="DEVICE_NAME" /> and your phone will connect automatically</translation>
 <translation id="8380784334203145311">Good night,</translation>
 <translation id="8388750414311082622">Last desk can't be removed.</translation>
@@ -946,6 +966,8 @@ Here are some things that you can try to get started.</translation>
 <translation id="9091626656156419976">Removed display <ph name="DISPLAY_NAME" /></translation>
 <translation id="9098969848082897657">Silence phone</translation>
 <translation id="9099154003160514616">Lacros update available</translation>
+<translation id="9105450214093926548">Signing in a second user is not supported while the Lacros browser is running. Please use a second browser profile in Lacros instead, or close Lacros and try again.</translation>
+<translation id="9133335900048457298">Can't record protected content</translation>
 <translation id="9151726767154816831">Restart and powerwash to update</translation>
 <translation id="9166331175924255663">Toggle Nearby Share high visibility.</translation>
 <translation id="9168436347345867845">Do it later</translation>

@@ -65,7 +65,8 @@ export class Resolution {
    * @return {!Resolution}
    */
   static fromString(s) {
-    return new Resolution(...s.split('x').map(Number));
+    const [width, height] = s.split('x').map((x) => Number(x));
+    return new Resolution(width, height);
   }
 
   /**
@@ -226,12 +227,6 @@ export const ErrorLevel = {
 };
 
 /**
- * Callback for reporting error in testing run.
- * @typedef {function(!ErrorInfo)}
- */
-export let TestingErrorCallback;
-
-/**
  * Throws when a method is not implemented.
  */
 export class NotImplementedError extends Error {
@@ -246,10 +241,15 @@ export class NotImplementedError extends Error {
 }
 
 /**
- * The possible scheme to load untrusted context.
- * @enum {string}
+ * Throws when an action is canceled.
  */
-export const UntrustedOrigin = {
-  CHROME_EXTENSION: 'chrome-extension://hfhhnacclhffhdffklopdkcgdhifgngh',
-  CHROME_UNTRUSTED: 'chrome-untrusted://camera-app',
-};
+export class CanceledError extends Error {
+  /**
+   * @param {string=} message
+   * @public
+   */
+  constructor(message = 'The action is canceled') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}

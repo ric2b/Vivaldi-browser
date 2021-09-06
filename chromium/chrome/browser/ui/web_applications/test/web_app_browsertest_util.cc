@@ -325,6 +325,11 @@ void CloseAndWait(Browser* browser) {
   waiter.Wait();
 }
 
+void WaitForBrowserToBeClosed(Browser* browser) {
+  BrowserRemovedWaiter waiter(browser);
+  waiter.Wait();
+}
+
 bool IsBrowserOpen(const Browser* test_browser) {
   for (Browser* browser : *BrowserList::GetInstance()) {
     if (browser == test_browser)
@@ -339,6 +344,16 @@ void UninstallWebApp(Profile* profile, const AppId& app_id) {
   DCHECK(provider->install_finalizer().CanUserUninstallExternalApp(app_id));
   provider->install_finalizer().UninstallExternalAppByUser(app_id,
                                                            base::DoNothing());
+}
+
+void UninstallWebAppWithCallback(Profile* profile,
+                                 const AppId& app_id,
+                                 UninstallWebAppCallback callback) {
+  auto* provider = WebAppProviderBase::GetProviderBase(profile);
+  DCHECK(provider);
+  DCHECK(provider->install_finalizer().CanUserUninstallExternalApp(app_id));
+  provider->install_finalizer().UninstallExternalAppByUser(app_id,
+                                                           std::move(callback));
 }
 
 SkColor ReadAppIconPixel(Profile* profile,

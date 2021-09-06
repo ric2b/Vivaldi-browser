@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -220,83 +221,99 @@ void MetricsReporter::OpenInNewTabAction(int index_in_stream) {
   RecordInteraction();
 }
 
-void MetricsReporter::OpenInNewIncognitoTabAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedOpenInNewIncognitoTab);
-  base::RecordAction(base::UserMetricsAction(
-      "ContentSuggestions.Feed.CardAction.OpenInNewIncognitoTab"));
-  RecordInteraction();
-}
-
-void MetricsReporter::SendFeedbackAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedSendFeedback);
-  base::RecordAction(base::UserMetricsAction(
-      "ContentSuggestions.Feed.CardAction.SendFeedback"));
-  RecordInteraction();
-}
-
-void MetricsReporter::DownloadAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedDownload);
-  base::RecordAction(
-      base::UserMetricsAction("ContentSuggestions.Feed.CardAction.Download"));
-  RecordInteraction();
-}
-
-void MetricsReporter::LearnMoreAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedLearnMore);
-  base::RecordAction(
-      base::UserMetricsAction("ContentSuggestions.Feed.CardAction.LearnMore"));
-  RecordInteraction();
-}
-
-void MetricsReporter::TurnOnAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedTurnOn);
-}
-
-void MetricsReporter::TurnOffAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedTurnOff);
-}
-
-void MetricsReporter::NavigationStarted() {
-  // TODO(harringtond): Use this or remove it.
-}
-
 void MetricsReporter::PageLoaded() {
   ReportCardOpenEndIfNeeded(true);
 }
 
-void MetricsReporter::RemoveAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedHideStory);
-  base::RecordAction(
-      base::UserMetricsAction("ContentSuggestions.Feed.CardAction.HideStory"));
-  RecordInteraction();
-}
+void MetricsReporter::OtherUserAction(FeedUserActionType action_type) {
+  ReportUserActionHistogram(action_type);
+  switch (action_type) {
+    case FeedUserActionType::kTappedOnCard:
+      DCHECK(false) << "This should be reported with OpenAction() instead";
+      break;
+    case FeedUserActionType::kShownCard_DEPRECATED:
+      DCHECK(false) << "deprecated";
+      break;
+    case FeedUserActionType::kTappedOpenInNewTab:
+      DCHECK(false)
+          << "This should be reported with OpenInNewTabAction() instead";
+      break;
+    case FeedUserActionType::kOpenedFeedSurface:
+      DCHECK(false) << "This should be reported with SurfaceOpened() instead";
+      break;
+    case FeedUserActionType::kTappedSendFeedback:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.SendFeedback"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kTappedLearnMore:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.LearnMore"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kTappedHideStory:
+      // TODO(crbug.com/1111101): This action is not visible to client code, so
+      // not yet used.
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.HideStory"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kTappedNotInterestedIn:
+      // TODO(crbug.com/1111101): This action is not visible to client code, so
+      // not yet used.
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.NotInterestedIn"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kTappedManageInterests:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.ManageInterests"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kTappedDownload:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.Download"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kOpenedContextMenu:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.ContextMenu"));
+      break;
+    case FeedUserActionType::kTappedOpenInNewIncognitoTab:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.OpenInNewIncognitoTab"));
+      RecordInteraction();
+      break;
 
-void MetricsReporter::NotInterestedInAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedNotInterestedIn);
-  base::RecordAction(base::UserMetricsAction(
-      "ContentSuggestions.Feed.CardAction.NotInterestedIn"));
-  RecordInteraction();
-}
-
-void MetricsReporter::ManageInterestsAction() {
-  ReportUserActionHistogram(FeedUserActionType::kTappedManageInterests);
-  base::RecordAction(base::UserMetricsAction(
-      "ContentSuggestions.Feed.CardAction.ManageInterests"));
-  RecordInteraction();
-}
-
-void MetricsReporter::ContextMenuOpened() {
-  ReportUserActionHistogram(FeedUserActionType::kOpenedContextMenu);
-  base::RecordAction(base::UserMetricsAction(
-      "ContentSuggestions.Feed.CardAction.ContextMenu"));
-}
-
-void MetricsReporter::EphemeralStreamChange() {
-  ReportUserActionHistogram(FeedUserActionType::kEphemeralChange);
-}
-
-void MetricsReporter::EphemeralStreamChangeRejected() {
-  ReportUserActionHistogram(FeedUserActionType::kEphemeralChangeRejected);
+    case FeedUserActionType::kTappedManageActivity:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.ManageActivity"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kTappedManageReactions:
+      base::RecordAction(base::UserMetricsAction(
+          "ContentSuggestions.Feed.CardAction.ManageReactions"));
+      RecordInteraction();
+      break;
+    case FeedUserActionType::kEphemeralChange:
+    case FeedUserActionType::kEphemeralChangeRejected:
+    case FeedUserActionType::kTappedTurnOn:
+    case FeedUserActionType::kTappedTurnOff:
+    case FeedUserActionType::kAddedToReadLater:
+    case FeedUserActionType::kClosedContextMenu:
+    case FeedUserActionType::kEphemeralChangeCommited:
+    case FeedUserActionType::kOpenedDialog:
+    case FeedUserActionType::kClosedDialog:
+    case FeedUserActionType::kShowSnackbar:
+    case FeedUserActionType::kOpenedNativeActionSheet:
+    case FeedUserActionType::kOpenedNativeContextMenu:
+    case FeedUserActionType::kClosedNativeContextMenu:
+    case FeedUserActionType::kOpenedNativePulldownMenu:
+    case FeedUserActionType::kClosedNativePulldownMenu:
+      // Nothing additional for these actions. Note that some of these are iOS
+      // only.
+      break;
+  }
 }
 
 void MetricsReporter::SurfaceOpened(SurfaceId surface_id) {
@@ -407,6 +424,21 @@ void MetricsReporter::NetworkRequestComplete(NetworkRequestType type,
     case NetworkRequestType::kUploadActions:
       base::UmaHistogramSparse(
           "ContentSuggestions.Feed.Network.ResponseStatus.UploadActions",
+          http_status_code);
+      return;
+    case NetworkRequestType::kNextPage:
+      base::UmaHistogramSparse(
+          "ContentSuggestions.Feed.Network.ResponseStatus.NextPage",
+          http_status_code);
+      return;
+    case NetworkRequestType::kListFollowedWebFeeds:
+      base::UmaHistogramSparse(
+          "ContentSuggestions.Feed.Network.ResponseStatus.ListFollowedWebFeeds",
+          http_status_code);
+      return;
+    case NetworkRequestType::kUnfollowWebFeed:
+      base::UmaHistogramSparse(
+          "ContentSuggestions.Feed.Network.ResponseStatus.UnfollowWebFeed",
           http_status_code);
       return;
   }

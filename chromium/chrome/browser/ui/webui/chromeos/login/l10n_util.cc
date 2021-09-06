@@ -29,9 +29,9 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
@@ -463,7 +463,7 @@ std::unique_ptr<base::ListValue> GetUILanguageList(
   input_method::InputMethodDescriptors descriptors =
       manager->GetXkbIMEAsInputMethodDescriptor();
   std::unique_ptr<base::ListValue> languages_list(GetLanguageList(
-      descriptors, l10n_util::GetAvailableLocales(),
+      descriptors, l10n_util::GetLocalesWithStrings(),
       most_relevant_language_codes
           ? *most_relevant_language_codes
           : StartupCustomizationDocument::GetInstance()->configured_locales(),

@@ -13,10 +13,13 @@
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/translate/content/browser/content_translate_driver.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/native_web_keyboard_event.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -73,6 +76,7 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI {
 
   void NotifyTabChange(content::WebContents* web_contents);
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateAPI);
 };
 
@@ -81,6 +85,8 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI {
 // WebContents.
 class VivaldiPrivateTabObserver
     : public content::WebContentsObserver,
+      public translate::ContentTranslateDriver::TranslationObserver,
+      public translate::TranslateDriver::LanguageDetectionObserver,
       public zoom::ZoomObserver,
       public content::WebContentsUserData<VivaldiPrivateTabObserver> {
  public:
@@ -96,7 +102,7 @@ class VivaldiPrivateTabObserver
 
   // content::WebContentsObserver implementation.
   void DidChangeThemeColor() override;
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
+  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
   void WebContentsDestroyed() override;
@@ -110,6 +116,17 @@ class VivaldiPrivateTabObserver
                          content::RenderFrameHost* render_frame_host) override;
   void NavigationEntryCommitted(
       const content::LoadCommittedDetails& load_details) override;
+
+  // translate::ContentTranslateDriver::Observer implementation
+  void OnPageTranslated(const std::string& original_lang,
+    const std::string& translated_lang,
+    translate::TranslateErrors::Type error_type) override;
+  void OnIsPageTranslatedChanged(content::WebContents* source) override;
+
+  // translate::TranslateDriver::LanguageDetectionObserver
+  void OnLanguageDetermined(
+    const translate::LanguageDetectionDetails& details) override;
+
 
   void SetShowImages(bool show_images);
   void SetLoadFromCacheOnly(bool load_from_cache_only);
@@ -369,6 +386,38 @@ class TabsPrivateHasBeforeUnloadOrUnloadFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateHasBeforeUnloadOrUnloadFunction);
+};
+
+class TabsPrivateTranslatePageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.translatePage",
+                             TABSPRIVATE_TRANSLATEPAGE)
+
+  TabsPrivateTranslatePageFunction() = default;
+
+ protected:
+  ~TabsPrivateTranslatePageFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateTranslatePageFunction);
+};
+
+class TabsPrivateRevertTranslatePageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.revertTranslatePage",
+                             TABSPRIVATE_REVERTTRANSLATEPAGE)
+
+  TabsPrivateRevertTranslatePageFunction() = default;
+
+ protected:
+  ~TabsPrivateRevertTranslatePageFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateRevertTranslatePageFunction);
 };
 
 }  // namespace extensions

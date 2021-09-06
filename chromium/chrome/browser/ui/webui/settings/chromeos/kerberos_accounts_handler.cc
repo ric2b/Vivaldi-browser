@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
@@ -20,7 +21,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -48,7 +48,7 @@ void AddKerberosTitleStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_KERBEROS_ACCOUNTS_SUBMENU_LABEL},
       {"kerberosAccountsPageTitle", IDS_SETTINGS_KERBEROS_ACCOUNTS_PAGE_TITLE},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 }
 
 // Adds flags related to Kerberos settings visibility and its corresponding
@@ -115,7 +115,7 @@ void AddKerberosAddAccountDialogStrings(content::WebUIDataSource* html_source) {
       {"addKerberosAccount", IDS_SETTINGS_ADD_KERBEROS_ACCOUNT},
       {"refreshKerberosAccount", IDS_SETTINGS_REFRESH_KERBEROS_ACCOUNT},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   PrefService* local_state = g_browser_process->local_state();
 
@@ -154,7 +154,7 @@ void AddKerberosAccountsPageStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_KERBEROS_ACCOUNTS_ACCOUNT_REFRESHED_TIP},
       {"kerberosAccountsSignedIn", IDS_SETTINGS_KERBEROS_ACCOUNTS_SIGNED_IN},
   };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+  html_source->AddLocalizedStrings(kLocalizedStrings);
 
   PrefService* local_state = g_browser_process->local_state();
 

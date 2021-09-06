@@ -64,14 +64,17 @@ void WindowShapeUpdater::UpdateWindowShapeFromWindowMask(aura::Window* window) {
   // compositor from filling the entire screen in AppendQuadsToFillScreen.
   // Otherwise, transparent should be false.
   native_widget_aura_->UpdateWindowTransparency();
-  base::Optional<SkPath> path =
-      tree_host_->GetWindowMaskForWindowShape(window->bounds().size());
-  if (path.has_value()) {
-    // SetAlphaShape to the layer of |content_window_|
-    window->layer()->SetAlphaShape(ConvertToShapeRects(path.value()));
-  } else {
+  SkPath path = tree_host_->GetWindowMaskForWindowShapeInPixels();
+  if (path.isEmpty()) {
     window->layer()->SetAlphaShape(nullptr);
+    return;
   }
+  SkPath path_in_dips;
+  path.transform(SkMatrix(tree_host_->GetInverseRootTransform().matrix()),
+                 &path_in_dips);
+
+  // SetAlphaShape to the layer of |content_window_|
+  window->layer()->SetAlphaShape(ConvertToShapeRects(path_in_dips));
 }
 
 }  // namespace views

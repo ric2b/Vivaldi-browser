@@ -119,7 +119,7 @@ void ScriptExecutor::Run(const UserData* user_data,
 
   delegate_->GetService()->GetActions(
       script_path_, delegate_->GetScriptURL(),
-      MergedTriggerContext(
+      TriggerContext(
           {delegate_->GetTriggerContext(), additional_context_.get()}),
       last_global_payload_, last_script_payload_,
       base::BindOnce(&ScriptExecutor::OnGetActions,
@@ -229,6 +229,7 @@ bool ScriptExecutor::ShouldInterruptOnPause(const ActionProto& proto) {
     case ActionProto::ActionInfoCase::kWaitForElementToBecomeStable:
     case ActionProto::ActionInfoCase::kCheckElementIsOnTop:
     case ActionProto::ActionInfoCase::kReleaseElements:
+    case ActionProto::ActionInfoCase::kDispatchJsEvent:
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET:
       return false;
   }
@@ -291,7 +292,20 @@ void ScriptExecutor::ShortWaitForElement(
     base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback) {
   current_action_data_.wait_for_dom = std::make_unique<WaitForDomOperation>(
       this, delegate_, delegate_->GetSettings().short_wait_for_element_deadline,
-      /* allow_interrupt= */ false,
+      /* allow_interrupt= */ false, /* observer= */ nullptr,
+      base::BindRepeating(&ScriptExecutor::CheckElementMatches,
+                          weak_ptr_factory_.GetWeakPtr(), selector),
+      base::BindOnce(&ScriptExecutor::OnShortWaitForElement,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  current_action_data_.wait_for_dom->Run();
+}
+
+void ScriptExecutor::ShortWaitForElementWithSlowWarning(
+    const Selector& selector,
+    base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback) {
+  current_action_data_.wait_for_dom = std::make_unique<WaitForDomOperation>(
+      this, delegate_, delegate_->GetSettings().short_wait_for_element_deadline,
+      /* allow_interrupt= */ false, /* observer= */ nullptr,
       base::BindRepeating(&ScriptExecutor::CheckElementMatches,
                           weak_ptr_factory_.GetWeakPtr(), selector),
       base::BindOnce(&ScriptExecutor::OnShortWaitForElement,
@@ -305,12 +319,28 @@ void ScriptExecutor::ShortWaitForElement(
 void ScriptExecutor::WaitForDom(
     base::TimeDelta max_wait_time,
     bool allow_interrupt,
+    WaitForDomObserver* observer,
     base::RepeatingCallback<void(BatchElementChecker*,
                                  base::OnceCallback<void(const ClientStatus&)>)>
         check_elements,
     base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback) {
   current_action_data_.wait_for_dom = std::make_unique<WaitForDomOperation>(
-      this, delegate_, max_wait_time, allow_interrupt, check_elements,
+      this, delegate_, max_wait_time, allow_interrupt, observer, check_elements,
+      base::BindOnce(&ScriptExecutor::OnWaitForElementVisibleWithInterrupts,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  current_action_data_.wait_for_dom->Run();
+}
+
+void ScriptExecutor::WaitForDomWithSlowWarning(
+    base::TimeDelta max_wait_time,
+    bool allow_interrupt,
+    WaitForDomObserver* observer,
+    base::RepeatingCallback<void(BatchElementChecker*,
+                                 base::OnceCallback<void(const ClientStatus&)>)>
+        check_elements,
+    base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback) {
+  current_action_data_.wait_for_dom = std::make_unique<WaitForDomOperation>(
+      this, delegate_, max_wait_time, allow_interrupt, observer, check_elements,
       base::BindOnce(&ScriptExecutor::OnWaitForElementVisibleWithInterrupts,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   current_action_data_.wait_for_dom->SetTimeoutWarningCallback(
@@ -337,7 +367,6 @@ std::string ScriptExecutor::GetBubbleMessage() {
 
 void ScriptExecutor::FindElement(const Selector& selector,
                                  ElementFinder::Callback callback) const {
-  DCHECK(!selector.empty());
   VLOG(3) << __func__ << " " << selector;
   delegate_->GetWebController()->FindElement(selector, /* strict_mode= */ true,
                                              std::move(callback));
@@ -345,7 +374,6 @@ void ScriptExecutor::FindElement(const Selector& selector,
 
 void ScriptExecutor::FindAllElements(const Selector& selector,
                                      ElementFinder::Callback callback) const {
-  DCHECK(!selector.empty());
   VLOG(3) << __func__ << " " << selector;
   delegate_->GetWebController()->FindAllElements(selector, std::move(callback));
 }
@@ -513,7 +541,7 @@ void ScriptExecutor::SetBrowseDomainsAllowlist(
 
 void ScriptExecutor::OnChosen(UserAction::Callback callback,
                               std::unique_ptr<TriggerContext> context) {
-  if (context->is_direct_action()) {
+  if (context->GetDirectAction()) {
     current_action_data_.direct_action = true;
   }
   std::move(callback).Run(std::move(context));
@@ -559,12 +587,13 @@ void ScriptExecutor::SelectOption(
 void ScriptExecutor::ScrollToElementPosition(
     const Selector& selector,
     const TopPadding& top_padding,
+    std::unique_ptr<ElementFinder::Result> container,
     const ElementFinder::Result& element,
     base::OnceCallback<void(const ClientStatus&)> callback) {
   last_focused_element_selector_ = selector;
   last_focused_element_top_padding_ = top_padding;
-  delegate_->GetWebController()->ScrollToElementPosition(element, top_padding,
-                                                         std::move(callback));
+  delegate_->GetWebController()->ScrollToElementPosition(
+      std::move(container), element, top_padding, std::move(callback));
 }
 
 void ScriptExecutor::SetTouchableElementArea(
@@ -903,6 +932,11 @@ bool ScriptExecutor::MaybeShowSlowWarning(const std::string& message,
   return true;
 }
 
+void ScriptExecutor::DispatchJsEvent(
+    base::OnceCallback<void(const ClientStatus&)> callback) const {
+  delegate_->GetWebController()->DispatchJsEvent(std::move(callback));
+}
+
 base::WeakPtr<ActionDelegate> ScriptExecutor::GetWeakPtr() const {
   return weak_ptr_factory_.GetWeakPtr();
 }
@@ -1060,7 +1094,7 @@ void ScriptExecutor::GetNextActions() {
   VLOG(2) << "Client execution time: "
           << roundtrip_timing_stats_.client_time_ms();
   delegate_->GetService()->GetNextActions(
-      MergedTriggerContext(
+      TriggerContext(
           {delegate_->GetTriggerContext(), additional_context_.get()}),
       last_global_payload_, last_script_payload_, processed_actions_,
       roundtrip_timing_stats_,
@@ -1155,6 +1189,7 @@ ScriptExecutor::WaitForDomOperation::WaitForDomOperation(
     ScriptExecutorDelegate* delegate,
     base::TimeDelta max_wait_time,
     bool allow_interrupt,
+    WaitForDomObserver* observer,
     base::RepeatingCallback<void(BatchElementChecker*,
                                  base::OnceCallback<void(const ClientStatus&)>)>
         check_elements,
@@ -1163,6 +1198,7 @@ ScriptExecutor::WaitForDomOperation::WaitForDomOperation(
       delegate_(delegate),
       max_wait_time_(max_wait_time),
       allow_interrupt_(allow_interrupt),
+      observer_(observer),
       check_elements_(std::move(check_elements)),
       callback_(std::move(callback)),
       timeout_warning_delay_(
@@ -1340,10 +1376,15 @@ void ScriptExecutor::WaitForDomOperation::OnAllChecksDone(
 void ScriptExecutor::WaitForDomOperation::RunInterrupt(
     const std::string& path) {
   batch_element_checker_.reset();
+  if (observer_)
+    observer_->OnInterruptStarted();
+
   SavePreInterruptState();
   ran_interrupts_.insert(path);
   interrupt_executor_ = std::make_unique<ScriptExecutor>(
-      path, TriggerContext::Merge({main_script_->additional_context_.get()}),
+      path,
+      std::make_unique<TriggerContext>(std::vector<const TriggerContext*>{
+          main_script_->additional_context_.get()}),
       main_script_->last_global_payload_, main_script_->initial_script_payload_,
       /* listener= */ this, main_script_->scripts_state_, &no_interrupts_,
       delegate_);
@@ -1363,6 +1404,9 @@ void ScriptExecutor::WaitForDomOperation::OnInterruptDone(
     RunCallbackWithResult(ClientStatus(INTERRUPT_FAILED), &result);
     return;
   }
+  if (observer_)
+    observer_->OnInterruptFinished();
+
   RestoreStatusMessage();
   RestorePreInterruptScroll();
 
@@ -1425,7 +1469,7 @@ void ScriptExecutor::WaitForDomOperation::RestorePreInterruptScroll() {
     actions->emplace_back(base::BindOnce(
         &ActionDelegate::ScrollToElementPosition, main_script_->GetWeakPtr(),
         main_script_->last_focused_element_selector_,
-        main_script_->last_focused_element_top_padding_));
+        main_script_->last_focused_element_top_padding_, nullptr));
     action_delegate_util::FindElementAndPerform(
         main_script_, main_script_->last_focused_element_selector_,
         base::BindOnce(&action_delegate_util::PerformAll, std::move(actions)),

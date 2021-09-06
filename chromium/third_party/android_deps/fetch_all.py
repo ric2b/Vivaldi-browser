@@ -49,14 +49,6 @@ _BUILD_GRADLE = 'build.gradle'
 # Location of the android_deps libs directory relative to custom 'android_deps' directory.
 _LIBS_DIR = 'libs'
 
-_JAVA_HOME = os.path.join(_CHROMIUM_SRC, 'third_party', 'jdk', 'current')
-_JETIFY_PATH = os.path.join(_CHROMIUM_SRC, 'third_party',
-                            'jetifier_standalone', 'bin',
-                            'jetifier-standalone')
-_JETIFY_CONFIG = os.path.join(_CHROMIUM_SRC, 'third_party',
-                              'jetifier_standalone', 'config',
-                              'ignore_R.config')
-
 _GN_PATH = os.path.join(_CHROMIUM_SRC, 'third_party', 'depot_tools', 'gn')
 
 _GRADLEW = os.path.join(_CHROMIUM_SRC, 'third_party', 'gradle_wrapper',
@@ -66,8 +58,9 @@ _GRADLEW = os.path.join(_CHROMIUM_SRC, 'third_party', 'gradle_wrapper',
 # Relative to _PRIMARY_ANDROID_DEPS_DIR.
 _PRIMARY_ANDROID_DEPS_FILES = [
     'buildSrc',
-    'vulnerability_supressions.xml',
     'licenses',
+    'settings.gradle.template',
+    'vulnerability_supressions.xml',
 ]
 
 # Git-controlled files needed by and updated by this tool.
@@ -76,6 +69,7 @@ _CUSTOM_ANDROID_DEPS_FILES = [
     os.path.join('..', '..', 'DEPS'),
     _BUILD_GN,
     _ADDITIONAL_README_PATHS,
+    'subprojects.txt',
 ]
 
 # If this file exists in an aar file then it is appended to LICENSE
@@ -266,18 +260,62 @@ _RE_CIPD_CREATE = re.compile('cipd create --pkg-def cipd.yaml -tag (\S*)')
 _RE_CIPD_PACKAGE = re.compile('package: (\S*)')
 
 
+def _ParseSubprojects(subproject_path):
+    """Parses listing of subproject build.gradle files. Returns list of paths."""
+    if not os.path.exists(subproject_path):
+        return None
+
+    subprojects = []
+    for subproject in open(subproject_path):
+        subproject = subproject.strip()
+        if subproject and not subproject.startswith('#'):
+            subprojects.append(subproject)
+    return subprojects
+
+
+def _GenerateSettingsGradle(subproject_dirs, settings_template_path,
+                            settings_out_path):
+    """Generates settings file by replacing "{{subproject_dirs}}" string in template.
+
+    Args:
+      subproject_dirs: List of subproject directories to substitute into template.
+      settings_template_path: Path of template file to substitute into.
+      settings_out_path: Path of output settings.gradle file.
+    """
+    with open(settings_template_path) as f:
+        template_content = f.read()
+
+    subproject_dirs_str = ''
+    if subproject_dirs:
+        subproject_dirs_str = '\'' + '\',\''.join(subproject_dirs) + '\''
+
+    template_content = template_content.replace('{{subproject_dirs}}',
+                                                subproject_dirs_str)
+    with open(settings_out_path, 'w') as f:
+        f.write(template_content)
+
+
+def _BuildGradleCmd(build_android_deps_dir, task):
+    cmd = [
+        _GRADLEW, '-b',
+        os.path.join(build_android_deps_dir, _BUILD_GRADLE), '--stacktrace',
+        task
+    ]
+    settings_gradle_path = os.path.join(build_android_deps_dir,
+                                        'settings.gradle')
+    if os.path.exists(settings_gradle_path):
+        cmd += ['-c', os.path.abspath(settings_gradle_path)]
+    return cmd
+
+
 def _CheckVulnerabilities(build_android_deps_dir, report_dst):
     logging.warning('Running Gradle dependencyCheckAnalyze. This may take a '
                     'few minutes the first time.')
 
     # Separate command from main gradle command so that we can provide specific
     # diagnostics in case of failure of this step.
-    gradle_cmd = [
-        _GRADLEW,
-        '-b',
-        os.path.join(build_android_deps_dir, _BUILD_GRADLE),
-        'dependencyCheckAnalyze',
-    ]
+    gradle_cmd = _BuildGradleCmd(build_android_deps_dir,
+                                 'dependencyCheckAnalyze')
 
     report_src = os.path.join(build_android_deps_dir, 'build', 'reports')
     if os.path.exists(report_dst):
@@ -414,42 +452,6 @@ def _CreateAarInfos(aar_files):
             raise Exception('Command Failed: {}\n'.format(' '.join(cmd)))
 
 
-def _JetifyAll(files, android_deps):
-    env = os.environ.copy()
-    env['JAVA_HOME'] = _JAVA_HOME
-    env['ANDROID_DEPS'] = android_deps
-
-    # Don't jetify support lib or androidx.
-    EXCLUDE = ('android_arch_', 'androidx_', 'com_android_support_',
-               'errorprone', 'jetifier')
-
-    jobs = []
-    for path in files:
-        if any(x in path for x in EXCLUDE):
-            continue
-        cmd = [_JETIFY_PATH, '-c', _JETIFY_CONFIG, '-i', path, '-o', path]
-        # Hide output: "You don't need to run Jetifier."
-        proc = subprocess.Popen(cmd,
-                                env=env,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT,
-                                encoding='ascii')
-        jobs.append((cmd, proc))
-
-    num_required = 0
-    for cmd, proc in jobs:
-        output = proc.communicate()[0]
-        if proc.returncode:
-            raise Exception(
-                'Jetify failed for command: {}\nOutput:\n{}'.format(
-                    ' '.join(cmd), output))
-        if "You don't need to run Jetifier" not in output:
-            logging.info('Needed jetify: %s', cmd[-1])
-            num_required += 1
-    logging.info('Jetify was needed for %d out of %d files', num_required,
-                 len(jobs))
-
-
 def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -500,6 +502,23 @@ def main():
              _CUSTOM_ANDROID_DEPS_FILES,
              src_path_must_exist=is_primary_android_deps)
 
+        subprojects = _ParseSubprojects(
+            os.path.join(args.android_deps_dir, 'subprojects.txt'))
+        if subprojects:
+            subproject_dirs = []
+            for (index, subproject) in enumerate(subprojects):
+                subproject_dir = 'subproject{}'.format(index)
+                Copy(args.android_deps_dir, [subproject],
+                     build_android_deps_dir,
+                     [os.path.join(subproject_dir, 'build.gradle')])
+                subproject_dirs.append(subproject_dir)
+
+            _GenerateSettingsGradle(
+                subproject_dirs,
+                os.path.join(args.android_deps_dir,
+                             'settings.gradle.template'),
+                os.path.join(build_android_deps_dir, 'settings.gradle'))
+
         if not args.ignore_vulnerabilities:
             report_dst = os.path.join(args.android_deps_dir,
                                       'vulnerability_reports')
@@ -510,13 +529,7 @@ def main():
         # This gradle command generates the new DEPS and BUILD.gn files, it can
         # also handle special cases.
         # Edit BuildConfigGenerator.groovy#addSpecialTreatment for such cases.
-        gradle_cmd = [
-            _GRADLEW,
-            '-b',
-            os.path.join(build_android_deps_dir, _BUILD_GRADLE),
-            'setupRepository',
-            '--stacktrace',
-        ]
+        gradle_cmd = _BuildGradleCmd(build_android_deps_dir, 'setupRepository')
         if debug:
             gradle_cmd.append('--debug')
         if args.ignore_licenses:
@@ -535,14 +548,7 @@ def main():
         ]
         RunCommand(gn_args, print_stdout=debug, cwd=_CHROMIUM_SRC)
 
-        logging.info('# Jetify all libraries.')
         aar_files = FindInDirectory(build_libs_dir, '*.aar')
-        jar_files = FindInDirectory(build_libs_dir, '*.jar')
-        jetify_android_deps = build_libs_dir
-        if not is_primary_android_deps:
-            jetify_android_deps += ':' + os.path.join(
-                _CHROMIUM_SRC, _PRIMARY_ANDROID_DEPS_DIR, _LIBS_DIR)
-        _JetifyAll(aar_files + jar_files, jetify_android_deps)
 
         logging.info('# Generate Android .aar info files.')
         _CreateAarInfos(aar_files)

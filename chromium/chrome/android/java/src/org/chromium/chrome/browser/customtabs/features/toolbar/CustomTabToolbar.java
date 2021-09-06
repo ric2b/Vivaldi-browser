@@ -9,6 +9,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -43,10 +44,9 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.LocationBar;
@@ -61,10 +61,10 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.LocationBarModel;
-import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.top.ToolbarLayout;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -76,6 +76,7 @@ import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 import org.chromium.ui.util.ColorUtils;
@@ -250,11 +251,12 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
      * @param actionModeCallback Callback to handle changes in contextual action Modes.
      * @return The LocationBar implementation for this CustomTabToolbar.
      */
-    public LocationBar createLocationBar(
-            LocationBarModel locationBarModel, ActionMode.Callback actionModeCallback) {
+    public LocationBar createLocationBar(LocationBarModel locationBarModel,
+            ActionMode.Callback actionModeCallback,
+            Supplier<ModalDialogManager> modalDialogManagerSupplier) {
         mLocationBarModel = locationBarModel;
-        mLocationBar =
-                new CustomTabLocationBar(locationBarModel, actionModeCallback, (UrlBar) mUrlBar);
+        mLocationBar = new CustomTabLocationBar(
+                locationBarModel, modalDialogManagerSupplier, actionModeCallback, (UrlBar) mUrlBar);
         return mLocationBar;
     }
 
@@ -654,12 +656,15 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     private class CustomTabLocationBar
             implements LocationBar, UrlBar.UrlBarDelegate, LocationBarDataProvider.Observer {
         private LocationBarDataProvider mLocationBarDataProvider;
+        private Supplier<ModalDialogManager> mModalDialogManagerSupplier;
         private UrlBarCoordinator mUrlCoordinator;
 
         public CustomTabLocationBar(LocationBarDataProvider locationBarDataProvider,
+                Supplier<ModalDialogManager> modalDialogManagerSupplier,
                 ActionMode.Callback actionModeCallback, UrlBar urlBar) {
             mLocationBarDataProvider = locationBarDataProvider;
             mLocationBarDataProvider.addObserver(this);
+            mModalDialogManagerSupplier = modalDialogManagerSupplier;
             mUrlCoordinator =
                     new UrlBarCoordinator(urlBar, /*windowDelegate=*/null, actionModeCallback,
                             /*focusChangeCallback=*/
@@ -676,16 +681,16 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                 if (currentTab == null) return;
                 WebContents webContents = currentTab.getWebContents();
                 if (webContents == null) return;
-                ChromeActivity activity =
-                        (ChromeActivity) currentTab.getWindowAndroid().getActivity().get();
+                Activity activity = currentTab.getWindowAndroid().getActivity().get();
                 if (activity == null) return;
                 PageInfoController.show(activity, webContents, getContentPublisher(),
                         PageInfoController.OpenedFromSource.TOOLBAR,
                         new ChromePageInfoControllerDelegate(activity, webContents,
-                                activity::getModalDialogManager,
+                                mModalDialogManagerSupplier,
                                 /*offlinePageLoadUrlDelegate=*/
                                 new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(currentTab)),
-                        new ChromePermissionParamsListBuilderDelegate());
+                        new ChromePermissionParamsListBuilderDelegate(),
+                        PageInfoController.NO_HIGHLIGHTED_PERMISSION);
             });
         }
 
@@ -742,7 +747,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             if (progressBar == null) return;
             final Resources resources = getResources();
             final int backgroundColor = getBackground().getColor();
-            if (ToolbarColors.isUsingDefaultToolbarColor(
+            if (ThemeUtils.isUsingDefaultToolbarColor(
                         resources, /*isIncognito=*/false, backgroundColor)) {
                 progressBar.setBackgroundColor(
                         ApiCompatibilityUtils.getColor(resources, R.color.progress_bar_background));
@@ -817,7 +822,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             // Don't show anything for Chrome URLs and "about:blank".
             // If we have taken a pre-initialized WebContents, then the starting URL
             // is "about:blank". We should not display it.
-            if (NativePageFactory.isNativePageUrl(url, getCurrentTab().isIncognito())
+            if (NativePage.isNativePageUrl(url, getCurrentTab().isIncognito())
                     || ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL.equals(url)) {
                 mUrlCoordinator.setUrlBarData(
                         UrlBarData.EMPTY, UrlBar.ScrollType.NO_SCROLL, SelectionState.SELECT_ALL);

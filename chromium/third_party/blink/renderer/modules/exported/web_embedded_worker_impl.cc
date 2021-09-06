@@ -214,9 +214,10 @@ void WebEmbeddedWorkerImpl::StartWorkerThread(
       worker_start_data->script_url, worker_start_data->script_type,
       global_scope_name, worker_start_data->user_agent,
       worker_start_data->ua_metadata, std::move(web_worker_fetch_context),
-      Vector<CSPHeaderAndType>(), network::mojom::ReferrerPolicy::kDefault,
-      starter_origin.get(), starter_secure_context, starter_https_state,
-      nullptr /* worker_clients */, std::move(content_settings_proxy),
+      Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
+      network::mojom::ReferrerPolicy::kDefault, starter_origin.get(),
+      starter_secure_context, starter_https_state, nullptr /* worker_clients */,
+      std::move(content_settings_proxy),
       base::nullopt /* response_address_space */,
       nullptr /* OriginTrialTokens */, worker_start_data->devtools_worker_token,
       std::move(worker_settings),
@@ -267,7 +268,7 @@ void WebEmbeddedWorkerImpl::StartWorkerThread(
     case mojom::blink::ScriptType::kClassic:
       worker_thread_->FetchAndRunClassicScript(
           worker_start_data->script_url,
-          nullptr /* worker_main_script_load_params */,
+          std::move(worker_start_data->main_script_load_params),
           std::move(fetch_client_setting_object_data),
           nullptr /* outside_resource_timing_notifier */,
           v8_inspector::V8StackTraceId());
@@ -279,7 +280,7 @@ void WebEmbeddedWorkerImpl::StartWorkerThread(
     case mojom::blink::ScriptType::kModule:
       worker_thread_->FetchAndRunModuleScript(
           worker_start_data->script_url,
-          nullptr /* worker_main_script_load_params */,
+          std::move(worker_start_data->main_script_load_params),
           std::move(fetch_client_setting_object_data),
           nullptr /* outside_resource_timing_notifier */,
           network::mojom::CredentialsMode::kOmit);

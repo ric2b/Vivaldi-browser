@@ -21,7 +21,6 @@ class Window;
 
 namespace base {
 class CommandLine;
-class FilePath;
 }  // namespace base
 
 namespace user_manager {
@@ -79,6 +78,11 @@ bool IsArcAvailable();
 
 // Returns true if ARC VM is enabled.
 bool IsArcVmEnabled();
+
+// Returns true if ARC VM realtime VCPU is enabled.
+// |cpus| is the number of logical cores that are currently online on the
+// device.
+bool IsArcVmRtVcpuEnabled(uint32_t cpus);
 
 // Returns true if all development configuration directives in the
 // vm_tools/init/arcvm_dev.conf file are ignored during ARCVM start.
@@ -176,12 +180,6 @@ void SetArcCpuRestriction(CpuRestrictionState cpu_restriction_state);
 // Returns the Android density that should be used for the given device scale
 // factor used on chrome.
 int32_t GetLcdDensityForDeviceScaleFactor(float device_scale_factor);
-
-// Generates a file called first stage fstab at |fstab_path| which is exported
-// by crosvm to the guest via the device tree so the guest can read certain
-// files in its init's first stage.
-bool GenerateFirstStageFstab(const base::FilePath& combined_property_file_name,
-                             const base::FilePath& fstab_path);
 
 // Gets a system property managed by crossystem. This function can be called
 // only with base::MayBlock().

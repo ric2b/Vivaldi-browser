@@ -18,8 +18,7 @@ namespace content {
 
 void WebContentsImpl::SetExtData(const std::string& ext_data) {
   ext_data_ = ext_data;
-  observers_.ForEachObserver(
-      [&](WebContentsObserver* observer) { observer->ExtDataSet(this); });
+  observers_.NotifyObservers(&WebContentsObserver::ExtDataSet, this);
 
   NotificationService::current()->Notify(
     NOTIFICATION_EXTDATA_UPDATED,
@@ -39,17 +38,15 @@ void FrameTreeNode::DidChangeLoadProgressExtended(double load_progress,
   loaded_elements_ = loaded_elements;
   total_elements_ = total_elements;
 
-  frame_tree_->UpdateLoadProgress(load_progress);
+  DidChangeLoadProgress(load_progress);
 }
 
 void WebContentsImpl::FrameTreeNodeDestroyed() {
-  observers_.ForEachObserver(
-      [&](WebContentsObserver* observer) { observer->WebContentsDidDetach(); });
+  observers_.NotifyObservers(&WebContentsObserver::WebContentsDidDetach);
 }
 
 void WebContentsImpl::AttachedToOuter() {
-  observers_.ForEachObserver(
-      [&](WebContentsObserver* observer) { observer->WebContentsDidAttach(); });
+  observers_.NotifyObservers(&WebContentsObserver::WebContentsDidAttach);
 }
 
 void WebContentsImpl::WebContentsTreeNode::VivaldiDestructor() {

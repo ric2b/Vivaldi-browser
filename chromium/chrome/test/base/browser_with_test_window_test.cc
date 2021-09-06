@@ -30,7 +30,7 @@
 #include "components/constrained_window/constrained_window_views.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "content/public/browser/context_factory.h"
 #endif
 #endif
@@ -108,7 +108,7 @@ void BrowserWithTestWindowTest::TearDown() {
   // If initialized, the KioskAppManager will register an observer to
   // CrosSettings and will need to be destroyed before it. Having it destroyed
   // as part of the teardown will avoid unexpected test failures.
-  chromeos::KioskAppManager::Shutdown();
+  ash::KioskAppManager::Shutdown();
 
   test_views_delegate_.reset();
   ash_test_helper_.TearDown();

@@ -19,6 +19,7 @@
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_assistant_structure.h"
+#include "ui/accessibility/ax_node_position.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
@@ -213,6 +214,21 @@ bool BrowserAccessibilityAndroid::IsContentInvalid() const {
          GetData().GetInvalidState() != ax::mojom::InvalidState::kFalse;
 }
 
+bool BrowserAccessibilityAndroid::IsDisabledDescendant() const {
+  // Iterate over parents and see if any are disabled.
+  BrowserAccessibilityAndroid* parent =
+      static_cast<BrowserAccessibilityAndroid*>(PlatformGetParent());
+  while (parent != nullptr) {
+    if (!parent->IsEnabled()) {
+      return true;
+    }
+    parent =
+        static_cast<BrowserAccessibilityAndroid*>(parent->PlatformGetParent());
+  }
+
+  return false;
+}
+
 bool BrowserAccessibilityAndroid::IsDismissable() const {
   return false;  // No concept of "dismissable" on the web currently.
 }
@@ -326,8 +342,9 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
 
   // The root inside a portal is not interesting.
   if (ui::IsPlatformDocument(GetRole()) && PlatformGetParent() &&
-      PlatformGetParent()->GetRole() == ax::mojom::Role::kPortal)
+      PlatformGetParent()->GetRole() == ax::mojom::Role::kPortal) {
     return false;
+  }
 
   // Mark as uninteresting if it's hidden, even if it is focusable.
   if (IsInvisibleOrIgnored())
@@ -336,7 +353,7 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   // Walk up the ancestry. A non-focusable child of a control is not
   // interesting. A child of an invisible iframe is also not interesting.
   const BrowserAccessibility* parent = PlatformGetParent();
-  while (parent != nullptr) {
+  while (parent) {
     if (ui::IsControl(parent->GetRole()) && !IsFocusable())
       return false;
 
@@ -455,11 +472,13 @@ bool BrowserAccessibilityAndroid::IsLeaf() const {
   if (BrowserAccessibility::IsLeaf())
     return true;
 
-  // Iframes are always allowed to contain children.
+  // Document roots (e.g. kRootWebArea and kPdfRoot), and iframes are always
+  // allowed to contain children.
   if (ui::IsIframe(GetRole()) || ui::IsPlatformDocument(GetRole()))
     return false;
 
-  // Button, date and time controls should drop their children.
+  // Button, date and time controls should not expose their children to Android
+  // accessibility APIs.
   switch (GetRole()) {
     case ax::mojom::Role::kButton:
     case ax::mojom::Role::kDate:
@@ -487,7 +506,7 @@ bool BrowserAccessibilityAndroid::IsLeaf() const {
       }
     }
 
-    // Focusable nodes with text can drop their children.
+    // Focusable nodes with text should not expose their children.
     if (HasState(ax::mojom::State::kFocusable) && !name.empty()) {
       if (HasFocusableNonOptionChild()) {
         return false;
@@ -496,7 +515,7 @@ bool BrowserAccessibilityAndroid::IsLeaf() const {
       }
     }
 
-    // Nodes with only static text as children can drop their children.
+    // Nodes with only static text as children should not expose their children.
     if (HasOnlyTextChildren())
       return true;
   }
@@ -1052,9 +1071,29 @@ base::string16 BrowserAccessibilityAndroid::GetRoleDescription() const {
     case ax::mojom::Role::kDate:
       message_id = IDS_AX_ROLE_DATE;
       break;
-    case ax::mojom::Role::kDateTime:
-      message_id = IDS_AX_ROLE_DATE_TIME;
+    case ax::mojom::Role::kDateTime: {
+      const ui::AXNodeData& data = GetData();
+      std::string type;
+      if (data.GetStringAttribute(ax::mojom::StringAttribute::kInputType,
+                                  &type)) {
+        // Returns a specific role to better aid users on the control type
+        // they are interacting with. This differs from Android text input type
+        // which has a more granular mapping that determines type of keyboard
+        // to display.
+        if (type == "datetime-local") {
+          message_id = IDS_AX_ROLE_DATE_TIME_LOCAL;
+        } else if (type == "month") {
+          message_id = IDS_AX_ROLE_MONTH;
+        } else if (type == "week") {
+          message_id = IDS_AX_ROLE_WEEK;
+        } else {
+          message_id = IDS_AX_ROLE_DATE_TIME;
+        }
+      } else {
+        message_id = IDS_AX_ROLE_DATE_TIME;
+      }
       break;
+    }
     case ax::mojom::Role::kDefinition:
       message_id = IDS_AX_ROLE_DEFINITION;
       break;
@@ -1830,9 +1869,9 @@ int BrowserAccessibilityAndroid::GetSelectionStart() const {
     return 0;
   }
 
-  auto position = anchor_object->CreatePositionAt(
+  AXPosition position = anchor_object->CreatePositionAt(
       unignored_selection.anchor_offset, unignored_selection.anchor_affinity);
-  while (position->GetAnchor() && position->GetAnchor() != this)
+  while (position->GetAnchor() && position->GetAnchor() != node())
     position = position->CreateParentPosition();
 
   return !position->IsNullPosition() ? position->text_offset() : 0;
@@ -1852,9 +1891,9 @@ int BrowserAccessibilityAndroid::GetSelectionEnd() const {
   if (!focus_object)
     return 0;
 
-  auto position = focus_object->CreatePositionAt(
+  AXPosition position = focus_object->CreatePositionAt(
       unignored_selection.focus_offset, unignored_selection.focus_affinity);
-  while (position->GetAnchor() && position->GetAnchor() != this)
+  while (position->GetAnchor() && position->GetAnchor() != node())
     position = position->CreateParentPosition();
 
   return !position->IsNullPosition() ? position->text_offset() : 0;
@@ -1872,8 +1911,9 @@ int BrowserAccessibilityAndroid::AndroidInputType() const {
   if (html_tag != "input")
     return ANDROID_TEXT_INPUTTYPE_TYPE_NULL;
 
+  const ui::AXNodeData& data = GetData();
   std::string type;
-  if (!GetHtmlAttribute("type", &type))
+  if (!data.GetStringAttribute(ax::mojom::StringAttribute::kInputType, &type))
     return ANDROID_TEXT_INPUTTYPE_TYPE_TEXT;
 
   if (type.empty() || type == "text" || type == "search")
@@ -2140,7 +2180,7 @@ void BrowserAccessibilityAndroid::GetSuggestions(
           suggestion_ends->push_back(suggestion_end);
         }
       }
-      start_offset += node->GetText().length();
+      start_offset += node->GetInnerText().length();
     }
 
     // Implementation of NextInTreeOrder, but walking the internal tree.
@@ -2196,6 +2236,34 @@ bool BrowserAccessibilityAndroid::HasImage() const {
       return true;
   }
   return false;
+}
+
+BrowserAccessibility*
+BrowserAccessibilityAndroid::PlatformGetLowestPlatformAncestor() const {
+  BrowserAccessibility* current_object =
+      const_cast<BrowserAccessibilityAndroid*>(this);
+  BrowserAccessibility* lowest_unignored_node = current_object;
+  if (lowest_unignored_node->IsIgnored())
+    lowest_unignored_node = lowest_unignored_node->PlatformGetParent();
+  DCHECK(!lowest_unignored_node || !lowest_unignored_node->IsIgnored())
+      << "`BrowserAccessibility::PlatformGetParent()` should return either an "
+         "unignored object or nullptr.";
+
+  // `highest_leaf_node` could be nullptr.
+  BrowserAccessibility* highest_leaf_node = lowest_unignored_node;
+  // For the purposes of this method, a leaf node does not include leaves in the
+  // internal accessibility tree, only in the platform exposed tree.
+  for (BrowserAccessibility* ancestor_node = lowest_unignored_node;
+       ancestor_node; ancestor_node = ancestor_node->PlatformGetParent()) {
+    if (ancestor_node->IsLeaf())
+      highest_leaf_node = ancestor_node;
+  }
+  if (highest_leaf_node)
+    return highest_leaf_node;
+
+  if (lowest_unignored_node)
+    return lowest_unignored_node;
+  return current_object;
 }
 
 bool BrowserAccessibilityAndroid::HasOnlyTextChildren() const {

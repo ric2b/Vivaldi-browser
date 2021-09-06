@@ -10,14 +10,17 @@
 #include "ash/clipboard/clipboard_history_menu_model_adapter.h"
 #include "ash/clipboard/clipboard_history_resource_manager.h"
 #include "ash/clipboard/clipboard_history_util.h"
+#include "ash/clipboard/clipboard_nudge_constants.h"
 #include "ash/clipboard/clipboard_nudge_controller.h"
 #include "ash/clipboard/scoped_clipboard_history_pause_impl.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/clipboard_image_model_factory.h"
 #include "ash/public/cpp/file_icon_util.h"
 #include "ash/public/cpp/window_tree_host_lookup.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/wm/window_util.h"
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -25,6 +28,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -201,6 +205,10 @@ ClipboardHistoryControllerImpl::~ClipboardHistoryControllerImpl() {
   clipboard_history_->RemoveObserver(this);
 }
 
+void ClipboardHistoryControllerImpl::Shutdown() {
+  nudge_controller_.reset();
+}
+
 void ClipboardHistoryControllerImpl::AddObserver(
     ClipboardHistoryController::Observer* observer) const {
   observers_.AddObserver(observer);
@@ -220,6 +228,12 @@ void ClipboardHistoryControllerImpl::ShowMenuByAccelerator() {
     ExecuteSelectedMenuItem(ui::EF_COMMAND_DOWN);
     return;
   }
+
+  if (ClipboardHistoryUtil::IsEnabledInCurrentMode() && IsEmpty()) {
+    nudge_controller_->ShowNudge(ClipboardNudgeType::kZeroStateNudge);
+    return;
+  }
+
   ShowMenu(CalculateAnchorRect(), ui::MENU_SOURCE_KEYBOARD,
            ShowSource::kAccelerator);
 }
@@ -277,9 +291,21 @@ void ClipboardHistoryControllerImpl::ShowMenu(const gfx::Rect& anchor_rect,
     observer.OnClipboardHistoryMenuShown();
 }
 
+bool ClipboardHistoryControllerImpl::ShouldShowNewFeatureBadge() const {
+  return chromeos::features::IsClipboardHistoryContextMenuNudgeEnabled() &&
+         nudge_controller_->ShouldShowNewFeatureBadge();
+}
+
+void ClipboardHistoryControllerImpl::MarkNewFeatureBadgeShown() {
+  nudge_controller_->MarkNewFeatureBadgeShown();
+}
+
 bool ClipboardHistoryControllerImpl::CanShowMenu() const {
-  return !clipboard_history_->IsEmpty() &&
-         ClipboardHistoryUtil::IsEnabledInCurrentMode();
+  return !IsEmpty() && ClipboardHistoryUtil::IsEnabledInCurrentMode();
+}
+
+bool ClipboardHistoryControllerImpl::IsEmpty() const {
+  return clipboard_history_->IsEmpty();
 }
 
 std::unique_ptr<ScopedClipboardHistoryPause>
@@ -353,9 +379,18 @@ bool ClipboardHistoryControllerImpl::PasteClipboardItemById(
   if (currently_pasting_)
     return false;
 
+  auto* active_window = window_util::GetActiveWindow();
+  if (!active_window)
+    return false;
+
   for (const auto& item : history()->GetItems()) {
     if (item.id().ToString() == item_id) {
-      PasteClipboardHistoryItem(item, /*paste_plain_text=*/false);
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &ClipboardHistoryControllerImpl::PasteClipboardHistoryItem,
+              weak_ptr_factory_.GetWeakPtr(), active_window, item,
+              /*paste_plain_text=*/false));
       return true;
     }
   }
@@ -375,6 +410,9 @@ bool ClipboardHistoryControllerImpl::DeleteClipboardItemById(
 
 bool ClipboardHistoryControllerImpl::DeleteClipboardItemByClipboardData(
     ui::ClipboardData* data) {
+  if (!history() || !data)
+    return false;
+
   for (const auto& item : history()->GetItems()) {
     if (item.data() == *data) {
       DeleteClipboardHistoryItem(item);
@@ -502,15 +540,29 @@ void ClipboardHistoryControllerImpl::PasteMenuItemData(int command_id,
   DCHECK(context_menu_);
   context_menu_->Cancel();
 
+  auto* active_window = window_util::GetActiveWindow();
+  if (!active_window)
+    return;
+
   const ClipboardHistoryItem& selected_item =
       context_menu_->GetItemFromCommandId(command_id);
 
-  PasteClipboardHistoryItem(selected_item, paste_plain_text);
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ClipboardHistoryControllerImpl::PasteClipboardHistoryItem,
+                     weak_ptr_factory_.GetWeakPtr(), active_window,
+                     selected_item, paste_plain_text));
 }
 
 void ClipboardHistoryControllerImpl::PasteClipboardHistoryItem(
-    const ClipboardHistoryItem& item,
+    aura::Window* intended_window,
+    ClipboardHistoryItem item,
     bool paste_plain_text) {
+  // It's possible that the window could change after posting the
+  // PasteClipboardHistoryItem task is scheduled.
+  if (!intended_window || intended_window != window_util::GetActiveWindow())
+    return;
+
   auto* clipboard = GetClipboard();
   std::unique_ptr<ui::ClipboardData> original_data;
 
@@ -540,26 +592,21 @@ void ClipboardHistoryControllerImpl::PasteClipboardHistoryItem(
   }
 
   ui::KeyEvent control_press(/*type=*/ui::ET_KEY_PRESSED, ui::VKEY_CONTROL,
-                             /*code=*/static_cast<ui::DomCode>(0), /*flags=*/0);
+                             ui::EF_NONE);
   auto* host = GetWindowTreeHostForDisplay(
       display::Screen::GetScreen()->GetDisplayForNewWindows().id());
   DCHECK(host);
   host->DeliverEventToSink(&control_press);
 
-  ui::KeyEvent v_press(/*type=*/ui::ET_KEY_PRESSED, ui::VKEY_V,
-                       /*code=*/static_cast<ui::DomCode>(0),
-                       /*flags=*/ui::EF_CONTROL_DOWN);
-
+  ui::KeyEvent v_press(ui::ET_KEY_PRESSED, ui::VKEY_V, ui::EF_CONTROL_DOWN);
   host->DeliverEventToSink(&v_press);
 
   ui::KeyEvent v_release(/*type=*/ui::ET_KEY_RELEASED, ui::VKEY_V,
-                         /*code=*/static_cast<ui::DomCode>(0),
-                         /*flags=*/ui::EF_CONTROL_DOWN);
+                         ui::EF_CONTROL_DOWN);
   host->DeliverEventToSink(&v_release);
 
   ui::KeyEvent control_release(/*type=*/ui::ET_KEY_RELEASED, ui::VKEY_CONTROL,
-                               /*code=*/static_cast<ui::DomCode>(0),
-                               /*flags=*/0);
+                               ui::EF_NONE);
   host->DeliverEventToSink(&control_release);
 
   ++pastes_to_be_confirmed_;
@@ -567,6 +614,7 @@ void ClipboardHistoryControllerImpl::PasteClipboardHistoryItem(
   for (auto& observer : observers_)
     observer.OnClipboardHistoryPasted();
 
+  // `original_data` only exists if the clipboard was modified.
   if (!original_data)
     return;
 

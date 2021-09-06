@@ -1,20 +1,26 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved
 
 #include "extensions/api/prefs/prefs_api.h"
 
 #include "apps/switches.h"
 #include "base/memory/ptr_util.h"
+#include "browser/translate/vivaldi_translate_client.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/translate/core/browser/translate_manager.h"
+#include "components/translate/core/browser/translate_pref_names.h"
+#include "components/translate/core/browser/translate_ui_delegate.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/prefs.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/native_settings_observer.h"
+#include "ui/vivaldi_ui_utils.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace extensions {
 
@@ -309,6 +315,142 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
   }
 
   return RespondNow(ArgumentList(Results::Create(results)));
+}
+
+namespace {
+std::unique_ptr<translate::TranslateUIDelegate> GetTranslateUIDelegate(
+    int tab_id,
+    content::BrowserContext* context,
+    std::string& original_language,
+    std::string& target_language) {
+  content::WebContents* web_contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, context, nullptr);
+
+  return std::make_unique<translate::TranslateUIDelegate>(
+          VivaldiTranslateClient::GetManagerFromWebContents(web_contents)
+              ->GetWeakPtr(),
+          original_language, target_language);
+}
+}
+
+ExtensionFunction::ResponseAction
+PrefsSetLanguagePairToAlwaysTranslateFunction::Run() {
+  using vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Params;
+  namespace Results = vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
+      GetTranslateUIDelegate(params->tab_id, browser_context(),
+                             params->original_language,
+                             params->target_language));
+
+  // Setting it when it's already set is a soft failure.
+  bool success = ui_delegate->ShouldAlwaysTranslate() != params->enable;
+
+  ui_delegate->SetAlwaysTranslate(params->enable);
+  if (params->enable) {
+    // Remove language from blocked list
+    ui_delegate->SetLanguageBlocked(false);
+    // Flip the setting so we get automatic translation.
+    PrefService* pref_service =
+        Profile::FromBrowserContext(browser_context())->GetPrefs();
+    pref_service->SetBoolean(vivaldiprefs::kTranslateEnabled, true);
+  }
+
+  return RespondNow(ArgumentList(Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction
+PrefsSetLanguageToNeverTranslateFunction::Run() {
+  using vivaldi::prefs::SetLanguageToNeverTranslate::Params;
+  namespace Results = vivaldi::prefs::SetLanguageToNeverTranslate::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
+      GetTranslateUIDelegate(params->tab_id, browser_context(),
+                             params->original_language,
+                             params->target_language));
+
+  // Setting it when it's already set is a soft failure.
+  bool success = params->block != ui_delegate->IsLanguageBlocked();
+
+  ui_delegate->SetLanguageBlocked(params->block);
+
+  if (params->block) {
+    // Disable always translate if we're blocking the language
+    ui_delegate->SetAlwaysTranslate(false);
+  }
+
+  return RespondNow(ArgumentList(Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction PrefsGetTranslateSettingsFunction::Run() {
+  using vivaldi::prefs::GetTranslateSettings::Params;
+  namespace Results = vivaldi::prefs::GetTranslateSettings::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
+      GetTranslateUIDelegate(params->tab_id, browser_context(),
+                             params->original_language,
+                             params->target_language));
+
+  extensions::vivaldi::prefs::TranslateLanguageSettings settings;
+
+  settings.is_language_pair_on_always_translate_list =
+      ui_delegate->ShouldAlwaysTranslate();
+  settings.is_language_in_never_translate_list =
+      ui_delegate->IsLanguageBlocked();
+  settings.is_site_on_never_translate_list =
+      ui_delegate->IsSiteOnNeverPromptList();
+
+  return RespondNow(ArgumentList(Results::Create(std::move(settings))));
+}
+
+ExtensionFunction::ResponseAction PrefsSetSiteToNeverTranslateFunction::Run() {
+  using vivaldi::prefs::SetSiteToNeverTranslate::Params;
+  namespace Results = vivaldi::prefs::SetSiteToNeverTranslate::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
+      GetTranslateUIDelegate(params->tab_id, browser_context(),
+                             params->original_language,
+                             params->target_language));
+
+  // Setting it when it's already set is a soft failure.
+  bool success = params->block != ui_delegate->IsSiteOnNeverPromptList();
+
+  if (!ui_delegate->CanAddToNeverPromptList()) {
+    success = false;
+  } else {
+    ui_delegate->SetNeverPrompt(params->block);
+  }
+  return RespondNow(ArgumentList(Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction PrefsSetTranslationDeclinedFunction::Run() {
+  using vivaldi::prefs::SetTranslationDeclined::Params;
+  namespace Results = vivaldi::prefs::SetTranslationDeclined::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
+      GetTranslateUIDelegate(params->tab_id, browser_context(),
+                             params->original_language,
+                             params->target_language));
+
+  ui_delegate->TranslationDeclined(params->explicitly_closed);
+
+  // We don't really have a fail condition...
+  return RespondNow(ArgumentList(Results::Create(true)));
 }
 
 }  // namespace extensions

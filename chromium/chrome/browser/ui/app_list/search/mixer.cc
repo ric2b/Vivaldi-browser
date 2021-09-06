@@ -15,8 +15,8 @@
 #include "base/macros.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/numerics/ranges.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/search_controller.h"
@@ -41,7 +41,8 @@ void RemoveDuplicates(Mixer::SortedResults* results) {
     // both of these, so insert concat(id, display_type).
     const std::string display_type = base::NumberToString(
         static_cast<int>(sort_data.result->display_type()));
-    if (!seen.insert(base::StrCat({sort_data.result->id(), display_type}))
+    if (!seen.insert(
+                 base::JoinString({sort_data.result->id(), display_type}, "-"))
              .second)
       continue;
 

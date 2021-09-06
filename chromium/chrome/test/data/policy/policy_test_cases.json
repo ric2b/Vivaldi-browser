@@ -597,6 +597,16 @@
     ]
   },
 
+  "AllowSystemNotifications" : {
+    "os": ["linux"],
+    "policy_pref_mapping_test": [
+      {
+        "policies": { "AllowSystemNotifications": true },
+        "prefs": { "system_notifications.allowed": {} }
+      }
+    ]
+  },
+
   "NativePrinters": {
     "note": "This policy is deprecated by 'Printers' policy. See http://crbug.com/1113362.",
     "os": ["chromeos"],
@@ -3898,6 +3908,18 @@
 
   "OpenNetworkConfiguration": {},
 
+  "GaiaOfflineSigninTimeLimitDays": {
+    "os": ["chromeos"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "GaiaOfflineSigninTimeLimitDays": 8
+        },
+        "prefs": { "gaia.offline_signin_time_limit": {"value": 8} }
+      }
+    ]
+  },
+
   "SAMLOfflineSigninTimeLimit": {
     "os": ["chromeos"],
     "policy_pref_mapping_tests": [
@@ -4807,6 +4829,18 @@
     ]
   },
 
+  "SSLErrorOverrideAllowedForOrigins": {
+    "os": ["win", "mac", "linux", "chromeos"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": { "SSLErrorOverrideAllowedForOrigins": ["google.com"] },
+        "prefs": {
+          "ssl.error_override_allowed_for_origins": {"value" : ["google.com"] }
+        }
+      }
+    ]
+  },
+
   "AllowDinosaurEasterEgg": {
     "os": ["win", "linux", "mac", "chromeos"],
     "policy_pref_mapping_tests": [
@@ -5406,22 +5440,22 @@
     ]
   },
 
-  "SamlLockScreenReauthenticationEnabled": {
+  "LockScreenReauthenticationEnabled": {
     "os": ["chromeos"],
     "policy_pref_mapping_tests": [
       {
         "policies": {
-          "SamlLockScreenReauthenticationEnabled": true
+          "LockScreenReauthenticationEnabled": true
         },
-        "prefs": { "saml.lock_screen_reauthentication_enabled": {
+        "prefs": { "lock_screen_reauthentication_enabled": {
           "value": true }
         }
       },
       {
         "policies": {
-          "SamlLockScreenReauthenticationEnabled": false
+          "LockScreenReauthenticationEnabled": false
         },
-        "prefs": {"saml.lock_screen_reauthentication_enabled": {
+        "prefs": {"lock_screen_reauthentication_enabled": {
           "value": false }
         }
       }
@@ -5469,6 +5503,10 @@
   },
 
   "AudioSandboxEnabled": {
+    "note": "This policy is used directly through the policy service instead of through a pref."
+  },
+
+  "AudioProcessHighPriorityEnabled": {
     "note": "This policy is used directly through the policy service instead of through a pref."
   },
 
@@ -5617,6 +5655,8 @@
   "DeviceFamilyLinkAccountsAllowed": {},
 
   "DeviceDataRoamingEnabled": {},
+
+  "DevicePciPeripheralDataAccessEnabled": {},
 
   "DeviceMetricsReportingEnabled": {
     "os": ["chromeos"],
@@ -6230,6 +6270,16 @@
     ]
   },
 
+  "ContextAwareAccessSignalsAllowlist": {
+    "os": ["win", "linux", "mac"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": { "ContextAwareAccessSignalsAllowlist": ["https://example1.com", "https://[*.]example2.com", "https://foo.example3.com/path"] },
+        "prefs": { "enterprise_connectors.device_trust.origins": { "value": ["https://example1.com", "https://[*.]example2.com", "https://foo.example3.com/path"] } }
+      }
+    ]
+  },
+
   "DeviceQuickFixBuildToken": {
     "os": ["chromeos"],
     "policy_pref_mapping_tests": [
@@ -6756,6 +6806,18 @@
     ]
   },
 
+  "DeviceAllowMGSToStoreDisplayProperties": {
+    "os": ["chromeos"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "DeviceAllowMGSToStoreDisplayProperties": true
+        },
+        "prefs": { "settings.display.allow_mgs_to_store": { "location": "local_state" } }
+      }
+    ]
+  },
+
   "WebAppInstallForceList": {
     "os": ["win", "linux", "mac", "chromeos"],
     "policy_pref_mapping_tests": [
@@ -6776,6 +6838,11 @@
             {
               "url": "https://xyz.example",
               "create_desktop_shortcut": true
+            },
+            {
+              "url": "https://foo.example",
+              "default_launch_container": "window",
+              "fallback_app_name": "Foo Example App"
             }
           ]
         },
@@ -7756,6 +7823,64 @@
     ]
   },
 
+  "SendDownloadToCloudEnterpriseConnector": {
+    "os": [ "win", "linux", "mac", "chromeos" ],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "SendDownloadToCloudEnterpriseConnector": [
+            {
+              "service_provider": "Google",
+              "enterprise_id": "1234567890",
+              "enable": [
+                {
+                  "url_list": [ "*" ],
+                  "mime_types": [ "text/plain" ]
+                },
+                {
+                  "url_list": [ "*.them.com", "*.others.com" ],
+                  "mime_types": [ "image/png" ]
+                }
+              ],
+              "disable": [
+                {
+                  "url_list": [ "*.us.com" ],
+                  "mime_types": [ "application/zip" ]
+                }
+              ]
+            }
+          ]
+        },
+        "prefs": {
+          "enterprise_connectors.send_download_to_cloud": {
+             "value":  [
+              {
+                "service_provider": "Google",
+                "enterprise_id": "1234567890",
+                "enable": [
+                  {
+                    "url_list": [ "*" ],
+                    "mime_types": [ "text/plain" ]
+                  },
+                  {
+                    "url_list": [ "*.them.com", "*.others.com" ],
+                    "mime_types": [ "image/png" ]
+                  }
+                ],
+                "disable": [
+                  {
+                    "url_list": [ "*.us.com" ],
+                    "mime_types": [ "application/zip" ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+
   "OnFileAttachedEnterpriseConnector": {
     "os": ["win", "linux", "mac", "chromeos"],
     "policy_pref_mapping_tests": [
@@ -8014,6 +8139,17 @@
       {
         "policies":  {
           "NativeWindowOcclusionEnabled":  true
+        },
+        "prefs": { "policy.native_window_occlusion_enabled":  {"location":  "local_state"} }
+      }
+    ]
+  },
+  "WindowOcclusionEnabled":  {
+    "os":  ["win"],
+    "policy_pref_mapping_tests":  [
+      {
+        "policies":  {
+          "WindowOcclusionEnabled":  true
         },
         "prefs": { "policy.native_window_occlusion_enabled":  {"location":  "local_state"} }
       }
@@ -8307,7 +8443,7 @@
   },
   "ClearBrowsingDataOnExitList": {
     "os": ["win", "linux", "mac", "chromeos"],
-    "policy_pref_mapping_test": [
+    "policy_pref_mapping_tests": [
       {
         "policies": { "ClearBrowsingDataOnExitList": ["browsing_history"] },
         "prefs": { "browser.clear_data.clear_on_exit": { "value": ["browsing_history"]}}
@@ -8317,7 +8453,7 @@
   "ProfilePickerOnStartupAvailability": {
     "os": ["win", "linux", "mac"],
     "can_be_recommended": false,
-    "policy_pref_mapping_test": [
+    "policy_pref_mapping_tests": [
       {
         "policies": { "ProfilePickerOnStartupAvailability": 2 },
         "prefs": {
@@ -8345,5 +8481,128 @@
         "prefs": {"browser_labs_enabled": {"value": false, "location": "user_profile"}}
       }
     ]
-    }
+  },
+  "WebXRImmersiveArEnabled": {
+    "os": ["android"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "WebXRImmersiveArEnabled": false
+        },
+        "prefs": {
+          "webxr.immersive_ar_enabled": {
+            "value": false,
+            "location": "user_profile"
+          }
+        }
+      }
+    ]
+  },
+  "DeviceSystemWideTracingEnabled": {
+    "os": ["chromeos"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {},
+        "prefs": {
+          "device_system_wide_tracing_enabled": {
+            "value": true,
+            "location": "local_state",
+            "expect_default": true
+          }
+        }
+      },
+      {
+        "policies": {
+          "DeviceSystemWideTracingEnabled": true
+        },
+        "prefs": {
+          "device_system_wide_tracing_enabled": {
+            "value": true,
+            "location": "local_state"
+          }
+        }
+      },
+      {
+        "policies": {
+          "DeviceSystemWideTracingEnabled": false
+        },
+        "prefs": {
+          "device_system_wide_tracing_enabled": {
+            "value": false,
+            "location": "local_state"
+          }
+        }
+      }
+    ]
+  },
+  "WebAppSettings": {
+    "os": ["win", "linux", "mac"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "WebAppSettings": {
+            "https://foo.example": {
+              "run_on_os_login": "allowed"
+            },
+            "https://bar.example": {
+              "run_on_os_login": "blocked"
+            },
+            "https://foobar.example" : {
+              "run_on_os_login": "run_windowed"
+            },
+            "*": {
+              "run_on_os_login": "blocked"
+            }
+          }
+        },
+        "prefs": { "profile.web_app.policy_settings": {} }
+      }
+    ]
+  },
+  "FetchKeepaliveDurationSecondsOnShutdown": {
+    "os": ["win", "linux", "mac"],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {},
+        "prefs": { "fetch_keepalive_duration_on_shutdown": {
+          "location": "user_profile",
+          "expect_default": true,
+          "value": 0
+        }}
+      },
+      {
+        "policies": {"FetchKeepaliveDurationSecondsOnShutdown": 0},
+        "prefs": { "fetch_keepalive_duration_on_shutdown": {
+          "location": "user_profile",
+          "expect_default": false,
+          "value": 0
+        }}
+      },
+      {
+        "policies": {"FetchKeepaliveDurationSecondsOnShutdown": 1},
+        "prefs": { "fetch_keepalive_duration_on_shutdown": {
+          "location": "user_profile",
+          "expect_default": false,
+          "value": 1
+        }}
+      },
+      {
+        "policies": {"FetchKeepaliveDurationSecondsOnShutdown": 5},
+        "prefs": { "fetch_keepalive_duration_on_shutdown": {
+          "location": "user_profile",
+          "expect_default": false,
+          "value": 5
+        }}
+      }
+    ]
+  },
+  "SuppressDifferentOriginSubframeDialogs": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "policy_pref_mapping_test": [
+      {
+        "policies": { "SuppressDifferentOriginSubframeDialogs": true },
+        "prefs": { "suppress_different_origin_subframe_js_dialogs": {} }
+      }
+    ]
+  }
 }

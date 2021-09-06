@@ -96,6 +96,7 @@ DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryPaymentFillingFeature,
 DEFINE_VARIATION_PARAM(kIPHKeyboardAccessoryPaymentOfferFeature,
                        "IPH_KeyboardAccessoryPaymentOffer");
 DEFINE_VARIATION_PARAM(kIPHNewTabPageButtonFeature, "IPH_NewTabPageHomeButton");
+DEFINE_VARIATION_PARAM(kIPHPageInfoFeature, "IPH_PageInfo");
 DEFINE_VARIATION_PARAM(kIPHPreviewsOmniboxUIFeature, "IPH_PreviewsOmniboxUI");
 DEFINE_VARIATION_PARAM(kIPHPwaInstallAvailableFeature,
                        "IPH_PwaInstallAvailableFeature");
@@ -156,6 +157,8 @@ DEFINE_VARIATION_PARAM(kIPHGlobalMediaControls, "IPH_GlobalMediaControls");
 DEFINE_VARIATION_PARAM(kIPHLiveCaption, "IPH_LiveCaption");
 DEFINE_VARIATION_PARAM(kIPHPasswordsAccountStorageFeature,
                        "IPH_PasswordsAccountStorage");
+DEFINE_VARIATION_PARAM(kIPHReadingListDiscoveryFeature,
+                       "IPH_ReadingListDiscovery");
 DEFINE_VARIATION_PARAM(kIPHReopenTabFeature, "IPH_ReopenTab");
 DEFINE_VARIATION_PARAM(kIPHWebUITabStripFeature, "IPH_WebUITabStrip");
 DEFINE_VARIATION_PARAM(kIPHDesktopPwaInstallFeature, "IPH_DesktopPwaInstall");
@@ -201,6 +204,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHKeyboardAccessoryPaymentFillingFeature),
         VARIATION_ENTRY(kIPHKeyboardAccessoryPaymentOfferFeature),
         VARIATION_ENTRY(kIPHNewTabPageButtonFeature),
+        VARIATION_ENTRY(kIPHPageInfoFeature),
         VARIATION_ENTRY(kIPHPreviewsOmniboxUIFeature),
         VARIATION_ENTRY(kIPHPwaInstallAvailableFeature),
         VARIATION_ENTRY(kIPHQuietNotificationPromptsFeature),
@@ -237,6 +241,7 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHGlobalMediaControls),
         VARIATION_ENTRY(kIPHLiveCaption),
         VARIATION_ENTRY(kIPHPasswordsAccountStorageFeature),
+        VARIATION_ENTRY(kIPHReadingListDiscoveryFeature),
         VARIATION_ENTRY(kIPHReopenTabFeature),
         VARIATION_ENTRY(kIPHWebUITabStripFeature),
         VARIATION_ENTRY(kIPHDesktopPwaInstallFeature),

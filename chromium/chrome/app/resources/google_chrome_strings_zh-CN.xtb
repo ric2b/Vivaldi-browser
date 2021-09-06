@@ -8,6 +8,7 @@
 <translation id="1088300314857992706"><ph name="USER_EMAIL_ADDRESS" /> 之前使用的是 Chrome</translation>
 <translation id="1097330777386562916">退出 Chrome 时清除 Cookie 及网站数据</translation>
 <translation id="110877069173485804">这是您的专属Chrome</translation>
+<translation id="1125124144982679672">谁在使用 Chrome？</translation>
 <translation id="1142745911746664600">无法更新 Chrome</translation>
 <translation id="1154147086299354128">在 Chrome 中打开(&amp;O)</translation>
 <translation id="123620459398936149">Chrome操作系统无法同步您的数据。请更新您的同步密码。</translation>
@@ -17,7 +18,9 @@
 <translation id="1399397803214730675">该计算机已安装了更高版本的 Google Chrome 浏览器。如果该软件无法正常运行，请卸载 Google Chrome 浏览器，然后重试。</translation>
 <translation id="1434626383986940139">Chrome Canary 应用</translation>
 <translation id="147727933880789532">Chrome 建议您停用此扩展程序，因为它目前不符合“增强型安全浏览”标准。</translation>
+<translation id="1516530951338665275">Google Chrome 需获得蓝牙使用权限才能继续配对。<ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="1553358976309200471">更新 Chrome</translation>
+<translation id="1583073672411044740"><ph name="EXISTING_USER" />已登录此 Chrome 个人资料。这样做会为 <ph name="USER_EMAIL_ADDRESS" /> 创建一份新的 Chrome 个人资料</translation>
 <translation id="1587223624401073077">Google Chrome 正在使用您的摄像头。</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> 存在危险，因此 Chrome 已将其拦截。</translation>
 <translation id="1597911401261118146">若要检查您的密码是否未曾遭遇数据泄露和其他安全问题，请<ph name="BEGIN_LINK" />登录 Chrome<ph name="END_LINK" />。</translation>
@@ -85,6 +88,7 @@
 <translation id="3065168410429928842">Chrome 标签页</translation>
 <translation id="3080151273017101988">关闭 Google Chrome 后继续运行后台应用</translation>
 <translation id="3089968997497233615">Google Chrome 浏览器现已推出更安全的新版本。</translation>
+<translation id="3100998948628680988">请为您的 Chrome 个人资料命名</translation>
 <translation id="3114643501466072395">若要检查您的其他密码是否未曾遭遇数据泄露和其他安全问题，请<ph name="BEGIN_LINK" />登录 Chrome<ph name="END_LINK" />。</translation>
 <translation id="3127818369811890733">Chrome 操作系统无法同步您的数据。</translation>
 <translation id="3140883423282498090">您所做的更改会在下次重新启动 Google Chrome 时生效。</translation>
@@ -109,6 +113,7 @@
 <translation id="3735758079232443276">“<ph name="EXTENSION_NAME" />”扩展程序更改了 Chrome 启动后系统显示的页面。</translation>
 <translation id="3779473566290487688">如需接收后续的 Google Chrome 更新，您需使用 OS X 10.11 或更高版本。该计算机目前使用的是 OS X 10.10。</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
+<translation id="3835168907083856002">这样做会为 <ph name="USER_EMAIL_ADDRESS" /> 创建一份新的 Chrome 个人资料</translation>
 <translation id="386202838227397562">请关闭所有 Google Chrome 浏览器窗口，然后重试。</translation>
 <translation id="3865754807470779944">已安装 Chrome 版本 <ph name="PRODUCT_VERSION" /></translation>
 <translation id="3873044882194371212">在 Chrome 无痕式窗口中打开链接(&amp;G)</translation>
@@ -116,7 +121,6 @@
 <translation id="4050175100176540509">最新版本不仅在安全性方面做出了重要改进，还提供了多项新功能。</translation>
 <translation id="4053720452172726777">自定义及控制 Google Chrome</translation>
 <translation id="4110895483821904099">设置您的新 Chrome 个人资料</translation>
-<translation id="4143243756087420366">Chrome 名称和图片</translation>
 <translation id="4147555960264124640">您目前登录的帐号是一个托管帐号，该帐号的管理员将能够控制您的 Google Chrome 个人资料。您的 Chrome 数据（例如您的应用、书签、历史记录、密码和其他设置）将永远与 <ph name="USER_NAME" /> 相关联。您可以通过 Google 帐号信息中心删除这些数据，但无法将这些数据与其他帐号相关联。<ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">安装程序无法解压缩存档文件。请重新下载 Google Chrome。</translation>
 <translation id="4191857738314598978">{0,plural, =1{请于 1 天内重新启动 Chrome}other{请于 # 天内重新启动 Chrome}}</translation>
@@ -145,7 +149,6 @@
 <translation id="4633000520311261472">为了提高 Chrome 的安全性，系统停用了一些未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />中、可能是在您不知情的情况下添加的扩展程序。</translation>
 <translation id="4666328473657283332">如需在您的所有设备上访问自己的 Chrome 信息，请登录您的帐号以便开启同步功能。</translation>
 <translation id="4728575227883772061">未知错误导致安装失败。如果 Google Chrome 浏览器正在运行，请将其关闭，然后重试。</translation>
-<translation id="4750550185319565338">重新启动 Chrome 以启用 <ph name="PLUGIN_NAME" /></translation>
 <translation id="4754614261631455953">Google Chrome Canary (mDNS-In)</translation>
 <translation id="4771048833395599659">此文件可能存在危险，因此 Chrome 已将其拦截。</translation>
 <translation id="479167709087336770">这项服务会使用 Google 搜索所用的拼写检查工具。您在浏览器中输入的文字会被发送给 Google。您随时可在“设置”中更改此行为。</translation>
@@ -167,10 +170,9 @@
 <translation id="5386244825306882791">它还能够控制您启动Chrome后或通过多功能框进行搜索时系统显示的页面。</translation>
 <translation id="5394833366792865639">共享 Chrome 标签页</translation>
 <translation id="5430073640787465221">您的偏好设置文件已损坏或无效。Google Chrome 浏览器无法恢复您的设置。</translation>
+<translation id="5434383153637353914">您可在此页面中管理您已登录的 Google 帐号。这样您就能在 Chrome 浏览器和 Play 商店应用以及 Gmail、Google 云端硬盘和 YouTube 等服务中使用这些帐号了。<ph name="LINK_BEGIN" />了解详情<ph name="LINK_END" /></translation>
 <translation id="556024056938947818">Google Chrome 正尝试显示密码。</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5655746611259367388">您可在<ph name="LINK_BEGIN" />设置<ph name="LINK_END" />中集中管理此帐号以及您已为<ph name="USER_NAME" />添加的其他 Google 帐号。
-          您向 Chrome 浏览器中的网站和 Google Play 中的应用授予的权限可能会应用于所有帐号。</translation>
 <translation id="5657226924540934362">如果此页面中未显示某项设置，请在 <ph name="LINK_BEGIN" />
       Chrome 操作系统设置<ph name="LINK_END" />中查找</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> 可能存在危险，因此 Chrome 已将其拦截。</translation>
@@ -179,6 +181,7 @@
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5715063361988620182">{SECONDS,plural, =1{Google Chrome 将在 1 秒后重新启动}other{Google Chrome 将在 # 秒后重新启动}}</translation>
 <translation id="573759479754913123">关于 Chrome 操作系统</translation>
+<translation id="5756509061973259733">此设备上已有一份使用该帐号创建的 Chrome 个人资料</translation>
 <translation id="5795887333006832406"><ph name="PAGE_TITLE" /> - Google Chrome Canary</translation>
 <translation id="5804318322022881572">无法启动 Chrome。请重试。</translation>
 <translation id="5867197326698922595">Google Chrome 正在尝试修改密码。</translation>
@@ -251,7 +254,6 @@
 <translation id="7930071585467473040">Google Chrome 正在尝试复制密码。</translation>
 <translation id="7962410387636238736">此计算机将不会再收到 Google Chrome 更新，因为 Windows XP 和 Windows Vista 已不再受支持</translation>
 <translation id="8008534537613507642">重新安装Chrome</translation>
-<translation id="8009904340233602924">在不登录帐号的情况下使用 Chrome</translation>
 <translation id="8013993649590906847">如果图片缺少有用的说明，则 Chrome 会尝试为您提供一条说明。为便于创建说明，系统会将图片发送给 Google。</translation>
 <translation id="8129812357326543296">关于 Google Chrome(&amp;G)</translation>
 <translation id="8255190535488645436">Google Chrome 正在使用您的摄像头和麦克风。</translation>
@@ -292,6 +294,5 @@
 <translation id="9138603949443464873">要想应用您的更改，请重新启动 Chrome</translation>
 <translation id="919706545465235479">更新 Chrome 以开始同步</translation>
 <translation id="940313311831216333">如需在您的所有设备上访问自己的 Chrome 信息，请登录您的帐号，然后开启同步功能。</translation>
-<translation id="94743460404517794">若有多个 Google 帐号，您可以将它们添加到自己的 <ph name="DEVICE_TYPE" />。这样您就能在 Chrome 浏览器和 Play 商店以及 Gmail、Google 云端硬盘和 YouTube 等服务中使用这些帐号了。<ph name="LINK_BEGIN" />了解详情<ph name="LINK_END" /></translation>
 <translation id="989369509083708165">Google Chrome 是您的默认浏览器</translation>
 </translationbundle>

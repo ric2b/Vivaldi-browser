@@ -240,11 +240,8 @@ void PageActionIconView::InstallLoadingIndicator() {
 }
 
 void PageActionIconView::SetIsLoading(bool is_loading) {
-  if (!loading_indicator_)
-    return;
-
-  is_loading ? loading_indicator_->ShowAnimation()
-             : loading_indicator_->StopAnimation();
+  if (loading_indicator_)
+    loading_indicator_->SetAnimating(is_loading);
 }
 
 content::WebContents* PageActionIconView::GetWebContents() const {
@@ -258,6 +255,6 @@ void PageActionIconView::UpdateBorder() {
 }
 
 BEGIN_METADATA(PageActionIconView, IconLabelBubbleView)
-ADD_PROPERTY_METADATA(SkColor, IconColor)
+ADD_PROPERTY_METADATA(SkColor, IconColor, views::metadata::SkColorConverter)
 ADD_PROPERTY_METADATA(bool, Active)
 END_METADATA

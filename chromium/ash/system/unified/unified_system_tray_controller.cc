@@ -5,8 +5,10 @@
 #include "ash/system/unified/unified_system_tray_controller.h"
 
 #include "ash/capture_mode/capture_mode_feature_pod_controller.h"
+#include "ash/constants/ash_features.h"
 #include "ash/metrics/user_metrics_action.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/projector/projector_feature_pod_controller.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/pagination/pagination_controller.h"
@@ -438,9 +440,11 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<AccessibilityFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<QuietModeFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<RotationLockFeaturePodController>());
-  AddFeaturePodItem(std::make_unique<PrivacyScreenFeaturePodController>());
   if (features::IsCaptureModeEnabled())
     AddFeaturePodItem(std::make_unique<CaptureModeFeaturePodController>(this));
+  if (chromeos::features::IsProjectorFeaturePodEnabled())
+    AddFeaturePodItem(std::make_unique<ProjectorFeaturePodController>(this));
+  AddFeaturePodItem(std::make_unique<NearbyShareFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<NightLightFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<CastFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<VPNFeaturePodController>(this));
@@ -448,7 +452,6 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<LocaleFeaturePodController>(this));
   if (features::IsDarkLightModeEnabled())
     AddFeaturePodItem(std::make_unique<DarkModeFeaturePodController>(this));
-  AddFeaturePodItem(std::make_unique<NearbyShareFeaturePodController>(this));
 
   // If you want to add a new feature pod item, add here.
 

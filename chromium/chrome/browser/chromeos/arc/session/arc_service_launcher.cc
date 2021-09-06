@@ -12,6 +12,7 @@
 #include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "chrome/browser/apps/app_service/arc_apps_factory.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/apps/apk_web_app_service.h"
 #include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_helper_bridge.h"
 #include "chrome/browser/chromeos/arc/adbd/arc_adbd_monitor_bridge.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/chromeos/arc/input_method_manager/arc_input_method_manager_service.h"
 #include "chrome/browser/chromeos/arc/instance_throttle/arc_instance_throttle.h"
 #include "chrome/browser/chromeos/arc/intent_helper/arc_settings_service.h"
+#include "chrome/browser/chromeos/arc/intent_helper/factory_reset_delegate.h"
 #include "chrome/browser/chromeos/arc/keymaster/arc_keymaster_bridge.h"
 #include "chrome/browser/chromeos/arc/kiosk/arc_kiosk_bridge.h"
 #include "chrome/browser/chromeos/arc/metrics/arc_metrics_service_proxy.h"
@@ -39,6 +41,7 @@
 #include "chrome/browser/chromeos/arc/print_spooler/arc_print_spooler_bridge.h"
 #include "chrome/browser/chromeos/arc/process/arc_process_service.h"
 #include "chrome/browser/chromeos/arc/screen_capture/arc_screen_capture_bridge.h"
+#include "chrome/browser/chromeos/arc/session/arc_demo_mode_preference_handler.h"
 #include "chrome/browser/chromeos/arc/session/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/sharesheet/arc_sharesheet_bridge.h"
@@ -49,7 +52,7 @@
 #include "chrome/browser/chromeos/arc/user_session/arc_user_session_service.h"
 #include "chrome/browser/chromeos/arc/video/gpu_arc_video_service_host.h"
 #include "chrome/browser/chromeos/arc/wallpaper/arc_wallpaper_service.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_usb_host_permission_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
@@ -76,6 +79,7 @@
 #include "components/arc/power/arc_power_bridge.h"
 #include "components/arc/property/arc_property_bridge.h"
 #include "components/arc/rotation_lock/arc_rotation_lock_bridge.h"
+#include "components/arc/sensor/arc_iio_sensor_bridge.h"
 #include "components/arc/sensor/arc_sensor_bridge.h"
 #include "components/arc/session/arc_session.h"
 #include "components/arc/session/arc_session_runner.h"
@@ -121,6 +125,11 @@ ArcServiceLauncher::ArcServiceLauncher(
       scheduler_configuration_manager_(scheduler_configuration_manager) {
   DCHECK(g_arc_service_launcher == nullptr);
   g_arc_service_launcher = this;
+
+  if (!chromeos::StartupUtils::IsOobeCompleted()) {
+    arc_demo_mode_preference_handler_ =
+        ArcDemoModePreferenceHandler::Create(arc_session_manager_.get());
+  }
 }
 
 ArcServiceLauncher::~ArcServiceLauncher() {
@@ -195,10 +204,12 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcFileSystemBridge::GetForBrowserContext(profile);
   ArcFileSystemMounter::GetForBrowserContext(profile);
   ArcFileSystemWatcherService::GetForBrowserContext(profile);
+  ArcIioSensorBridge::GetForBrowserContext(profile);
   ArcImeService::GetForBrowserContext(profile);
   ArcInputMethodManagerService::GetForBrowserContext(profile);
   ArcInstanceThrottle::GetForBrowserContext(profile);
-  ArcIntentHelperBridge::GetForBrowserContext(profile);
+  ArcIntentHelperBridge::GetForBrowserContext(profile)->SetDelegate(
+      std::make_unique<FactoryResetDelegate>());
   ArcKeymasterBridge::GetForBrowserContext(profile);
   ArcKioskBridge::GetForBrowserContext(profile);
   ArcLockScreenBridge::GetForBrowserContext(profile);

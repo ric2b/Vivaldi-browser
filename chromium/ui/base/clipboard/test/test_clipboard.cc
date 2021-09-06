@@ -48,6 +48,10 @@ void TestClipboard::SetLastModifiedTime(const base::Time& time) {
 
 void TestClipboard::OnPreShutdown() {}
 
+DataTransferEndpoint* TestClipboard::GetSource(ClipboardBuffer buffer) const {
+  return GetStore(buffer).GetDataSource();
+}
+
 uint64_t TestClipboard::GetSequenceNumber(ClipboardBuffer buffer) const {
   return GetStore(buffer).sequence_number;
 }
@@ -66,6 +70,8 @@ bool TestClipboard::IsFormatAvailable(
                              data_dst);
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
   const DataStore& store = GetStore(buffer);
+  if (format == ClipboardFormatType::GetFilenamesType())
+    return !store.filenames.empty();
   return base::Contains(store.data, format);
 }
 
@@ -92,6 +98,9 @@ void TestClipboard::ReadAvailableTypes(
     types->push_back(base::UTF8ToUTF16(kMimeTypeRTF));
   if (IsFormatAvailable(ClipboardFormatType::GetBitmapType(), buffer, data_dst))
     types->push_back(base::UTF8ToUTF16(kMimeTypePNG));
+  if (IsFormatAvailable(ClipboardFormatType::GetFilenamesType(), buffer,
+                        data_dst))
+    types->push_back(base::UTF8ToUTF16(kMimeTypeURIList));
 }
 
 std::vector<base::string16>
@@ -214,6 +223,16 @@ void TestClipboard::ReadCustomData(ClipboardBuffer buffer,
                                    const DataTransferEndpoint* data_dst,
                                    base::string16* result) const {}
 
+void TestClipboard::ReadFilenames(ClipboardBuffer buffer,
+                                  const DataTransferEndpoint* data_dst,
+                                  std::vector<ui::FileInfo>* result) const {
+  const DataStore& store = GetStore(buffer);
+  if (!IsReadAllowed(store.data_src.get(), data_dst))
+    return;
+
+  *result = store.filenames;
+}
+
 // TODO(crbug.com/1103215): |data_dst| should be supported.
 void TestClipboard::ReadBookmark(const DataTransferEndpoint* data_dst,
                                  base::string16* title,
@@ -317,6 +336,10 @@ void TestClipboard::WriteRTF(const char* rtf_data, size_t data_len) {
       std::string(rtf_data, data_len);
 }
 
+void TestClipboard::WriteFilenames(std::vector<ui::FileInfo> filenames) {
+  GetDefaultStore().filenames = std::move(filenames);
+}
+
 void TestClipboard::WriteBookmark(const char* title_data,
                                   size_t title_len,
                                   const char* url_data,
@@ -383,11 +406,16 @@ void TestClipboard::DataStore::Clear() {
   url_title.clear();
   html_src_url.clear();
   image = SkBitmap();
+  data_src.reset();
 }
 
 void TestClipboard::DataStore::SetDataSource(
     std::unique_ptr<DataTransferEndpoint> data_src) {
   this->data_src = std::move(data_src);
+}
+
+DataTransferEndpoint* TestClipboard::DataStore::GetDataSource() const {
+  return this->data_src.get();
 }
 
 const TestClipboard::DataStore& TestClipboard::GetStore(

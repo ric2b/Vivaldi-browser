@@ -99,6 +99,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext,
                                ResourceRequest&,
                                const ResourceLoaderOptions&) override;
 
+  bool IsPrerendering() const override;
+
   // Exposed for testing.
   void ModifyRequestForCSP(ResourceRequest&);
   void AddClientHintsIfNecessary(const ClientHintsPreferences&,
@@ -154,7 +156,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext,
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason,
                                ResourceType) const override;
-  const ContentSecurityPolicy* GetContentSecurityPolicyForWorld(
+  ContentSecurityPolicy* GetContentSecurityPolicyForWorld(
       const DOMWrapperWorld* world) const override;
   bool IsSVGImageChromeClient() const override;
   void CountUsage(WebFeature) const override;
@@ -173,7 +175,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext,
 
   const KURL& Url() const override;
   const SecurityOrigin* GetParentSecurityOrigin() const override;
-  const ContentSecurityPolicy* GetContentSecurityPolicy() const override;
+  ContentSecurityPolicy* GetContentSecurityPolicy() const override;
   void AddConsoleMessage(ConsoleMessage*) const override;
 
   WebContentSettingsClient* GetContentSettingsClient() const;
@@ -217,7 +219,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext,
   const bool save_data_enabled_;
 
   // Non-null only when detached.
-  Member<const FrozenState> frozen_state_;
+  Member<FrozenState> frozen_state_;
 };
 
 }  // namespace blink

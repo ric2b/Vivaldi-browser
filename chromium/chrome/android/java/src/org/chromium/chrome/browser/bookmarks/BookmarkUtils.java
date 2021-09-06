@@ -8,10 +8,12 @@ import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.Browser;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -50,14 +52,18 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.feature_engagement.EventConstants;
+import org.chromium.components.profile_metrics.BrowserProfileType;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
 
 // Vivaldi
+import java.util.Locale;
+
 import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
@@ -146,6 +152,14 @@ public class BookmarkUtils {
         BookmarkId bookmarkId =
                 addBookmarkInternal(activity, bookmarkModel, tab.getTitle(), tab.getOriginalUrl());
 
+        if (bookmarkId != null && bookmarkId.getType() == BookmarkType.NORMAL) {
+            @BrowserProfileType
+            int type = Profile.getBrowserProfileTypeFromProfile(
+                    Profile.fromWebContents(tab.getWebContents()));
+            RecordHistogram.recordEnumeratedHistogram(
+                    "Bookmarks.AddedPerProfileType", type, BrowserProfileType.MAX_VALUE + 1);
+        }
+
         Snackbar snackbar = null;
         if (bookmarkId == null) {
             snackbar = Snackbar.make(activity.getString(R.string.bookmark_page_failed),
@@ -179,6 +193,12 @@ public class BookmarkUtils {
                         Snackbar.UMA_BOOKMARK_ADDED)
                         .setTemplateText(activity.getString(R.string.bookmark_page_saved_folder));
             }
+            if (ChromeApplication.isVivaldi())
+                snackbar.setSingleLine(false).setAction(
+                        activity.getString(R.string.bookmark_item_edit)
+                                .toUpperCase(Locale.getDefault()), null)
+                .setProfileImage(activity.getResources().getDrawable(R.drawable.ic_bookmark_small));
+            else
             snackbar.setSingleLine(false).setAction(activity.getString(R.string.bookmark_item_edit),
                     null);
         }
@@ -198,7 +218,7 @@ public class BookmarkUtils {
      * @param context The associated context.
      * @return The bookmark ID created after saving the article to the reading list.
      */
-    public static BookmarkId addToReadingList(String url, String title,
+    public static BookmarkId addToReadingList(GURL url, String title,
             SnackbarManager snackbarManager, BookmarkBridge bookmarkBridge, Context context) {
         assert bookmarkBridge.isBookmarkModelLoaded();
         BookmarkId bookmarkId = bookmarkBridge.addToReadingList(title, url);
@@ -220,7 +240,7 @@ public class BookmarkUtils {
      * Will reset last used parent if it fails to add a bookmark
      */
     private static BookmarkId addBookmarkInternal(
-            Context context, BookmarkModel bookmarkModel, String title, String url) {
+            Context context, BookmarkModel bookmarkModel, String title, GURL url) {
         BookmarkId parent = getLastUsedParent(context);
         BookmarkItem parentItem = null;
         if (parent != null) {
@@ -402,18 +422,37 @@ public class BookmarkUtils {
                 "Bookmarks.OpenBookmarkType", bookmarkId.getType(), BookmarkType.LAST + 1);
 
         BookmarkItem bookmarkItem = model.getBookmarkById(bookmarkId);
+        assert bookmarkItem != null;
+        RecordHistogram.recordCustomTimesHistogram("Bookmarks.OpenBookmarkTimeInterval."
+                        + bookmarkTypeToHistogramSuffix(bookmarkId.getType()),
+                System.currentTimeMillis() - bookmarkItem.getDateAdded(), 1,
+                DateUtils.DAY_IN_MILLIS * 30, 50);
+
         if (bookmarkItem.getId().getType() == BookmarkType.READING_LIST
                 && !bookmarkItem.isFolder()) {
             model.setReadStatusForReadingList(bookmarkItem.getUrl(), true);
-            openUrlInCustomTab(context, bookmarkItem.getUrl());
+            openUrlInCustomTab(context, bookmarkItem.getUrl().getSpec());
         } else {
             // Note(david@vivaldi.com): Always use the parent component.
             if (ChromeApplication.isVivaldi())
                 openBookmarkComponentName = IntentUtils.safeGetParcelableExtra(
                          ((Activity) context).getIntent(), IntentHandler.EXTRA_PARENT_COMPONENT);
-            openUrl(context, bookmarkItem.getUrl(), openBookmarkComponentName);
+            openUrl(context, bookmarkItem.getUrl().getSpec(), openBookmarkComponentName);
         }
         return true;
+    }
+
+    private static String bookmarkTypeToHistogramSuffix(@BookmarkType int type) {
+        switch (type) {
+            case BookmarkType.NORMAL:
+                return "Normal";
+            case BookmarkType.PARTNER:
+                return "Partner";
+            case BookmarkType.READING_LIST:
+                return "ReadingList";
+        }
+        assert false : "Unknown BookmarkType";
+        return "";
     }
 
     /**

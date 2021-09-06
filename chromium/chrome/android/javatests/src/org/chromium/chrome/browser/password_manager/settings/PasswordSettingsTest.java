@@ -92,7 +92,6 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryActivity;
 import org.chromium.chrome.browser.history.HistoryManager;
 import org.chromium.chrome.browser.history.StubbedHistoryProvider;
@@ -104,11 +103,9 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
-import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.prefs.PrefService;
@@ -132,8 +129,6 @@ import java.util.concurrent.atomic.AtomicReference;
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class PasswordSettingsTest {
     private static final long UI_UPDATING_TIMEOUT_MS = 3000;
-    @Mock
-    private PasswordEditingDelegate mMockPasswordEditingDelegate;
 
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
@@ -191,10 +186,6 @@ public class PasswordSettingsTest {
         @Nullable
         private String mExportTargetPath;
 
-        // This is set to the last entry index {@link #showPasswordEntryEditingView()} was called
-        // with.
-        private int mLastEntryIndex;
-
         public void setSavedPasswords(ArrayList<SavedPasswordEntry> savedPasswords) {
             mSavedPasswords = savedPasswords;
         }
@@ -213,10 +204,6 @@ public class PasswordSettingsTest {
 
         public String getExportTargetPath() {
             return mExportTargetPath;
-        }
-
-        public int getLastEntryIndex() {
-            return mLastEntryIndex;
         }
 
         /**
@@ -270,18 +257,9 @@ public class PasswordSettingsTest {
         }
 
         @Override
-        public void showPasswordEntryEditingView(Context context, int index) {
-            mLastEntryIndex = index;
-            Bundle fragmentArgs = new Bundle();
-            fragmentArgs.putString(
-                    PasswordEntryEditor.CREDENTIAL_URL, getSavedPasswordEntry(index).getUrl());
-            fragmentArgs.putString(PasswordEntryEditor.CREDENTIAL_NAME,
-                    getSavedPasswordEntry(index).getUserName());
-            fragmentArgs.putString(PasswordEntryEditor.CREDENTIAL_PASSWORD,
-                    getSavedPasswordEntry(index).getPassword());
-            SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
-            settingsLauncher.launchSettingsActivity(
-                    context, PasswordEntryEditor.class, fragmentArgs);
+        public void showPasswordEntryEditingView(
+                Context context, SettingsLauncher launcher, int index) {
+            assert false : "Define this method before starting to use it in tests.";
         }
     }
 
@@ -408,14 +386,6 @@ public class PasswordSettingsTest {
      */
     public static Matcher<View> withSearchMenuIdOrText() {
         return withMenuIdOrText(R.id.menu_id_search, R.string.search);
-    }
-
-    /**
-     * Looks for the save edited password icon by id or by its title.
-     * @return Returns either the icon button or the menu option.
-     */
-    public static Matcher<View> withSaveMenuIdOrText() {
-        return withMenuIdOrText(R.id.action_save_edited_password, R.string.save);
     }
 
     /**
@@ -741,61 +711,6 @@ public class PasswordSettingsTest {
             Assert.assertNotNull(
                     passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS));
         });
-    }
-
-    /**
-     * Check that {@link #showPasswordEntryEditingView()} was called with the index matching the one
-     * of the password that was clicked.
-     */
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.EDIT_PASSWORDS_IN_SETTINGS})
-    public void testSelectedStoredPasswordIndexIsSameAsInShowPasswordEntryEditingView() {
-        PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(
-                mMockPasswordEditingDelegate);
-        setPasswordSourceWithMultipleEntries( // Initialize preferences
-                new SavedPasswordEntry[] {new SavedPasswordEntry("https://example.com",
-                                                  "example user", "example password"),
-                        new SavedPasswordEntry("https://test.com", "test user", "test password")});
-
-        startPasswordSettingsFromMainSettings();
-        Espresso.onView(withId(R.id.recycler_view))
-                .perform(scrollToHolder(hasTextInViewHolder("test user")));
-        Espresso.onView(withText(containsString("test user"))).perform(click());
-
-        Assert.assertEquals(mHandler.getLastEntryIndex(), 1);
-    }
-
-    /**
-     * Check that the changes of password data are shown in the password viewing activity and in the
-     * list of passwords after the save button was clicked.
-     */
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.EDIT_PASSWORDS_IN_SETTINGS)
-    public void testChangeOfStoredPasswordDataIsPropagated() throws Exception {
-        PasswordEditingDelegateProvider.getInstance().setPasswordEditingDelegate(
-                mMockPasswordEditingDelegate);
-        setPasswordSource(new SavedPasswordEntry("https://example.com", "test user", "password"));
-
-        startPasswordSettingsFromMainSettings();
-
-        Espresso.onView(withId(R.id.recycler_view))
-                .perform(scrollToHolder(hasTextInViewHolder("test user")));
-        Espresso.onView(withText(containsString("test user"))).perform(click());
-
-        // Performing a change of saved credentials.
-        mHandler.mSavedPasswords.set(
-                0, new SavedPasswordEntry("https://example.com", "test user new", "password"));
-
-        Espresso.onView(withSaveMenuIdOrText()).perform(click());
-
-        // Check if the password preferences activity has the updated data in the list of passwords.
-        Espresso.onView(withId(R.id.recycler_view))
-                .perform(scrollToHolder(hasTextInViewHolder("test user new")));
-        Espresso.onView(withText("test user new")).check(matches(isDisplayed()));
     }
 
     /**

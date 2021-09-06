@@ -37,6 +37,8 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
     return weak_factory_.GetWeakPtr();
   }
 
+  void Initialize();
+
   void ClearSyncData();
 
   VivaldiInvalidationService* invalidation_service() {
@@ -56,9 +58,8 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
       const syncer::WeakHandle<syncer::JsBackend>& js_backend,
       const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
           debug_info_listener,
-      const std::string& birthday,
-      const std::string& bag_of_chips,
-      bool success) override;
+      bool success,
+      bool is_first_time_sync_configure) override;
 
   void OnClearDataComplete(scoped_refptr<net::HttpResponseHeaders> headers);
 

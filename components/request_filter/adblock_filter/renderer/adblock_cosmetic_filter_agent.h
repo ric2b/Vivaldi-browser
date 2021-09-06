@@ -9,7 +9,7 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_frame_observer_tracker.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
-#include "vivaldi_mojom/components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
+#include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
 
 namespace blink {
 class RTCPeerConnectionHandler;

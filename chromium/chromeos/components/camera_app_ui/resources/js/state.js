@@ -16,6 +16,7 @@ import {
 export const State = {
   CAMERA_CONFIGURING: 'camera-configuring',
   CAMERA_SWITCHING: 'camera-switching',
+  CUSTOM_VIDEO_PARAMETERS: 'custom-video-parameters',
   EXPERT: 'expert',
   FPS_30: 'fps-30',
   FPS_60: 'fps-60',
@@ -49,6 +50,7 @@ export const State = {
   SCAN_BARCODE: 'scan-barcode',
   SHOULD_HANDLE_INTENT_RESULT: 'should-handle-intent-result',
   SHOW_METADATA: 'show-metadata',
+  SHOW_PTZ_OPTIONS: 'show-ptz-options',
   SCREEN_OFF_AUTO: 'screen-off-auto',
   STREAMING: 'streaming',
   SUSPEND: 'suspend',
@@ -81,7 +83,7 @@ export function assertState(s) {
 }
 
 /**
- * @typedef {function(boolean, !PerfInformation=)}
+ * @typedef {function(boolean, !PerfInformation=): void}
  */
 let StateObserver;  // eslint-disable-line no-unused-vars
 

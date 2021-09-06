@@ -23,6 +23,8 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.concurrent.Executor;
 
+import org.chromium.base.BuildConfig;
+
 /**
  * Runs asynchronous startup task that need to be run before the native side is
  * started. Currently it runs two tasks:
@@ -40,6 +42,7 @@ public abstract class AsyncInitTaskRunner {
 
     @VisibleForTesting
     boolean shouldFetchVariationsSeedDuringFirstRun() {
+        if (BuildConfig.IS_VIVALDI) return false;   // Vivaldi says NO to field trials.
         return ChromeVersionInfo.isOfficialBuild();
     }
 

@@ -10,12 +10,12 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/borealis/borealis_context.h"
 #include "chrome/browser/chromeos/borealis/borealis_context_manager.h"
 #include "chrome/browser/chromeos/borealis/borealis_metrics.h"
 #include "chrome/browser/chromeos/borealis/borealis_task.h"
 #include "chrome/browser/chromeos/borealis/infra/described.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 
 namespace {
@@ -81,9 +81,24 @@ void BorealisContextManagerImpl::Startup::Start(
 }
 
 BorealisContextManagerImpl::BorealisContextManagerImpl(Profile* profile)
-    : profile_(profile), weak_factory_(this) {}
+    : profile_(profile), weak_factory_(this) {
+  // DBusThreadManager may not be initialized in tests.
+  if (chromeos::DBusThreadManager::IsInitialized()) {
+    chromeos::DBusThreadManager::Get()->GetConciergeClient()->AddVmObserver(
+        this);
+  }
+}
 
-BorealisContextManagerImpl::~BorealisContextManagerImpl() = default;
+BorealisContextManagerImpl::~BorealisContextManagerImpl() {
+  // Even if initialized, DBusThreadManager may be destroyed prior to
+  // BorealisService/BorealisContextManagerImpl in tests. Therefore we must not
+  // keep a pointer to the observed ConciergeClient, either directly or via
+  // ScopedObservation or similar.
+  if (chromeos::DBusThreadManager::IsInitialized()) {
+    chromeos::DBusThreadManager::Get()->GetConciergeClient()->RemoveVmObserver(
+        this);
+  }
+}
 
 void BorealisContextManagerImpl::StartBorealis(ResultCallback callback) {
   if (context_) {
@@ -105,15 +120,22 @@ bool BorealisContextManagerImpl::IsRunning() {
   return context_.get();
 }
 
-void BorealisContextManagerImpl::ShutDownBorealis() {
+void BorealisContextManagerImpl::ShutDownBorealis(
+    base::OnceCallback<void(BorealisShutdownResult)> on_shutdown_callback) {
   // Get the context we are shutting down, either from an in-progress startup or
   // from the running one.
   std::unique_ptr<BorealisContext> shutdown_context;
   std::swap(shutdown_context, context_);
   if (in_progress_startup_)
     shutdown_context = in_progress_startup_->Abort();
-  if (!shutdown_context)
+  if (!shutdown_context) {
+    // TODO(b/172178036): There could be an operation in progress but we can't
+    // tell because we don't record that state. Fix this by adding proper state
+    // tracking for the context_manager.
+    std::move(on_shutdown_callback).Run(BorealisShutdownResult::kSuccess);
     return;
+  }
+  RecordBorealisShutdownNumAttemptsHistogram();
 
   // TODO(b/172178036): This could have been a task-sequence but that
   // abstraction is proving insufficient.
@@ -124,17 +146,25 @@ void BorealisContextManagerImpl::ShutDownBorealis() {
   chromeos::DBusThreadManager::Get()->GetConciergeClient()->StopVm(
       std::move(request),
       base::BindOnce(
-          [](base::Optional<vm_tools::concierge::StopVmResponse> response) {
+          [](base::OnceCallback<void(BorealisShutdownResult)>
+                 on_shutdown_callback,
+             base::Optional<vm_tools::concierge::StopVmResponse> response) {
             // We don't have a good way to deal with a vm failing to stop (and
             // this would be a very rare occurrence anyway). We log an error if
             // it actually wasn't successful.
+            BorealisShutdownResult result = BorealisShutdownResult::kSuccess;
             if (!response.has_value()) {
               LOG(ERROR) << "Failed to stop Borealis VM: No response";
+              result = BorealisShutdownResult::kFailed;
             } else if (!response.value().success()) {
               LOG(ERROR) << "Failed to stop Borealis VM: "
                          << response.value().failure_reason();
+              result = BorealisShutdownResult::kFailed;
             }
-          }));
+            RecordBorealisShutdownResultHistogram(result);
+            std::move(on_shutdown_callback).Run(result);
+          },
+          std::move(on_shutdown_callback)));
 }
 
 base::queue<std::unique_ptr<BorealisTask>>
@@ -179,6 +209,25 @@ void BorealisContextManagerImpl::Complete(Startup::Result completion_result) {
     ResultCallback callback = std::move(callback_queue_.front());
     callback_queue_.pop();
     std::move(callback).Run(completion_result_for_clients);
+  }
+}
+
+// TODO(b/179620544): Move handling of unexpected shutdowns to
+// BorealisLaunchWatcher.
+void BorealisContextManagerImpl::OnVmStarted(
+    const vm_tools::concierge::VmStartedSignal& signal) {}
+
+void BorealisContextManagerImpl::OnVmStopped(
+    const vm_tools::concierge::VmStoppedSignal& signal) {
+  if (context_ && context_->vm_name() == signal.name() &&
+      signal.owner_id() ==
+          chromeos::ProfileHelper::GetUserIdHashFromProfile(profile_)) {
+    // If |context_| exists, it's a "running" Borealis instance which we didn't
+    // request to shut down.
+    context_->NotifyUnexpectedVmShutdown();
+
+    // Update our state to reflect the unexpected VM exit.
+    context_.reset();
   }
 }
 

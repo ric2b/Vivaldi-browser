@@ -62,6 +62,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors_error_string.h"
+#include "third_party/blink/renderer/platform/loader/fetch/back_forward_cache_loader_helper.h"
 #include "third_party/blink/renderer/platform/loader/fetch/cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/console_logger.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
@@ -92,20 +93,15 @@ namespace blink {
 
 namespace {
 
-enum RequestOutcome { kSuccess, kFail };
+enum class RequestOutcome { kSuccess, kFail };
 
-std::unique_ptr<TracedValue> EndResourceLoadData(RequestOutcome outcome) {
-  auto value = std::make_unique<TracedValue>();
+const char* RequestOutcomeToString(RequestOutcome outcome) {
   switch (outcome) {
     case RequestOutcome::kSuccess:
-      value->SetString("outcome", "Success");
-      break;
+      return "Success";
     case RequestOutcome::kFail:
-      value->SetString("outcome", "Fail");
-      break;
+      return "Fail";
   }
-
-  return value;
 }
 
 bool IsThrottlableRequestContext(mojom::blink::RequestContextType context) {
@@ -462,6 +458,7 @@ void ResourceLoader::Trace(Visitor* visitor) const {
   visitor->Trace(resource_);
   visitor->Trace(response_body_loader_);
   visitor->Trace(data_pipe_completion_notifier_);
+  visitor->Trace(cancel_timer_);
   ResourceLoadSchedulerClient::Trace(visitor);
 }
 
@@ -548,8 +545,8 @@ void ResourceLoader::DidStartLoadingResponseBodyInternal(
   DCHECK(!response_body_loader_);
   ResponseBodyLoaderClient& response_body_loader_client = *this;
   response_body_loader_ = MakeGarbageCollected<ResponseBodyLoader>(
-      bytes_consumer, response_body_loader_client,
-      task_runner_for_body_loader_);
+      bytes_consumer, response_body_loader_client, task_runner_for_body_loader_,
+      fetcher_->GetBackForwardCacheLoaderHelper());
   resource_->ResponseBodyReceived(*response_body_loader_,
                                   task_runner_for_body_loader_);
   if (response_body_loader_->IsDrained()) {
@@ -562,6 +559,8 @@ void ResourceLoader::DidStartLoadingResponseBodyInternal(
 }
 
 void ResourceLoader::Run() {
+  // TODO(crbug.com/1169032): Manage cookies' capability control here for the
+  // Prerender2.
   StartWith(resource_->GetResourceRequest());
 }
 
@@ -847,7 +846,8 @@ bool ResourceLoader::WillFollowRedirect(
   if (auto* observer = fetcher_->GetResourceLoadObserver()) {
     observer->WillSendRequest(resource_->InspectorId(), *new_request,
                               redirect_response, resource_->GetType(),
-                              options.initiator_info);
+                              options.initiator_info,
+                              initial_request.GetRenderBlockingBehavior());
   }
 
   // First-party cookie logic moved from DocumentLoader in Blink to
@@ -1146,7 +1146,7 @@ void ResourceLoader::DidFinishLoadingFirstPartInMultipart() {
       TRACE_DISABLED_BY_DEFAULT("network"), "ResourceLoad",
       TRACE_ID_WITH_SCOPE("BlinkResourceID",
                           TRACE_ID_LOCAL(resource_->InspectorId())),
-      "endData", EndResourceLoadData(RequestOutcome::kSuccess));
+      "outcome", RequestOutcomeToString(RequestOutcome::kSuccess));
 
   fetcher_->HandleLoaderFinish(resource_.Get(), base::TimeTicks(),
                                ResourceFetcher::kDidFinishFirstPartInMultipart,
@@ -1190,7 +1190,7 @@ void ResourceLoader::DidFinishLoading(base::TimeTicks response_end_time,
       TRACE_DISABLED_BY_DEFAULT("network"), "ResourceLoad",
       TRACE_ID_WITH_SCOPE("BlinkResourceID",
                           TRACE_ID_LOCAL(resource_->InspectorId())),
-      "endData", EndResourceLoadData(RequestOutcome::kSuccess));
+      "outcome", RequestOutcomeToString(RequestOutcome::kSuccess));
 
   fetcher_->HandleLoaderFinish(
       resource_.Get(), response_end_time, ResourceFetcher::kDidFinishLoading,
@@ -1257,7 +1257,7 @@ void ResourceLoader::HandleError(const ResourceError& error) {
       TRACE_DISABLED_BY_DEFAULT("network"), "ResourceLoad",
       TRACE_ID_WITH_SCOPE("BlinkResourceID",
                           TRACE_ID_LOCAL(resource_->InspectorId())),
-      "endData", EndResourceLoadData(RequestOutcome::kFail));
+      "outcome", RequestOutcomeToString(RequestOutcome::kFail));
 
   // Set Now() as the response time, in case a more accurate one wasn't set in
   // DidFinishLoading or DidFail. This is important for error cases that don't
@@ -1268,19 +1268,6 @@ void ResourceLoader::HandleError(const ResourceError& error) {
   fetcher_->HandleLoaderError(resource_.Get(),
                               response_end_time_for_error_cases_, error,
                               inflight_keepalive_bytes_);
-}
-
-void ResourceLoader::EvictFromBackForwardCache(
-    mojom::RendererEvictionReason reason) {
-  fetcher_->EvictFromBackForwardCache(reason);
-}
-
-void ResourceLoader::DidBufferLoadWhileInBackForwardCache(size_t num_bytes) {
-  fetcher_->DidBufferLoadWhileInBackForwardCache(num_bytes);
-}
-
-bool ResourceLoader::CanContinueBufferingWhileInBackForwardCache() {
-  return fetcher_->CanContinueBufferingWhileInBackForwardCache();
 }
 
 void ResourceLoader::RequestSynchronously(const ResourceRequestHead& request) {

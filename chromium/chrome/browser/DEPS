@@ -17,13 +17,6 @@ include_rules = [
   "+chrome/android/modules",
   "+chrome/android/test_support_jni_headers",
   "+chrome/app",
-  "+chrome/browser/error_reporting",
-  "+chrome/browser/flags/android",
-  "+chrome/browser/preferences/android",
-  "+chrome/browser/profiles/android/jni_headers",
-  "+chrome/browser/util/android",
-  "+chrome/browser/version",
-  "+chrome/browser/video_tutorials",
   "+chrome/credential_provider/common",
   "+chrome/grit",
   "+chrome/install_static",
@@ -59,12 +52,17 @@ include_rules = [
   "+components/bookmarks/common",
   "+components/bookmarks/managed",
   "+components/bookmarks/test",
+  "+components/browser_sync",
+  "+components/browser_ui/bottomsheet",
+  "+components/browser_ui/modaldialog",
+  "+components/browser_ui/notifications",
   "+components/browser_ui/photo_picker",
   "+components/browser_ui/settings",
   "+components/browser_ui/util",
   "+components/browser_ui/widget",
-  "+components/browser_sync",
   "+components/browser_ui/site_settings",
+  "+components/browser_ui/strings",
+  "+components/browser_ui/styles",
   "+components/browser_watcher",
   "+components/browsing_data/content",
   "+components/browsing_data/core",
@@ -92,6 +90,7 @@ include_rules = [
   "+components/contextual_search/content/browser",
   "+components/contextual_search/content/common",
   "+components/contextual_search/core/browser",
+  "+components/continuous_search/browser",
   "+components/cookie_config",
   "+components/country_codes",
   "+components/crash/content/app",
@@ -136,7 +135,6 @@ include_rules = [
   "+components/feedback",
   "+components/find_in_page",
   "+components/flags_ui",
-  "+components/games/core",
   "+components/gcm_driver",
   "+components/google/core/browser",
   "+components/google/core/common",
@@ -161,6 +159,7 @@ include_rules = [
   "+components/language/content/browser",
   "+components/language/core/browser",
   "+components/language/core/common",
+  "+components/lens",
   "+components/leveldb_proto/content",
   "+components/leveldb_proto/public",
   "+components/leveldb_proto/testing",
@@ -169,6 +168,8 @@ include_rules = [
   "+components/login",
   "+components/media_message_center",
   "+components/media_router/browser",
+  "+components/memories/content",
+  "+components/memories/core",
   "+components/messages/android",
   "+components/metal_util",
   "+components/metrics",
@@ -236,7 +237,6 @@ include_rules = [
   "+components/query_parser",
   "+components/query_tiles",
   "+components/quirks",
-  "+components/rappor",
   "+components/reading_list/core",
   "+components/reading_list/features",
   "+components/remote_cocoa/app_shim",
@@ -244,6 +244,7 @@ include_rules = [
   "+components/remote_cocoa/common",
   "+components/renderer_context_menu",
   "+components/reputation",
+  "+components/reporting",
   "+components/rlz",
   "+components/safe_browsing",
   "+components/safe_search_api",
@@ -326,6 +327,7 @@ include_rules = [
   "+components/web_modal",
   "+components/web_resource",
   "+components/webapps/browser",
+  "+components/webapps/common",
   "+components/webdata/common",
   "+components/webdata_services",
   "+components/webrtc_logging/browser",
@@ -402,13 +404,13 @@ include_rules = [
   "+third_party/widevine/cdm/buildflags.h",
   "+third_party/widevine/cdm/widevine_cdm_common.h",
   "+chrome/services/machine_learning",
-
+  "+chrome/services/speech",
   # Code under //ash should be accessed via its public API. See //ash/README.md.
   "-ash",
+  "+ash/constants",
   "+ash/public",
   "+ash/keyboard/ui/grit",
   "+ash/keyboard/ui/resources",
-  "+ash/components/shortcut_viewer",
 
   # The message center should only be accessed through
   # //chrome/browser/notifications.
@@ -507,6 +509,9 @@ specific_include_rules = {
   "browser_process_impl.cc": [
     "+ui/message_center/message_center.h",
   ],
+  "browser_process_platform_part_chromeos.cc": [
+    "+ash/components/account_manager",
+  ],
   "input_method_engine.cc": [
     # For GetVirtualKeyboardController.
     "+ash/keyboard/ui/keyboard_ui_controller.h",
@@ -527,4 +532,10 @@ specific_include_rules = {
   "chrome_content_browser_client\.cc" : [
     "+content/public/browser/tts_controller.h",
   ],
+  "chrome_navigation_browsertest.cc" : [
+    "+content/common/content_navigation_policy.h",
+  ],
+  "about_flags\.cc" : [
+    "+mojo/core/embedder/features.h",
+  ]
 }

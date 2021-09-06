@@ -118,7 +118,7 @@ std::string WebEngineContentBrowserClient::GetUserAgent() {
 }
 
 void WebEngineContentBrowserClient::OverrideWebkitPrefs(
-    content::RenderViewHost* rvh,
+    content::WebContents* web_contents,
     blink::web_pref::WebPreferences* web_prefs) {
   // Disable WebSQL support since it's being removed from the web platform.
   web_prefs->databases_enabled = false;
@@ -252,9 +252,13 @@ WebEngineContentBrowserClient::CreateURLLoaderThrottles(
   }
 
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles;
-  throttles.emplace_back(std::make_unique<WebEngineURLLoaderThrottle>(
+  scoped_refptr<WebEngineURLLoaderThrottle::UrlRequestRewriteRules>& rules =
       FrameImpl::FromWebContents(wc_getter.Run())
-          ->url_request_rewrite_rules_manager()));
+          ->url_request_rewrite_rules_manager()
+          ->GetCachedRules();
+  if (rules) {
+    throttles.emplace_back(std::make_unique<WebEngineURLLoaderThrottle>(rules));
+  }
   return throttles;
 }
 
@@ -263,7 +267,8 @@ void WebEngineContentBrowserClient::ConfigureNetworkContextParams(
     bool in_memory,
     const base::FilePath& relative_partition_path,
     network::mojom::NetworkContextParams* network_context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+    cert_verifier::mojom::CertVerifierCreationParams*
+        cert_verifier_creation_params) {
   network_context_params->user_agent = GetUserAgent();
   network_context_params
       ->accept_language = net::HttpUtil::GenerateAcceptLanguageHeader(

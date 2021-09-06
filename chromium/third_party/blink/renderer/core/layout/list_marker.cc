@@ -93,8 +93,7 @@ int ListMarker::ListItemValue(const LayoutObject& list_item) const {
   return 0;
 }
 
-// If the value of ListStyleType changed, we need to the marker text has been
-// updated.
+// If the value of ListStyleType changed, we need to update the marker text.
 void ListMarker::ListStyleTypeChanged(LayoutObject& marker) {
   DCHECK_EQ(Get(&marker), this);
   if (marker_text_type_ == kNotText || marker_text_type_ == kUnresolved)
@@ -103,6 +102,18 @@ void ListMarker::ListStyleTypeChanged(LayoutObject& marker) {
   marker_text_type_ = kUnresolved;
   marker.SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
       layout_invalidation_reason::kListStyleTypeChange);
+}
+
+// If the @counter-style in use has changed, we need to update the marker text.
+void ListMarker::CounterStyleChanged(LayoutObject& marker) {
+  DCHECK(RuntimeEnabledFeatures::CSSAtRuleCounterStyleEnabled());
+  DCHECK_EQ(Get(&marker), this);
+  if (marker_text_type_ == kNotText || marker_text_type_ == kUnresolved)
+    return;
+
+  marker_text_type_ = kUnresolved;
+  marker.SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
+      layout_invalidation_reason::kCounterStyleChange);
 }
 
 void ListMarker::OrdinalValueChanged(LayoutObject& marker) {
@@ -315,7 +326,7 @@ LayoutUnit ListMarker::WidthOfSymbol(const ComputedStyle& style) {
   DCHECK(font_data);
   if (!font_data)
     return LayoutUnit();
-  const AtomicString name = style.GetListStyleType()->GetCounterStyleName();
+  const AtomicString& name = style.GetListStyleType()->GetCounterStyleName();
   if (name == "disclosure-open" || name == "disclosure-closed")
     return DisclosureSymbolSize(style);
   return LayoutUnit((font_data->GetFontMetrics().Ascent() * 2 / 3 + 1) / 2 + 2);
@@ -331,7 +342,7 @@ std::pair<LayoutUnit, LayoutUnit> ListMarker::InlineMarginsForInside(
     return {LayoutUnit(), LayoutUnit(kCMarkerPaddingPx)};
   switch (GetListStyleCategory(document, list_item_style)) {
     case ListStyleCategory::kSymbol: {
-      const AtomicString name =
+      const AtomicString& name =
           list_item_style.GetListStyleType()->GetCounterStyleName();
       if (name == "disclosure-open" || name == "disclosure-closed") {
         return {LayoutUnit(), LayoutUnit(kClosureMarkerMarginEm *
@@ -368,7 +379,7 @@ std::pair<LayoutUnit, LayoutUnit> ListMarker::InlineMarginsForOutside(
         if (!font_data)
           return {};
         const FontMetrics& font_metrics = font_data->GetFontMetrics();
-        const AtomicString name =
+        const AtomicString& name =
             list_item_style.GetListStyleType()->GetCounterStyleName();
         LayoutUnit offset =
             (name == "disclosure-open" || name == "disclosure-closed")
@@ -398,7 +409,7 @@ LayoutRect ListMarker::RelativeSymbolMarkerRect(const ComputedStyle& style,
   // http://crbug.com/543193
   const FontMetrics& font_metrics = font_data->GetFontMetrics();
   const int ascent = font_metrics.Ascent();
-  const AtomicString name = style.GetListStyleType()->GetCounterStyleName();
+  const AtomicString& name = style.GetListStyleType()->GetCounterStyleName();
   if (name == "disclosure-open" || name == "disclosure-closed") {
     LayoutUnit marker_size = DisclosureSymbolSize(style);
     relative_rect = LayoutRect(LayoutUnit(), ascent - marker_size, marker_size,
@@ -420,9 +431,7 @@ const CounterStyle& ListMarker::GetCounterStyle(Document& document,
   DCHECK(RuntimeEnabledFeatures::CSSAtRuleCounterStyleEnabled());
   DCHECK(style.GetListStyleType());
   DCHECK(style.GetListStyleType()->IsCounterStyle());
-  const ListStyleTypeData& list_style_data = *style.GetListStyleType();
-  return document.GetStyleEngine().FindCounterStyleAcrossScopes(
-      list_style_data.GetCounterStyleName(), list_style_data.GetTreeScope());
+  return style.GetListStyleType()->GetCounterStyle(document);
 }
 
 ListMarker::ListStyleCategory ListMarker::GetListStyleCategory(

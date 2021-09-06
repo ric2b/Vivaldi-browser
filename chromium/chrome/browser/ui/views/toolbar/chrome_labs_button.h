@@ -7,26 +7,25 @@
 
 #include "chrome/browser/ui/views/toolbar/chrome_labs_bubble_view_model.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 
 class ChromeLabsButton : public ToolbarButton {
  public:
-  ChromeLabsButton();
+  METADATA_HEADER(ChromeLabsButton);
+  explicit ChromeLabsButton(const ChromeLabsBubbleViewModel* model);
+  ChromeLabsButton(const ChromeLabsButton&) = delete;
+  ChromeLabsButton& operator=(const ChromeLabsButton&) = delete;
   ~ChromeLabsButton() override;
 
   // ToolbarButton:
   void UpdateIcon() override;
 
-  // views::View:
-  const char* GetClassName() const override;
-
-  void SetLabInfoForTesting(const std::vector<LabInfo>& test_lab_info);
+  static bool ShouldShowButton(const ChromeLabsBubbleViewModel* model);
 
  private:
   void ButtonPressed();
 
-  // Used by tests to customize the LabInfo used to populate the button's menu.
-  // This will be empty in production code.
-  std::vector<LabInfo> test_lab_info_;
+  const ChromeLabsBubbleViewModel* model_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_CHROME_LABS_BUTTON_H_

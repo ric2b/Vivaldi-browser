@@ -5,29 +5,32 @@ import("//build/buildflag_header.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//chromeos/assistant/assistant.gni")
 
-assert(enable_cros_libassistant)
-
 source_set("proxy") {
-  sources = [
-    "assistant_proxy.cc",
-    "assistant_proxy.h",
-    "conversation_controller_proxy.cc",
-    "conversation_controller_proxy.h",
-    "libassistant_service_host.h",
-    "service_controller_proxy.cc",
-    "service_controller_proxy.h",
-  ]
+  sources = []
+  deps = []
 
-  public_deps = [ "//chromeos/services/libassistant/public/mojom" ]
+  if (enable_cros_libassistant) {
+    sources += [
+      "assistant_proxy.cc",
+      "assistant_proxy.h",
+      "conversation_controller_proxy.cc",
+      "conversation_controller_proxy.h",
+      "libassistant_service_host.h",
+      "service_controller_proxy.cc",
+      "service_controller_proxy.h",
+    ]
 
-  deps = [
-    "//base",
-    "//chromeos/assistant/internal",
-    "//chromeos/assistant/internal/proto/google3",
-    "//chromeos/constants",
-    "//chromeos/services/assistant/public/cpp",
-    "//chromeos/services/assistant/public/cpp/migration",
-    "//chromeos/services/libassistant",
-    "//libassistant/shared/internal_api:fuchsia_api_helper",
-  ]
+    public_deps = [ "//chromeos/services/libassistant/public/mojom" ]
+
+    deps += [
+      "//ash/constants",
+      "//base",
+      "//chromeos/assistant/internal",
+      "//chromeos/assistant/internal/proto/google3",
+      "//chromeos/services/assistant/public/cpp",
+      "//chromeos/services/assistant/public/cpp/migration",
+      "//chromeos/services/libassistant",
+      "//services/network/public/cpp",
+    ]
+  }
 }

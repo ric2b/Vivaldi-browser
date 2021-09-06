@@ -8,6 +8,7 @@
 
 #include "extensions/api/context_menu/context_menu_api.h"
 
+#include "browser/menus/vivaldi_context_menu_controller.h"
 #include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "content/public/browser/web_contents.h"
@@ -68,9 +69,10 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   // for all windows. We have to locate the proper web contents to use.
   Browser* browser = ::vivaldi::FindBrowserByWindowId(
       params->properties.window_id);
-  content::WebContents* window_web_contents = browser ?
-      static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents() :
-      nullptr;
+  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+  if (!window)
+    return RespondNow(Error("Missing browser window"));
+  content::WebContents* window_web_contents = window->web_contents();
   if (!window_web_contents)
     return RespondNow(Error("Missing WebContents"));
 
@@ -81,35 +83,16 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
               "and call preventDefault() to block the standard menu"));
   }
 
-  controller_.reset(new ::vivaldi::ContextMenuController(
-      this,
-      web_contents,
-      window_web_contents,
-      rv_context_menu,
-      std::move(params)));
-  controller_->Show();
-
-  AddRef();
-
-  return RespondLater();
-}
-
-void ContextMenuShowFunction::OnAction(int command_id, int event_state) {
-  MenubarMenuAPI::SendAction(browser_context(), command_id, event_state);
-}
-
-void ContextMenuShowFunction::OnHover(const std::string& url) {
-  MenubarMenuAPI::SendHover(browser_context(), url);
-}
-
-void ContextMenuShowFunction::OnOpened() {
-  MenubarMenuAPI::SendOpen(browser_context(), 0);
-}
-
-void ContextMenuShowFunction::OnClosed() {
-  MenubarMenuAPI::SendClose(browser_context());
-  Respond(ArgumentList(context_menu::Show::Results::Create()));
-  Release();
+  // The controller deletes itself
+  ::vivaldi::ContextMenuController* controller = new
+      ::vivaldi::ContextMenuController(
+          browser_context(),
+          web_contents,
+          window_web_contents,
+          rv_context_menu,
+          std::move(params));
+  controller->Show();
+  return RespondNow(ArgumentList(context_menu::Show::Results::Create()));
 }
 
 }  // namespace extensions

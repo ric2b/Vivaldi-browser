@@ -16,6 +16,7 @@ group("closure_compile") {
 }
 
 js_type_check("closure_compile_legacy") {
+  uses_legacy_modules = true
   deps = [
     ":audio_player",
     ":background",
@@ -26,7 +27,6 @@ js_type_check("closure_compile_legacy") {
 }
 
 js_type_check("closure_compile_jsmodules") {
-  uses_js_modules = true
   deps = [
     ":background.m",
     ":error_util.m",

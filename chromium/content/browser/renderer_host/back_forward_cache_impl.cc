@@ -177,7 +177,6 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh,
       FeatureToBit(WebSchedulerTrackedFeature::kWebOTPService) |
       FeatureToBit(WebSchedulerTrackedFeature::kSpeechRecognizer) |
       FeatureToBit(WebSchedulerTrackedFeature::kSpeechSynthesis) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWakeLock) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebDatabase) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebHID) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebLocks) |
@@ -320,7 +319,8 @@ BackForwardCacheImpl::Entry::Entry(
     : render_frame_host(std::move(rfh)),
       proxy_hosts(std::move(proxies)),
       render_view_hosts(std::move(render_view_hosts)) {}
-BackForwardCacheImpl::Entry::~Entry() {}
+
+BackForwardCacheImpl::Entry::~Entry() = default;
 
 BackForwardCacheTestDelegate::BackForwardCacheTestDelegate() {
   DCHECK(!g_bfcache_disabled_test_observer);
@@ -362,8 +362,7 @@ BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStorePageNow(
     RenderFrameHostImpl* rfh) {
   BackForwardCacheCanStoreDocumentResult result =
       CanPotentiallyStorePageLater(rfh);
-  CheckDynamicStatesOnSubtree(&result, rfh);
-
+  CheckDynamicBlocklistedFeaturesOnSubtree(&result, rfh);
   DVLOG(1) << "CanStorePageNow: " << rfh->GetLastCommittedURL() << " : "
            << result.ToString();
   return result;
@@ -377,7 +376,10 @@ BackForwardCacheImpl::CanPotentiallyStorePageLater(RenderFrameHostImpl* rfh) {
   if (rfh->GetParent())
     result.No(BackForwardCacheMetrics::NotRestoredReason::kNotMainFrame);
 
-  if (!IsBackForwardCacheEnabled() || is_disabled_for_testing_) {
+  if (!IsBackForwardCacheEnabled() || is_disabled_for_testing_ ||
+      // TODO(https://crbug.com/1176151): Replace with LifecycleState check once
+      // it tracks prerender too.
+      rfh->frame_tree()->is_prerendering()) {
     result.No(
         BackForwardCacheMetrics::NotRestoredReason::kBackForwardCacheDisabled);
 
@@ -391,6 +393,13 @@ BackForwardCacheImpl::CanPotentiallyStorePageLater(RenderFrameHostImpl* rfh) {
     if (!DeviceHasEnoughMemoryForBackForwardCache()) {
       result.No(BackForwardCacheMetrics::NotRestoredReason::
                     kBackForwardCacheDisabledByLowMemory);
+    }
+
+    // TODO(https://crbug.com/1176151): Replace with LifecycleState check once
+    // it tracks prerender too.
+    if (rfh->frame_tree()->is_prerendering()) {
+      result.No(BackForwardCacheMetrics::NotRestoredReason::
+                    kBackForwardCacheDisabledForPrerender);
     }
   }
 
@@ -502,7 +511,7 @@ void BackForwardCacheImpl::CanStoreRenderFrameHostLater(
 
 // Recursively checks dynamic states that might affect whether this
 // RenderFrameHost and all child frames can be cached right now.
-void BackForwardCacheImpl::CheckDynamicStatesOnSubtree(
+void BackForwardCacheImpl::CheckDynamicBlocklistedFeaturesOnSubtree(
     BackForwardCacheCanStoreDocumentResult* result,
     RenderFrameHostImpl* rfh) {
   if (!rfh->IsDOMContentLoaded())
@@ -510,13 +519,15 @@ void BackForwardCacheImpl::CheckDynamicStatesOnSubtree(
 
   // Check for banned features currently being used. Note that unlike the check
   // in CanStoreRenderFrameHostLater, we are checking all banned features here
-  // (not only the "sticky" features), because this time we're making a final
-  // decision on whether we should store a page in the back-forward cache or
-  // not.
+  // (not only the "sticky" features), because this time we're making a decision
+  // on whether we should store a page in the back-forward cache or not.
   if (uint64_t banned_features =
           GetDisallowedFeatures(rfh, RequestedFeatures::kAll) &
           rfh->scheduler_tracked_features()) {
-    if (!ShouldIgnoreBlocklists()) {
+    bool should_ignore_features_for_now =
+        CheckFeatureUsageOnlyAfterAck() &&
+        !rfh->render_view_host()->DidReceiveBackForwardCacheAck();
+    if (!ShouldIgnoreBlocklists() && !should_ignore_features_for_now) {
       result->NoDueToFeatures(banned_features);
     }
   }
@@ -530,7 +541,8 @@ void BackForwardCacheImpl::CheckDynamicStatesOnSubtree(
   }
 
   for (size_t i = 0; i < rfh->child_count(); i++)
-    CheckDynamicStatesOnSubtree(result, rfh->child_at(i)->current_frame_host());
+    CheckDynamicBlocklistedFeaturesOnSubtree(
+        result, rfh->child_at(i)->current_frame_host());
 }
 
 void BackForwardCacheImpl::StoreEntry(
@@ -692,10 +704,12 @@ void BackForwardCacheImpl::DestroyEvictedFrames() {
   TRACE_EVENT0("navigation", "BackForwardCache::DestroyEvictedFrames");
   if (entries_.empty())
     return;
-  entries_.erase(std::remove_if(
-      entries_.begin(), entries_.end(), [](std::unique_ptr<Entry>& entry) {
-        return entry->render_frame_host->is_evicted_from_back_forward_cache();
-      }));
+  entries_.erase(std::remove_if(entries_.begin(), entries_.end(),
+                                [](std::unique_ptr<Entry>& entry) {
+                                  return entry->render_frame_host
+                                      ->is_evicted_from_back_forward_cache();
+                                }),
+                 entries_.end());
 }
 
 bool BackForwardCacheImpl::IsAllowed(const GURL& current_url) {
@@ -717,4 +731,13 @@ bool BackForwardCacheImpl::IsAllowed(const GURL& current_url) {
   }
   return false;
 }
+
+bool BackForwardCacheImpl::CheckFeatureUsageOnlyAfterAck() {
+  if (!IsBackForwardCacheEnabled())
+    return false;
+
+  return base::GetFieldTrialParamByFeatureAsBool(
+      features::kBackForwardCache, "check_eligibility_after_pagehide", false);
+}
+
 }  // namespace content

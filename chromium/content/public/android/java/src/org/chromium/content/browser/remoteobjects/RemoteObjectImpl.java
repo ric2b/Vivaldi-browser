@@ -37,6 +37,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 
 /**
  * Exposes limited access to a Java object over a Mojo interface.
@@ -125,6 +126,9 @@ class RemoteObjectImpl implements RemoteObject {
     public static final int UNSIGNED_SHORT_MASK = 0xffff;
     public static final long UNSIGNED_INT_MASK = 0xffffffffL;
 
+    private static final Pattern sDoubleNumberPattern = Pattern.compile(
+            "^(-?[0-9]+)(\\.0+)? ( ( (?:\\.[0-9]*[1-9])? )0* ) ((?:e.*)?)$", Pattern.COMMENTS);
+
     public RemoteObjectImpl(Object target, Class<? extends Annotation> safeAnnotationClass,
             Auditor auditor, ObjectIdAllocator objectIdAllocator, boolean allowInspection) {
         mTarget = new WeakReference<>(target);
@@ -201,7 +205,13 @@ class RemoteObjectImpl implements RemoteObject {
         Class<?>[] parameterTypes = method.getParameterTypes();
         Object[] args = new Object[numArguments];
         for (int i = 0; i < numArguments; i++) {
-            args[i] = convertArgument(arguments[i], parameterTypes[i], StringCoercionMode.COERCE);
+            try {
+                args[i] = convertArgument(arguments[i], parameterTypes[i],
+                        StringCoercionMode.COERCE, objectIdAllocator);
+            } catch (IllegalArgumentException e) {
+                callback.call(makeErrorResult(RemoteInvocationError.NON_ASSIGNABLE_TYPES));
+                return;
+            }
         }
 
         Object result = null;
@@ -304,7 +314,7 @@ class RemoteObjectImpl implements RemoteObject {
     }
 
     private abstract static class WrapBuffer {
-        private Class<?> mParameterType;
+        protected Class<?> mParameterType;
         protected int mLength;
 
         WrapBuffer(Class<?> parameterType) {
@@ -353,6 +363,16 @@ class RemoteObjectImpl implements RemoteObject {
         }
 
         @Override
+        public Object copyArray() {
+            if (mParameterType != byte.class) {
+                return super.copyArray();
+            }
+            byte[] result = new byte[mLength];
+            mBuffer.get(result);
+            return result;
+        }
+
+        @Override
         protected Number get(int index) {
             byte number = mBuffer.get(index);
             return (mUnsigned ? (short) (number & UNSIGNED_BYTE_MASK) : number);
@@ -367,6 +387,16 @@ class RemoteObjectImpl implements RemoteObject {
             mBuffer = buffer;
             mLength = mBuffer.limit();
             mUnsigned = unsigned;
+        }
+
+        @Override
+        public Object copyArray() {
+            if (mParameterType != short.class) {
+                return super.copyArray();
+            }
+            short[] result = new short[mLength];
+            mBuffer.get(result);
+            return result;
         }
 
         @Override
@@ -387,6 +417,16 @@ class RemoteObjectImpl implements RemoteObject {
         }
 
         @Override
+        public Object copyArray() {
+            if (mParameterType != int.class) {
+                return super.copyArray();
+            }
+            int[] result = new int[mLength];
+            mBuffer.get(result);
+            return result;
+        }
+
+        @Override
         protected Number get(int index) {
             int number = mBuffer.get(index);
             return (mUnsigned ? (long) (number & UNSIGNED_INT_MASK) : number);
@@ -399,6 +439,16 @@ class RemoteObjectImpl implements RemoteObject {
             super(parameterType);
             mBuffer = buffer;
             mLength = mBuffer.limit();
+        }
+
+        @Override
+        public Object copyArray() {
+            if (mParameterType != float.class) {
+                return super.copyArray();
+            }
+            float[] result = new float[mLength];
+            mBuffer.get(result);
+            return result;
         }
 
         @Override
@@ -421,6 +471,16 @@ class RemoteObjectImpl implements RemoteObject {
         }
 
         @Override
+        public Object copyArray() {
+            if (mParameterType != double.class) {
+                return super.copyArray();
+            }
+            double[] result = new double[mLength];
+            mBuffer.get(result);
+            return result;
+        }
+
+        @Override
         protected Number get(int index) {
             return mBuffer.get(index);
         }
@@ -432,7 +492,7 @@ class RemoteObjectImpl implements RemoteObject {
     }
 
     private static Object convertArgument(RemoteInvocationArgument argument, Class<?> parameterType,
-            @StringCoercionMode int stringCoercionMode) {
+            @StringCoercionMode int stringCoercionMode, ObjectIdAllocator objectIdAllocator) {
         switch (argument.which()) {
             case RemoteInvocationArgument.Tag.NumberValue:
                 // See http://jdk6.java.net/plugin2/liveconnect/#JS_NUMBER_VALUES.
@@ -549,8 +609,8 @@ class RemoteObjectImpl implements RemoteObject {
 
                     Object result = Array.newInstance(componentType, arrayValue.length);
                     for (int i = 0; i < arrayValue.length; i++) {
-                        Object element = convertArgument(
-                                arrayValue[i], componentType, StringCoercionMode.DO_NOT_COERCE);
+                        Object element = convertArgument(arrayValue[i], componentType,
+                                StringCoercionMode.DO_NOT_COERCE, objectIdAllocator);
                         Array.set(result, i, element);
                     }
                     return result;
@@ -620,6 +680,28 @@ class RemoteObjectImpl implements RemoteObject {
                     // raising a JavaScript exception.
                     return null;
                 }
+            case RemoteInvocationArgument.Tag.ObjectIdValue:
+                if (parameterType == String.class) {
+                    return stringCoercionMode == StringCoercionMode.COERCE ? "undefined" : null;
+                } else if (parameterType.isPrimitive()) {
+                    return getPrimitiveZero(parameterType);
+                } else if (parameterType.isArray()) {
+                    // LIVECONNECT_COMPLIANCE: Existing behavior is to convert to null. Spec
+                    // requires raising a JavaScript exception.
+                    return null;
+                }
+
+                Object object = objectIdAllocator.getObjectById(argument.getObjectIdValue());
+                if (object == null) {
+                    // LIVECONNECT_COMPLIANCE: Existing behavior is to pass null. Spec
+                    // requires converting if the target type is
+                    // netscape.javascript.JSObject, otherwise raising a JavaScript
+                    // exception.
+                    return null;
+                }
+                if (parameterType.isInstance(object)) return object;
+
+                throw new IllegalArgumentException("incompatible argument type with object id");
             default:
                 throw new RuntimeException("invalid wire argument type");
         }
@@ -704,9 +786,9 @@ class RemoteObjectImpl implements RemoteObject {
         // Expression is somewhat complicated, in order to deal with scientific notation. Either
         // group 2 will match (and so the decimal will be stripped along with zeroes), or group 3
         // will match (and the decimal will be left), but not both (since there cannot be more than
-        // one decimal point).
-        return String.format((Locale) null, "%.6g", doubleValue)
-                .replaceFirst("^(-?[0-9]+)(\\.0+)?((\\.[0-9]*[1-9])0*)?(e.*)?$", "$1$4$5");
+        // one decimal point). Group 5 will match an exponential part.
+        return sDoubleNumberPattern.matcher(String.format((Locale) null, "%.6g", doubleValue))
+                .replaceAll("$1$4$5");
     }
 
     private static Object getPrimitiveZero(Class<?> parameterType) {

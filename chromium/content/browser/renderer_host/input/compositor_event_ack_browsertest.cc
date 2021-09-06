@@ -16,7 +16,6 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/input_messages.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/content_switches.h"
@@ -114,8 +113,9 @@ class CompositorEventAckBrowserTest : public ContentBrowserTest {
   ~CompositorEventAckBrowserTest() override {}
 
   RenderWidgetHostImpl* GetWidgetHost() {
+    auto* main_frame = shell()->web_contents()->GetMainFrame();
     return RenderWidgetHostImpl::From(
-        shell()->web_contents()->GetRenderViewHost()->GetWidget());
+        main_frame->GetRenderViewHost()->GetWidget());
   }
 
   void OnSyntheticGestureCompleted(SyntheticGesture::Result result) {
@@ -195,7 +195,7 @@ class CompositorEventAckBrowserTest : public ContentBrowserTest {
         GetWidgetHost()->render_frame_metadata_provider());
 
     SyntheticSmoothScrollGestureParams params;
-    params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
+    params.gesture_source_type = content::mojom::GestureSourceType::kTouchInput;
     params.anchor = gfx::PointF(50, 50);
     params.distances.push_back(gfx::Vector2d(0, -45));
 

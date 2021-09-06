@@ -140,6 +140,7 @@ std::string CalculateCommonMimeType(
 
 namespace apps_util {
 
+const char kIntentActionMain[] = "main";
 const char kIntentActionView[] = "view";
 const char kIntentActionSend[] = "send";
 const char kIntentActionSendMultiple[] = "send_multiple";
@@ -193,11 +194,14 @@ apps::mojom::IntentPtr CreateShareIntentFromDriveFile(
 }
 
 apps::mojom::IntentPtr CreateShareIntentFromText(
-    const std::string& share_text) {
+    const std::string& share_text,
+    const std::string& share_title) {
   auto intent = apps::mojom::Intent::New();
   intent->action = kIntentActionSend;
   intent->mime_type = "text/plain";
   intent->share_text = share_text;
+  if (!share_title.empty())
+    intent->share_title = share_title;
   return intent;
 }
 

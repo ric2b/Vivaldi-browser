@@ -2,21 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
+#include "chrome/browser/ash/login/screens/arc_terms_of_service_screen.h"
 
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
 #include "base/memory/ptr_util.h"
+#include "chrome/browser/ash/login/screens/recommend_apps_screen.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
-#include "chrome/browser/chromeos/login/screens/recommend_apps_screen.h"
 #include "chrome/browser/chromeos/login/test/embedded_test_server_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
@@ -41,7 +42,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/constants/chromeos_switches.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
 #include "components/arc/arc_prefs.h"
 #include "components/arc/arc_util.h"
@@ -97,11 +98,11 @@ const test::UIPath kArcReviewSettingsCheckbox = {kArcTosID,
                                                  "arcReviewSettingsCheckbox"};
 const test::UIPath kArcTosAcceptButton = {kArcTosID, "arcTosAcceptButton"};
 const test::UIPath kArcTosBackButton = {kArcTosID, "arcTosBackButton"};
-const test::UIPath kArcTosDialog = {kArcTosID, "arcTosDialog"};
 const test::UIPath kArcTosNextButton = {kArcTosID, "arcTosNextButton"};
 const test::UIPath kArcTosOverlayWebview = {kArcTosID, "arcTosOverlayWebview"};
 const test::UIPath kArcTosRetryButton = {kArcTosID, "arcTosRetryButton"};
 const test::UIPath kArcTosView = {kArcTosID, "arcTosView"};
+const test::UIPath kArcTosDialog = {kArcTosID, "arcTosDialog"};
 
 ArcPlayTermsOfServiceConsent BuildArcPlayTermsOfServiceConsent(bool accepted) {
   ArcPlayTermsOfServiceConsent play_consent;
@@ -261,9 +262,7 @@ class ArcTermsOfServiceScreenTest : public OobeBaseTest {
 
   void WaitForTermsOfServiceWebViewToLoad() {
     OobeScreenWaiter(ArcTermsOfServiceScreenView::kScreenId).Wait();
-    test::OobeJS()
-        .CreateHasClassWaiter(true, "arc-tos-loaded", kArcTosDialog)
-        ->Wait();
+    test::OobeJS().CreateVisibilityWaiter(true, kArcTosDialog)->Wait();
   }
 
   void WaitForScreenExitResult() {
@@ -468,7 +467,8 @@ IN_PROC_BROWSER_TEST_F(ArcTermsOfServiceScreenTest, ReviewPlayOptions) {
 }
 
 // Test whether google privacy policy can be loaded.
-IN_PROC_BROWSER_TEST_F(ArcTermsOfServiceScreenTest, PrivacyPolicy) {
+// TODO(crbug.com/1177111) Re-enable test
+IN_PROC_BROWSER_TEST_F(ArcTermsOfServiceScreenTest, DISABLED_PrivacyPolicy) {
   // Privacy policy link is parsed from the footer of the TOS content response.
   set_serve_tos_with_privacy_policy_footer(true);
   TriggerArcTosScreen();
@@ -531,6 +531,25 @@ IN_PROC_BROWSER_TEST_F(ArcTermsOfServiceScreenTest, RetryAndBackButtonClicked) {
               static_cast<int>(
                   ArcTermsOfServiceScreen::UserAction::kBackButtonClicked),
               1)));
+}
+
+IN_PROC_BROWSER_TEST_F(ArcTermsOfServiceScreenTest, NextButtonFocused) {
+  TriggerArcTosScreen();
+  WaitForTermsOfServiceWebViewToLoad();
+  test::OobeJS().CreateFocusWaiter(kArcTosNextButton)->Wait();
+
+  // TODO(crbug/1167720): Make this a method of JSChecker
+  ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+      nullptr, ui::VKEY_RETURN, false /* control */, false /* shift */,
+      false /* alt */, false /* command */));
+  test::OobeJS().CreateVisibilityWaiter(true, kArcTosAcceptButton)->Wait();
+
+  EXPECT_THAT(histogram_tester_.GetAllSamples(
+                  "OOBE.ArcTermsOfServiceScreen.UserActions"),
+              ElementsAre(base::Bucket(
+                  static_cast<int>(
+                      ArcTermsOfServiceScreen::UserAction::kNextButtonClicked),
+                  1)));
 }
 
 // There are two checkboxes for enabling/disabling arc backup restore and

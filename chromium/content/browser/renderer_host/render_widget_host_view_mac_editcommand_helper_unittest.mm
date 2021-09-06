@@ -18,7 +18,6 @@
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/common/input_messages.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
@@ -151,7 +150,8 @@ TEST_F(RenderWidgetHostViewMacEditCommandHelperWithTaskEnvTest,
     int32_t routing_id = process_host->GetNextRoutingID();
     std::unique_ptr<RenderWidgetHostImpl> render_widget =
         RenderWidgetHostImpl::Create(
-            &delegate, *agent_scheduling_group_host, routing_id,
+            /*frmae_tree=*/nullptr, &delegate, *agent_scheduling_group_host,
+            routing_id,
             /*hidden=*/false, /*renderer_initiated_creation=*/false,
             std::make_unique<FrameTokenMessageQueue>());
 

@@ -42,8 +42,7 @@ class CONTENT_EXPORT FlingingRendererClientFactory
       media::AudioRendererSink* audio_renderer_sink,
       media::VideoRendererSink* video_renderer_sink,
       media::RequestOverlayInfoCB request_overlay_info_cb,
-      const gfx::ColorSpace& target_color_space,
-      bool use_platform_media_pipeline = false) override;
+      const gfx::ColorSpace& target_color_space) override;
 
   // Returns whether media flinging has started, based off of whether the
   // |remote_playback_client_| has a presentation ID or not. Called by

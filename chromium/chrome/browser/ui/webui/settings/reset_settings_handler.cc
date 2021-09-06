@@ -33,7 +33,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/reset/metrics.h"
+#include "chrome/browser/ash/reset/metrics.h"
 #include "chrome/common/pref_names.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -304,8 +304,8 @@ void ResetSettingsHandler::OnShowPowerwashDialog(
      const base::ListValue* args) {
   UMA_HISTOGRAM_ENUMERATION(
       "Reset.ChromeOS.PowerwashDialogShown",
-      chromeos::reset::DIALOG_FROM_OPTIONS,
-      chromeos::reset::DIALOG_VIEW_TYPE_SIZE);
+      ash::reset::DialogViewType::kFromOptions,
+      ash::reset::DialogViewType::kCount);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

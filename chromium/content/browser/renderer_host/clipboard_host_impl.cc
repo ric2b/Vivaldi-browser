@@ -8,28 +8,40 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/pickle.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
+#include "content/browser/file_system/browser_file_system_helper.h"
+#include "content/browser/file_system_access/file_system_access_manager_impl.h"
 #include "content/browser/permissions/permission_controller_impl.h"
+#include "content/browser/renderer_host/data_transfer_util.h"
+#include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/drop_data.h"
 #include "ipc/ipc_message.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "skia/ext/skia_utils_base.h"
+#include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
+#include "third_party/blink/public/mojom/page/drag.mojom-forward.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/custom_data_helper.h"
+#include "ui/base/clipboard/file_info.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
+#include "ui/base/ui_base_features.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -100,11 +112,8 @@ void ClipboardHostImpl::IsPasteContentAllowedRequest::InvokeCallbacks() {
   }
 }
 
-ClipboardHostImpl::ClipboardHostImpl(
-    RenderFrameHost* render_frame_host,
-    mojo::PendingReceiver<blink::mojom::ClipboardHost> receiver)
-    : receiver_(this, std::move(receiver)),
-      clipboard_(ui::Clipboard::GetForCurrentThread()) {
+ClipboardHostImpl::ClipboardHostImpl(RenderFrameHost* render_frame_host)
+    : clipboard_(ui::Clipboard::GetForCurrentThread()) {
   // |render_frame_host| may be null in unit tests.
   if (render_frame_host) {
     render_frame_routing_id_ =
@@ -125,18 +134,10 @@ ClipboardHostImpl::ClipboardHostImpl(
 void ClipboardHostImpl::Create(
     RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<blink::mojom::ClipboardHost> receiver) {
-  // Clipboard implementations do interesting things, like run nested message
-  // loops. Use manual memory management instead of SelfOwnedReceiver<T> which
-  // synchronously destroys on failure and can result in some unfortunate
-  // use-after-frees after the nested message loops exit.
-  auto* host = new ClipboardHostImpl(
-      static_cast<RenderFrameHostImpl*>(render_frame_host),
+  mojo::MakeSelfOwnedReceiver(
+      base::WrapUnique(new ClipboardHostImpl(
+          static_cast<RenderFrameHostImpl*>(render_frame_host))),
       std::move(receiver));
-  host->receiver_.set_disconnect_handler(base::BindOnce(
-      [](ClipboardHostImpl* host) {
-        base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, host);
-      },
-      host));
 }
 
 ClipboardHostImpl::~ClipboardHostImpl() {
@@ -341,6 +342,61 @@ void ClipboardHostImpl::OnReadImage(ui::ClipboardBuffer clipboard_buffer,
             std::move(callback).Run(bitmap);
           },
           std::move(bitmap), std::move(callback)));
+}
+
+void ClipboardHostImpl::ReadFiles(ui::ClipboardBuffer clipboard_buffer,
+                                  ReadFilesCallback callback) {
+  blink::mojom::ClipboardFilesPtr result = blink::mojom::ClipboardFiles::New();
+  if (!IsClipboardPasteAllowed(render_frame_routing_id_)) {
+    std::move(callback).Run(std::move(result));
+    return;
+  }
+
+  if (!base::FeatureList::IsEnabled(features::kClipboardFilenames)) {
+    std::move(callback).Run(std::move(result));
+    return;
+  }
+
+  std::vector<ui::FileInfo> filenames;
+  auto data_dst = CreateDataEndpoint();
+  clipboard_->ReadFilenames(clipboard_buffer, data_dst.get(), &filenames);
+  std::string data = ui::FileInfosToURIList(filenames);
+
+  RenderFrameHostImpl* render_frame_host =
+      RenderFrameHostImpl::FromID(render_frame_routing_id_);
+  DCHECK(render_frame_host);
+  // This code matches the drag-and-drop DataTransfer code in
+  // RenderWidgetHostImpl::DragTargetDrop().
+
+  // Call PrepareDataTransferFilenamesForChildProcess() to register files so
+  // they can be accessed by the renderer.
+  RenderProcessHost* process = render_frame_host->GetProcess();
+  result->file_system_id = PrepareDataTransferFilenamesForChildProcess(
+      filenames, ChildProcessSecurityPolicyImpl::GetInstance(),
+      process->GetID(), process->GetStoragePartition()->GetFileSystemContext());
+
+  // Convert to DataTransferFiles which creates the access token for each file.
+  StoragePartitionImpl* storage_partition = static_cast<StoragePartitionImpl*>(
+      render_frame_host->GetProcess()->GetStoragePartition());
+  std::vector<blink::mojom::DataTransferFilePtr> files =
+      FileInfosToDataTransferFiles(
+          filenames, storage_partition->GetFileSystemAccessManager(),
+          process->GetID());
+  std::move(files.begin(), files.end(), std::back_inserter(result->files));
+
+  PerformPasteIfContentAllowed(
+      clipboard_->GetSequenceNumber(clipboard_buffer),
+      ui::ClipboardFormatType::GetFilenamesType(), std::move(data),
+      base::BindOnce(
+          [](blink::mojom::ClipboardFilesPtr result, ReadFilesCallback callback,
+             ClipboardPasteContentAllowed allowed) {
+            if (!allowed) {
+              result->files.clear();
+              result->file_system_id->clear();
+            }
+            std::move(callback).Run(std::move(result));
+          },
+          std::move(result), std::move(callback)));
 }
 
 void ClipboardHostImpl::ReadCustomData(ui::ClipboardBuffer clipboard_buffer,

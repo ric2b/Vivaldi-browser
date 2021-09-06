@@ -140,8 +140,8 @@ bool UserScriptInjector::ExpectsResults() const {
   return false;
 }
 
-base::Optional<CSSOrigin> UserScriptInjector::GetCssOrigin() const {
-  return base::nullopt;
+CSSOrigin UserScriptInjector::GetCssOrigin() const {
+  return CSSOrigin::kAuthor;
 }
 
 bool UserScriptInjector::IsRemovingCSS() const {

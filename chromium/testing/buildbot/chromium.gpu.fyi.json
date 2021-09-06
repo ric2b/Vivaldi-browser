@@ -16,6 +16,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -43,6 +50,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -80,6 +94,13 @@
         "name": "angle_perftests",
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -116,6 +137,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2621,6 +2649,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2652,6 +2687,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2693,6 +2735,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2731,6 +2780,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2757,8 +2813,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_vulkan_tests",
         "resultdb": {
@@ -2766,6 +2821,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2791,8 +2853,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_vulkan_tests",
         "resultdb": {
@@ -2800,6 +2861,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2825,8 +2893,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_tests",
         "resultdb": {
@@ -2834,6 +2901,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2859,8 +2933,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_tests",
         "resultdb": {
@@ -2868,6 +2941,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2893,8 +2973,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles2_vulkan_tests",
         "resultdb": {
@@ -2902,6 +2981,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2926,8 +3012,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles31_vulkan_tests",
         "resultdb": {
@@ -2935,6 +3020,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2960,8 +3052,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles32_vulkan_tests",
         "resultdb": {
@@ -2969,6 +3060,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -2993,8 +3091,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles3_vulkan_tests",
         "resultdb": {
@@ -3002,6 +3099,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3042,6 +3146,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3080,6 +3191,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3111,6 +3229,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3152,6 +3277,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3190,6 +3322,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3216,8 +3355,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_vulkan_tests",
         "resultdb": {
@@ -3225,6 +3363,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3250,8 +3395,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_vulkan_tests",
         "resultdb": {
@@ -3259,6 +3403,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3284,8 +3435,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_tests",
         "resultdb": {
@@ -3293,6 +3443,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3318,8 +3475,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_tests",
         "resultdb": {
@@ -3327,6 +3483,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3352,8 +3515,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles2_vulkan_tests",
         "resultdb": {
@@ -3361,6 +3523,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3385,8 +3554,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles31_vulkan_tests",
         "resultdb": {
@@ -3394,6 +3562,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3419,8 +3594,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles32_vulkan_tests",
         "resultdb": {
@@ -3428,6 +3602,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3452,8 +3633,7 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles3_vulkan_tests",
         "resultdb": {
@@ -3461,6 +3641,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3496,6 +3683,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3675,6 +3869,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3711,6 +3912,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3747,6 +3955,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3783,6 +3998,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3823,6 +4045,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3868,6 +4097,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3913,6 +4149,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3950,6 +4193,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -3986,6 +4236,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4023,6 +4280,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4057,6 +4321,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4236,6 +4507,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4272,6 +4550,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4308,6 +4593,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4344,6 +4636,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4384,6 +4683,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4429,6 +4735,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4474,6 +4787,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4511,6 +4831,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4547,6 +4874,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4584,6 +4918,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4620,6 +4961,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4713,6 +5061,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4750,6 +5105,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4785,6 +5147,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4820,6 +5189,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4855,6 +5231,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4890,6 +5273,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4929,6 +5319,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -4973,6 +5370,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5017,6 +5421,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5048,6 +5459,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5083,6 +5501,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5118,6 +5543,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5154,6 +5586,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5191,6 +5630,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5224,6 +5670,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5403,6 +5856,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5439,6 +5899,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5475,6 +5942,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5511,6 +5985,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5551,6 +6032,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5596,6 +6084,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5641,6 +6136,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5678,6 +6180,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5714,6 +6223,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5751,6 +6267,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5785,6 +6308,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -5966,6 +6496,13 @@
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6002,6 +6539,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6038,6 +6582,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6074,6 +6625,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6110,6 +6668,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6150,6 +6715,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6195,6 +6767,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6240,6 +6819,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6277,6 +6863,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6313,6 +6906,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6350,6 +6950,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6400,6 +7007,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6437,6 +7051,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6475,6 +7096,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6514,6 +7142,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6536,25 +7171,84 @@
     "isolated_scripts": [
       {
         "args": [
-          "noop_sleep",
+          "pixel",
           "--show-stdout",
-          "--browser=android-chromium",
+          "--browser=android-webview-instrumentation",
           "--passthrough",
           "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
         ],
         "isolate_name": "telemetry_gpu_integration_test",
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
-        "name": "noop_sleep_tests",
+        "name": "android_webview_pixel_skia_gold_test",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
         "resultdb": {
           "enable": true
         },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "context_lost_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6567,6 +7261,555 @@
           ],
           "idempotent": false,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "depth_capture",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "gpu_process",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "info_collection",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_high_performance_gpu",
+          "--expected-vendor-id",
+          "0",
+          "--expected-device-id",
+          "0"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "info_collection_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating --force-online-connection-state-for-indicator --disable-wcg-for-test",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "maps_pixel_validating_test",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating --force-online-connection-state-for-indicator --disable-wcg-for-test",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "pixel_skia_gold_validating_test",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating --force-online-connection-state-for-indicator --disable-wcg-for-test",
+          "--dont-restore-color-profile-after-test"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "screenshot_sync_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "trace_test",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "trace_test",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "webgl_conformance",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu",
+          "--webgl-conformance-version=2.0.1",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_tests_output.json"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "webgl2_conformance_gles_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 20
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "webgl_conformance",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating --force_high_performance_gpu",
+          "--webgl-conformance-version=2.0.1",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_tests_output.json"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "webgl2_conformance_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 20
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "webgl_conformance",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "webgl_conformance_gles_passthrough_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 6
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "webgl_conformance",
+          "--show-stdout",
+          "--browser=android-chromium",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating --force_high_performance_gpu",
+          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "webgl_conformance_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "device_os": "R",
+              "device_os_type": "userdebug",
+              "device_type": "flame",
+              "os": "Android",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 6
         },
         "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
       }
@@ -6604,6 +7847,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6706,6 +7956,13 @@
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6733,12 +7990,18 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_gles_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6763,12 +8026,18 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_gles_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -6793,12 +8062,18 @@
           "--shard-timeout=500"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_gles_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
+          "cipd_packages": [
+            {
+              "cipd_package": "infra/tools/luci/logdog/butler/${platform}",
+              "location": "bin",
+              "revision": "git_revision:ff387eadf445b24c935f1cf7d6ddd279f8a6b04c"
+            }
+          ],
           "containment_type": "AUTO",
           "dimension_sets": [
             {
@@ -7794,6 +9069,76 @@
   "GPU FYI Win x64 DX12 Vulkan Builder": {},
   "GPU FYI Win x64 DX12 Vulkan Builder (dbg)": {},
   "GPU FYI Win x64 dEQP Builder": {},
+  "Lacros FYI x64 Release (AMD)": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "noop_sleep",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "noop_sleep_tests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:7340",
+              "os": "Ubuntu",
+              "pool": "chromium.tests.gpu.experimental"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      }
+    ]
+  },
+  "Lacros FYI x64 Release (Intel)": {
+    "isolated_scripts": [
+      {
+        "args": [
+          "noop_sleep",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "noop_sleep_tests",
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:5912-19.0.2",
+              "os": "Ubuntu-19.04",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      }
+    ]
+  },
   "Linux FYI Debug (NVIDIA)": {
     "gtest_tests": [
       {
@@ -10710,775 +12055,6 @@
       }
     ]
   },
-  "Linux FYI Release (AMD R7 240)": {
-    "gtest_tests": [
-      {
-        "args": [
-          "angle_unittests"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
-        "use_isolated_scripts_api": true
-      },
-      {
-        "args": [
-          "--enable-gpu",
-          "--test-launcher-bot-mode",
-          "--test-launcher-jobs=1",
-          "--gtest_filter=CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*",
-          "--no-xvfb"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "tab_capture_end2end_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "browser_tests",
-        "test_id_prefix": "ninja://chrome/test:browser_tests/"
-      },
-      {
-        "args": [
-          "--use-cmd-decoder=passthrough",
-          "--use-gl=angle",
-          "--use-gpu-in-tests",
-          "--no-xvfb"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "gl_tests_passthrough",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gl_tests",
-        "test_id_prefix": "ninja://gpu:gl_tests/"
-      },
-      {
-        "args": [
-          "--use-cmd-decoder=validating",
-          "--use-gpu-in-tests",
-          "--no-xvfb"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "gl_tests_validating",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gl_tests",
-        "test_id_prefix": "ninja://gpu:gl_tests/"
-      },
-      {
-        "args": [
-          "--use-gpu-in-tests"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gles2_conform_test",
-        "test_id_prefix": "ninja://gpu/gles2_conform_support:gles2_conform_test/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "swiftshader_unittests",
-        "test_id_prefix": "ninja://third_party/swiftshader/tests/GLESUnitTests:swiftshader_unittests/"
-      }
-    ],
-    "isolated_scripts": [
-      {
-        "args": [
-          "context_lost",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=passthrough --use-gl=angle"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "context_lost_passthrough_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "context_lost",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "context_lost_validating_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "depth_capture",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "depth_capture_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "gpu_process",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "gpu_process_launch_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "hardware_accelerated_feature",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "hardware_accelerated_feature_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "info_collection",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --force_high_performance_gpu",
-          "--expected-vendor-id",
-          "1002",
-          "--expected-device-id",
-          "6613"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "info_collection_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "maps",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=passthrough --use-gl=angle",
-          "--dont-restore-color-profile-after-test",
-          "--test-machine-name",
-          "${buildername}",
-          "--git-revision=${got_revision}"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "maps_pixel_passthrough_test",
-        "precommit_args": [
-          "--gerrit-issue=${patch_issue}",
-          "--gerrit-patchset=${patch_set}",
-          "--buildbucket-id=${buildbucket_build_id}"
-        ],
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "maps",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating",
-          "--dont-restore-color-profile-after-test",
-          "--test-machine-name",
-          "${buildername}",
-          "--git-revision=${got_revision}"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "maps_pixel_validating_test",
-        "precommit_args": [
-          "--gerrit-issue=${patch_issue}",
-          "--gerrit-patchset=${patch_set}",
-          "--buildbucket-id=${buildbucket_build_id}"
-        ],
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "pixel",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=passthrough --use-gl=angle",
-          "--dont-restore-color-profile-after-test",
-          "--test-machine-name",
-          "${buildername}",
-          "--git-revision=${got_revision}"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "pixel_skia_gold_passthrough_test",
-        "precommit_args": [
-          "--gerrit-issue=${patch_issue}",
-          "--gerrit-patchset=${patch_set}",
-          "--buildbucket-id=${buildbucket_build_id}"
-        ],
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "pixel",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating",
-          "--dont-restore-color-profile-after-test",
-          "--test-machine-name",
-          "${buildername}",
-          "--git-revision=${got_revision}"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "pixel_skia_gold_validating_test",
-        "precommit_args": [
-          "--gerrit-issue=${patch_issue}",
-          "--gerrit-patchset=${patch_set}",
-          "--buildbucket-id=${buildbucket_build_id}"
-        ],
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "screenshot_sync",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=passthrough --use-gl=angle",
-          "--dont-restore-color-profile-after-test"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "screenshot_sync_passthrough_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "screenshot_sync",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating",
-          "--dont-restore-color-profile-after-test"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "screenshot_sync_validating_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "trace_test",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "trace_test",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "webgl_conformance",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating --force_high_performance_gpu",
-          "--webgl-conformance-version=2.0.1",
-          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl2_conformance_tests_output.json"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "webgl2_conformance_validating_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 20
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "webgl_conformance",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --force_high_performance_gpu",
-          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "webgl_conformance_gl_passthrough_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      },
-      {
-        "args": [
-          "webgl_conformance",
-          "--show-stdout",
-          "--browser=release",
-          "--passthrough",
-          "-v",
-          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --use-cmd-decoder=validating --force_high_performance_gpu",
-          "--read-abbreviated-json-results-from=../../content/test/data/gpu/webgl_conformance_tests_output.json"
-        ],
-        "isolate_name": "telemetry_gpu_integration_test",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "webgl_conformance_validating_tests",
-        "resultdb": {
-          "enable": true
-        },
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "containment_type": "AUTO",
-          "dimension_sets": [
-            {
-              "gpu": "1002:6613",
-              "os": "Ubuntu",
-              "pool": "chromium.tests.gpu"
-            }
-          ],
-          "expiration": 21600,
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
-      }
-    ]
-  },
   "Linux FYI Release (AMD RX 5500 XT)": {
     "gtest_tests": [
       {
@@ -11486,7 +12062,7 @@
           "angle_end2end_tests",
           "--gtest_filter=-*Vulkan_SwiftShader*",
           "--bot-mode",
-          "--max-processes=4"
+          "--max-processes=1"
         ],
         "merge": {
           "args": [],
@@ -16142,8 +16718,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_gl_tests",
         "swarming": {
@@ -16174,8 +16749,7 @@
           "--max-processes=1"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_gl_tests",
         "swarming": {
@@ -16201,8 +16775,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_vulkan_tests",
         "swarming": {
@@ -16229,8 +16802,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_gl_tests",
         "swarming": {
@@ -16256,8 +16828,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_vulkan_tests",
         "swarming": {
@@ -16283,8 +16854,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_rotate180_tests",
         "swarming": {
@@ -16310,8 +16880,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_rotate270_tests",
         "swarming": {
@@ -16337,8 +16906,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_rotate90_tests",
         "swarming": {
@@ -16364,8 +16932,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_gl_tests",
         "swarming": {
@@ -16392,8 +16959,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_tests",
         "swarming": {
@@ -16420,8 +16986,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_rotate180_tests",
         "swarming": {
@@ -16448,8 +17013,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_rotate270_tests",
         "swarming": {
@@ -16476,8 +17040,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_rotate90_tests",
         "swarming": {
@@ -16504,8 +17067,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_gl_tests",
         "swarming": {
@@ -16532,8 +17094,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_tests",
         "swarming": {
@@ -16560,8 +17121,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles2_vulkan_tests",
         "swarming": {
@@ -16587,8 +17147,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles31_vulkan_tests",
         "swarming": {
@@ -16614,8 +17173,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles32_vulkan_tests",
         "swarming": {
@@ -16641,8 +17199,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles3_vulkan_tests",
         "swarming": {
@@ -17750,6 +18307,298 @@
       },
       {
         "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_context_lost_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "depth_capture",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "gpu_process",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_maps_pixel_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_pixel_skia_gold_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_screenshot_sync_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            },
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
           "gpu_process",
           "--show-stdout",
           "--browser=release",
@@ -18722,6 +19571,256 @@
       },
       {
         "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_context_lost_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:3e9b",
+              "os": "Mac-10.15.7"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "depth_capture",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:3e9b",
+              "os": "Mac-10.15.7"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "gpu_process",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:3e9b",
+              "os": "Mac-10.15.7"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:3e9b",
+              "os": "Mac-10.15.7"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_maps_pixel_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:3e9b",
+              "os": "Mac-10.15.7"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_pixel_skia_gold_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:3e9b",
+              "os": "Mac-10.15.7"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_screenshot_sync_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:3e9b",
+              "os": "Mac-10.15.7"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
           "gpu_process",
           "--show-stdout",
           "--browser=release",
@@ -19643,6 +20742,256 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_context_lost_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "depth_capture",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "gpu_process",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_maps_pixel_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_pixel_skia_gold_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "8086:0a2e",
+              "os": "Mac-10.15.5"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_screenshot_sync_tests",
         "resultdb": {
           "enable": true
         },
@@ -21797,6 +23146,270 @@
       },
       {
         "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_context_lost_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "depth_capture",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "gpu_process",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_maps_pixel_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_pixel_skia_gold_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_screenshot_sync_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "1002:6821",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
           "gpu_process",
           "--show-stdout",
           "--browser=release",
@@ -22798,6 +24411,270 @@
       },
       {
         "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_context_lost_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "depth_capture",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "gpu_process",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_maps_pixel_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_pixel_skia_gold_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_screenshot_sync_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "gpu": "10de:0fe9",
+              "hidpi": "1",
+              "os": "Mac-10.14.6",
+              "pool": "chromium.tests.gpu"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
           "gpu_process",
           "--show-stdout",
           "--browser=release",
@@ -23685,6 +25562,263 @@
       },
       {
         "args": [
+          "context_lost",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_context_lost_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "os": "Mac-11.0",
+              "pool": "chromium.tests.mac-arm64"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "depth_capture",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "os": "Mac-11.0",
+              "pool": "chromium.tests.mac-arm64"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "gpu_process",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "os": "Mac-11.0",
+              "pool": "chromium.tests.mac-arm64"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "hardware_accelerated_feature",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "os": "Mac-11.0",
+              "pool": "chromium.tests.mac-arm64"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "maps",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_maps_pixel_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "os": "Mac-11.0",
+              "pool": "chromium.tests.mac-arm64"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "pixel",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test",
+          "--test-machine-name",
+          "${buildername}",
+          "--git-revision=${got_revision}"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_pixel_skia_gold_tests",
+        "precommit_args": [
+          "--gerrit-issue=${patch_issue}",
+          "--gerrit-patchset=${patch_set}",
+          "--buildbucket-id=${buildbucket_build_id}"
+        ],
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "os": "Mac-11.0",
+              "pool": "chromium.tests.mac-arm64"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chrome-gpu-gold@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
+          "screenshot_sync",
+          "--show-stdout",
+          "--browser=release",
+          "--passthrough",
+          "-v",
+          "--extra-browser-args=--enable-logging=stderr --js-flags=--expose-gc --disable-features=UseSkiaRenderer",
+          "--dont-restore-color-profile-after-test"
+        ],
+        "isolate_name": "telemetry_gpu_integration_test",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "gl_renderer_screenshot_sync_tests",
+        "resultdb": {
+          "enable": true
+        },
+        "should_retry_with_patch": false,
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "containment_type": "AUTO",
+          "dimension_sets": [
+            {
+              "cpu": "arm64",
+              "os": "Mac-11.0",
+              "pool": "chromium.tests.mac-arm64"
+            }
+          ],
+          "idempotent": false,
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/"
+      },
+      {
+        "args": [
           "gpu_process",
           "--show-stdout",
           "--browser=release",
@@ -24319,8 +26453,7 @@
           "--max-processes=1"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_gl_tests",
         "swarming": {
@@ -24347,8 +26480,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_metal_tests",
         "swarming": {
@@ -24375,8 +26507,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_gl_tests",
         "swarming": {
@@ -24403,8 +26534,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_metal_tests",
         "swarming": {
@@ -24431,8 +26561,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_gl_tests",
         "swarming": {
@@ -24460,8 +26589,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_metal_tests",
         "swarming": {
@@ -24494,8 +26622,7 @@
           "--max-processes=1"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_gl_tests",
         "swarming": {
@@ -24520,8 +26647,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_metal_tests",
         "swarming": {
@@ -24546,8 +26672,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_gl_tests",
         "swarming": {
@@ -24572,8 +26697,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_metal_tests",
         "swarming": {
@@ -24598,8 +26722,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_gl_tests",
         "swarming": {
@@ -24625,8 +26748,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_metal_tests",
         "swarming": {
@@ -35397,8 +37519,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_d3d11_tests",
         "swarming": {
@@ -35428,8 +37549,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_d3d11_tests",
         "swarming": {
@@ -35456,8 +37576,7 @@
           "--max-processes=1"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_gl_tests",
         "swarming": {
@@ -35483,8 +37602,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_vulkan_tests",
         "swarming": {
@@ -35511,8 +37629,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_d3d11_tests",
         "swarming": {
@@ -35538,8 +37655,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_gl_tests",
         "swarming": {
@@ -35565,8 +37681,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_vulkan_tests",
         "swarming": {
@@ -35592,8 +37707,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_rotate180_tests",
         "swarming": {
@@ -35619,8 +37733,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_rotate270_tests",
         "swarming": {
@@ -35646,8 +37759,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_rotate90_tests",
         "swarming": {
@@ -35673,8 +37785,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_d3d11_tests",
         "swarming": {
@@ -35701,8 +37812,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_gl_tests",
         "swarming": {
@@ -35729,8 +37839,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles31_vulkan_tests",
         "swarming": {
@@ -35757,8 +37866,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_rotate180_tests",
         "swarming": {
@@ -35785,8 +37893,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_rotate270_tests",
         "swarming": {
@@ -35813,8 +37920,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_rotate90_tests",
         "swarming": {
@@ -35841,8 +37947,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_d3d11_tests",
         "swarming": {
@@ -35869,8 +37974,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_gl_tests",
         "swarming": {
@@ -35897,8 +38001,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_vulkan_tests",
         "swarming": {
@@ -35925,8 +38028,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles2_vulkan_tests",
         "swarming": {
@@ -35952,8 +38054,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles31_vulkan_tests",
         "swarming": {
@@ -35979,8 +38080,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles32_vulkan_tests",
         "swarming": {
@@ -36006,8 +38106,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_khr_gles3_vulkan_tests",
         "swarming": {
@@ -39534,8 +41633,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_d3d11_tests",
         "swarming": {
@@ -39562,8 +41660,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_vulkan_tests",
         "swarming": {
@@ -40426,8 +42523,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_egl_d3d11_tests",
         "swarming": {
@@ -40454,8 +42550,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles2_d3d11_tests",
         "swarming": {
@@ -40482,8 +42577,7 @@
           "--bot-mode"
         ],
         "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+          "script": "//third_party/angle/scripts/angle_deqp_test_merge.py"
         },
         "name": "angle_deqp_gles3_d3d11_tests",
         "swarming": {

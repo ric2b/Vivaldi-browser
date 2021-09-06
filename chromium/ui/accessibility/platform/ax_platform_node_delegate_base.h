@@ -76,7 +76,7 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
   bool IsLeaf() const override;
   bool IsFocused() const override;
   bool IsToplevelBrowserWindow() override;
-  gfx::NativeViewAccessible GetClosestPlatformObject() const override;
+  gfx::NativeViewAccessible GetLowestPlatformAncestor() const override;
 
   class ChildIteratorBase : public ChildIterator {
    public:
@@ -259,6 +259,10 @@ class AX_EXPORT AXPlatformNodeDelegateBase : public AXPlatformNodeDelegate {
   bool IsOrderedSet() const override;
   base::Optional<int> GetPosInSet() const override;
   base::Optional<int> GetSetSize() const override;
+
+  // Computed colors, taking blending into account.
+  SkColor GetColor() const override;
+  SkColor GetBackgroundColor() const override;
 
   //
   // Events.

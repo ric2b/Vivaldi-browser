@@ -5,7 +5,11 @@
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 
 #include <memory>
+#include <string>
 
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
+#include "ash/constants/devicetype.h"
 #include "ash/public/cpp/login_screen.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -29,17 +33,19 @@
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "chrome/browser/ash/certificate_provider/certificate_provider_service.h"
+#include "chrome/browser/ash/certificate_provider/certificate_provider_service_factory.h"
+#include "chrome/browser/ash/certificate_provider/pin_dialog_manager.h"
+#include "chrome/browser/ash/login/saml/public_saml_url_fetcher.h"
+#include "chrome/browser/ash/login/saml/saml_metric_utils.h"
+#include "chrome/browser/ash/login/screens/network_error.h"
+#include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/authpolicy/authpolicy_helper.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
-#include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
-#include "chrome/browser/chromeos/certificate_provider/pin_dialog_manager.h"
 #include "chrome/browser/chromeos/login/reauth_stats.h"
-#include "chrome/browser/chromeos/login/saml/public_saml_url_fetcher.h"
-#include "chrome/browser/chromeos/login/saml/saml_metric_utils.h"
-#include "chrome/browser/chromeos/login/screens/network_error.h"
-#include "chrome/browser/chromeos/login/screens/signin_fatal_error_screen.h"
 #include "chrome/browser/chromeos/login/signin_partition_manager.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
@@ -48,8 +54,6 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -68,13 +72,11 @@
 #include "chrome/installer/util/google_update_settings.h"
 #include "chromeos/components/security_token_pin/constants.h"
 #include "chromeos/components/security_token_pin/error_generator.h"
-#include "chromeos/constants/chromeos_features.h"
-#include "chromeos/constants/chromeos_switches.h"
-#include "chromeos/constants/devicetype.h"
 #include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/login/auth/challenge_response/cert_utils.h"
 #include "chromeos/login/auth/cryptohome_key_constants.h"
 #include "chromeos/login/auth/saml_password_attributes.h"
+#include "chromeos/login/auth/sync_trusted_vault_keys.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/network/onc/certificate_scope.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -178,6 +180,12 @@ std::string GetEnterpriseEnrollmentDomain() {
   return connector->GetEnterpriseEnrollmentDomain();
 }
 
+std::string GetSSOProfile() {
+  policy::BrowserPolicyConnectorChromeOS* connector =
+      g_browser_process->platform_part()->browser_policy_connector_chromeos();
+  return connector->GetSSOProfile();
+}
+
 std::string GetRealm() {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -268,24 +276,25 @@ PinDialogManager* GetLoginScreenPinDialogManager() {
 }
 
 base::Value MakeSecurityTokenPinDialogParameters(
-    security_token_pin::CodeType code_type,
     bool enable_user_input,
     security_token_pin::ErrorLabel error_label,
     int attempts_left) {
   base::Value params(base::Value::Type::DICTIONARY);
-  params.SetIntKey("codeType", static_cast<int>(code_type));
+
   params.SetBoolKey("enableUserInput", enable_user_input);
-  params.SetIntKey("attemptsLeft", attempts_left);
   params.SetBoolKey("hasError",
                     error_label != security_token_pin::ErrorLabel::kNone);
   params.SetStringKey(
       "formattedError",
       GenerateErrorMessage(error_label, attempts_left, enable_user_input));
-  params.SetStringKey(
-      "formattedAttemptsLeft",
-      base::i18n::MessageFormatter::FormatWithNumberedArgs(
-          l10n_util::GetStringUTF16(IDS_REQUEST_PIN_DIALOG_ATTEMPTS_LEFT),
-          attempts_left));
+  if (attempts_left == -1) {
+    params.SetStringKey("formattedAttemptsLeft", base::string16());
+  } else {
+    params.SetStringKey(
+        "formattedAttemptsLeft",
+        GenerateErrorMessage(security_token_pin::ErrorLabel::kNone,
+                             attempts_left, true));
+  }
   return params;
 }
 
@@ -406,11 +415,16 @@ void GaiaScreenHandler::LoadGaiaWithPartitionAndVersionAndConsent(
   const std::string enterprise_enrollment_domain(
       GetEnterpriseEnrollmentDomain());
   const std::string enterprise_domain_manager(GetEnterpriseDomainManager());
+  const std::string sso_profile(GetSSOProfile());
+
   if (!enterprise_display_domain.empty())
     params.SetString("enterpriseDisplayDomain", enterprise_display_domain);
   if (!enterprise_enrollment_domain.empty()) {
     params.SetString("enterpriseEnrollmentDomain",
                      enterprise_enrollment_domain);
+  }
+  if (!sso_profile.empty()) {
+    params.SetString("ssoProfile", sso_profile);
   }
   if (!enterprise_domain_manager.empty()) {
     params.SetString("enterpriseDomainManager", enterprise_domain_manager);
@@ -488,7 +502,6 @@ void GaiaScreenHandler::LoadGaiaWithPartitionAndVersionAndConsent(
 
   params.SetBoolean("extractSamlPasswordAttributes",
                     login::ExtractSamlPasswordAttributesEnabled());
-  params.SetBoolean("enableGaiaActionButtons", true);
   params.SetBoolean("enableSyncTrustedVaultKeys",
                     IsSyncTrustedVaultKeysEnabled());
 
@@ -594,20 +607,6 @@ void GaiaScreenHandler::DeclareLocalizedValues(
                IDS_SAML_SECURITY_TOKEN_PIN_DIALOG_TITLE);
   builder->Add("securityTokenPinDialogSubtitle",
                IDS_SAML_SECURITY_TOKEN_PIN_DIALOG_SUBTITLE);
-  builder->Add("securityTokenPinDialogTryAgain",
-               IDS_SAML_SECURITY_TOKEN_PIN_DIALOG_TRY_AGAIN);
-  builder->Add("securityTokenPinDialogAttemptsLeft",
-               IDS_REQUEST_PIN_DIALOG_ATTEMPTS_LEFT);
-  builder->Add("securityTokenPinDialogErrorAttempts",
-               IDS_REQUEST_PIN_DIALOG_ERROR_ATTEMPTS);
-  builder->Add("securityTokenPinDialogUnknownError",
-               IDS_REQUEST_PIN_DIALOG_UNKNOWN_ERROR);
-  builder->Add("securityTokenPinDialogUnknownInvalidPin",
-               IDS_REQUEST_PIN_DIALOG_INVALID_PIN_ERROR);
-  builder->Add("securityTokenPinDialogUnknownInvalidPuk",
-               IDS_REQUEST_PIN_DIALOG_INVALID_PUK_ERROR);
-  builder->Add("securityTokenPinDialogUnknownMaxAttemptsExceeded",
-               IDS_REQUEST_PIN_DIALOG_MAX_ATTEMPTS_EXCEEDED_ERROR);
 }
 
 void GaiaScreenHandler::Initialize() {
@@ -780,8 +779,6 @@ void GaiaScreenHandler::HandleCompleteAuthentication(
       base::BindOnce(&LoginDisplayHost::CompleteLogin,
                      base::Unretained(LoginDisplayHost::default_host())));
 
-  // TODO(crbug.com/1081651): Propagate |sync_trusted_vault_keys| into
-  // UserContext.
   pending_user_context_ = std::make_unique<UserContext>();
   std::string error_message;
   if (!login::BuildUserContextForGaiaSignIn(
@@ -789,6 +786,10 @@ void GaiaScreenHandler::HandleCompleteAuthentication(
           GetAccountId(email, gaia_id, AccountType::GOOGLE), using_saml,
           using_saml_api_, password,
           SamlPasswordAttributes::FromJs(*password_attributes),
+          IsSyncTrustedVaultKeysEnabled()
+              ? base::make_optional(
+                    SyncTrustedVaultKeys::FromJs(*sync_trusted_vault_keys))
+              : base::nullopt,
           *extension_provided_client_cert_usage_observer_,
           pending_user_context_.get(), &error_message)) {
     core_oobe_view_->ShowSignInError(0, error_message, std::string(),
@@ -822,8 +823,7 @@ void GaiaScreenHandler::HandleCompleteLogin(const std::string& gaia_id,
                                             const std::string& password,
                                             bool using_saml) {
   VLOG(1) << "HandleCompleteLogin";
-  DoCompleteLogin(gaia_id, typed_email, password, using_saml,
-                  SamlPasswordAttributes());
+  DoCompleteLogin(gaia_id, typed_email, password, using_saml);
 }
 
 void GaiaScreenHandler::HandleUsingSAMLAPI(bool is_third_party_idp) {
@@ -865,11 +865,6 @@ void GaiaScreenHandler::HandleSamlChallengeMachineKey(
 
 void GaiaScreenHandler::HandleGaiaUIReady() {
   VLOG(1) << "Gaia is loaded";
-
-  // As we could miss and window.onload could already be called, restore
-  // focus to current pod (see crbug/175243).
-  if (gaia_silent_load_)
-    signin_screen_handler_->RefocusCurrentPod();
 
   frame_error_ = net::OK;
   frame_state_ = FRAME_STATE_LOADED;
@@ -988,12 +983,10 @@ void GaiaScreenHandler::OnShowAddUser() {
   LoginDisplayHost::default_host()->ShowGaiaDialog(populated_account_id_);
 }
 
-void GaiaScreenHandler::DoCompleteLogin(
-    const std::string& gaia_id,
-    const std::string& typed_email,
-    const std::string& password,
-    bool using_saml,
-    const SamlPasswordAttributes& password_attributes) {
+void GaiaScreenHandler::DoCompleteLogin(const std::string& gaia_id,
+                                        const std::string& typed_email,
+                                        const std::string& password,
+                                        bool using_saml) {
   if (using_saml && !using_saml_api_)
     RecordSAMLScrapingVerificationResultInHistogram(true);
 
@@ -1011,7 +1004,8 @@ void GaiaScreenHandler::DoCompleteLogin(
   if (!login::BuildUserContextForGaiaSignIn(
           user ? user->GetType() : CalculateUserType(account_id),
           GetAccountId(typed_email, gaia_id, AccountType::GOOGLE), using_saml,
-          using_saml_api_, password, password_attributes,
+          using_saml_api_, password, SamlPasswordAttributes(),
+          /*sync_trusted_vault_keys=*/base::nullopt,
           *extension_provided_client_cert_usage_observer_, &user_context,
           &error_message)) {
     core_oobe_view_->ShowSignInError(0, error_message, std::string(),
@@ -1076,12 +1070,12 @@ void GaiaScreenHandler::SubmitLoginFormForTest() {
 
   // clang-format off
   std::string code =
-      "document.getElementById('identifier').value = '" + test_user_ + "';"
-      "document.getElementById('nextButton').click();";
+      "document.getElementById('identifier').value = '" + test_user_ + "';";
   // clang-format on
 
   frame->ExecuteJavaScriptForTests(base::ASCIIToUTF16(code),
                                    base::NullCallback());
+  CallJS("login.GaiaSigninScreen.clickPrimaryButtonForTesting");
 
   if (!test_services_.empty()) {
     // Prefix each doublequote with backslash, so that it will remain correct
@@ -1096,9 +1090,9 @@ void GaiaScreenHandler::SubmitLoginFormForTest() {
 
   if (!test_pass_.empty()) {
     code = "document.getElementById('password').value = '" + test_pass_ + "';";
-    code += "document.getElementById('nextButton').click();";
     frame->ExecuteJavaScriptForTests(base::ASCIIToUTF16(code),
                                      base::NullCallback());
+    CallJS("login.GaiaSigninScreen.clickPrimaryButtonForTesting");
   }
 
   // Test properties are cleared in HandleCompleteAuthentication because the
@@ -1193,8 +1187,8 @@ void GaiaScreenHandler::ShowSecurityTokenPinDialog(
       std::move(pin_dialog_closed_callback);
 
   CallJS("login.GaiaSigninScreen.showPinDialog",
-         MakeSecurityTokenPinDialogParameters(code_type, enable_user_input,
-                                              error_label, attempts_left));
+         MakeSecurityTokenPinDialogParameters(enable_user_input, error_label,
+                                              attempts_left));
 }
 
 void GaiaScreenHandler::CloseSecurityTokenPinDialog() {

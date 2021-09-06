@@ -22,11 +22,10 @@ GPURenderPassEncoder::GPURenderPassEncoder(
     WGPURenderPassEncoder render_pass_encoder)
     : DawnObject<WGPURenderPassEncoder>(device, render_pass_encoder) {}
 
-GPURenderPassEncoder::~GPURenderPassEncoder() {
-  if (IsDawnControlClientDestroyed()) {
-    return;
-  }
-  GetProcs().renderPassEncoderRelease(GetHandle());
+void GPURenderPassEncoder::setBindGroup(uint32_t index,
+                                        GPUBindGroup* bindGroup) {
+  GetProcs().renderPassEncoderSetBindGroup(GetHandle(), index,
+                                           bindGroup->GetHandle(), 0, nullptr);
 }
 
 void GPURenderPassEncoder::setBindGroup(
@@ -178,6 +177,14 @@ void GPURenderPassEncoder::executeBundles(
 
   GetProcs().renderPassEncoderExecuteBundles(GetHandle(), bundles.size(),
                                              dawn_bundles.get());
+}
+
+void GPURenderPassEncoder::beginOcclusionQuery(uint32_t queryIndex) {
+  GetProcs().renderPassEncoderBeginOcclusionQuery(GetHandle(), queryIndex);
+}
+
+void GPURenderPassEncoder::endOcclusionQuery() {
+  GetProcs().renderPassEncoderEndOcclusionQuery(GetHandle());
 }
 
 void GPURenderPassEncoder::writeTimestamp(GPUQuerySet* querySet,

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/no_destructor.h"
-#include "base/scoped_observation.h"
 #include "base/strings/string_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
@@ -270,7 +269,7 @@ AXAuraObjWrapper* AXAuraObjCache::CreateInternal(
     return Get(it->second);
 
   auto wrapper = std::make_unique<AuraViewWrapper>(this, aura_view);
-  int32_t id = wrapper->GetUniqueId();
+  ui::AXNodeID id = wrapper->GetUniqueId();
   (*aura_view_to_id_map)[aura_view] = id;
   cache_[id] = std::move(wrapper);
   return cache_[id].get();
@@ -281,11 +280,10 @@ int32_t AXAuraObjCache::GetIDInternal(
     AuraView* aura_view,
     const std::map<AuraView*, int32_t>& aura_view_to_id_map) const {
   if (!aura_view)
-    return ui::AXNode::kInvalidAXID;
+    return ui::kInvalidAXNodeID;
 
   auto it = aura_view_to_id_map.find(aura_view);
-  return it != aura_view_to_id_map.end() ? it->second
-                                         : ui::AXNode::kInvalidAXID;
+  return it != aura_view_to_id_map.end() ? it->second : ui::kInvalidAXNodeID;
 }
 
 template <typename AuraView>
@@ -293,7 +291,7 @@ void AXAuraObjCache::RemoveInternal(
     AuraView* aura_view,
     std::map<AuraView*, int32_t>* aura_view_to_id_map) {
   int32_t id = GetID(aura_view);
-  if (id == ui::AXNode::kInvalidAXID)
+  if (id == ui::kInvalidAXNodeID)
     return;
   aura_view_to_id_map->erase(aura_view);
   cache_.erase(id);

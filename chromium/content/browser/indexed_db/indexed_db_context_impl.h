@@ -23,6 +23,7 @@
 #include "components/services/storage/public/mojom/file_system_access_context.mojom.h"
 #include "components/services/storage/public/mojom/indexed_db_control.mojom.h"
 #include "components/services/storage/public/mojom/indexed_db_control_test.mojom.h"
+#include "components/services/storage/public/mojom/storage_policy_update.mojom.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_dispatcher_host.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -30,7 +31,6 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
-#include "storage/browser/quota/special_storage_policy.h"
 #include "url/origin.h"
 
 namespace base {
@@ -70,7 +70,7 @@ class CONTENT_EXPORT IndexedDBContextImpl
       mojo::PendingRemote<storage::mojom::BlobStorageContext>
           blob_storage_context,
       mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
-          native_file_system_context,
+          file_system_access_context,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
       scoped_refptr<base::SequencedTaskRunner> custom_task_runner);
 
@@ -92,9 +92,8 @@ class CONTENT_EXPORT IndexedDBContextImpl
                           DownloadOriginDataCallback callback) override;
   void GetAllOriginsDetails(GetAllOriginsDetailsCallback callback) override;
   void SetForceKeepSessionState() override;
-  void ApplyPolicyUpdates(
-      std::vector<storage::mojom::IndexedDBStoragePolicyUpdatePtr>
-          policy_updates) override;
+  void ApplyPolicyUpdates(std::vector<storage::mojom::StoragePolicyUpdatePtr>
+                              policy_updates) override;
   void BindTestInterface(
       mojo::PendingReceiver<storage::mojom::IndexedDBControlTest> receiver)
       override;
@@ -188,8 +187,8 @@ class CONTENT_EXPORT IndexedDBContextImpl
   storage::mojom::BlobStorageContext* blob_storage_context() const {
     return blob_storage_context_ ? blob_storage_context_.get() : nullptr;
   }
-  storage::mojom::FileSystemAccessContext* native_file_system_context() const {
-    return native_file_system_context_ ? native_file_system_context_.get()
+  storage::mojom::FileSystemAccessContext* file_system_access_context() const {
+    return file_system_access_context_ ? file_system_access_context_.get()
                                        : nullptr;
   }
 
@@ -208,10 +207,6 @@ class CONTENT_EXPORT IndexedDBContextImpl
   friend class IndexedDBQuotaClientTest;
 
   class IndexedDBGetUsageAndQuotaCallback;
-
-  static void ClearSessionOnlyOrigins(
-      const base::FilePath& indexeddb_path,
-      scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy);
 
   ~IndexedDBContextImpl() override;
 
@@ -238,7 +233,7 @@ class CONTENT_EXPORT IndexedDBContextImpl
   // Bound and accessed on the |idb_task_runner_|.
   mojo::Remote<storage::mojom::BlobStorageContext> blob_storage_context_;
   mojo::Remote<storage::mojom::FileSystemAccessContext>
-      native_file_system_context_;
+      file_system_access_context_;
   std::unique_ptr<IndexedDBFactoryImpl> indexeddb_factory_;
 
   // If |data_path_| is empty then this is an incognito session and the backing
@@ -247,7 +242,6 @@ class CONTENT_EXPORT IndexedDBContextImpl
 
   // If true, nothing (not even session-only data) should be deleted on exit.
   bool force_keep_session_state_;
-  const scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
   const scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
   std::unique_ptr<std::set<url::Origin>> origin_set_;
   std::map<url::Origin, int64_t> origin_size_map_;

@@ -25,8 +25,6 @@
 <translation id="1966382378801805537">Chromium non è in grado di determinare o impostare il browser predefinito</translation>
 <translation id="2008474315282236005">Verrà eliminato 1 elemento da questo dispositivo. Per recuperare i dati in un secondo momento, accedi a Chromium come <ph name="USER_EMAIL" />.</translation>
 <translation id="2020032459870799438">Per controllare che le tue altre password siano protette da violazioni dei dati e altri problemi di sicurezza, <ph name="BEGIN_LINK" />accedi a Chromium<ph name="END_LINK" />.</translation>
-<translation id="2179192076895113433">Puoi gestire questo e gli altri Account Google che hai aggiunto per <ph name="USER_NAME" /> da un unico posto nella sezione <ph name="LINK_BEGIN" />Impostazioni<ph name="LINK_END" />.
-          Le autorizzazioni concesse ai siti web nel browser Chromium e alle app scaricate da Google Play potrebbero essere applicate a tutti gli account.</translation>
 <translation id="2185166961232948079">Chromium - Accesso rete - <ph name="PAGE_TITLE" /></translation>
 <translation id="2225696941839557119">Impossibile sincronizzare le password in Chromium OS.</translation>
 <translation id="2241627712206172106">Se condividi un computer, i tuoi amici e la tua famiglia possono navigare separatamente e configurare Chromium in base alle proprie esigenze.</translation>
@@ -36,7 +34,6 @@
 <translation id="2396765026452590966">L'estensione "<ph name="EXTENSION_NAME" />" ha cambiato la pagina mostrata all'avvio di Chromium.</translation>
 <translation id="2483889755041906834">In Chromium</translation>
 <translation id="2485422356828889247">Disinstalla</translation>
-<translation id="2527042973354814951">Riavvia Chromium per attivare <ph name="PLUGIN_NAME" /></translation>
 <translation id="2535480412977113886">Impossibile sincronizzare i dati in Chromium OS perché i dati di accesso dell'account sono obsoleti.</translation>
 <translation id="2560420686485554789">Chromium deve avere accesso allo spazio di archiviazione per poter scaricare file</translation>
 <translation id="2572494885440352020">Supporto Chromium</translation>
@@ -52,6 +49,7 @@
 <translation id="2770231113462710648">Cambia browser predefinito con:</translation>
 <translation id="2799223571221894425">Riavvia</translation>
 <translation id="2816712596130903444">Vuoi separare il profilo Chromium?</translation>
+<translation id="2837693172913560447">Questa operazione creerà un nuovo profilo Chromium per <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="2847479871509788944">Rimuovi da Chromium...</translation>
 <translation id="2885378588091291677">Task Manager</translation>
 <translation id="2910007522516064972">Informazioni su &amp;Chromium</translation>
@@ -107,6 +105,7 @@
 <translation id="4407044323746248786">Vuoi uscire comunque da Chromium?</translation>
 <translation id="4415566066719264597">Lascia Chromium in esecuzione in background</translation>
 <translation id="4423735387467980091">Personalizza e controlla Chromium</translation>
+<translation id="4491398312037323794">Questa pagina ti consente di gestire gli Account Google a cui hai eseguito l'accesso. Questi account saranno disponibili nel browser Chromium e nelle app del Play Store, nonché in servizi come Gmail, Drive e YouTube. <ph name="LINK_BEGIN" />Scopri di più<ph name="LINK_END" /></translation>
 <translation id="452711251841752011">Ti diamo il benvenuto in Chromium; nuova finestra del browser aperta</translation>
 <translation id="4544142686420020088">Si è verificato un errore: Chromium non si è aggiornato. <ph name="BEGIN_LINK" />Risolvi i problemi di aggiornamento e gli aggiornamenti non riusciti di Chromium.<ph name="END_LINK" /></translation>
 <translation id="454579500955453258">Vuoi continuare con un nuovo profilo Chromium?</translation>
@@ -120,12 +119,12 @@
 <translation id="4750035648288509542">Aggiornamento quasi terminato. Riavvia Chromium per terminare l'aggiornamento. Le finestre di navigazione in incognito non verranno riaperte.</translation>
 <translation id="4788777615168560705">Chromium non può controllare le tue password. Riprova tra 24 ore oppure <ph name="BEGIN_LINK" />controlla le password nel tuo Account Google<ph name="END_LINK" />.</translation>
 <translation id="479167709087336770">Viene usato lo stesso controllo ortografico utilizzato nella Ricerca Google. Il testo che digiti nel browser viene inviato a Google. Puoi modificare questo comportamento in qualsiasi momento nelle impostazioni.</translation>
-<translation id="4814736265800133385">Utilizza Chromium senza un account</translation>
 <translation id="4888717733111232871">Regola inbound per consentire il traffico mDNS in Chromium.</translation>
 <translation id="4943838377383847465">Chromium è in modalità background.</translation>
 <translation id="4987820182225656817">Gli ospiti possono utilizzare Chromium senza lasciare tracce.</translation>
 <translation id="4994636714258228724">Aggiungiti a Chromium</translation>
 <translation id="5224391634244552924">Nessuna password salvata. Chromium può controllare le password quando le salvi.</translation>
+<translation id="5252179775517634216"><ph name="EXISTING_USER" /> ha già eseguito l'accesso a questo profilo Chromium. Questa operazione creerà un nuovo profilo Chromium per <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="5277894862589591112">Riavvia Chromium per applicare le modifiche</translation>
 <translation id="5358375970380395591">Stai per accedere con un account gestito e per dare al relativo amministratore il controllo del tuo profilo Chromium. I tuoi dati di Chromium, come app, Preferiti, cronologia, password e altre impostazioni, verranno collegati definitivamente a <ph name="USER_NAME" />. Potrai eliminare questi dati tramite la Dashboard di Google Account, ma non potrai associare questi dati a un altro account. <ph name="LEARN_MORE" /></translation>
 <translation id="5386450000063123300">Aggiornamento di Chromium in corso (<ph name="PROGRESS_PERCENT" />)</translation>
@@ -139,7 +138,6 @@
 <translation id="549669000822060376">Attendi mentre Chromium installa gli aggiornamenti di sistema più recenti.</translation>
 <translation id="5496810170689441661">Chromium sta cercando di modificare le password. Per consentire la modifica, digita la tua password Windows.</translation>
 <translation id="5623402015214259806">{0,plural, =0{È disponibile un aggiornamento di Chromium}=1{È disponibile un aggiornamento di Chromium}other{È disponibile un aggiornamento di Chromium da # giorni}}</translation>
-<translation id="5631814766731275228">Nome e immagine di Chromium</translation>
 <translation id="5634636535844844681">Chromium richiede Windows 7 o versioni successive.</translation>
 <translation id="5653831366781983928">Riavvia subito Chromium</translation>
 <translation id="5698481217667032250">Visualizza Chromium in questa lingua</translation>
@@ -167,6 +165,7 @@
 <translation id="6266342355635466082">Chromium non può controllare la disponibilità di aggiornamenti. Prova a controllare la connessione a Internet.</translation>
 <translation id="6268381023930128611">Uscire da Chromium?</translation>
 <translation id="6281746429495226318">Personalizza il tuo profilo Chromium</translation>
+<translation id="6290827346642914212">Assegna un nome al tuo profilo Chromium</translation>
 <translation id="6295779123002464101"><ph name="FILE_NAME" /> potrebbe essere pericoloso, pertanto è stato bloccato da Chromium.</translation>
 <translation id="6309712487085796862">Chromium sta utilizzando la videocamera.</translation>
 <translation id="6333502561965082103">C'è un'altra operazione in corso su Chromium. Riprova più tardi.</translation>
@@ -195,6 +194,7 @@ Alcune funzioni potrebbero non essere disponibili. Specifica un'altra directory 
 <translation id="6863361426438995919">Google Pay (copiata in Chromium)</translation>
 <translation id="6893813176749746474">Chromium è stato aggiornato ma non lo utilizzi da almeno 30 giorni.</translation>
 <translation id="6897548120660295439">Rosetta consente di riprodurre i contenuti multimediali protetti in questa pagina su Chromium.</translation>
+<translation id="691026815377248078">Chromium richiede l'accesso al Bluetooth per continuare l'accoppiamento. <ph name="IDS_BLUETOOTH_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="6964305034639999644">Apri link in una finestra di navigazione in inco&amp;gnito di Chromium</translation>
 <translation id="6978145336957848883">Le password inefficaci sono facili da indovinare. Consenti a Chromium di <ph name="BEGIN_LINK" />creare e memorizzare password efficaci per te<ph name="END_LINK" />.</translation>
 <translation id="6990124437352146030">Per questo sito Chromium ha bisogno dell'autorizzazione ad accedere al microfono</translation>
@@ -233,6 +233,7 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 <translation id="7773960292263897147">Chromium non è in grado di impedire alle estensioni di registrare la tua cronologia di navigazione. Per disattivare questa estensione in modalità di navigazione in incognito, deseleziona questa opzione.</translation>
 <translation id="7790626492778995050"><ph name="PAGE_TITLE" /> - Chromium Canary</translation>
 <translation id="7827169012280634081">Cancella cookie e dati dei siti alla chiusura di Chromium</translation>
+<translation id="7828947555739565424">Esiste già un profilo Chromium con questo account su questo dispositivo</translation>
 <translation id="7857220146454061152">Per ricevere gli aggiornamenti futuri di Chromium, devi avere macOS 10.11 o versioni successive. Su questo computer è installato macOS 10.10.</translation>
 <translation id="7867198900892795913">Non è stato possibile aggiornare Chromium alla versione più recente, quindi non potrai utilizzare le nuove funzioni e gli aggiornamenti di sicurezza.</translation>
 <translation id="7898472181347242998">Per controllare se il tuo dispositivo è aggiornato, vai alle <ph name="LINK_BEGIN" />Impostazioni di Chromium OS<ph name="LINK_END" /></translation>
@@ -273,12 +274,12 @@ Chromium non è in grado di recuperare le impostazioni.</translation>
 <translation id="9047197236183657400">Vuoi spostare l'account a un nuovo profilo Chromium?</translation>
 <translation id="9089354809943900324">Chromium non è aggiornato</translation>
 <translation id="9093206154853821181">{0,plural, =1{Chromium verrà riavviato tra un'ora}other{Chromium verrà riavviato tra # ore}}</translation>
-<translation id="9107750757953039239">Se hai più Account Google, puoi aggiungerli al tuo <ph name="DEVICE_TYPE" />. I tuoi account saranno disponibili nel browser Chromium e nel Play Store, nonché in servizi come Gmail, Drive e YouTube. <ph name="LINK_BEGIN" />Scopri di più<ph name="LINK_END" /></translation>
 <translation id="91086099826398415">Apri link in una nuova &amp;scheda di Chromium</translation>
 <translation id="911206726377975832">Eliminare anche i tuoi dati di navigazione?</translation>
 <translation id="9158494823179993217">L'amministratore di sistema ha configurato Chromium per l'apertura di un browser alternativo per accedere a <ph name="TARGET_URL_HOSTNAME" />.</translation>
 <translation id="9190841055450128916">Chromium (mDNS-In)</translation>
 <translation id="9214764063801632699">Sistema Chromium OS</translation>
 <translation id="93478295209880648">Chromium potrebbe non funzionare correttamente perché non è più supportato su Windows XP o Windows Vista</translation>
+<translation id="965162752251293939">Chi usa Chromium?</translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 </translationbundle>

@@ -12,8 +12,8 @@ android_library("java") {
     ":java_resources",
     "//base:base_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
-    "//third_party/android_deps:androidx_annotation_annotation_java",
-    "//third_party/android_deps:androidx_appcompat_appcompat_resources_java",
+    "//third_party/androidx:androidx_annotation_annotation_java",
+    "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
   ]
   resources_package = "org.chromium.components.browser_ui.styles"
 }
@@ -154,13 +154,14 @@ android_resources("java_resources") {
     "java/res/drawable/ic_music_note_24dp.xml",
     "java/res/drawable/ic_offline_pin_24dp_on_dark_bg.xml",
     "java/res/drawable/ic_offline_pin_24dp_on_light_bg.xml",
-    "java/res/drawable/ic_people_24dp.xml",
     "java/res/drawable/ic_permission_location_filled.xml",
     "java/res/drawable/ic_play_circle_filled_24dp_on_dark_bg.xml",
     "java/res/drawable/ic_play_circle_filled_24dp_on_light_bg.xml",
     "java/res/drawable/ic_security_grey.xml",
     "java/res/drawable/ic_update_grey.xml",
     "java/res/drawable/ic_videocam_24dp.xml",
+    "java/res/drawable/ic_visibility_black.xml",
+    "java/res/drawable/ic_visibility_off_black.xml",
     "java/res/drawable/ic_vpn_key_grey.xml",
     "java/res/drawable/ic_warning_red_16dp.xml",
     "java/res/drawable/ic_warning_red_24dp.xml",

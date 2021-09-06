@@ -123,19 +123,24 @@ template <typename T>
 struct IsTraceable : cppgc::internal::IsTraceable<T> {};
 
 template <typename T>
-struct IsGarbageCollectedType : cppgc::internal::IsGarbageCollectedType<T> {};
+struct IsGarbageCollectedType
+    : cppgc::internal::IsGarbageCollectedOrMixinType<T> {};
 
 template <typename T>
 struct IsWeak : cppgc::internal::IsWeak<T> {};
+
+template <typename T>
+struct IsMemberType : std::integral_constant<bool, cppgc::IsMemberTypeV<T>> {};
+
+template <typename T>
+struct IsWeakMemberType
+    : std::integral_constant<bool, cppgc::IsWeakMemberTypeV<T>> {};
 
 template <typename T>
 struct IsMemberOrWeakMemberType
     : std::integral_constant<bool,
                              cppgc::IsMemberTypeV<T> ||
                                  cppgc::IsWeakMemberTypeV<T>> {};
-
-template <typename T>
-struct IsMemberType : std::integral_constant<bool, cppgc::IsMemberTypeV<T>> {};
 
 #else  // !USE_V8_OILPAN
 
@@ -169,11 +174,6 @@ struct IsTraceable<T,
   static_assert(internal::IsTraceMethodConst<T>(),
                 "Trace methods should be marked as const.");
 };
-
-template <typename T, typename U>
-struct IsTraceable<std::pair<T, U>>
-    : std::integral_constant<bool,
-                             IsTraceable<T>::value || IsTraceable<U>::value> {};
 
 template <typename T>
 class IsGarbageCollectedTypeInternal {
@@ -223,19 +223,29 @@ template <typename T>
 struct IsWeak : std::false_type {};
 
 template <typename T>
-struct IsMemberOrWeakMemberType
-    : std::integral_constant<
-          bool,
-          WTF::IsSubclassOfTemplate<T, blink::Member>::value ||
-              WTF::IsSubclassOfTemplate<T, blink::WeakMember>::value> {};
-
-template <typename T>
 struct IsMemberType : std::integral_constant<
                           bool,
                           WTF::IsSubclassOfTemplate<T, blink::Member>::value> {
 };
 
+template <typename T>
+struct IsWeakMemberType
+    : std::integral_constant<
+          bool,
+          WTF::IsSubclassOfTemplate<T, blink::WeakMember>::value> {};
+
+template <typename T>
+struct IsMemberOrWeakMemberType
+    : std::integral_constant<bool,
+                             IsMemberType<T>::value ||
+                                 IsWeakMemberType<T>::value> {};
+
 #endif  // !USE_V8_OILPAN
+
+template <typename T, typename U>
+struct IsTraceable<std::pair<T, U>>
+    : std::integral_constant<bool,
+                             IsTraceable<T>::value || IsTraceable<U>::value> {};
 
 // Convenience template wrapping the IsTraceableInCollection template in
 // Collection Traits. It helps make the code more readable.

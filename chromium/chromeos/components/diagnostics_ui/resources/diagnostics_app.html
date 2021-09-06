@@ -20,10 +20,18 @@
     position: relative;
   }
 
+  #download-icon {
+    --iron-icon-height: 20px;
+    --iron-icon-width: 20px;
+    color: var(--google-blue-600);
+    right: 4px;
+  }
+
   #header {
     @apply --diagnostics-header-font;
     align-self: flex-start;
     margin-bottom: 10px;
+    margin-left: 22px;
   }
 
   .overview-container {
@@ -34,13 +42,10 @@
     justify-content: center;
     margin: 20px 0;
   }
-  .session-log-button {
-    background-color: rgba(var(--google-blue-600), .06);
-    border-radius: 20px;
-    width: 144px;
-    height: 40px;
-    font-size: 14px;
-    padding: 5px;
+
+  #toast {
+    bottom: 0;
+    left: 0;
   }
 </style>
 <div id="diagnosticsContainer" hidden="[[!systemInfoReceived_]]">
@@ -68,8 +73,13 @@
     </div>
   </div>
   <div class="session-log-container">
-    <cr-button class="session-log-button">
-      [[i18n('sessionLog')]]
+    <cr-button on-click="onSessionLogClick_" class="session-log-button"
+        hidden="[[!isLoggedIn_]]">
+      <iron-icon icon="diagnostics:download" id="download-icon"></iron-icon>
+      <span>[[i18n('sessionLog')]]</span>
     </cr-button>
   </div>
+  <cr-toast id="toast" duration="2500">
+    <span>[[toastText_]]</span>
+  </cr-toast>
 </div>

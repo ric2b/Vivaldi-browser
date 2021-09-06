@@ -40,4 +40,8 @@ std::string PassThroughVideoDecoder::GetDisplayName() const {
   return "PassThroughVideoDecoder";
 }
 
+VideoDecoderType PassThroughVideoDecoder::GetDecoderType() const {
+  return VideoDecoderType::kDecrypting;
+}
+
 }  // namespace media

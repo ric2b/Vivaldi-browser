@@ -32,6 +32,7 @@
 #include "base/scoped_observation.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -68,7 +69,6 @@
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "third_party/skia/include/effects/SkLayerDrawLooper.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -323,6 +323,48 @@ int GetStackableTabWidth() {
   return TabStyle::GetTabOverlap() +
          (ui::TouchUiController::Get()->touch_ui() ? 136 : 102);
 }
+
+// Helper class that manages the tab scrolling animation.
+class TabScrollingAnimation : public gfx::LinearAnimation,
+                              public gfx::AnimationDelegate {
+ public:
+  explicit TabScrollingAnimation(
+      TabStrip* tab_strip,
+      gfx::AnimationContainer* bounds_animator_container,
+      base::TimeDelta duration,
+      const gfx::Rect start_visible_rect,
+      const gfx::Rect end_visible_rect)
+      : gfx::LinearAnimation(duration,
+                             gfx::LinearAnimation::kDefaultFrameRate,
+                             this),
+        tab_strip_(tab_strip),
+        start_visible_rect_(start_visible_rect),
+        end_visible_rect_(end_visible_rect) {
+    SetContainer(bounds_animator_container);
+  }
+  TabScrollingAnimation(const TabScrollingAnimation&) = delete;
+  TabScrollingAnimation& operator=(const TabScrollingAnimation&) = delete;
+  ~TabScrollingAnimation() override = default;
+
+  void AnimateToState(double state) override {
+    gfx::Rect intermediary_rect(
+        start_visible_rect_.x() +
+            (end_visible_rect_.x() - start_visible_rect_.x()) * state,
+        start_visible_rect_.y(), start_visible_rect_.width(),
+        start_visible_rect_.height());
+
+    tab_strip_->ScrollRectToVisible(intermediary_rect);
+  }
+
+  void AnimationEnded(const gfx::Animation* animation) override {
+    tab_strip_->ScrollRectToVisible(end_visible_rect_);
+  }
+
+ private:
+  TabStrip* const tab_strip_;
+  const gfx::Rect start_visible_rect_;
+  const gfx::Rect end_visible_rect_;
+};
 
 }  // namespace
 
@@ -1424,26 +1466,37 @@ void TabStrip::ScrollTabToVisible(int model_index) {
     return;
   }
 
-  gfx::Rect visible_content_rect = scroll_container->GetVisibleRect();
-  Tab* active_tab = tab_at(model_index);
+  if (tab_scrolling_animation_)
+    tab_scrolling_animation_->Stop();
 
-  if ((active_tab->x() >= visible_content_rect.x()) &&
-      (active_tab->bounds().right() <= visible_content_rect.right())) {
+  gfx::Rect visible_content_rect = scroll_container->GetVisibleRect();
+  gfx::Rect active_tab_ideal_bounds = ideal_bounds(model_index);
+
+  if ((active_tab_ideal_bounds.x() >= visible_content_rect.x()) &&
+      (active_tab_ideal_bounds.right() <= visible_content_rect.right())) {
     return;
   }
 
-  bool scroll_left = active_tab->x() < visible_content_rect.x();
+  bool scroll_left = active_tab_ideal_bounds.x() < visible_content_rect.x();
   if (scroll_left) {
-    gfx::Rect new_visible(active_tab->x(), visible_content_rect.y(),
+    gfx::Rect new_visible(active_tab_ideal_bounds.x(), visible_content_rect.y(),
                           visible_content_rect.width(),
                           visible_content_rect.height());
-    ScrollRectToVisible(new_visible);
+    tab_scrolling_animation_ = std::make_unique<TabScrollingAnimation>(
+        this, bounds_animator_.container(),
+        bounds_animator_.GetAnimationDuration(), visible_content_rect,
+        new_visible);
+    tab_scrolling_animation_->Start();
   } else {
     gfx::Rect new_visible(
-        active_tab->bounds().right() - visible_content_rect.width(),
+        active_tab_ideal_bounds.right() - visible_content_rect.width(),
         visible_content_rect.y(), visible_content_rect.width(),
         visible_content_rect.height());
-    ScrollRectToVisible(new_visible);
+    tab_scrolling_animation_ = std::make_unique<TabScrollingAnimation>(
+        this, bounds_animator_.container(),
+        bounds_animator_.GetAnimationDuration(), visible_content_rect,
+        new_visible);
+    tab_scrolling_animation_->Start();
   }
 }
 
@@ -1613,7 +1666,9 @@ bool TabStrip::ShouldTabBeVisible(const Tab* tab) const {
   // tabstrip were resized to its greatest possible width, it shouldn't be
   // visible.
   const int right_edge = tab->bounds().right();
-  const int tabstrip_right = CalculateAvailableWidthForTabs();
+  const int tabstrip_right = tab->dragging()
+                                 ? drag_context_->GetTabDragAreaWidth()
+                                 : GetAvailableWidthForTabStrip();
   if (right_edge > tabstrip_right)
     return false;
 
@@ -2135,7 +2190,7 @@ bool TabStrip::HoverCardIsShowingForTab(Tab* tab) {
     return false;
 
   return hover_card_ && hover_card_->GetWidget()->IsVisible() &&
-         !hover_card_->IsFadingOut() &&
+         !hover_card_->GetFadingOut() &&
          hover_card_->GetDesiredAnchorView() == tab;
 }
 
@@ -2305,12 +2360,6 @@ SkColor TabStrip::GetPaintedGroupColor(
 // TabStrip, views::AccessiblePaneView overrides:
 
 void TabStrip::Layout() {
-  if (IsAnimating()) {
-    // Hide tabs that have animated at least partially out of the clip region.
-    SetTabSlotVisibility();
-    return;
-  }
-
   if (base::FeatureList::IsEnabled(features::kScrollableTabStrip)) {
     // With tab scrolling, the tabstrip is solely responsible for its own
     // width.
@@ -2324,6 +2373,12 @@ void TabStrip::Layout() {
     const int width = std::min(max_width, std::max(min_width, available_width));
     SetBounds(0, 0, width, GetLayoutConstant(TAB_HEIGHT));
     SetTabSlotVisibility();
+  }
+
+  if (IsAnimating()) {
+    // Hide tabs that have animated at least partially out of the clip region.
+    SetTabSlotVisibility();
+    return;
   }
 
   // Only do a layout if our size or the available width changed.
@@ -2800,6 +2855,12 @@ void TabStrip::AnimateToIdealBounds() {
             base::BindRepeating(&TabStrip::OnTabSlotAnimationProgressed,
                                 base::Unretained(this))));
   }
+
+  // Because the preferred size of the tabstrip depends on the IsAnimating()
+  // condition, but starting an animation  doesn't necessarily invalidate the
+  // existing preferred size and layout (which may now be incorrect), we need to
+  // signal this explicitly.
+  PreferredSizeChanged();
 }
 
 void TabStrip::SnapToIdealBounds() {
@@ -2840,6 +2901,8 @@ void TabStrip::CompleteAnimationAndLayout() {
   last_layout_size_ = size();
 
   bounds_animator_.Cancel();
+  if (tab_scrolling_animation_)
+    tab_scrolling_animation_->SetCurrentValue(1);
 
   SwapLayoutIfNecessary();
   if (touch_layout_)
@@ -3314,10 +3377,21 @@ void TabStrip::StartResizeLayoutTabsFromTouchTimer() {
 
 void TabStrip::AddMessageLoopObserver() {
   if (!mouse_watcher_) {
+    // Expand the watched region downwards below the bottom of the tabstrip.
+    // This allows users to move the cursor horizontally, to another tab,
+    // without accidentally exiting closing mode if they drift verticaally
+    // slightly out of the tabstrip.
     constexpr int kTabStripAnimationVSlop = 40;
+    // Expand the watched region to the right to cover the NTB. This prevents
+    // the scenario where the user goes to click on the NTB while they're in
+    // closing mode, and closing mode exits just as they reach the NTB.
+    constexpr int kTabStripAnimationHSlop = 60;
     mouse_watcher_ = std::make_unique<views::MouseWatcher>(
         std::make_unique<views::MouseWatcherViewHost>(
-            this, gfx::Insets(0, 0, kTabStripAnimationVSlop, 0)),
+            this,
+            gfx::Insets(0, base::i18n::IsRTL() ? kTabStripAnimationHSlop : 0,
+                        kTabStripAnimationVSlop,
+                        base::i18n::IsRTL() ? 0 : kTabStripAnimationHSlop)),
         this);
   }
   mouse_watcher_->Start(GetWidget()->GetNativeWindow());
@@ -3702,7 +3776,7 @@ void TabStrip::OnMouseEntered(const ui::MouseEvent& event) {
 
 void TabStrip::OnMouseExited(const ui::MouseEvent& event) {
   if (base::FeatureList::IsEnabled(features::kTabHoverCards) && hover_card_ &&
-      hover_card_->IsVisible()) {
+      hover_card_->GetVisible()) {
     hover_card_->set_last_mouse_exit_timestamp(base::TimeTicks::Now());
   }
   UpdateHoverCard(nullptr);
@@ -3854,8 +3928,12 @@ ADD_READONLY_PROPERTY_METADATA(int, ModelCount)
 ADD_READONLY_PROPERTY_METADATA(int, PinnedTabCount)
 ADD_READONLY_PROPERTY_METADATA(base::Optional<int>, FocusedTabIndex)
 ADD_READONLY_PROPERTY_METADATA(int, StrokeThickness)
-ADD_READONLY_PROPERTY_METADATA(SkColor, ToolbarTopSeparatorColor)
-ADD_READONLY_PROPERTY_METADATA(SkColor, TabSeparatorColor)
+ADD_READONLY_PROPERTY_METADATA(SkColor,
+                               ToolbarTopSeparatorColor,
+                               views::metadata::SkColorConverter)
+ADD_READONLY_PROPERTY_METADATA(SkColor,
+                               TabSeparatorColor,
+                               views::metadata::SkColorConverter)
 ADD_READONLY_PROPERTY_METADATA(float, HoverOpacityForRadialHighlight)
 ADD_READONLY_PROPERTY_METADATA(int, ActiveTabWidth)
 ADD_READONLY_PROPERTY_METADATA(int, InactiveTabWidth)

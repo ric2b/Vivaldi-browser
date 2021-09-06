@@ -14,6 +14,8 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
+#include "chrome/browser/profiles/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/scoped_profile_keep_alive.h"
 #include "chrome/browser/sessions/session_restore_test_helper.h"
 #include "chrome/browser/sessions/tab_loader_tester.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
@@ -711,7 +713,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindow) {
 // Mac10.13 Tests (dbg) and PASS/FAIL flakiness on Linux Chromium OS ASan LSan
 // Tests (1) bot.
 #if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
-    defined(OS_WIN) || (defined(OS_MAC) && !defined(NDEBUG))
+    !defined(NDEBUG)
 #define MAYBE_RestoreTabWithSpecialURL DISABLED_RestoreTabWithSpecialURL
 #else
 #define MAYBE_RestoreTabWithSpecialURL RestoreTabWithSpecialURL
@@ -744,8 +746,9 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, MAYBE_RestoreTabWithSpecialURL) {
 // https://crbug.com/667932: Flakiness on linux_chromium_asan_rel_ng bot.
 // https://crbug.com/825305: Timeout flakiness on Win7 Tests (dbg)(1) and
 // Mac10.13 Tests (dbg) bots.
+// Also fails on Linux Tests (dbg).
 #if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
-    ((defined(OS_WIN) || defined(OS_MAC)) && !defined(NDEBUG))
+    !defined(NDEBUG)
 #define MAYBE_RestoreTabWithSpecialURLOnBack DISABLED_RestoreTabWithSpecialURLOnBack
 #else
 #define MAYBE_RestoreTabWithSpecialURLOnBack RestoreTabWithSpecialURLOnBack
@@ -803,9 +806,11 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreOnStartup) {
 // same thing.
 IN_PROC_BROWSER_TEST_F(TabRestoreTest,
                        RestoreFirstBrowserWhenSessionServiceEnabled) {
-  // Do not exit from test when last browser is closed.
+  // Do not exit from test or delete the Profile* when last browser is closed.
   ScopedKeepAlive keep_alive(KeepAliveOrigin::SESSION_RESTORE,
                              KeepAliveRestartOption::DISABLED);
+  ScopedProfileKeepAlive profile_keep_alive(
+      browser()->profile(), ProfileKeepAliveOrigin::kSessionRestore);
 
   // Enable session service.
   SessionStartupPref pref(SessionStartupPref::LAST);
@@ -1501,8 +1506,6 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, BackToAboutBlank) {
   GoBack(browser());
   EXPECT_EQ(GURL(url::kAboutBlankURL),
             new_popup->GetMainFrame()->GetLastCommittedURL());
-  // TODO(lukasza): https://crbug.com/888079: The browser process should tell
-  // the renderer which (initiator-based) origin to commit.  Right now, Blink
-  // just falls back to an opaque origin.
-  EXPECT_TRUE(new_popup->GetMainFrame()->GetLastCommittedOrigin().opaque());
+  EXPECT_EQ(initial_origin,
+            new_popup->GetMainFrame()->GetLastCommittedOrigin());
 }

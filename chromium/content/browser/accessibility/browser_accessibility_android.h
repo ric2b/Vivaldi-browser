@@ -23,7 +23,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   static BrowserAccessibilityAndroid* GetFromUniqueId(int32_t unique_id);
   int32_t unique_id() const { return GetUniqueId().Get(); }
 
-  // Overrides from BrowserAccessibility.
+  // BrowserAccessibility Overrides.
   void OnDataChanged() override;
   void OnLocationChanged() override;
   base::string16 GetLocalizedStringForImageAnnotationStatus(
@@ -38,6 +38,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   bool IsCombobox() const;
   bool IsComboboxControl() const;
   bool IsContentInvalid() const;
+  bool IsDisabledDescendant() const;
   bool IsDismissable() const;
   bool IsEnabled() const;
   bool IsExpanded() const;
@@ -184,21 +185,23 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   // This gives BrowserAccessibility::Create access to the class constructor.
   friend class BrowserAccessibility;
 
-  BrowserAccessibilityAndroid();
-  ~BrowserAccessibilityAndroid() override;
-
-  bool HasOnlyTextChildren() const;
-  bool HasOnlyTextAndImageChildren() const;
-  bool ShouldExposeValueAsName() const;
-
-  int CountChildrenWithRole(ax::mojom::Role role) const;
-
   static size_t CommonPrefixLength(const base::string16 a,
                                    const base::string16 b);
   static size_t CommonSuffixLength(const base::string16 a,
                                    const base::string16 b);
   static size_t CommonEndLengths(const base::string16 a,
                                  const base::string16 b);
+
+  BrowserAccessibilityAndroid();
+  ~BrowserAccessibilityAndroid() override;
+
+  // BrowserAccessibility overrides.
+  BrowserAccessibility* PlatformGetLowestPlatformAncestor() const override;
+
+  bool HasOnlyTextChildren() const;
+  bool HasOnlyTextAndImageChildren() const;
+  bool ShouldExposeValueAsName() const;
+  int CountChildrenWithRole(ax::mojom::Role role) const;
 
   void AppendTextToString(base::string16 extra_text,
                           base::string16* string) const;

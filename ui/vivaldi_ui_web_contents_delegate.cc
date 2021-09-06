@@ -195,13 +195,13 @@ void VivaldiUIWebContentsDelegate::ActivateContents(
   window_->Activate();
 }
 
-void VivaldiUIWebContentsDelegate::RenderViewCreated(
-  content::RenderViewHost* render_view_host) {
+void VivaldiUIWebContentsDelegate::RenderFrameCreated(
+    content::RenderFrameHost* render_frame_host) {
   if (window_->requested_alpha_enabled()) {
     VivaldiNativeAppWindowViews* window_views = window_->views();
     if (window_views && window_views->CanHaveAlphaEnabled()) {
       content::RenderWidgetHostView* host_view =
-          render_view_host->GetWidget()->GetView();
+          render_frame_host->GetView();
       DCHECK(host_view);
       host_view->SetBackgroundColor(SK_ColorTRANSPARENT);
     }

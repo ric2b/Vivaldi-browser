@@ -129,6 +129,12 @@ void NearbyReceiveManager::OnHighVisibilityChanged(bool in_high_visibility) {
   }
 }
 
+void NearbyReceiveManager::OnNearbyProcessStopped() {
+  for (auto& remote : observers_set_) {
+    remote->OnNearbyProcessStopped();
+  }
+}
+
 void NearbyReceiveManager::NotifyOnTransferUpdate(
     const ShareTarget& share_target,
     const TransferMetadata& metadata) {

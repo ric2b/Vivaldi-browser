@@ -199,7 +199,7 @@ class DevtoolsConnectorAPI : public BrowserContextKeyedAPI {
   DevtoolsConnectorItem* GetOrCreateDevtoolsConnectorItem(int tab_id);
 
   void RemoveDevtoolsConnectorItem(int tab_id);
-  static void CloseAllDevtools(content::BrowserContext* browser_context);
+  static void CloseAllDevtools();
 
   // Browser or nullptr to close all open devtools.
   static void CloseDevtoolsForBrowser(content::BrowserContext* browser_context,

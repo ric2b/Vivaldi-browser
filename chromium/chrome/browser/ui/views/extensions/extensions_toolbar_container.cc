@@ -18,12 +18,16 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 namespace {
+
+using ::ui::mojom::DragOperation;
 
 base::OnceClosure& GetOnVisibleCallbackForTesting() {
   static base::NoDestructor<base::OnceClosure> callback;
@@ -642,20 +646,16 @@ void ExtensionsToolbarContainer::OnDragExited() {
       weak_ptr_factory_.GetWeakPtr(), dragged_extension_id, true));
 }
 
-int ExtensionsToolbarContainer::OnPerformDrop(
+DragOperation ExtensionsToolbarContainer::OnPerformDrop(
     const ui::DropTargetEvent& event) {
   BrowserActionDragData data;
   if (!data.Read(event.data()))
-    return ui::DragDropTypes::DRAG_NONE;
+    return DragOperation::kNone;
 
   model_->MovePinnedAction(drop_info_->action_id, drop_info_->index);
 
   OnDragExited();  // Perform clean up after dragging.
-  return ui::DragDropTypes::DRAG_MOVE;
-}
-
-const char* ExtensionsToolbarContainer::GetClassName() const {
-  return "ExtensionsToolbarContainer";
+  return DragOperation::kMove;
 }
 
 void ExtensionsToolbarContainer::OnWidgetClosing(views::Widget* widget) {
@@ -731,7 +731,7 @@ bool ExtensionsToolbarContainer::ShouldContainerBeVisible() const {
     return true;
 
   // Is menu showing.
-  if (extensions_button_->IsExtensionsMenuShowing())
+  if (extensions_button_->GetExtensionsMenuShowing())
     return true;
 
   // Is extension pop out is showing.
@@ -758,3 +758,6 @@ void ExtensionsToolbarContainer::OnMenuOpening() {
 void ExtensionsToolbarContainer::OnMenuClosed() {
   UpdateContainerVisibility();
 }
+
+BEGIN_METADATA(ExtensionsToolbarContainer, ToolbarIconContainerView)
+END_METADATA

@@ -20,8 +20,8 @@ import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.ui.widget.Toast;
 
 import java.util.Calendar;
-
-import org.chromium.chrome.browser.ChromeApplication;
+// Vivaldi
+import org.chromium.base.BuildConfig;
 
 /**
  * Settings fragment that displays information about Chrome.
@@ -56,7 +56,7 @@ public class AboutChromeSettings
         p.setSummary(
                 getApplicationVersion(getActivity(), AboutSettingsBridge.getApplicationVersion()));
         // Vivaldi (ref. VB-59279)
-        if (!ChromeApplication.isVivaldi())
+        if (!BuildConfig.IS_VIVALDI)
         p.setOnPreferenceClickListener(this);
         p = findPreference(PREF_OS_VERSION);
         p.setSummary(AboutSettingsBridge.getOSVersion());
@@ -70,6 +70,10 @@ public class AboutChromeSettings
      * versions are more useful.
      */
     public static String getApplicationVersion(Context context, String version) {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            version = version.concat(" (OEM)");
+        }
         if (ChromeVersionInfo.isOfficialBuild()) {
             return version;
         }

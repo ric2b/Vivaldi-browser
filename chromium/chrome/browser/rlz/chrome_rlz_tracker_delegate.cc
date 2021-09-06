@@ -41,8 +41,8 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
-#include "chromeos/constants/chromeos_switches.h"
 #endif
 
 ChromeRLZTrackerDelegate::ChromeRLZTrackerDelegate() {}
@@ -178,8 +178,8 @@ void ChromeRLZTrackerDelegate::SetOmniboxSearchCallback(
   DCHECK(!callback.is_null());
   omnibox_url_opened_subscription_ =
       OmniboxEventGlobalTracker::GetInstance()->RegisterCallback(
-          base::Bind(&ChromeRLZTrackerDelegate::OnURLOpenedFromOmnibox,
-                     base::Unretained(this)));
+          base::BindRepeating(&ChromeRLZTrackerDelegate::OnURLOpenedFromOmnibox,
+                              base::Unretained(this)));
   on_omnibox_search_callback_ = std::move(callback);
 }
 

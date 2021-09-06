@@ -84,8 +84,16 @@ void AddressPoolManager::Remove(pool_handle handle) {
   pool->Reset();
 }
 
-char* AddressPoolManager::Reserve(pool_handle handle, void*, size_t length) {
+char* AddressPoolManager::Reserve(pool_handle handle,
+                                  void* requested_address,
+                                  size_t length) {
   Pool* pool = GetPool(handle);
+  if (!requested_address)
+    return reinterpret_cast<char*>(pool->FindChunk(length));
+  const bool is_available = pool->TryReserveChunk(
+      reinterpret_cast<uintptr_t>(requested_address), length);
+  if (is_available)
+    return static_cast<char*>(requested_address);
   return reinterpret_cast<char*>(pool->FindChunk(length));
 }
 
@@ -179,6 +187,29 @@ uintptr_t AddressPoolManager::Pool::FindChunk(size_t requested_size) {
   return 0;
 }
 
+bool AddressPoolManager::Pool::TryReserveChunk(uintptr_t address,
+                                               size_t requested_size) {
+  base::AutoLock scoped_lock(lock_);
+  PA_DCHECK(!(address & kSuperPageOffsetMask));
+  PA_DCHECK(!(requested_size & kSuperPageOffsetMask));
+  const size_t begin_bit = (address - address_begin_) / kSuperPageSize;
+  const size_t need_bits = requested_size / kSuperPageSize;
+  const size_t end_bit = begin_bit + need_bits;
+  // Check that requested address is not too high.
+  if (end_bit > total_bits_)
+    return false;
+  // Check if any bit of the requested region is set already.
+  for (size_t i = begin_bit; i < end_bit; ++i) {
+    if (alloc_bitset_.test(i))
+      return false;
+  }
+  // Otherwise, set the bits.
+  for (size_t i = begin_bit; i < end_bit; ++i) {
+    alloc_bitset_.set(i);
+  }
+  return true;
+}
+
 void AddressPoolManager::Pool::FreeChunk(uintptr_t address, size_t free_size) {
   base::AutoLock scoped_lock(lock_);
 
@@ -204,20 +235,20 @@ AddressPoolManager::Pool::~Pool() = default;
 
 #else  // defined(PA_HAS_64_BITS_POINTERS)
 
-namespace {
-
-LazyInstance<Lock>::Leaky g_lock = LAZY_INSTANCE_INITIALIZER;
-
-}  // namespace
-
-Lock& AddressPoolManager::GetLock() {
-  return g_lock.Get();
-}
-
-std::bitset<AddressPoolManager::kDirectMapBits>
-    AddressPoolManager::directmap_bits_;  // GUARDED_BY(GetLock())
-std::bitset<AddressPoolManager::kNormalBucketBits>
-    AddressPoolManager::normal_bucket_bits_;  // GUARDED_BY(GetLock())
+static_assert(
+    kSuperPageSize %
+            AddressPoolManagerBitmap::kBytesPer1BitOfNormalBucketBitmap ==
+        0,
+    "kSuperPageSize must be a multiple of kBytesPer1BitOfNormalBucketBitmap.");
+static_assert(
+    kSuperPageSize /
+            AddressPoolManagerBitmap::kBytesPer1BitOfNormalBucketBitmap >
+        0,
+    "kSuperPageSize must be larger than kBytesPer1BitOfNormalBucketBitmap.");
+static_assert(AddressPoolManagerBitmap::kGuardBitsOfNormalBucketBitmap >=
+                  AddressPoolManagerBitmap::kGuardOffsetOfNormalBucketBitmap,
+              "kGuardBitsOfNormalBucketBitmap must be larger than or equal to "
+              "kGuardOffsetOfNormalBucketBitmap.");
 
 template <size_t bitsize>
 void SetBitmap(std::bitset<bitsize>& bitmap,
@@ -247,10 +278,6 @@ void ResetBitmap(std::bitset<bitsize>& bitmap,
   }
 }
 
-static_assert(kSuperPageSize % PageAllocationGranularity() == 0,
-              "AddressPoolManager depends on that kSuperPageSize is multiples "
-              "of PageAllocationGranularity().");
-
 char* AddressPoolManager::Reserve(pool_handle handle,
                                   void* requested_address,
                                   size_t length) {
@@ -279,39 +306,79 @@ void AddressPoolManager::MarkUsed(pool_handle handle,
                                   const char* address,
                                   size_t length) {
   uintptr_t ptr_as_uintptr = reinterpret_cast<uintptr_t>(address);
-  AutoLock guard(GetLock());
+  AutoLock guard(AddressPoolManagerBitmap::GetLock());
   if (handle == kDirectMapHandle) {
-    SetBitmap(directmap_bits_, ptr_as_uintptr / PageAllocationGranularity(),
+    SetBitmap(AddressPoolManagerBitmap::directmap_bits_,
+              ptr_as_uintptr / PageAllocationGranularity(),
               length / PageAllocationGranularity());
   } else {
     PA_DCHECK(handle == kNormalBucketHandle);
     PA_DCHECK(!(length & kSuperPageOffsetMask));
-    SetBitmap(normal_bucket_bits_, ptr_as_uintptr >> kSuperPageShift,
-              length >> kSuperPageShift);
+    // If BUILDFLAG(MAKE_GIGACAGE_GRANULARITY_PARTITION_PAGE_SIZE) is defined,
+    // make IsManagedByNormalBucketPool return false when an address
+    // inside the first or the last PartitionPageSize()-bytes
+    // block is given:
+    //
+    //          ------+---+---------------+---+----
+    // memory   ..... | B | managed by PA | B | ...
+    // regions  ------+---+---------------+---+----
+    //
+    // B: PartitionPageSize()-bytes block. This is used by
+    // PartitionAllocator and is not available for callers.
+    //
+    // This is required to avoid crash caused by the following code:
+    //
+    // {
+    //   CheckedPtr<T> ptr = allocateFromNotPartitionAllocator(X * sizeof(T));
+    //   for (size_t i = 0; i < X; i ++) { ...; ptr++; }
+    //   // |ptr| may point an address inside 'B'.
+    // }
+    //
+    // Suppose that |ptr| points to an address inside B after the loop. So when
+    // exiting the scope, IsManagedByNormalBucketPool(ptr) returns true without
+    // the barrier blocks. Since the memory is not allocated by Partition
+    // Allocator, ~CheckedPtr will cause crash.
+    SetBitmap(
+        AddressPoolManagerBitmap::normal_bucket_bits_,
+        (ptr_as_uintptr >>
+         AddressPoolManagerBitmap::kBitShiftOfNormalBucketBitmap) +
+            AddressPoolManagerBitmap::kGuardOffsetOfNormalBucketBitmap,
+        (length >> AddressPoolManagerBitmap::kBitShiftOfNormalBucketBitmap) -
+            AddressPoolManagerBitmap::kGuardBitsOfNormalBucketBitmap);
   }
 }
 
 void AddressPoolManager::MarkUnused(pool_handle handle,
                                     uintptr_t address,
                                     size_t length) {
-  AutoLock guard(GetLock());
+  AutoLock guard(AddressPoolManagerBitmap::GetLock());
   // Currently, address regions allocated by kNormalBucketHandle are never freed
-  // in PartitionAlloc. Thus we have LIKELY for kDirectMapHandle
+  // in PartitionAlloc, except on error paths. Thus we have LIKELY for
+  // kDirectMapHandle
   if (LIKELY(handle == kDirectMapHandle)) {
-    ResetBitmap(directmap_bits_, address / PageAllocationGranularity(),
+    ResetBitmap(AddressPoolManagerBitmap::directmap_bits_,
+                address / PageAllocationGranularity(),
                 length / PageAllocationGranularity());
   } else {
     PA_DCHECK(handle == kNormalBucketHandle);
     PA_DCHECK(!(length & kSuperPageOffsetMask));
-    ResetBitmap(normal_bucket_bits_, address >> kSuperPageShift,
-                length >> kSuperPageShift);
+    // If BUILDFLAG(MAKE_GIGACAGE_GRANULARITY_PARTITION_PAGE_SIZE) is defined,
+    // make IsManagedByNormalBucketPool return false when an address
+    // inside the first or the last PartitionPageSize()-bytes block is given.
+    // (See MarkUsed comment)
+    ResetBitmap(
+        AddressPoolManagerBitmap::normal_bucket_bits_,
+        (address >> AddressPoolManagerBitmap::kBitShiftOfNormalBucketBitmap) +
+            AddressPoolManagerBitmap::kGuardOffsetOfNormalBucketBitmap,
+        (length >> AddressPoolManagerBitmap::kBitShiftOfNormalBucketBitmap) -
+            AddressPoolManagerBitmap::kGuardBitsOfNormalBucketBitmap);
   }
 }
 
 void AddressPoolManager::ResetForTesting() {
-  AutoLock guard(GetLock());
-  directmap_bits_.reset();
-  normal_bucket_bits_.reset();
+  AutoLock guard(AddressPoolManagerBitmap::GetLock());
+  AddressPoolManagerBitmap::directmap_bits_.reset();
+  AddressPoolManagerBitmap::normal_bucket_bits_.reset();
 }
 
 #endif  // defined(PA_HAS_64_BITS_POINTERS)

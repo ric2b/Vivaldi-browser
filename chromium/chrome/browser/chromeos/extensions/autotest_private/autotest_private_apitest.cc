@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/test/bind.h"
 #include "build/build_config.h"
+#include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/tracing/arc_app_performance_tracing.h"
@@ -74,6 +75,8 @@ class AutotestPrivateApiTest : public ExtensionApiTest {
         ->Get(browser()->profile())
         ->set_test_mode(true);
   }
+
+  chromeos::ScopedTestingCrosSettings scoped_testing_cros_settings_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AutotestPrivateApiTest);
@@ -342,8 +345,7 @@ class AutotestPrivateSystemWebAppsTest : public AutotestPrivateApiTest {
  public:
   AutotestPrivateSystemWebAppsTest() {
     installation_ =
-        web_app::TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp(
-            true);
+        web_app::TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp();
   }
   ~AutotestPrivateSystemWebAppsTest() override = default;
 

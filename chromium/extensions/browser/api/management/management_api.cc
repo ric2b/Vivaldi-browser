@@ -389,6 +389,10 @@ ExtensionFunction::ResponseAction ManagementLaunchAppFunction::Run() {
       management::LaunchApp::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (vivaldi::IsVivaldiApp(params->id)) {
+    return RespondNow(Error(keys::kNotAnAppError, params->id));
+  }
+
   if (ExtensionsBrowserClient::Get()->IsRunningInForcedAppMode())
     return RespondNow(Error(keys::kNotAllowedInKioskError));
 
@@ -397,8 +401,7 @@ ExtensionFunction::ResponseAction ManagementLaunchAppFunction::Run() {
           ->GetExtensionById(params->id, ExtensionRegistry::EVERYTHING);
   if (!extension)
     return RespondNow(Error(keys::kNoExtensionError, params->id));
-  if (!(extension->is_app() ||
-    (extension->is_extension() && vivaldi::IsVivaldiApp(this->source_url().host())))) {
+  if (!extension->is_app()) {
     return RespondNow(Error(keys::kNotAnAppError, params->id));
   }
 

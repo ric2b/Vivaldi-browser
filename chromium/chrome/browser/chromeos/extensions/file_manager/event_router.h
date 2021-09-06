@@ -54,10 +54,10 @@ class EventRouter
       public guest_os::GuestOsSharePath::Observer,
       public ash::TabletModeObserver {
  public:
-  typedef base::Callback<void(const base::FilePath& virtual_path,
-                              bool got_error,
-                              const std::vector<std::string>& extension_ids)>
-      DispatchDirectoryChangeEventImplCallback;
+  using DispatchDirectoryChangeEventImplCallback = base::RepeatingCallback<void(
+      const base::FilePath& virtual_path,
+      bool got_error,
+      const std::vector<std::string>& extension_ids)>;
 
   explicit EventRouter(Profile* profile);
   ~EventRouter() override;
@@ -168,6 +168,9 @@ class EventRouter
   // and failed FilesApp will show the "Move to Windows files" dialog.
   void DropFailedPluginVmDirectoryNotShared();
 
+  // Called by the UI to notify the result of a displayed dialog.
+  void OnDriveDialogResult(drivefs::mojom::DialogResult result);
+
   // Returns a weak pointer for the event router.
   base::WeakPtr<EventRouter> GetWeakPtr();
 
@@ -225,6 +228,10 @@ class EventRouter
       extensions::api::file_manager_private::CrostiniEventType pref_false);
 
   void NotifyDriveConnectionStatusChanged();
+
+  void DisplayDriveConfirmDialog(
+      const drivefs::mojom::DialogReason& reason,
+      base::OnceCallback<void(drivefs::mojom::DialogResult)> callback);
 
   base::Time last_copy_progress_event_;
 

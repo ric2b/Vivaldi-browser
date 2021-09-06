@@ -40,6 +40,8 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/table/table_view.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace {
 
@@ -61,9 +63,9 @@ int ComputeHeadingMessageFromUsage(
       DCHECK(!usage.writable_files.empty());
       if (usage.writable_files.size() == 1) {
         *embedded_path = usage.writable_files.front();
-        return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_SINGLE_WRITABLE_FILE_TEXT;
+        return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_SINGLE_WRITABLE_FILE_TEXT;
       }
-      return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_WRITABLE_FILES_TEXT;
+      return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_WRITABLE_FILES_TEXT;
     }
 
     // Only readable files.
@@ -71,9 +73,9 @@ int ComputeHeadingMessageFromUsage(
       DCHECK(!usage.readable_files.empty());
       if (usage.readable_files.size() == 1) {
         *embedded_path = usage.readable_files.front();
-        return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_SINGLE_READABLE_FILE_TEXT;
+        return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_SINGLE_READABLE_FILE_TEXT;
       }
-      return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_READABLE_FILES_TEXT;
+      return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_READABLE_FILES_TEXT;
     }
   }
 
@@ -84,9 +86,9 @@ int ComputeHeadingMessageFromUsage(
       DCHECK(!usage.writable_directories.empty());
       if (usage.writable_directories.size() == 1) {
         *embedded_path = usage.writable_directories.front();
-        return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_SINGLE_WRITABLE_DIRECTORY_TEXT;
+        return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_SINGLE_WRITABLE_DIRECTORY_TEXT;
       }
-      return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_WRITABLE_DIRECTORIES_TEXT;
+      return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_WRITABLE_DIRECTORIES_TEXT;
     }
 
     // Only readable directories.
@@ -94,9 +96,9 @@ int ComputeHeadingMessageFromUsage(
       DCHECK(!usage.readable_directories.empty());
       if (usage.readable_directories.size() == 1) {
         *embedded_path = usage.readable_directories.front();
-        return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_SINGLE_READABLE_DIRECTORY_TEXT;
+        return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_SINGLE_READABLE_DIRECTORY_TEXT;
       }
-      return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_READABLE_DIRECTORIES_TEXT;
+      return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_READABLE_DIRECTORIES_TEXT;
     }
   }
 
@@ -104,18 +106,18 @@ int ComputeHeadingMessageFromUsage(
   if (usage.writable_files.empty() && usage.writable_directories.empty()) {
     DCHECK(!usage.readable_files.empty());
     DCHECK(!usage.readable_directories.empty());
-    return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_READABLE_FILES_AND_DIRECTORIES_TEXT;
+    return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_READABLE_FILES_AND_DIRECTORIES_TEXT;
   }
 
   // Only writable files and directories.
   if (usage.readable_files.empty() && usage.readable_directories.empty()) {
     DCHECK(!usage.writable_files.empty());
     DCHECK(!usage.writable_directories.empty());
-    return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_WRITABLE_FILES_AND_DIRECTORIES_TEXT;
+    return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_WRITABLE_FILES_AND_DIRECTORIES_TEXT;
   }
 
   // Some combination of read and/or write access to files and/or directories.
-  return IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_READ_AND_WRITE;
+  return IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_READ_AND_WRITE;
 }
 
 // Displays a (one-column) table model as a one-line summary showing the
@@ -123,6 +125,8 @@ int ComputeHeadingMessageFromUsage(
 // full list of items.
 class CollapsibleListView : public views::View {
  public:
+  METADATA_HEADER(CollapsibleListView);
+
   // How many rows to show in the expanded table without having to scroll.
   static constexpr int kExpandedTableRowCount = 3;
 
@@ -154,7 +158,7 @@ class CollapsibleListView : public views::View {
 
       label_text = base::i18n::MessageFormatter::FormatWithNumberedArgs(
           l10n_util::GetStringUTF16(
-              IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_FILES_TEXT),
+              IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_FILES_TEXT),
           model->RowCount(), first_item, second_item);
     }
     auto* label = label_container->AddChildView(std::make_unique<views::Label>(
@@ -165,9 +169,9 @@ class CollapsibleListView : public views::View {
     auto button = views::CreateVectorToggleImageButton(base::BindRepeating(
         &CollapsibleListView::ButtonPressed, base::Unretained(this)));
     button->SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_NATIVE_FILE_SYSTEM_USAGE_EXPAND));
+        l10n_util::GetStringUTF16(IDS_FILE_SYSTEM_ACCESS_USAGE_EXPAND));
     button->SetToggledTooltipText(
-        l10n_util::GetStringUTF16(IDS_NATIVE_FILE_SYSTEM_USAGE_COLLAPSE));
+        l10n_util::GetStringUTF16(IDS_FILE_SYSTEM_ACCESS_USAGE_COLLAPSE));
     expand_collapse_button_ = label_container->AddChildView(std::move(button));
     if (model->RowCount() < 3)
       expand_collapse_button_->SetVisible(false);
@@ -223,6 +227,9 @@ class CollapsibleListView : public views::View {
   views::ScrollView* table_view_parent_;
   views::ToggleImageButton* expand_collapse_button_;
 };
+
+BEGIN_METADATA(CollapsibleListView, views::View)
+END_METADATA
 
 }  // namespace
 
@@ -348,7 +355,7 @@ FileSystemAccessUsageBubbleView::FileSystemAccessUsageBubbleView(
   SetButtonLabel(ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_DONE));
   SetButtonLabel(
       ui::DIALOG_BUTTON_CANCEL,
-      l10n_util::GetStringUTF16(IDS_NATIVE_FILE_SYSTEM_USAGE_REMOVE_ACCESS));
+      l10n_util::GetStringUTF16(IDS_FILE_SYSTEM_ACCESS_USAGE_REMOVE_ACCESS));
   SetCancelCallback(
       base::BindOnce(&FileSystemAccessUsageBubbleView::OnDialogCancelled,
                      base::Unretained(this)));
@@ -410,7 +417,7 @@ void FileSystemAccessUsageBubbleView::Init() {
       if (readable_paths_model_.RowCount() > 0) {
         auto label = std::make_unique<views::Label>(
             l10n_util::GetStringUTF16(
-                IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_SAVE_CHANGES),
+                IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_SAVE_CHANGES),
             views::style::CONTEXT_DIALOG_BODY_TEXT,
             views::style::STYLE_PRIMARY);
         label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -424,7 +431,7 @@ void FileSystemAccessUsageBubbleView::Init() {
       if (writable_paths_model_.RowCount() > 0) {
         auto label = std::make_unique<views::Label>(
             l10n_util::GetStringUTF16(
-                IDS_NATIVE_FILE_SYSTEM_USAGE_BUBBLE_VIEW_CHANGES),
+                IDS_FILE_SYSTEM_ACCESS_USAGE_BUBBLE_VIEW_CHANGES),
             views::style::CONTEXT_DIALOG_BODY_TEXT,
             views::style::STYLE_PRIMARY);
         label->SetHorizontalAlignment(gfx::ALIGN_LEFT);

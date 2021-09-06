@@ -55,7 +55,6 @@
 #include "services/network/dns_config_change_manager.h"
 #include "services/network/first_party_sets/first_party_sets.h"
 #include "services/network/http_auth_cache_copier.h"
-#include "services/network/legacy_tls_config_distributor.h"
 #include "services/network/net_log_exporter.h"
 #include "services/network/net_log_proxy_sink.h"
 #include "services/network/network_context.h"
@@ -325,14 +324,6 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-#if defined(OS_MAC)
-  if (!base::FeatureList::IsEnabled(network::features::kCertVerifierService) &&
-      base::FeatureList::IsEnabled(
-          net::features::kCertVerifierBuiltinFeature)) {
-    net::InitializeTrustStoreMacCache();
-  }
-#endif
-
   // Set-up the global port overrides.
   if (command_line->HasSwitch(switches::kExplicitlyAllowedPorts)) {
     std::string allowed_ports =
@@ -377,9 +368,6 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
   http_auth_cache_copier_ = std::make_unique<HttpAuthCacheCopier>();
 
   crl_set_distributor_ = std::make_unique<CRLSetDistributor>();
-
-  legacy_tls_config_distributor_ =
-      std::make_unique<LegacyTLSConfigDistributor>();
 
   doh_probe_activator_ = std::make_unique<DelayedDohProbeActivator>(this);
 
@@ -667,13 +655,6 @@ void NetworkService::UpdateCRLSet(
     base::span<const uint8_t> crl_set,
     mojom::NetworkService::UpdateCRLSetCallback callback) {
   crl_set_distributor_->OnNewCRLSet(crl_set, std::move(callback));
-}
-
-void NetworkService::UpdateLegacyTLSConfig(
-    base::span<const uint8_t> config,
-    mojom::NetworkService::UpdateLegacyTLSConfigCallback callback) {
-  legacy_tls_config_distributor_->OnNewLegacyTLSConfig(config,
-                                                       std::move(callback));
 }
 
 void NetworkService::OnCertDBChanged() {

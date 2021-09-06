@@ -9,6 +9,7 @@
 
 namespace blink {
 
+class ContainerQueryEvaluator;
 class Element;
 class Node;
 class PseudoElement;
@@ -101,12 +102,21 @@ class StyleRecalcChange {
 // StyleRecalcContext is an object that is passed on the stack during
 // the style recalc process.
 //
-// In the future, it will contain data which makes it possible to
-// evaluate Container Queries, but for now it's an empty placeholder.
-//
-// TODO(crbug.com/1145970): Populate this class.
+// Its purpose is to hold context related to the style recalc process as
+// a whole, i.e. information not directly associated to the specific element
+// style is being calculated for.
 class StyleRecalcContext {
   STACK_ALLOCATED();
+
+ public:
+  // Using the ancestor chain, build a StyleRecalcContext suitable for
+  // resolving the style of the given Element.
+  static StyleRecalcContext FromAncestors(Element&);
+
+  // If style is being calculated for an element inside a container,
+  // this ContainerQueryEvaluator may be used to evaluate @container
+  // rules against that container.
+  ContainerQueryEvaluator* cq_evaluator = nullptr;
 };
 
 }  // namespace blink

@@ -28,6 +28,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/message_box_view.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
 
 using content::WebContents;
@@ -93,6 +94,7 @@ ExternalProtocolDialog::ExternalProtocolDialog(
   SetCloseCallback(base::BindOnce(
       &ExternalProtocolHandler::RecordHandleStateMetrics,
       false /* checkbox_selected */, ExternalProtocolHandler::BLOCK));
+  SetModalType(ui::MODAL_TYPE_CHILD);
 
   message_box_view_ =
       new views::MessageBoxView(GetMessageTextForOrigin(initiating_origin_));
@@ -175,19 +177,18 @@ views::View* ExternalProtocolDialog::GetContentsView() {
   return message_box_view_;
 }
 
-ui::ModalType ExternalProtocolDialog::GetModalType() const {
-  return ui::MODAL_TYPE_CHILD;
-}
-
 views::Widget* ExternalProtocolDialog::GetWidget() {
-  return message_box_view_->GetWidget();
+  return message_box_view_ ? message_box_view_->GetWidget() : nullptr;
 }
 
 const views::Widget* ExternalProtocolDialog::GetWidget() const {
-  return message_box_view_->GetWidget();
+  return message_box_view_ ? message_box_view_->GetWidget() : nullptr;
 }
 
 void ExternalProtocolDialog::SetRememberSelectionCheckboxCheckedForTesting(
     bool checked) {
   message_box_view_->SetCheckBoxSelected(checked);
 }
+
+BEGIN_METADATA(ExternalProtocolDialog, views::DialogDelegateView)
+END_METADATA

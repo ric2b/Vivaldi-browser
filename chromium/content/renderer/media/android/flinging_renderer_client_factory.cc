@@ -31,8 +31,7 @@ std::unique_ptr<media::Renderer> FlingingRendererClientFactory::CreateRenderer(
     media::AudioRendererSink* audio_renderer_sink,
     media::VideoRendererSink* video_renderer_sink,
     media::RequestOverlayInfoCB request_overlay_info_cb,
-    const gfx::ColorSpace& /* target_color_space */,
-    bool use_platform_media_pipeline) {
+    const gfx::ColorSpace& /* target_color_space */) {
   DCHECK(IsFlingingActive());
   DCHECK(remote_play_state_change_cb_);
 

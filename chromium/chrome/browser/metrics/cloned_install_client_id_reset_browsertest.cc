@@ -31,7 +31,6 @@ class ClonedInstallClientIdResetBrowserTest : public InProcessBrowserTest {
     // consistency between Chromium and Chrome builds.
     ChromeMetricsServiceAccessor::SetForceIsMetricsReportingEnabledPrefLookup(
         true);
-    // Based on GetParam(), either enable or disable metrics reporting.
     ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
         &metrics_enabled_);
 
@@ -70,8 +69,15 @@ IN_PROC_BROWSER_TEST_F(ClonedInstallClientIdResetBrowserTest,
   EXPECT_EQ(kInitialClientId, metrics_service()->GetClientId());
 }
 
+// Test is flaky on Mac (https://crbug.com/1175077).
+#if defined(OS_MAC)
+#define MAYBE_TestClonedInstallClientIdReset \
+  DISABLED_TestClonedInstallClientIdReset
+#else
+#define MAYBE_TestClonedInstallClientIdReset TestClonedInstallClientIdReset
+#endif
 IN_PROC_BROWSER_TEST_F(ClonedInstallClientIdResetBrowserTest,
-                       TestClonedInstallClientIdReset) {
+                       MAYBE_TestClonedInstallClientIdReset) {
   EXPECT_NE(kInitialClientId, metrics_service()->GetClientId());
   EXPECT_FALSE(local_state()->GetBoolean(metrics::prefs::kMetricsResetIds));
 }

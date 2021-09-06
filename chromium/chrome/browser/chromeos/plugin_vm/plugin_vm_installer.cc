@@ -16,6 +16,7 @@
 #include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_drive_image_download_service.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_features.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_license_checker.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_metrics_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
@@ -257,6 +257,12 @@ void PluginVmInstaller::OnDiskImageProgress(
       return;
     case vm_tools::concierge::DiskImageStatus::DISK_STATUS_IN_PROGRESS:
       UpdateProgress(percent_completed / 100.);
+      return;
+    case vm_tools::concierge::DiskImageStatus::DISK_STATUS_NOT_ENOUGH_SPACE:
+      LOG(ERROR) << "Disk image import signals out of space condition with "
+                    "current progress: "
+                 << percent_completed;
+      OnImported(FailureReason::OUT_OF_DISK_SPACE);
       return;
     default:
       LOG(ERROR) << "Disk image status signal has status: " << status
@@ -673,22 +679,27 @@ void PluginVmInstaller::OnImportDiskImage(base::Optional<ReplyType> reply) {
   // completed?
   // TODO(https://crbug.com/966396): Handle error case when image already
   // exists.
-  if (response.status() !=
-      vm_tools::concierge::DiskImageStatus::DISK_STATUS_IN_PROGRESS) {
-    LOG(ERROR) << "Disk image is not in progress. Status: " << response.status()
-               << ", " << response.failure_reason();
-    OnImported(FailureReason::UNEXPECTED_DISK_IMAGE_STATUS);
-    return;
+  switch (response.status()) {
+    case vm_tools::concierge::DiskImageStatus::DISK_STATUS_IN_PROGRESS:
+      VLOG(1) << "Disk image creation/import is now in progress";
+      current_import_command_uuid_ = response.command_uuid();
+      // Image in progress. Waiting for progress signals...
+      // TODO(https://crbug.com/966398): think about adding a timeout here,
+      //   i.e. what happens if concierge dies and does not report any signal
+      //   back, not even an error signal. Right now, the user would see
+      //   the "Configuring Plugin VM" screen forever. Maybe that's OK
+      //   at this stage though.
+      break;
+    case vm_tools::concierge::DiskImageStatus::DISK_STATUS_NOT_ENOUGH_SPACE:
+      LOG(ERROR) << "Disk image import operation ran out of disk space";
+      OnImported(FailureReason::OUT_OF_DISK_SPACE);
+      break;
+    default:
+      LOG(ERROR) << "Disk image is not in progress. Status: "
+                 << response.status() << ", " << response.failure_reason();
+      OnImported(FailureReason::UNEXPECTED_DISK_IMAGE_STATUS);
+      break;
   }
-
-  VLOG(1) << "Disk image creation/import is now in progress";
-  current_import_command_uuid_ = response.command_uuid();
-  // Image in progress. Waiting for progress signals...
-  // TODO(https://crbug.com/966398): think about adding a timeout here,
-  //   i.e. what happens if concierge dies and does not report any signal
-  //   back, not even an error signal. Right now, the user would see
-  //   the "Configuring Plugin VM" screen forever. Maybe that's OK
-  //   at this stage though.
 }
 
 void PluginVmInstaller::RequestFinalStatus() {
@@ -710,15 +721,21 @@ void PluginVmInstaller::OnFinalDiskImageStatus(
 
   vm_tools::concierge::DiskImageStatusResponse response = reply.value();
   DCHECK(response.command_uuid() == current_import_command_uuid_);
-  if (response.status() !=
-      vm_tools::concierge::DiskImageStatus::DISK_STATUS_CREATED) {
-    LOG(ERROR) << "Disk image is not created. Status: " << response.status()
-               << ", " << response.failure_reason();
-    OnImported(FailureReason::IMAGE_IMPORT_FAILED);
-    return;
+  switch (response.status()) {
+    case vm_tools::concierge::DiskImageStatus::DISK_STATUS_CREATED:
+      OnImported(base::nullopt);
+      break;
+    case vm_tools::concierge::DiskImageStatus::DISK_STATUS_NOT_ENOUGH_SPACE:
+      LOG(ERROR) << "Disk image import operation ran out of disk space "
+                 << "with current progress: " << response.progress();
+      OnImported(FailureReason::OUT_OF_DISK_SPACE);
+      break;
+    default:
+      LOG(ERROR) << "Disk image is not created. Status: " << response.status()
+                 << ", " << response.failure_reason();
+      OnImported(FailureReason::IMAGE_IMPORT_FAILED);
+      break;
   }
-
-  OnImported(base::nullopt);
 }
 
 void PluginVmInstaller::OnImported(

@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.webapps;
 import android.graphics.Bitmap;
 import android.util.Pair;
 
+import org.chromium.components.webapps.AddToHomescreenProperties;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -19,8 +20,6 @@ class AddToHomescreenBottomSheetViewBinder {
             view.setTitle(model.get(AddToHomescreenProperties.TITLE));
         } else if (propertyKey.equals(AddToHomescreenProperties.URL)) {
             view.setUrl(model.get(AddToHomescreenProperties.URL));
-        } else if (propertyKey.equals(AddToHomescreenProperties.CATEGORIES)) {
-            view.setCategories(model.get(AddToHomescreenProperties.CATEGORIES));
         } else if (propertyKey.equals(AddToHomescreenProperties.DESCRIPTION)) {
             view.setDescription(model.get(AddToHomescreenProperties.DESCRIPTION));
         } else if (propertyKey.equals(AddToHomescreenProperties.ICON)) {

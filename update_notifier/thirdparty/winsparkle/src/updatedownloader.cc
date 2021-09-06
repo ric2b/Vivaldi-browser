@@ -67,12 +67,6 @@ namespace winsparkle {
 
 namespace {
 
-// The subject name in Vivaldi signing certificate.
-const wchar_t kVivaldiSubjectName[] = L"Vivaldi Technologies AS";
-#if !defined(OFFICIAL_BUILD)
-const wchar_t kVivaldiTestSubjectName[] = L"Vivaldi testbuild";
-#endif
-
 const wchar_t kExpandExe[] = L"expand.exe";
 
 // TODO(igor@vivaldi.com): Figure out how to use installer::kChromeArchive here.
@@ -100,23 +94,29 @@ base::FilePath GetTempDirHolder(Error& error) {
     return base::FilePath();
   }
 
-  // Generate a stable name using a hash of the installation directory.
-  std::wstring hash = GetPathHash(GetConfig().exe_dir);
-  base::FilePath temp_dir_holder = os_tmp_dir.Append(L"VivaldiUpdate-" + hash);
-  return temp_dir_holder;
+  std::wstring temp_subdir;
+  if (g_install_mode) {
+    temp_subdir = L"VivaldiInstall";
+  } else {
+    // Generate a stable name using a hash of the installation directory.
+    base::FilePath temp_dir_holder;
+    std::wstring hash = GetPathHash(GetConfig().exe_dir, true);
+    temp_subdir = L"VivaldiUpdate-" + hash;
+  }
+  return os_tmp_dir.Append(temp_subdir);
 }
 
 base::FilePath CreateUniqueDownloadDir(Error& error) {
   base::FilePath temp_dir_holder = GetTempDirHolder(error);
   if (!CreateDirectory(temp_dir_holder)) {
     error.set(Error::kStorage, "Failed to create a directory - " +
-                                   base::UTF16ToUTF8(temp_dir_holder.value()));
+                                   base::WideToUTF8(temp_dir_holder.value()));
     return base::FilePath();
   }
   base::FilePath tmp_dir;
-  if (!CreateTemporaryDirInDir(temp_dir_holder, base::string16(), &tmp_dir)) {
+  if (!CreateTemporaryDirInDir(temp_dir_holder, std::wstring(), &tmp_dir)) {
     error.set(Error::kStorage, "Failed to create a temporary directory in " +
-                                   base::UTF16ToUTF8(temp_dir_holder.value()));
+                                   base::WideToUTF8(temp_dir_holder.value()));
     return base::FilePath();
   }
   return tmp_dir;
@@ -138,7 +138,7 @@ base::FilePath DownloadUrl(const GURL& url,
     return base::FilePath();
 
   base::FilePath download_path =
-      tmpdir.Append(base::UTF8ToUTF16(downloader.GetFileName()));
+      tmpdir.Append(base::UTF8ToWide(downloader.GetFileName()));
   FILE* file = _wfopen(download_path.value().c_str(), L"wb");
   if (!file) {
     error.set(Error::kStorage, "Cannot open update file " +
@@ -190,7 +190,7 @@ GURL FindDeltaURL(const Appcast& appcast) {
   if (!appcast.Deltas.empty()) {
     // Download the delta update file if there is a valid download URL
     const std::string currentVersion =
-        base::UTF16ToUTF8(GetConfig().app_version);
+        base::WideToUTF8(GetConfig().app_version);
     for (auto& delta : appcast.Deltas) {
       if (!delta.DownloadURL.is_valid())
         continue;
@@ -364,9 +364,9 @@ void VerifyEmbeddedSignature(const base::FilePath& file_path,
   // For sopranos we need to support self-signed installer in non-official
   // builds.
   bool show_ui_for_untrusted_certificate = false;
-  if (subject != kVivaldiSubjectName) {
+  if (subject != vivaldi_update_notifier::kVivaldiSubjectName) {
 #if !defined(OFFICIAL_BUILD)
-    if (subject == kVivaldiTestSubjectName) {
+    if (subject == vivaldi_update_notifier::kVivaldiTestSubjectName) {
       show_ui_for_untrusted_certificate = true;
     } else
 #endif
@@ -374,7 +374,7 @@ void VerifyEmbeddedSignature(const base::FilePath& file_path,
       error.set(
           Error::kVerify,
           std::string("Certificate contains an unexpected subject name - ") +
-              base::UTF16ToUTF8(subject));
+              base::WideToUTF8(subject));
       return;
     }
   }
@@ -398,7 +398,7 @@ void RunHelperProcess(const base::CommandLine& cmdline,
   if (!process.IsValid()) {
     error.set(
         Error::kExec,
-        "Failed to run " + base::UTF16ToUTF8(cmdline.GetCommandLineString()));
+        "Failed to run " + base::WideToUTF8(cmdline.GetCommandLineString()));
     return;
   }
   int exit_code = 0;
@@ -417,14 +417,14 @@ void RunHelperProcess(const base::CommandLine& cmdline,
     if (timeout_time < base::Time::Now()) {
       error.set(Error::kExec,
                 "Timed out wating for the process to finish - " +
-                    base::UTF16ToUTF8(cmdline.GetCommandLineString()));
+                    base::WideToUTF8(cmdline.GetCommandLineString()));
       process.Terminate(1, false);
       return;
     }
   }
   if (exit_code != 0) {
     error.set(Error::kStorage,
-              base::UTF16ToUTF8(cmdline.GetCommandLineString()) +
+              base::WideToUTF8(cmdline.GetCommandLineString()) +
                   " terminated with non-zero exit code - " +
                   std::to_string(exit_code));
   }
@@ -492,7 +492,7 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
   if (!base::PathExists(vivaldi_delta)) {
     error.set(Error::kFormat,
               "The delta archive without " +
-                  base::UTF16ToUTF8(vivaldi_delta.BaseName().value()) +
+                  base::WideToUTF8(vivaldi_delta.BaseName().value()) +
                   " member");
     return;
   }
@@ -505,7 +505,7 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
   if (dot == std::wstring::npos) {
     error.set(Error::kFormat,
               "Unexpected format of delta archive - " +
-                  base::UTF16ToUTF8(vivaldi_delta.BaseName().value()));
+                  base::WideToUTF8(vivaldi_delta.BaseName().value()));
     return;
   }
 
@@ -523,7 +523,7 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
   if (base::PathExists(new_setup_exe)) {
     error.set(Error::kFormat,
               "The delta archive contains unexpected member - " +
-                  base::UTF16ToUTF8(new_setup_exe.BaseName().value()));
+                  base::WideToUTF8(new_setup_exe.BaseName().value()));
     return;
   }
 
@@ -531,7 +531,7 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
   cmdline.AppendSwitchPath(installer::switches::kUpdateSetupExe, setup_delta);
   cmdline.AppendSwitchPath(installer::switches::kNewSetupExe, new_setup_exe);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          vivaldi_update_notifier::kEnableLogging)) {
+          installer::switches::kEnableLogging)) {
     cmdline.AppendSwitch(installer::switches::kVerboseLogging);
   }
 
@@ -547,17 +547,19 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
 }
 
 void AddInstallArguments(base::CommandLine& cmdline) {
-  const base::FilePath& exe_dir = GetConfig().exe_dir;
-  cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
-                           exe_dir.DirName());
+  if (!g_install_mode) {
+    const base::FilePath& exe_dir = GetConfig().exe_dir;
+    cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
+                             exe_dir.DirName());
 
-  cmdline.AppendSwitch(vivaldi::constants::kVivaldiUpdate);
-  if (g_silent_update) {
-    cmdline.AppendSwitch(switches::kVivaldiSilentUpdate);
+    cmdline.AppendSwitch(vivaldi::constants::kVivaldiUpdate);
+    if (g_silent_update) {
+      cmdline.AppendSwitch(switches::kVivaldiSilentUpdate);
+    }
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          vivaldi_update_notifier::kEnableLogging)) {
+          installer::switches::kEnableLogging)) {
     cmdline.AppendSwitch(installer::switches::kVerboseLogging);
   }
 }
@@ -613,7 +615,7 @@ std::unique_ptr<InstallerLaunchData> TryDeltaDownload(
       base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
           vivaldi_update_notifier::kDebugSetupExe);
   if (!debug_setup_exe.empty()) {
-    cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiDebugCopyExe,
+    cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiDebugTargetExe,
                              cmdline.GetProgram());
     cmdline.SetProgram(debug_setup_exe);
   }
@@ -630,7 +632,8 @@ std::unique_ptr<InstallerLaunchData> DownloadFullInstaller(
   if (error)
     return nullptr;
 
-  LOG(INFO) << "Downloading a full update from " << appcast.DownloadURL.spec();
+  LOG(INFO) << "Downloading a full installer from "
+            << appcast.DownloadURL.spec();
   DownloadReport report;
   base::FilePath full_update_path =
       DownloadUrl(appcast.DownloadURL, tmpdir, report, delegate, error);
@@ -654,8 +657,10 @@ std::unique_ptr<InstallerLaunchData> DownloadUpdate(
     return nullptr;
   base::FilePath tmpdir = CreateUniqueDownloadDir(error);
 
-  std::unique_ptr<InstallerLaunchData> launch_data =
-      TryDeltaDownload(appcast, tmpdir, delegate, error);
+  std::unique_ptr<InstallerLaunchData> launch_data;
+  if (!winsparkle::g_install_mode) {
+    launch_data = TryDeltaDownload(appcast, tmpdir, delegate, error);
+  }
   if (!launch_data) {
     launch_data = DownloadFullInstaller(appcast, tmpdir, delegate, error);
   }
@@ -667,10 +672,10 @@ std::unique_ptr<InstallerLaunchData> DownloadUpdate(
   return launch_data;
 }
 
-void RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
-                  Error& error) {
+base::Process RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
+                           Error& error) {
   if (error)
-    return;
+    return base::Process();
 
   if (launch_data->delta) {
     // Pre-mark the delta as failed. The installer will clear the status on a
@@ -687,13 +692,14 @@ void RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
     error.set(
         Error::kExec,
         "Failed to run " +
-            base::UTF16ToUTF8(launch_data->cmdline.GetCommandLineString()));
-    return;
+            base::WideToUTF8(launch_data->cmdline.GetCommandLineString()));
+    return base::Process();
   }
 
   // We successfully started the installer, we should not remove the downloaded
   // files in the destructor.
   launch_data->download_dir = base::FilePath();
+  return process;
 }
 
 void CleanDownloadLeftovers() {
@@ -707,20 +713,32 @@ void CleanDownloadLeftovers() {
   base::DeletePathRecursively(temp_dir_holder);
 }
 
-std::wstring GetPathHash(const base::FilePath& path) {
+std::wstring GetPathHash(const base::FilePath& path, bool base64) {
   std::string exe_dir_sha256 = crypto::SHA256HashString(path.AsUTF8Unsafe());
   DCHECK_EQ(exe_dir_sha256.length(), 32U);
 
-  // Use the first 16 bytes to generate the hash to keep it short as it is used
-  // for path prefixes.
-  std::string hash = base::Base64Encode(
-      base::as_bytes(base::make_span(exe_dir_sha256.data(), 16)));
-  // Use URL-safe encoding to avoid +/=
-  DCHECK_EQ(hash.length(), 24U);
-  hash.resize(22);  // strip '='
-  base::ReplaceChars(hash, "+", "-", &hash);
-  base::ReplaceChars(hash, "/", "_", &hash);
-  return base::UTF8ToUTF16(hash);
+  // We do not need cryptographically strong hash here, we just need to ensure
+  // that the probability of a collision is small enough for non-deliberate
+  // cases as things should not crash even when the hash coinsides. Thus we use
+  // just few initial bytes of the hash to keep strings small.
+  //
+  // TODO(igor@vivaldi.com): Remove base64 form. As it used for the persistent
+  // path that is removed after the update downloader is restarted after an
+  // update, it is no just a matter of removing the code.
+  std::string hash;
+  if (base64) {
+    hash = base::Base64Encode(
+        base::as_bytes(base::make_span(exe_dir_sha256.data(), 16)));
+    // Use URL-safe encoding to avoid +/=
+    DCHECK_EQ(hash.length(), 24U);
+    hash.resize(22);  // strip '='
+    base::ReplaceChars(hash, "+", "-", &hash);
+    base::ReplaceChars(hash, "/", "_", &hash);
+  } else {
+    hash = base::HexEncode(
+        base::as_bytes(base::make_span(exe_dir_sha256.data(), 8)));
+  }
+  return base::ASCIIToWide(base::ToLowerASCII(hash));
 }
 
 InstallerLaunchData::InstallerLaunchData(bool delta,

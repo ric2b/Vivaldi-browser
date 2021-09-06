@@ -240,11 +240,27 @@
       "use_goma": true
     }
   },
+  "GPU FYI Lacros x64 Builder": {
+    "gn_args": {
+      "dcheck_always_on": true,
+      "ffmpeg_branding": "Chrome",
+      "is_component_build": false,
+      "is_debug": false,
+      "ozone_platform": "headless",
+      "proprietary_codecs": true,
+      "symbol_level": 1,
+      "use_bundled_weston": true,
+      "use_goma": true,
+      "use_ozone": true,
+      "use_x11": false
+    }
+  },
   "GPU FYI Linux Builder": {
     "gn_args": {
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
@@ -258,6 +274,7 @@
     "gn_args": {
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": true,
@@ -302,6 +319,7 @@
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
@@ -315,6 +333,7 @@
     "gn_args": {
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": true,
@@ -356,6 +375,7 @@
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
@@ -370,6 +390,7 @@
     "gn_args": {
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": true,
@@ -396,6 +417,7 @@
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
@@ -409,6 +431,7 @@
     "gn_args": {
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": true,
@@ -423,6 +446,7 @@
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
+      "enable_nacl": false,
       "enable_vulkan": true,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
@@ -437,6 +461,7 @@
     "gn_args": {
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
+      "enable_nacl": false,
       "enable_vulkan": true,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
@@ -462,6 +487,7 @@
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": false,
@@ -521,6 +547,7 @@
       "build_angle_gles1_conform_tests": true,
       "build_angle_trace_perf_tests": true,
       "dcheck_always_on": true,
+      "enable_nacl": false,
       "ffmpeg_branding": "Chrome",
       "internal_gles2_conform_tests": true,
       "is_component_build": false,

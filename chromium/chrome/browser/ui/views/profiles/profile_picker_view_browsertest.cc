@@ -328,11 +328,11 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   // Check expectations when the profile creation flow is done.
   WaitForPickerClosed();
 
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   EXPECT_FALSE(entry->IsAuthenticated());
   EXPECT_EQ(entry->GetLocalProfileName(), base::UTF8ToUTF16("Joe"));
@@ -378,11 +378,11 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
       ->SyncConfirmationUIClosed(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
 
   // Check expectations when the profile creation flow is done.
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   EXPECT_EQ(entry->GetLocalProfileName(), base::UTF8ToUTF16("Joe"));
   EXPECT_EQ(ThemeServiceFactory::GetForProfile(profile_being_created)
@@ -421,11 +421,11 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   // Check expectations when the profile creation flow is done.
   WaitForPickerClosed();
 
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   // Sync is technically enabled for the profile. Without SyncService, the
   // difference between SYNC_WITH_DEFAULT_SETTINGS and CONFIGURE_SYNC_FIRST
@@ -479,10 +479,11 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
           }),
       base::string16(), std::string());
   run_loop.Run();
-  ProfileAttributesEntry* other_entry = nullptr;
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
-  ASSERT_TRUE(storage.GetProfileAttributesWithPath(new_path, &other_entry));
+  ProfileAttributesEntry* other_entry =
+      storage.GetProfileAttributesWithPath(new_path);
+  ASSERT_NE(other_entry, nullptr);
   // Fake sync is enabled in this profile with Joe's account.
   other_entry->SetAuthInfo(std::string(),
                            base::UTF8ToUTF16("joe.consumer@gmail.com"),
@@ -509,9 +510,9 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   // Check expectations when the profile creation flow is done.
   WaitForPickerClosed();
 
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(storage.GetProfileAttributesWithPath(
-      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      storage.GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   EXPECT_FALSE(entry->IsAuthenticated());
   EXPECT_EQ(entry->GetLocalProfileName(), base::UTF8ToUTF16("Joe"));
@@ -552,11 +553,11 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   // Check expectations when the profile creation flow is done.
   WaitForPickerClosed();
 
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   EXPECT_FALSE(entry->IsAuthenticated());
   // Since the given name is not provided, the email address is used instead as
@@ -587,11 +588,11 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   EXPECT_EQ(wc, new_browser->tab_strip_model()->GetActiveWebContents());
   EXPECT_NE(nullptr, DiceTabHelper::FromWebContents(wc));
 
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   EXPECT_FALSE(entry->IsAuthenticated());
   EXPECT_EQ(entry->GetLocalProfileName(), base::UTF8ToUTF16(kWork));
@@ -637,12 +638,12 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   // getting opened.
   Browser* new_browser = BrowserAddedWaiter(2u).Wait();
   // Inject a fake tab helper that confirms the enterprise dialog right away.
-  base::RunLoop loop_until_sync_confirmed;
+  base::RunLoop loop_until_enterprise_confirmed;
   TestTabDialogs::OverwriteForWebContents(
       new_browser->tab_strip_model()->GetActiveWebContents(),
-      &loop_until_sync_confirmed);
-  // Wait until the final sync confirmation screen in shown and confirmed.
-  loop_until_sync_confirmed.Run();
+      &loop_until_enterprise_confirmed);
+  // Wait until the enterprise dialog in shown and confirmed.
+  loop_until_enterprise_confirmed.Run();
 
   // The picker should be closed even before the enterprise confirmation but it
   // is closed asynchronously after opening the browser so after the NTP
@@ -657,17 +658,86 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
       ->SyncConfirmationUIClosed(LoginUIService::ABORT_SYNC);
 
   // Check expectations when the profile creation flow is done.
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   EXPECT_EQ(entry->GetLocalProfileName(), base::UTF8ToUTF16("enterprise.com"));
 
   // The color is not applied for enterprise users.
   EXPECT_FALSE(ThemeServiceFactory::GetForProfile(profile_being_created)
                    ->UsingAutogeneratedTheme());
+}
+
+// Regression test for https://crbug.com/1184746.
+IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
+                       CreateSignedInProfileWithSyncDisabled) {
+  ASSERT_EQ(1u, BrowserList::GetInstance()->size());
+  Profile* profile_being_created = StartSigninFlow();
+
+  // Add an account - simulate a successful Gaia sign-in.
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_being_created);
+  // Consumer-looking gmail address avoids code that forces the sync service to
+  // actually start which would add overhead in mocking further stuff.
+  CoreAccountInfo core_account_info = signin::MakeAccountAvailable(
+      identity_manager, "joe.enterprise@gmail.com");
+  ASSERT_TRUE(identity_manager->HasAccountWithRefreshToken(
+      core_account_info.account_id));
+
+  // Enterprise domain needed for this profile being detected as Work.
+  AccountInfo account_info =
+      FillAccountInfo(core_account_info, "Joe", "enterprise.com");
+  signin::UpdateAccountInfoForAccount(identity_manager, account_info);
+
+  // Wait for the sign-in to propagate to the flow, resulting in new browser
+  // getting opened and the enterprise dialog displayed.
+  Browser* new_browser = BrowserAddedWaiter(2u).Wait();
+
+  // Now disable sync by setting the device as managed in prefs. This simulates
+  // that it is disabled after showing the enterprise dialog through policies
+  // that are fetched.
+  syncer::SyncPrefs prefs(profile_being_created->GetPrefs());
+  prefs.SetManagedForTest(true);
+  syncer::SyncService* sync_service =
+      ProfileSyncServiceFactory::GetForProfile(profile_being_created);
+
+  // Inject a fake tab helper that confirms the enterprise dialog right away.
+  base::RunLoop loop_until_enterprise_confirmed;
+  TestTabDialogs::OverwriteForWebContents(
+      new_browser->tab_strip_model()->GetActiveWebContents(),
+      &loop_until_enterprise_confirmed);
+  // Wait until the enterprise dialog in shown and confirmed.
+  loop_until_enterprise_confirmed.Run();
+
+  // The picker should be closed even before the enterprise confirmation but it
+  // is closed asynchronously after opening the browser so after the NTP
+  // renders, it is safe to check.
+  WaitForFirstPaint(new_browser->tab_strip_model()->GetActiveWebContents(),
+                    GURL("chrome://newtab/"));
+  WaitForPickerClosed();
+
+  // Now the sync consent screen is shown, simulate closing the UI with "Stay
+  // signed in"
+  LoginUIServiceFactory::GetForProfile(profile_being_created)
+      ->SyncConfirmationUIClosed(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
+
+  // Check expectations when the profile creation flow is done.
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
+  EXPECT_FALSE(entry->IsEphemeral());
+  EXPECT_EQ(entry->GetLocalProfileName(), base::UTF8ToUTF16("enterprise.com"));
+
+  // The color is not applied for enterprise users.
+  EXPECT_FALSE(ThemeServiceFactory::GetForProfile(profile_being_created)
+                   ->UsingAutogeneratedTheme());
+  // Sync is disabled.
+  EXPECT_FALSE(sync_service->GetUserSettings()->IsSyncRequested());
 }
 
 IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
@@ -694,12 +764,13 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   // getting opened.
   Browser* new_browser = BrowserAddedWaiter(2u).Wait();
   // Inject a fake tab helper that confirms the enterprise dialog right away.
-  base::RunLoop loop_until_sync_confirmed;
+  base::RunLoop loop_until_enterprise_confirmed;
   TestTabDialogs::OverwriteForWebContents(
       new_browser->tab_strip_model()->GetActiveWebContents(),
-      &loop_until_sync_confirmed);
-  // Wait until the final sync confirmation screen in shown and confirmed.
-  loop_until_sync_confirmed.Run();
+      &loop_until_enterprise_confirmed);
+  // Wait until the enterprise dialog in shown and confirmed.
+  loop_until_enterprise_confirmed.Run();
+
   // Now the sync consent screen is shown, simulate closing the UI with
   // "Configure sync".
   LoginUIServiceFactory::GetForProfile(profile_being_created)
@@ -710,11 +781,11 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   // Check expectations when the profile creation flow is done.
   WaitForPickerClosed();
 
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(g_browser_process->profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_FALSE(entry->IsEphemeral());
   EXPECT_EQ(entry->GetLocalProfileName(), base::UTF8ToUTF16("enterprise.com"));
   // The color is not applied if the user enters settings.
@@ -790,11 +861,11 @@ class ProfilePickerCreationFlowEphemeralProfileBrowserTest
     ProfilePickerCreationFlowBrowserTest::SetUpInProcessBrowserTestFixture();
     if (GetTestPreCount() == 1) {
       // Only called in "PRE_" tests, to set a name to the starting profile.
-      ProfileAttributesEntry* entry = nullptr;
-      ASSERT_TRUE(profile_manager()
-                      ->GetProfileAttributesStorage()
-                      .GetProfileAttributesWithPath(
-                          browser()->profile()->GetPath(), &entry));
+      ProfileAttributesEntry* entry =
+          profile_manager()
+              ->GetProfileAttributesStorage()
+              .GetProfileAttributesWithPath(browser()->profile()->GetPath());
+      ASSERT_NE(entry, nullptr);
       entry->SetLocalProfileName(base::UTF8ToUTF16(kOriginalProfileName),
                                  entry->IsUsingDefaultName());
     }
@@ -815,11 +886,11 @@ IN_PROC_BROWSER_TEST_P(ProfilePickerCreationFlowEphemeralProfileBrowserTest,
   Profile* profile_being_created = StartSigninFlow();
 
   // Check that the profile is ephemeral, regardless of the policy.
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_TRUE(entry->IsEphemeral());
   EXPECT_TRUE(entry->IsOmitted());
   // Add an account - simulate a successful Gaia sign-in.
@@ -881,11 +952,11 @@ IN_PROC_BROWSER_TEST_P(ProfilePickerCreationFlowEphemeralProfileBrowserTest,
   Profile* profile_being_created = StartSigninFlow();
 
   // Check that the profile is ephemeral, regardless of the policy.
-  ProfileAttributesEntry* entry = nullptr;
-  ASSERT_TRUE(profile_manager()
-                  ->GetProfileAttributesStorage()
-                  .GetProfileAttributesWithPath(
-                      profile_being_created->GetPath(), &entry));
+  ProfileAttributesEntry* entry =
+      profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile_being_created->GetPath());
+  ASSERT_NE(entry, nullptr);
   EXPECT_TRUE(entry->IsEphemeral());
   EXPECT_TRUE(entry->IsOmitted());
   // Exit Chrome while still in the signin flow.

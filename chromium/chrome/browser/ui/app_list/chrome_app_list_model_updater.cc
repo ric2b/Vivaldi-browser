@@ -96,9 +96,12 @@ void ChromeAppListModelUpdater::RemoveItem(const std::string& id) {
 }
 
 void ChromeAppListModelUpdater::RemoveUninstalledItem(const std::string& id) {
+  // Copy the ID to the stack since it may to be destroyed in
+  // RemoveChromeItem(). See crbug.com/1190347.
+  std::string id_copy = id;
+  RemoveChromeItem(id_copy);
   if (app_list_controller_)
-    app_list_controller_->RemoveUninstalledItem(id);
-  RemoveChromeItem(id);
+    app_list_controller_->RemoveUninstalledItem(id_copy);
 }
 
 void ChromeAppListModelUpdater::MoveItemToFolder(const std::string& id,
@@ -262,6 +265,13 @@ void ChromeAppListModelUpdater::SetItemFolderId(const std::string& id,
   std::unique_ptr<ash::AppListItemMetadata> data = item->CloneMetadata();
   data->folder_id = folder_id;
   app_list_controller_->SetItemMetadata(id, std::move(data));
+}
+
+void ChromeAppListModelUpdater::SetNotificationBadgeColor(const std::string& id,
+                                                          const SkColor color) {
+  if (!app_list_controller_)
+    return;
+  app_list_controller_->SetItemNotificationBadgeColor(id, color);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

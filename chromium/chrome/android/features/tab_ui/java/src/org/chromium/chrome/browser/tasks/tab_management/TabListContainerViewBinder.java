@@ -69,6 +69,12 @@ class TabListContainerViewBinder {
             if (!(view.getLayoutParams() instanceof FrameLayout.LayoutParams)) return;
 
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+            // Note(david@vivaldi.com): In the tab switcher view the bottom toolbar has always a
+            // fixed height (VAB-3531).
+            if (ChromeApplication.isVivaldi())
+                params.bottomMargin = view.getResources().getDimensionPixelSize(
+                        org.chromium.chrome.tab_ui.R.dimen.bottom_toolbar_height);
+            else
             params.bottomMargin = model.get(BOTTOM_CONTROLS_HEIGHT);
             view.requestLayout();
         } else if (SHADOW_TOP_OFFSET == propertyKey) {

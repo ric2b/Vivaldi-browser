@@ -10,8 +10,10 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "components/arc/enterprise/arc_apps_tracker.h"
 #include "components/arc/enterprise/snapshot_hours_policy_service.h"
+#include "components/arc/enterprise/snapshot_reboot_controller.h"
 #include "components/arc/enterprise/snapshot_session_controller.h"
 #include "components/session_manager/core/session_manager_observer.h"
 
@@ -70,6 +72,13 @@ class ArcDataSnapshotdManager final
     // Returns a current profile pref service. Should be called only when ARC
     // session is up and running.
     virtual PrefService* GetProfilePrefService() = 0;
+
+    // Creates a snapshot reboot notification.
+    virtual std::unique_ptr<ArcSnapshotRebootNotification>
+    CreateRebootNotification() = 0;
+
+    // Creates an ARC apps tracker.
+    virtual std::unique_ptr<ArcAppsTracker> CreateAppsTracker() = 0;
   };
 
   // This class operates with a snapshot related info either last or
@@ -88,7 +97,7 @@ class ArcDataSnapshotdManager final
     // dictionary.
     static std::unique_ptr<SnapshotInfo> CreateForTesting(
         const std::string& os_version,
-        const std::string& creation_date,
+        const base::Time& creation_date,
         bool verified,
         bool updated,
         bool last);
@@ -107,9 +116,11 @@ class ArcDataSnapshotdManager final
 
     bool is_last() const { return is_last_; }
 
+    bool updated() const { return updated_; }
+
    private:
     SnapshotInfo(const std::string& os_version,
-                 const std::string& creation_date,
+                 const base::Time& creation_date,
                  bool verified,
                  bool updated,
                  bool last);
@@ -117,14 +128,25 @@ class ArcDataSnapshotdManager final
     // Returns dictionary path in arc.snapshot local state preference.
     std::string GetDictPath() const;
 
+    void UpdateCreationDate(const base::Time& creation_date);
+
+    // Called once this snapshot is expired.
+    void OnSnapshotExpired();
+
     bool is_last_;
 
     // Values should be kept in sync with values stored in arc.snapshot.last or
     // arc.snapshot.previous preferences.
     std::string os_version_;
-    std::string creation_date_;
+    base::Time creation_date_;
     bool verified_ = false;
     bool updated_ = false;
+
+    // The snapshots' lifetime timer is fired when this snapshot must be
+    // cleared.
+    base::OneShotTimer lifetime_timer_;
+
+    base::WeakPtrFactory<SnapshotInfo> weak_ptr_factory_{this};
   };
 
   // This class operates with a snapshot related info including mode and
@@ -195,13 +217,14 @@ class ArcDataSnapshotdManager final
 
   ArcDataSnapshotdManager(PrefService* local_state,
                           std::unique_ptr<Delegate> delegate,
-                          std::unique_ptr<ArcAppsTracker> apps_tracker,
                           base::OnceClosure attempt_user_exit_callback);
   ArcDataSnapshotdManager(const ArcDataSnapshotdManager&) = delete;
   ArcDataSnapshotdManager& operator=(const ArcDataSnapshotdManager&) = delete;
   ~ArcDataSnapshotdManager() override;
 
   static ArcDataSnapshotdManager* Get();
+
+  static base::TimeDelta snapshot_max_lifetime_for_testing();
 
   // Starts arc-data-snapshotd.
   void EnsureDaemonStarted(base::OnceClosure callback);
@@ -218,11 +241,15 @@ class ArcDataSnapshotdManager final
   // waiting for the response from arc-data-snapshotd daemon.
   bool IsAutoLoginAllowed();
 
+  // Returns true if ARC data snapshot update is in progress.
+  bool IsSnapshotInProgress();
+
   // SnapshotSessionController::Observer overrides:
   void OnSnapshotSessionStarted() override;
   void OnSnapshotSessionStopped() override;
   void OnSnapshotSessionFailed() override;
   void OnSnapshotAppInstalled(int percent) override;
+  void OnSnapshotSessionPolicyCompliant() override;
 
   static void set_snapshot_enabled_for_testing(bool enabled) {
     is_snapshot_enabled_for_testing_ = enabled;
@@ -255,6 +282,10 @@ class ArcDataSnapshotdManager final
     session_controller_ = std::move(session_controller);
   }
 
+  SnapshotRebootController* get_reboot_controller_for_testing() const {
+    return reboot_controller_.get();
+  }
+
  private:
   // Attempts to arc-data-snapshotd daemon regardless of state of the class.
   // Runs |callback| once finished.
@@ -276,6 +307,8 @@ class ArcDataSnapshotdManager final
   void LoadSnapshot(const std::string& account_id, base::OnceClosure callback);
   void UpdateUi(int percent);
 
+  // Called once a snapshot is expired.
+  void OnSnapshotExpired();
   // Called once the outdated snapshots were removed or ensured that there are
   // no outdated snapshots.
   void OnSnapshotsCleared(bool success);
@@ -307,10 +340,6 @@ class ArcDataSnapshotdManager final
   // Called once a progress bar is updated.
   void OnUiUpdated(bool success);
 
-  // Returns non-empty account ID string if a MGS is active.
-  // Otherwise returns an empty string.
-  std::string GetCryptohomeAccountId();
-
   static bool is_snapshot_enabled_for_testing_;
 
   SnapshotHoursPolicyService policy_service_;
@@ -319,7 +348,6 @@ class ArcDataSnapshotdManager final
   Snapshot snapshot_;
 
   std::unique_ptr<Delegate> delegate_;
-  std::unique_ptr<ArcAppsTracker> apps_tracker_;
   std::unique_ptr<ArcDataSnapshotdBridge> bridge_;
   std::unique_ptr<ArcDataRemoveRequestedPrefHandler>
       data_remove_requested_handler_;
@@ -332,6 +360,9 @@ class ArcDataSnapshotdManager final
   // Initialized only when needed to observe and call back on a user session
   // events.
   std::unique_ptr<SnapshotSessionController> session_controller_;
+
+  // Initialized only when the device reboot is requested.
+  std::unique_ptr<SnapshotRebootController> reboot_controller_;
 
   // Used for cancelling previously posted tasks to daemon.
   base::WeakPtrFactory<ArcDataSnapshotdManager> daemon_weak_ptr_factory_{this};

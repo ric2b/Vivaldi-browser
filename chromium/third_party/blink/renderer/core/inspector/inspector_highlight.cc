@@ -299,6 +299,7 @@ void AppendStyleInfo(Node* node,
                         ToHEXA(node_contrast.background_color));
     contrast->setString("contrastAlgorithm",
                         ContrastAlgorithmToString(contrast_algorithm));
+    contrast->setDouble("textOpacity", node_contrast.text_opacity);
     element_info->setValue("contrast", std::move(contrast));
   }
 }
@@ -347,9 +348,12 @@ std::unique_ptr<protocol::DictionaryValue> BuildElementInfo(Element* element) {
 
   // layoutObject the getBoundingClientRect() data in the tooltip
   // to be consistent with the rulers (see http://crbug.com/262338).
-  DOMRect* bounding_box = element->getBoundingClientRect();
-  element_info->setString("nodeWidth", String::Number(bounding_box->width()));
-  element_info->setString("nodeHeight", String::Number(bounding_box->height()));
+
+  DCHECK(element->GetDocument().Lifecycle().GetState() >=
+         DocumentLifecycle::kLayoutClean);
+  FloatRect bounding_box = element->GetBoundingClientRectNoLifecycleUpdate();
+  element_info->setString("nodeWidth", String::Number(bounding_box.Width()));
+  element_info->setString("nodeHeight", String::Number(bounding_box.Height()));
 
   element_info->setBoolean("isKeyboardFocusable",
                            element->IsKeyboardFocusable());
@@ -431,6 +435,21 @@ BuildFlexContainerHighlightConfigInfo(
                        "columnGapSpace");
   AppendLineStyleConfig(flex_config.cross_alignment, flex_config_info,
                         "crossAlignment");
+
+  return flex_config_info;
+}
+
+std::unique_ptr<protocol::DictionaryValue> BuildFlexItemHighlightConfigInfo(
+    const InspectorFlexItemHighlightConfig& flex_config) {
+  std::unique_ptr<protocol::DictionaryValue> flex_config_info =
+      protocol::DictionaryValue::create();
+
+  AppendBoxStyleConfig(flex_config.base_size_box, flex_config_info,
+                       "baseSizeBox");
+  AppendLineStyleConfig(flex_config.base_size_border, flex_config_info,
+                        "baseSizeBorder");
+  AppendLineStyleConfig(flex_config.flexibility_arrow, flex_config_info,
+                        "flexibilityArrow");
 
   return flex_config_info;
 }
@@ -696,6 +715,12 @@ bool IsLayoutNGFlexibleBox(const LayoutObject& layout_object) {
          layout_object.IsLayoutNGFlexibleBox();
 }
 
+bool IsLayoutNGFlexItem(const LayoutObject& layout_object) {
+  return !layout_object.GetNode()->IsDocumentNode() &&
+         IsLayoutNGFlexibleBox(*layout_object.Parent()) &&
+         To<LayoutBox>(layout_object).IsFlexItemIncludingNG();
+}
+
 std::unique_ptr<protocol::DictionaryValue> BuildAreaNamePaths(Node* node,
                                                               float scale) {
   LayoutObject* layout_object = node->GetLayoutObject();
@@ -941,7 +966,7 @@ Vector<Vector<std::pair<PhysicalRect, float>>> GetFlexLinesAndItems(
   return flex_lines;
 }
 
-std::unique_ptr<protocol::DictionaryValue> BuildFlexInfo(
+std::unique_ptr<protocol::DictionaryValue> BuildFlexContainerInfo(
     Node* node,
     const InspectorFlexContainerHighlightConfig&
         flex_container_highlight_config,
@@ -1025,6 +1050,40 @@ std::unique_ptr<protocol::DictionaryValue> BuildFlexInfo(
   flex_info->setValue(
       "flexContainerHighlightConfig",
       BuildFlexContainerHighlightConfigInfo(flex_container_highlight_config));
+
+  return flex_info;
+}
+
+std::unique_ptr<protocol::DictionaryValue> BuildFlexItemInfo(
+    Node* node,
+    const InspectorFlexItemHighlightConfig& flex_item_highlight_config,
+    float scale) {
+  std::unique_ptr<protocol::DictionaryValue> flex_info =
+      protocol::DictionaryValue::create();
+
+  LayoutObject* layout_object = node->GetLayoutObject();
+  bool is_horizontal = IsHorizontalFlex(layout_object->Parent());
+  Length base_size = Length::Auto();
+
+  const Length& flex_basis = layout_object->StyleRef().FlexBasis();
+  const Length& size = is_horizontal ? layout_object->StyleRef().Width()
+                                     : layout_object->StyleRef().Height();
+
+  if (flex_basis.IsFixed()) {
+    base_size = flex_basis;
+  } else if (flex_basis.IsAuto() && size.IsFixed()) {
+    base_size = size;
+  }
+
+  // For now, we only care about the cases where we can know the base size.
+  if (base_size.IsSpecified()) {
+    flex_info->setDouble("baseSize", base_size.Pixels() * scale);
+    flex_info->setBoolean("isHorizontalFlow", is_horizontal);
+
+    flex_info->setValue(
+        "flexItemHighlightConfig",
+        BuildFlexItemHighlightConfigInfo(flex_item_highlight_config));
+  }
 
   return flex_info;
 }
@@ -1310,6 +1369,8 @@ InspectorGridHighlightConfig::InspectorGridHighlightConfig()
 
 InspectorFlexContainerHighlightConfig::InspectorFlexContainerHighlightConfig() =
     default;
+
+InspectorFlexItemHighlightConfig::InspectorFlexItemHighlightConfig() = default;
 
 InspectorHighlightBase::InspectorHighlightBase(float scale)
     : highlight_paths_(protocol::ListValue::create()), scale_(scale) {}
@@ -1674,6 +1735,7 @@ void InspectorHighlight::AppendNodeHighlight(
   if (highlight_config.css_grid != Color::kTransparent ||
       highlight_config.grid_highlight_config) {
     grid_info_ = protocol::ListValue::create();
+    // TODO(crbug.com/1045599): Implement |BuildGridInfo| for GridNG.
     if (layout_object->IsLayoutGrid()) {
       grid_info_->pushValue(
           BuildGridInfo(node, highlight_config, scale_, true));
@@ -1681,12 +1743,20 @@ void InspectorHighlight::AppendNodeHighlight(
   }
 
   if (highlight_config.flex_container_highlight_config) {
-    flex_info_ = protocol::ListValue::create();
+    flex_container_info_ = protocol::ListValue::create();
     // Some objects are flexible boxes even though display:flex is not set, we
     // need to avoid those.
     if (IsLayoutNGFlexibleBox(*layout_object)) {
-      flex_info_->pushValue(BuildFlexInfo(
+      flex_container_info_->pushValue(BuildFlexContainerInfo(
           node, *(highlight_config.flex_container_highlight_config), scale_));
+    }
+  }
+
+  if (highlight_config.flex_item_highlight_config) {
+    flex_item_info_ = protocol::ListValue::create();
+    if (IsLayoutNGFlexItem(*layout_object)) {
+      flex_item_info_->pushValue(BuildFlexItemInfo(
+          node, *(highlight_config.flex_item_highlight_config), scale_));
     }
   }
 }
@@ -1734,8 +1804,10 @@ std::unique_ptr<protocol::DictionaryValue> InspectorHighlight::AsProtocolValue()
     object->setValue("elementInfo", element_info_->clone());
   if (grid_info_ && grid_info_->size() > 0)
     object->setValue("gridInfo", grid_info_->clone());
-  if (flex_info_ && flex_info_->size() > 0)
-    object->setValue("flexInfo", flex_info_->clone());
+  if (flex_container_info_ && flex_container_info_->size() > 0)
+    object->setValue("flexInfo", flex_container_info_->clone());
+  if (flex_item_info_ && flex_item_info_->size() > 0)
+    object->setValue("flexItemInfo", flex_item_info_->clone());
   return object;
 }
 
@@ -1899,7 +1971,7 @@ std::unique_ptr<protocol::DictionaryValue> InspectorFlexContainerHighlight(
     return nullptr;
   }
 
-  return BuildFlexInfo(node, config, scale);
+  return BuildFlexContainerInfo(node, config, scale);
 }
 
 // static
@@ -1924,6 +1996,9 @@ InspectorHighlightConfig InspectorHighlight::DefaultConfig() {
   config.flex_container_highlight_config =
       std::make_unique<InspectorFlexContainerHighlightConfig>(
           InspectorHighlight::DefaultFlexContainerConfig());
+  config.flex_item_highlight_config =
+      std::make_unique<InspectorFlexItemHighlightConfig>(
+          InspectorHighlight::DefaultFlexItemConfig());
   return config;
 }
 
@@ -1970,6 +2045,18 @@ InspectorHighlight::DefaultFlexContainerConfig() {
   config.column_gap_space =
       base::Optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
   config.cross_alignment =
+      base::Optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+  return config;
+}
+
+// static
+InspectorFlexItemHighlightConfig InspectorHighlight::DefaultFlexItemConfig() {
+  InspectorFlexItemHighlightConfig config;
+  config.base_size_box =
+      base::Optional<BoxStyle>(InspectorHighlight::DefaultBoxStyle());
+  config.base_size_border =
+      base::Optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
+  config.flexibility_arrow =
       base::Optional<LineStyle>(InspectorHighlight::DefaultLineStyle());
   return config;
 }

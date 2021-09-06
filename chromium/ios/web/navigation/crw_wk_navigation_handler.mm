@@ -5,6 +5,7 @@
 #import "ios/web/navigation/crw_wk_navigation_handler.h"
 
 #include "base/feature_list.h"
+#include "base/ios/ios_util.h"
 #import "base/ios/ns_error_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -19,7 +20,6 @@
 #import "ios/web/navigation/crw_error_page_helper.h"
 #import "ios/web/navigation/crw_navigation_item_holder.h"
 #import "ios/web/navigation/crw_pending_navigation_info.h"
-#import "ios/web/navigation/crw_text_fragments_handler.h"
 #import "ios/web/navigation/crw_wk_navigation_states.h"
 #include "ios/web/navigation/error_retry_state_machine.h"
 #import "ios/web/navigation/navigation_context_impl.h"
@@ -36,10 +36,12 @@
 #import "ios/web/security/crw_cert_verification_controller.h"
 #import "ios/web/security/wk_web_view_security_util.h"
 #import "ios/web/session/session_certificate_policy_cache_impl.h"
+#import "ios/web/text_fragments/crw_text_fragments_handler.h"
 #import "ios/web/web_state/user_interaction_state.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "ios/web/web_view/content_type_util.h"
 #import "ios/web/web_view/error_translation_util.h"
+#import "ios/web/web_view/wk_security_origin_util.h"
 #import "ios/web/web_view/wk_web_view_util.h"
 #import "net/base/mac/url_conversions.h"
 #include "net/base/net_errors.h"
@@ -391,8 +393,19 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
         self.userInteractionState->HasUserTappedRecently(webView) &&
         net::GURLWithNSURL(action.request.mainDocumentURL) ==
             self.userInteractionState->LastUserInteraction()->main_document_url;
+    BOOL isCrossOriginTargetFrame = NO;
+    if (action.sourceFrame && action.targetFrame &&
+        action.sourceFrame != action.targetFrame) {
+      url::Origin sourceOrigin =
+          url::Origin::Create(web::GURLOriginWithWKSecurityOrigin(
+              action.sourceFrame.securityOrigin));
+      url::Origin targetOrigin =
+          url::Origin::Create(web::GURLOriginWithWKSecurityOrigin(
+              action.targetFrame.securityOrigin));
+      isCrossOriginTargetFrame = !sourceOrigin.IsSameOriginWith(targetOrigin);
+    }
     web::WebStatePolicyDecider::RequestInfo requestInfo(
-        transition, isMainFrameNavigationAction,
+        transition, isMainFrameNavigationAction, isCrossOriginTargetFrame,
         userInteractedWithRequestMainFrame);
 
     policyDecision =
@@ -1386,8 +1399,8 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     return YES;
   }
 
-  if (!ui::PageTransitionIsNewNavigation(pageTransition)) {
-    // Allow reloads and back-forward navigations.
+  if (pageTransition & ui::PAGE_TRANSITION_FORWARD_BACK) {
+    // Allow back-forward navigations.
     return YES;
   }
 
@@ -1502,7 +1515,15 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     // frame to prevent abusive behavior (crbug.com/890558).
     web::NavigationContext* context =
         [self contextForPendingMainFrameNavigationWithURL:responseURL];
-    if (context->IsRendererInitiated()) {
+    // If the server is doing a redirect on a user reload, the navigation is
+    // treated as a reload instead of a redirect. See crbug.com/1165654.
+    web::NavigationItem* lastCommittedItem =
+        self.navigationManagerImpl->GetLastCommittedItem();
+    BOOL isFakeReload = PageTransitionCoreTypeIs(context->GetPageTransition(),
+                                                 ui::PAGE_TRANSITION_RELOAD) &&
+                        lastCommittedItem &&
+                        lastCommittedItem->GetURL() != responseURL;
+    if (context->IsRendererInitiated() || isFakeReload) {
       return NO;
     }
   }
@@ -1812,11 +1833,8 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
         web::RequiresProvisionalNavigationFailureWorkaround()) {
       // It is likely that |navigationContext| is null because
       // didStartProvisionalNavigation: was not called with this WKNavigation
-      // object. Log UMA to know when this workaround can be removed and
-      // do not call OnNavigationFinished() to avoid crash on null pointer
-      // dereferencing. See crbug.com/973653 and crbug.com/1004634 for details.
-      UMA_HISTOGRAM_BOOLEAN(
-          "Navigation.IOSNullContextInDidFailProvisionalNavigation", true);
+      // object, which was pretty common on iOS 12 and fixed on iOS 13.
+      // See crbug.com/973653 and crbug.com/1004634 for details.
       return;
     }
   }
@@ -2054,16 +2072,10 @@ void ReportOutOfSyncURLInDidStartProvisionalNavigation(
     }
 
     if (provisionalLoad) {
-      if (!navigationContext &&
-          web::RequiresProvisionalNavigationFailureWorkaround()) {
+      if (base::ios::IsRunningOnIOS13OrLater() || navigationContext) {
         // It is likely that |navigationContext| is null because
         // didStartProvisionalNavigation: was not called with this WKNavigation
-        // object. Log UMA to know when this workaround can be removed and
-        // do not call OnNavigationFinished() to avoid crash on null pointer
-        // dereferencing. See crbug.com/973653 for details.
-        UMA_HISTOGRAM_BOOLEAN(
-            "Navigation.IOSNullContextInDidFailProvisionalNavigation", true);
-      } else {
+        // object. See crbug.com/973653 for details.
         self.webStateImpl->OnNavigationFinished(navigationContext.get());
       }
     }

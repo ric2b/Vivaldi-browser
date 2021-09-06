@@ -243,11 +243,11 @@ void NGContainerFragmentBuilder::SwapOutOfFlowPositionedCandidates(
 void NGContainerFragmentBuilder::AddMulticolWithPendingOOFs(
     const NGBlockNode& multicol) {
   DCHECK(To<LayoutBlockFlow>(multicol.GetLayoutBox())->MultiColumnFlowThread());
-  multicols_with_pending_oofs_.insert(multicol);
+  multicols_with_pending_oofs_.insert(multicol.GetLayoutBox());
 }
 
 void NGContainerFragmentBuilder::SwapMulticolsWithPendingOOFs(
-    HashSet<NGBlockNode>* multicols_with_pending_oofs) {
+    MulticolCollection* multicols_with_pending_oofs) {
   DCHECK(multicols_with_pending_oofs->IsEmpty());
   std::swap(multicols_with_pending_oofs_, *multicols_with_pending_oofs);
 }
@@ -257,6 +257,12 @@ void NGContainerFragmentBuilder::SwapOutOfFlowFragmentainerDescendants(
   DCHECK(descendants->IsEmpty());
   DCHECK(!has_oof_candidate_that_needs_block_offset_adjustment_);
   std::swap(oof_positioned_fragmentainer_descendants_, *descendants);
+}
+
+void NGContainerFragmentBuilder::ClearOutOfFlowFragmentainerDescendants() {
+  if (!HasOutOfFlowFragmentainerDescendants())
+    return;
+  oof_positioned_fragmentainer_descendants_.clear();
 }
 
 void NGContainerFragmentBuilder::
@@ -297,8 +303,8 @@ void NGContainerFragmentBuilder::PropagateOOFPositionedInfo(
   if (box_fragment->HasMulticolsWithPendingOOFs()) {
     const auto& multicols_with_pending_oofs =
         box_fragment->MulticolsWithPendingOOFs();
-    for (const NGBlockNode& multicol : multicols_with_pending_oofs)
-      AddMulticolWithPendingOOFs(multicol);
+    for (LayoutBox* multicol : multicols_with_pending_oofs)
+      AddMulticolWithPendingOOFs(NGBlockNode(multicol));
   }
 
   // If we find a multicol with OOF positioned fragmentainer descendants,

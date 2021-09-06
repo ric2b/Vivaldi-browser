@@ -24,7 +24,7 @@
 #include "components/blocked_content/popup_tracker.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
-#include "components/embedder_support/android/util/user_agent_utils.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/js_injection/browser/js_communication_host.h"
@@ -37,6 +37,7 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/ukm/content/source_url_recorder.h"
+#include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webrtc/media_stream_devices_controller.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -79,7 +80,6 @@
 #include "weblayer/browser/profile_impl.h"
 #include "weblayer/browser/subresource_filter_client_impl.h"
 #include "weblayer/browser/translate_client_impl.h"
-#include "weblayer/browser/user_agent.h"
 #include "weblayer/browser/weblayer_features.h"
 #include "weblayer/common/isolated_world_ids.h"
 #include "weblayer/public/fullscreen_delegate.h"
@@ -375,6 +375,8 @@ TabImpl::TabImpl(ProfileImpl* profile,
 
   // PrerenderTabHelper adds a WebContentsObserver.
   PrerenderTabHelper::CreateForWebContents(web_contents_.get());
+
+  webapps::InstallableManager::CreateForWebContents(web_contents_.get());
 }
 
 TabImpl::~TabImpl() {
@@ -835,8 +837,9 @@ void TabImpl::SetDesktopUserAgentEnabled(JNIEnv* env, jboolean enable) {
 
   // Reset state that an earlier call to Navigation::SetUserAgentString()
   // could have modified.
-  embedder_support::SetDesktopUserAgentOverride(web_contents_.get(),
-                                                GetUserAgentMetadata());
+  embedder_support::SetDesktopUserAgentOverride(
+      web_contents_.get(), embedder_support::GetUserAgentMetadata(),
+      /* override_in_new_tabs= */ false);
   web_contents_->SetRendererInitiatedUserAgentOverrideOption(
       content::NavigationController::UA_OVERRIDE_INHERIT);
 
@@ -972,7 +975,7 @@ content::ColorChooser* TabImpl::OpenColorChooser(
 }
 
 void TabImpl::CreateSmsPrompt(content::RenderFrameHost* render_frame_host,
-                              const url::Origin& origin,
+                              const std::vector<url::Origin>& origin_list,
                               const std::string& one_time_code,
                               base::OnceClosure on_confirm,
                               base::OnceClosure on_cancel) {
@@ -980,7 +983,7 @@ void TabImpl::CreateSmsPrompt(content::RenderFrameHost* render_frame_host,
   auto* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
   sms::SmsInfoBar::Create(
-      web_contents, InfoBarService::FromWebContents(web_contents), origin,
+      web_contents, InfoBarService::FromWebContents(web_contents), origin_list,
       one_time_code, std::move(on_confirm), std::move(on_cancel));
 #else
   NOTREACHED();
@@ -1347,7 +1350,9 @@ void TabImpl::InitializeAutofill() {
           autofill::AutofillHandler::DISABLE_AUTOFILL_DOWNLOAD_MANAGER;
 #if defined(OS_ANDROID)
   if (base::FeatureList::IsEnabled(
-          autofill::features::kAndroidAutofillQueryServerFieldTypes)) {
+          autofill::features::kAndroidAutofillQueryServerFieldTypes) &&
+      (!autofill::AutofillProvider::
+           is_download_manager_disabled_for_testing())) {
     enable_autofill_download_manager =
         autofill::AutofillHandler::ENABLE_AUTOFILL_DOWNLOAD_MANAGER;
   }

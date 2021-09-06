@@ -53,7 +53,8 @@ IdentityManager::IdentityManager(IdentityManager::InitParameters&& parameters)
                         std::move(parameters.accounts_mutator),
                         std::move(parameters.accounts_cookie_mutator),
                         std::move(parameters.device_accounts_synchronizer)),
-      diagnostics_provider_(std::move(parameters.diagnostics_provider)) {
+      diagnostics_provider_(std::move(parameters.diagnostics_provider)),
+      allow_access_token_fetch_(parameters.allow_access_token_fetch) {
   DCHECK(account_fetcher_service_);
   DCHECK(diagnostics_provider_);
 
@@ -87,7 +88,7 @@ IdentityManager::IdentityManager(IdentityManager::InitParameters&& parameters)
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos_account_manager_ = parameters.chromeos_account_manager;
+  ash_account_manager_ = parameters.ash_account_manager;
 #endif
 }
 
@@ -104,6 +105,11 @@ IdentityManager::~IdentityManager() {
     Java_IdentityManager_destroy(base::android::AttachCurrentThread(),
                                  java_identity_manager_);
 #endif
+}
+
+void IdentityManager::Shutdown() {
+  for (auto& observer : diagnostics_observation_list_)
+    observer.OnIdentityManagerShutdown();
 }
 
 void IdentityManager::AddObserver(Observer* observer) {
@@ -135,9 +141,10 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
     const ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     AccessTokenFetcher::Mode mode) {
-  return std::make_unique<AccessTokenFetcher>(account_id, oauth_consumer_name,
-                                              token_service_.get(), scopes,
-                                              std::move(callback), mode);
+  CHECK(allow_access_token_fetch_);
+  return std::make_unique<AccessTokenFetcher>(
+      account_id, oauth_consumer_name, token_service_.get(),
+      primary_account_manager_.get(), scopes, std::move(callback), mode);
 }
 
 std::unique_ptr<AccessTokenFetcher>
@@ -148,9 +155,11 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
     const ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     AccessTokenFetcher::Mode mode) {
+  CHECK(allow_access_token_fetch_);
   return std::make_unique<AccessTokenFetcher>(
-      account_id, oauth_consumer_name, token_service_.get(), url_loader_factory,
-      scopes, std::move(callback), mode);
+      account_id, oauth_consumer_name, token_service_.get(),
+      primary_account_manager_.get(), url_loader_factory, scopes,
+      std::move(callback), mode);
 }
 
 std::unique_ptr<AccessTokenFetcher>
@@ -162,9 +171,11 @@ IdentityManager::CreateAccessTokenFetcherForClient(
     const ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
     AccessTokenFetcher::Mode mode) {
+  CHECK(allow_access_token_fetch_);
   return std::make_unique<AccessTokenFetcher>(
       account_id, client_id, client_secret, oauth_consumer_name,
-      token_service_.get(), scopes, std::move(callback), mode);
+      token_service_.get(), primary_account_manager_.get(), scopes,
+      std::move(callback), mode);
 }
 
 void IdentityManager::RemoveAccessTokenFromCache(
@@ -204,8 +215,9 @@ IdentityManager::GetExtendedAccountInfoForAccountsWithRefreshToken() const {
   return accounts;
 }
 
-bool IdentityManager::HasPrimaryAccountWithRefreshToken() const {
-  return HasAccountWithRefreshToken(GetPrimaryAccountId());
+bool IdentityManager::HasPrimaryAccountWithRefreshToken(
+    ConsentLevel consent_level) const {
+  return HasAccountWithRefreshToken(GetPrimaryAccountId(consent_level));
 }
 
 bool IdentityManager::HasAccountWithRefreshToken(
@@ -398,6 +410,13 @@ void IdentityManager::ForceRefreshOfExtendedAccountInfo(
   account_fetcher_service_->ForceRefreshOfAccountInfo(account_id);
 }
 
+void IdentityManager::ForceRefreshOfExtendedAccountInfo(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& j_core_account_id) {
+  ForceRefreshOfExtendedAccountInfo(
+      ConvertFromJavaCoreAccountId(env, j_core_account_id));
+}
+
 base::android::ScopedJavaLocalRef<jobject>
 IdentityManager::GetPrimaryAccountInfo(JNIEnv* env, jint consent_level) const {
   CoreAccountInfo account_info =
@@ -461,8 +480,8 @@ GaiaCookieManagerService* IdentityManager::GetGaiaCookieManagerService() const {
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-chromeos::AccountManager* IdentityManager::GetChromeOSAccountManager() const {
-  return chromeos_account_manager_;
+ash::AccountManager* IdentityManager::GetAshAccountManager() const {
+  return ash_account_manager_;
 }
 #endif
 
@@ -485,8 +504,18 @@ AccountInfo IdentityManager::GetAccountInfoForAccountWithRefreshToken(
 
 void IdentityManager::OnPrimaryAccountChanged(
     const PrimaryAccountChangeEvent& event_details) {
-  for (auto& observer : observer_list_)
+  CoreAccountId event_primary_account_id =
+      event_details.GetCurrentState().primary_account.account_id;
+  DCHECK_EQ(event_primary_account_id,
+            GetPrimaryAccountId(event_details.GetCurrentState().consent_level));
+  for (auto& observer : observer_list_) {
     observer.OnPrimaryAccountChanged(event_details);
+    // Ensure that |observer| did not change the primary account as otherwise
+    // |event_details| would not longer be correct.
+    DCHECK_EQ(
+        event_primary_account_id,
+        GetPrimaryAccountId(event_details.GetCurrentState().consent_level));
+  }
 
 #if defined(OS_ANDROID)
   if (java_identity_manager_) {
@@ -496,13 +525,6 @@ void IdentityManager::OnPrimaryAccountChanged(
         ConvertToJavaPrimaryAccountChangeEvent(env, event_details));
   }
 #endif
-
-  if (event_details.GetEventTypeFor(ConsentLevel::kSync) ==
-      PrimaryAccountChangeEvent::Type::kCleared) {
-    for (auto& observer : observer_list_) {
-      observer.AfterSyncPrimaryAccountCleared();
-    }
-  }
 }
 
 void IdentityManager::OnRefreshTokenAvailable(const CoreAccountId& account_id) {
@@ -608,7 +630,7 @@ void IdentityManager::OnRefreshTokenRevokedFromSource(
 }
 
 void IdentityManager::OnAccountUpdated(const AccountInfo& info) {
-  if (HasPrimaryAccount()) {
+  if (HasPrimaryAccount(signin::ConsentLevel::kNotRequired)) {
     const CoreAccountId primary_account_id =
         GetPrimaryAccountId(ConsentLevel::kNotRequired);
     if (primary_account_id == info.account_id) {

@@ -6,6 +6,7 @@
 
 #include "base/optional.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "build/build_config.h"
 #include "chrome/browser/cart/cart_db_content.pb.h"
 #include "chrome/browser/cart/cart_service.h"
 #include "chrome/browser/cart/cart_service_factory.h"
@@ -66,6 +67,10 @@ const std::vector<ProfileProtoDB<cart_db::ChromeCartContentProto>::KeyAndValue>
     kEmptyExpected = {};
 }  // namespace
 
+// TODO(crbug.com/1175279): CartHandlerTest.* tests are flaky on TSan.
+#if defined(THREAD_SANITIZER)
+#define CartHandlerTest DISABLED_CartHandlerTest
+#endif
 class CartHandlerTest : public testing::Test {
  public:
   CartHandlerTest()
@@ -137,21 +142,8 @@ TEST_F(CartHandlerTest, TestHideStatusChange) {
   ASSERT_FALSE(service_->IsHidden());
 }
 
-// Verifies the remove status is flipped by removing and restoring.
-TEST_F(CartHandlerTest, TestRemoveStatusChange) {
-  ASSERT_FALSE(service_->IsRemoved());
-
-  handler_->RemoveCartModule();
-  ASSERT_TRUE(service_->IsRemoved());
-
-  handler_->RestoreRemovedCartModule();
-  ASSERT_FALSE(service_->IsRemoved());
-}
-
 // Verifies GetMerchantCarts loads fake data with feature parameter.
-//
-// Disabled due to excessive flakiness. http://crbug.com/1175279
-TEST_F(CartHandlerTest, DISABLED_TestEnableFakeData) {
+TEST_F(CartHandlerTest, TestEnableFakeData) {
   base::RunLoop run_loop;
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeatureWithParameters(
@@ -173,7 +165,13 @@ TEST_F(CartHandlerTest, DISABLED_TestEnableFakeData) {
 }
 
 // Verifies GetMerchantCarts loads real data without fake data parameter.
-TEST_F(CartHandlerTest, TestDisableFakeData) {
+// TODO(crbug.com/1180772): Test is flaky on Linux.
+#if defined(OS_LINUX)
+#define MAYBE_TestDisableFakeData DISABLED_TestDisableFakeData
+#else
+#define MAYBE_TestDisableFakeData TestDisableFakeData
+#endif
+TEST_F(CartHandlerTest, MAYBE_TestDisableFakeData) {
   base::RunLoop run_loop;
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(ntp_features::kNtpChromeCartModule);
@@ -280,9 +278,23 @@ TEST_F(CartHandlerTest, TestRemoveCart) {
 
 // Tests show welcome surface for first three appearances of cart module.
 TEST_F(CartHandlerTest, TestShowWelcomeSurface) {
-  base::RunLoop run_loop[11];
+  base::RunLoop run_loop[4 * CartService::kWelcomSurfaceShowLimit + 5];
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeature(ntp_features::kNtpChromeCartModule);
+  int run_loop_index = 0;
+
+  // Never increase appearance count for welcome surface when there is no cart.
+  for (int i = 0; i < CartService::kWelcomSurfaceShowLimit + 1; i++) {
+    std::vector<chrome_cart::mojom::MerchantCartPtr> empty_carts;
+    handler_->GetWarmWelcomeVisible(base::BindOnce(
+        &CartHandlerTest::GetEvaluationShouldShowWelcomSurface,
+        base::Unretained(this), run_loop[run_loop_index].QuitClosure(), true));
+    run_loop[run_loop_index++].Run();
+    handler_->GetMerchantCarts(base::BindOnce(
+        &GetEvaluationMerchantCarts, run_loop[run_loop_index].QuitClosure(),
+        std::move(empty_carts)));
+    run_loop[run_loop_index++].Run();
+  }
 
   // Add a cart with product image.
   CartDB* cart_db_ = service_->GetDB();
@@ -293,8 +305,9 @@ TEST_F(CartHandlerTest, TestShowWelcomeSurface) {
   cart_db_->AddCart(
       kMockMerchantBKey, merchant_proto,
       base::BindOnce(&CartHandlerTest::OperationEvaluation,
-                     base::Unretained(this), run_loop[0].QuitClosure(), true));
-  run_loop[0].Run();
+                     base::Unretained(this),
+                     run_loop[run_loop_index].QuitClosure(), true));
+  run_loop[run_loop_index++].Run();
 
   // Show welcome surface for the first three appearances.
   for (int i = 0; i < CartService::kWelcomSurfaceShowLimit; i++) {
@@ -307,12 +320,12 @@ TEST_F(CartHandlerTest, TestShowWelcomeSurface) {
 
     handler_->GetWarmWelcomeVisible(base::BindOnce(
         &CartHandlerTest::GetEvaluationShouldShowWelcomSurface,
-        base::Unretained(this), run_loop[2 * i + 1].QuitClosure(), true));
-    run_loop[2 * i + 1].Run();
+        base::Unretained(this), run_loop[run_loop_index].QuitClosure(), true));
+    run_loop[run_loop_index++].Run();
     handler_->GetMerchantCarts(base::BindOnce(
-        &GetEvaluationMerchantCarts, run_loop[2 * (i + 1)].QuitClosure(),
+        &GetEvaluationMerchantCarts, run_loop[run_loop_index].QuitClosure(),
         std::move(carts_without_product)));
-    run_loop[2 * (i + 1)].Run();
+    run_loop[run_loop_index++].Run();
   }
 
   // Build a callback result with product image.
@@ -324,14 +337,14 @@ TEST_F(CartHandlerTest, TestShowWelcomeSurface) {
   carts_with_product.push_back(std::move(dummy_cart2));
 
   // Not show welcome surface afterwards.
-  handler_->GetWarmWelcomeVisible(
-      base::BindOnce(&CartHandlerTest::GetEvaluationShouldShowWelcomSurface,
-                     base::Unretained(this), run_loop[9].QuitClosure(), false));
-  run_loop[9].Run();
-  handler_->GetMerchantCarts(base::BindOnce(&GetEvaluationMerchantCarts,
-                                            run_loop[10].QuitClosure(),
-                                            std::move(carts_with_product)));
-  run_loop[10].Run();
+  handler_->GetWarmWelcomeVisible(base::BindOnce(
+      &CartHandlerTest::GetEvaluationShouldShowWelcomSurface,
+      base::Unretained(this), run_loop[run_loop_index].QuitClosure(), false));
+  run_loop[run_loop_index++].Run();
+  handler_->GetMerchantCarts(base::BindOnce(
+      &GetEvaluationMerchantCarts, run_loop[run_loop_index].QuitClosure(),
+      std::move(carts_with_product)));
+  run_loop[run_loop_index++].Run();
 }
 
 // Test cart click index histogram is properly recorded.

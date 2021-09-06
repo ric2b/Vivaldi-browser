@@ -39,6 +39,9 @@ import org.chromium.chrome.browser.password_check.PasswordCheckComponentUiFactor
 import org.chromium.chrome.browser.password_check.PasswordCheckEditFragmentView;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_check.PasswordCheckFragmentView;
+import org.chromium.chrome.browser.password_entry_edit.CredentialEditFragmentView;
+import org.chromium.chrome.browser.password_entry_edit.CredentialEditUiFactory;
+import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsFragment;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManagerUtils;
 import org.chromium.chrome.browser.safety_check.SafetyCheckCoordinator;
@@ -329,6 +332,9 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             editFragment.setCheckProvider(
                     () -> PasswordCheckFactory.getOrCreate(mSettingsLauncher));
         }
+        if (fragment instanceof CredentialEditFragmentView) {
+            CredentialEditUiFactory.create((CredentialEditFragmentView) fragment);
+        }
         if (fragment instanceof ImageDescriptionsSettings) {
             Profile profile = Profile.getLastUsedRegularProfile();
             ImageDescriptionsSettings imageFragment = (ImageDescriptionsSettings) fragment;
@@ -341,6 +347,11 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                         ImageDescriptionsController.getInstance().onlyOnWifiEnabled(profile));
             }
             imageFragment.setDelegate(ImageDescriptionsController.getInstance().getDelegate());
+        }
+        if (fragment instanceof PrivacySandboxSettingsFragment) {
+            ((PrivacySandboxSettingsFragment) fragment)
+                    .setCctHelpers(LaunchIntentDispatcher::createCustomTabActivityIntent,
+                            IntentHandler::addTrustedIntentExtras);
         }
     }
 

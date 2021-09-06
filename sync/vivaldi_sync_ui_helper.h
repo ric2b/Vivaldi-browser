@@ -41,6 +41,8 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
                       VivaldiProfileSyncService* sync_manager);
   ~VivaldiSyncUIHelper() override;
 
+  void RegisterObserver();
+
   bool SetEncryptionPassword(const std::string& password);
 
   std::string GetBackupEncryptionToken();

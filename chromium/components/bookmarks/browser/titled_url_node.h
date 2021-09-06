@@ -28,10 +28,10 @@ class TitledUrlNode {
       const = 0;
 
   // Vivaldi: Returns the nickname for the node.
-  virtual const base::string16 GetTitledUrlNodeNickName() const = 0;
+  virtual const base::string16 GetTitledUrlNodeNickName() const;
 
   // Vivaldi: Returns the description for the node.
-  virtual const base::string16 GetTitledUrlNodeDescription() const = 0;
+  virtual const base::string16 GetTitledUrlNodeDescription() const;
 
  protected:
   virtual ~TitledUrlNode() {}

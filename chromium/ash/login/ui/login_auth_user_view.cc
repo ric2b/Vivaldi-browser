@@ -39,7 +39,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -1530,7 +1529,7 @@ void LoginAuthUserView::OnAuthSubmit(const base::string16& password) {
 
   Shell::Get()->login_screen_controller()->AuthenticateUserWithPasswordOrPin(
       current_user().basic_user_info.account_id, base::UTF16ToUTF8(password),
-      HasAuthMethod(AUTH_PIN),
+      ShouldAuthenticateWithPin(),
       base::BindOnce(&LoginAuthUserView::OnAuthComplete,
                      weak_factory_.GetWeakPtr()));
 }
@@ -1626,6 +1625,11 @@ void LoginAuthUserView::OnPinTextChanged(bool is_empty) {
 
 bool LoginAuthUserView::HasAuthMethod(AuthMethods auth_method) const {
   return (auth_methods_ & auth_method) != 0;
+}
+
+bool LoginAuthUserView::ShouldAuthenticateWithPin() const {
+  return input_field_mode_ == InputFieldMode::PIN_AND_PASSWORD ||
+         input_field_mode_ == InputFieldMode::PIN_WITH_TOGGLE;
 }
 
 void LoginAuthUserView::AttemptAuthenticateWithChallengeResponse() {

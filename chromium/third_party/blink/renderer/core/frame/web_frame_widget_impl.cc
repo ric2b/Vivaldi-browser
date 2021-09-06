@@ -47,7 +47,6 @@
 #include "third_party/blink/public/mojom/input/touch_event.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
@@ -67,9 +66,11 @@
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_ukm_aggregator.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_client.h"
+#include "third_party/blink/renderer/core/frame/screen.h"
 #include "third_party/blink/renderer/core/frame/screen_metrics_emulator.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
@@ -318,7 +319,7 @@ WebLocalFrame* WebFrameWidgetImpl::LocalRoot() const {
   return local_root_;
 }
 
-WebRect WebFrameWidgetImpl::ComputeBlockBound(
+gfx::Rect WebFrameWidgetImpl::ComputeBlockBound(
     const gfx::Point& point_in_root_frame,
     bool ignore_clipping) const {
   HitTestLocation location(local_root_->GetFrameView()->ConvertFromRootFrame(
@@ -333,7 +334,7 @@ WebRect WebFrameWidgetImpl::ComputeBlockBound(
 
   Node* node = result.InnerNodeOrImageMapImage();
   if (!node)
-    return WebRect();
+    return gfx::Rect();
 
   // Find the block type node based on the hit node.
   // FIXME: This wants to walk flat tree with
@@ -348,7 +349,7 @@ WebRect WebFrameWidgetImpl::ComputeBlockBound(
     LocalFrame* frame = node->GetDocument().GetFrame();
     return frame->View()->ConvertToRootFrame(absolute_rect);
   }
-  return WebRect();
+  return gfx::Rect();
 }
 
 void WebFrameWidgetImpl::DragTargetDragEnter(
@@ -907,8 +908,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
             gfx::Rect(ComputeBlockBound(pos_in_local_frame_root, false));
 
         if (ForMainFrame()) {
-          web_view->AnimateDoubleTapZoom(pos_in_local_frame_root,
-                                         WebRect(block_bounds));
+          web_view->AnimateDoubleTapZoom(pos_in_local_frame_root, block_bounds);
         } else {
           // This sends the tap point and bounds to the main frame renderer via
           // the browser, where their coordinates will be transformed into the
@@ -1179,9 +1179,6 @@ void WebFrameWidgetImpl::SendOverscrollEventFromImplSide(
 
 void WebFrameWidgetImpl::SendScrollEndEventFromImplSide(
     cc::ElementId scroll_latched_element_id) {
-  if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl())
-    devtools->PageScrollEnded();
-
   if (!RuntimeEnabledFeatures::OverscrollCustomizationEnabled())
     return;
 
@@ -1193,10 +1190,8 @@ void WebFrameWidgetImpl::SendScrollEndEventFromImplSide(
 
 void WebFrameWidgetImpl::UpdateCompositorScrollState(
     const cc::CompositorCommitData& commit_data) {
-  if (commit_data.manipulation_info != cc::kManipulationInfoNone) {
-    if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl())
-      devtools->PageScrollStarted();
-  }
+  if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl())
+    devtools->SetPageIsScrolling(commit_data.is_scroll_active);
 
   RecordManipulationTypeCounts(commit_data.manipulation_info);
 
@@ -1685,15 +1680,6 @@ void WebFrameWidgetImpl::SetBrowserControlsParams(
   widget_base_->LayerTreeHost()->SetBrowserControlsParams(params);
 }
 
-cc::LayerTreeDebugState WebFrameWidgetImpl::GetLayerTreeDebugState() {
-  return widget_base_->LayerTreeHost()->GetDebugState();
-}
-
-void WebFrameWidgetImpl::SetLayerTreeDebugState(
-    const cc::LayerTreeDebugState& state) {
-  widget_base_->LayerTreeHost()->SetDebugState(state);
-}
-
 void WebFrameWidgetImpl::SynchronouslyCompositeForTesting(
     base::TimeTicks frame_time) {
   widget_base_->LayerTreeHost()->CompositeForTest(frame_time, false);
@@ -1788,11 +1774,24 @@ void WebFrameWidgetImpl::ShowContextMenu(
 }
 
 void WebFrameWidgetImpl::SetViewportIntersection(
-    mojom::blink::ViewportIntersectionStatePtr intersection_state) {
+    mojom::blink::ViewportIntersectionStatePtr intersection_state,
+    const base::Optional<VisualProperties>& visual_properties) {
   // Remote viewports are only applicable to local frames with remote ancestors.
   // TODO(https://crbug.com/1148960): Should this deal with portals?
   DCHECK(ForSubframe());
 
+  if (visual_properties.has_value())
+    UpdateVisualProperties(visual_properties.value());
+  ApplyViewportIntersection(std::move(intersection_state));
+}
+
+void WebFrameWidgetImpl::ApplyViewportIntersectionForTesting(
+    mojom::blink::ViewportIntersectionStatePtr intersection_state) {
+  ApplyViewportIntersection(std::move(intersection_state));
+}
+
+void WebFrameWidgetImpl::ApplyViewportIntersection(
+    mojom::blink::ViewportIntersectionStatePtr intersection_state) {
   child_data().compositor_visible_rect =
       intersection_state->compositor_visible_rect;
   widget_base_->LayerTreeHost()->SetVisualDeviceViewportIntersectionRect(
@@ -1950,7 +1949,7 @@ void WebFrameWidgetImpl::ResetMeaningfulLayoutStateForMainFrame() {
 }
 
 void WebFrameWidgetImpl::InitializeCompositing(
-    scheduler::WebThreadScheduler* main_thread_scheduler,
+    scheduler::WebAgentGroupScheduler& agent_group_scheduler,
     cc::TaskGraphRunner* task_graph_runner,
     const ScreenInfo& screen_info,
     std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory,
@@ -1958,7 +1957,7 @@ void WebFrameWidgetImpl::InitializeCompositing(
   DCHECK(View()->does_composite());
   DCHECK(!non_composited_client_);  // Assure only one initialize is called.
   widget_base_->InitializeCompositing(
-      main_thread_scheduler, task_graph_runner, is_for_child_local_root_,
+      agent_group_scheduler, task_graph_runner, is_for_child_local_root_,
       screen_info, std::move(ukm_recorder_factory), settings,
       input_handler_weak_ptr_factory_.GetWeakPtr());
 
@@ -2095,8 +2094,7 @@ void WebFrameWidgetImpl::EndCommitCompositorFrame(
     base::TimeTicks commit_start_time) {
   DCHECK(commit_compositor_frame_start_time_.has_value());
   if (ForMainFrame()) {
-    View()->Client()->DidCommitCompositorFrameForLocalMainFrame(
-        commit_start_time);
+    View()->DidCommitCompositorFrameForLocalMainFrame();
     View()->UpdatePreferredSize();
     if (!View()->MainFrameImpl()) {
       // Trying to track down why the view's idea of the main frame varies
@@ -2757,15 +2755,15 @@ void WebFrameWidgetImpl::SetRootLayer(scoped_refptr<cc::Layer> layer) {
 
 base::WeakPtr<AnimationWorkletMutatorDispatcherImpl>
 WebFrameWidgetImpl::EnsureCompositorMutatorDispatcher(
-    scoped_refptr<base::SingleThreadTaskRunner>* mutator_task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> mutator_task_runner) {
   if (!mutator_task_runner_) {
+    mutator_task_runner_ = std::move(mutator_task_runner);
     widget_base_->LayerTreeHost()->SetLayerTreeMutator(
         AnimationWorkletMutatorDispatcherImpl::CreateCompositorThreadClient(
-            &mutator_dispatcher_, &mutator_task_runner_));
+            mutator_dispatcher_, mutator_task_runner_));
   }
 
   DCHECK(mutator_task_runner_);
-  *mutator_task_runner = mutator_task_runner_;
   return mutator_dispatcher_;
 }
 
@@ -3026,14 +3024,14 @@ void WebFrameWidgetImpl::GetEditContextBoundsInWindow(
   WebInputMethodController* controller = GetActiveWebInputMethodController();
   if (!controller)
     return;
-  WebRect control_bounds;
-  WebRect selection_bounds;
+  gfx::Rect control_bounds;
+  gfx::Rect selection_bounds;
   controller->GetLayoutBounds(&control_bounds, &selection_bounds);
   *edit_context_control_bounds =
-      widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(control_bounds));
+      widget_base_->BlinkSpaceToEnclosedDIPs(control_bounds);
   if (controller->IsEditContextActive()) {
     *edit_context_selection_bounds =
-        widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(selection_bounds));
+        widget_base_->BlinkSpaceToEnclosedDIPs(selection_bounds);
   }
 }
 
@@ -3346,13 +3344,12 @@ void WebFrameWidgetImpl::GetCompositionCharacterBoundsInWindow(
     return;
   blink::WebInputMethodController* controller =
       focused_frame->GetInputMethodController();
-  blink::WebVector<blink::WebRect> bounds_from_blink;
+  blink::WebVector<gfx::Rect> bounds_from_blink;
   if (!controller->GetCompositionCharacterBounds(bounds_from_blink))
     return;
 
   for (auto& rect : bounds_from_blink) {
-    bounds_in_dips->push_back(
-        widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(rect)));
+    bounds_in_dips->push_back(widget_base_->BlinkSpaceToEnclosedDIPs(rect));
   }
 }
 
@@ -3376,14 +3373,13 @@ WebFrameWidgetImpl::GetImeTextSpansInfo(
   Vector<ui::mojom::blink::ImeTextSpanInfoPtr> ime_text_spans_info;
 
   for (const auto& ime_text_span : ime_text_spans) {
-    WebRect webrect;
+    gfx::Rect rect;
     unsigned length = ime_text_span.end_offset - ime_text_span.start_offset;
     focused_frame->FirstRectForCharacterRange(ime_text_span.start_offset,
-                                              length, webrect);
+                                              length, rect);
 
     ime_text_spans_info.push_back(ui::mojom::blink::ImeTextSpanInfo::New(
-        ime_text_span,
-        widget_base_->BlinkSpaceToEnclosedDIPs(gfx::Rect(webrect))));
+        ime_text_span, widget_base_->BlinkSpaceToEnclosedDIPs(rect)));
   }
   return ime_text_spans_info;
 }
@@ -3601,12 +3597,12 @@ void WebFrameWidgetImpl::ScrollFocusedEditableNodeIntoRect(
 }
 
 void WebFrameWidgetImpl::ZoomToFindInPageRect(
-    const WebRect& rect_in_root_frame) {
+    const gfx::Rect& rect_in_root_frame) {
   if (ForMainFrame()) {
     View()->ZoomToFindInPageRect(rect_in_root_frame);
   } else {
     GetAssociatedFrameWidgetHost()->ZoomToFindInPageRectInMainFrame(
-        gfx::Rect(rect_in_root_frame));
+        rect_in_root_frame);
   }
 }
 
@@ -3722,6 +3718,15 @@ float WebFrameWidgetImpl::GetCompositingScaleFactor() {
   return compositing_scale_factor_;
 }
 
+const cc::LayerTreeDebugState& WebFrameWidgetImpl::GetLayerTreeDebugState() {
+  return widget_base_->LayerTreeHost()->GetDebugState();
+}
+
+void WebFrameWidgetImpl::SetLayerTreeDebugState(
+    const cc::LayerTreeDebugState& state) {
+  widget_base_->LayerTreeHost()->SetDebugState(state);
+}
+
 void WebFrameWidgetImpl::NotifyCompositingScaleFactorChanged(
     float compositing_scale_factor) {
   compositing_scale_factor_ = compositing_scale_factor;
@@ -3815,15 +3820,18 @@ void WebFrameWidgetImpl::DidUpdateSurfaceAndScreen(
   // When the device scale changes, the size and position of the popup would
   // need to be adjusted, which we can't do. Just close the popup, which is
   // also consistent with page zoom and resize behavior.
+  ScreenInfo original_screen_info = GetOriginalScreenInfo();
   if (previous_original_screen_info.device_scale_factor !=
-      screen_info.device_scale_factor) {
+      original_screen_info.device_scale_factor) {
     View()->CancelPagePopup();
   }
 
-  // Propagate changes down to child local root RenderWidgets and BrowserPlugins
-  // in other frame trees/processes.
-  ScreenInfo original_screen_info = GetOriginalScreenInfo();
   if (previous_original_screen_info != original_screen_info) {
+    local_root_->GetFrame()->DomWindow()->screen()->DispatchEvent(
+        *Event::Create(event_type_names::kChange));
+
+    // Propagate changes down to child local root RenderWidgets and
+    // BrowserPlugins in other frame trees/processes.
     ForEachRemoteFrameControlledByWidget(WTF::BindRepeating(
         [](const ScreenInfo& original_screen_info, RemoteFrame* remote_frame) {
           remote_frame->DidChangeScreenInfo(original_screen_info);
@@ -3868,7 +3876,9 @@ void WebFrameWidgetImpl::WasShown(bool was_evicted) {
   if (was_evicted) {
     ForEachRemoteFrameControlledByWidget(
         WTF::BindRepeating([](RemoteFrame* remote_frame) {
-          remote_frame->Client()->WasEvicted();
+          // On eviction, the last SurfaceId is invalidated. We need to
+          // allocate a new id.
+          remote_frame->ResendVisualProperties();
         }));
   }
 }

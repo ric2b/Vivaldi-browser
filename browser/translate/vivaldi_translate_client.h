@@ -1,0 +1,144 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved.
+//
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef BROWSER_TRANSLATE_VIVALDI_TRANSLATE_CLIENT_H_
+#define BROWSER_TRANSLATE_VIVALDI_TRANSLATE_CLIENT_H_
+
+#include "base/feature_list.h"
+#include "base/macros.h"
+#include "build/build_config.h"
+#include "chrome/browser/ui/translate/translate_bubble_model.h"
+#include "components/language/core/browser/url_language_histogram.h"
+#include "components/translate/content/browser/content_translate_driver.h"
+#include "components/translate/content/browser/per_frame_content_translate_driver.h"
+#include "components/translate/core/browser/translate_client.h"
+#include "components/translate/core/browser/translate_step.h"
+#include "components/translate/core/common/translate_errors.h"
+#include "content/public/browser/web_contents_observer.h"
+#include "content/public/browser/web_contents_user_data.h"
+#include "extensions/buildflags/buildflags.h"
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/schema/tabs_private.h"
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+namespace content {
+class BrowserContext;
+class WebContents;
+}  // namespace content
+
+class PrefService;
+
+namespace translate {
+class LanguageState;
+class TranslateAcceptLanguages;
+class TranslatePrefs;
+class TranslateManager;
+
+struct LanguageDetectionDetails;
+}  // namespace translate
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+using extensions::vivaldi::tabs_private::TranslateError;
+using extensions::vivaldi::tabs_private::TranslateStep;
+
+TranslateStep ToVivaldiTranslateStep(translate::TranslateStep step);
+TranslateError ToVivaldiTranslateError(translate::TranslateErrors::Type error);
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+class VivaldiTranslateClient
+    : public translate::TranslateClient,
+      public translate::ContentTranslateDriver::LanguageDetectionObserver,
+      public content::WebContentsObserver,
+      public content::WebContentsUserData<VivaldiTranslateClient> {
+ public:
+  ~VivaldiTranslateClient() override;
+
+  // Gets the LanguageState associated with the page.
+  const translate::LanguageState& GetLanguageState();
+
+  // Returns the ContentTranslateDriver instance associated with this
+  // WebContents.
+  translate::ContentTranslateDriver* translate_driver();
+
+  // Returns the PerFrameContentTranslateDriver instance, if any, associated
+  // with this WebContents.
+  translate::PerFrameContentTranslateDriver* per_frame_translate_driver();
+
+  // Helper method to return a new TranslatePrefs instance.
+  static std::unique_ptr<translate::TranslatePrefs> CreateTranslatePrefs(
+      PrefService* prefs);
+
+  // Helper method to return the TranslateAcceptLanguages instance associated
+  // with |browser_context|.
+  static translate::TranslateAcceptLanguages* GetTranslateAcceptLanguages(
+      content::BrowserContext* browser_context);
+
+  // Helper method to return the TranslateManager instance associated with
+  // |web_contents|, or NULL if there is no such associated instance.
+  static translate::TranslateManager* GetManagerFromWebContents(
+      content::WebContents* web_contents);
+
+  static void LoadTranslationScript();
+  static std::string& GetTranslateScript();
+
+  // Gets |source| and |target| language for translation.
+  void GetTranslateLanguages(content::WebContents* web_contents,
+                             std::string* source,
+                             std::string* target);
+
+  // Gets the associated TranslateManager.
+  translate::TranslateManager* GetTranslateManager();
+
+  // TranslateClient implementation.
+  translate::TranslateDriver* GetTranslateDriver() override;
+  PrefService* GetPrefs() override;
+  std::unique_ptr<translate::TranslatePrefs> GetTranslatePrefs() override;
+  translate::TranslateAcceptLanguages* GetTranslateAcceptLanguages() override;
+
+  bool ShowTranslateUI(translate::TranslateStep step,
+                       const std::string& source_language,
+                       const std::string& target_language,
+                       translate::TranslateErrors::Type error_type,
+                       bool triggered_from_menu) override;
+  bool IsTranslatableURL(const GURL& url) override;
+  void ShowReportLanguageDetectionErrorUI(const GURL& report_url) override;
+
+  // TranslateDriver::LanguageDetectionObserver implementation.
+  void OnLanguageDetermined(
+      const translate::LanguageDetectionDetails& details) override;
+
+#if defined(OS_ANDROID)
+  std::unique_ptr<infobars::InfoBar> CreateInfoBar(
+      std::unique_ptr<translate::TranslateInfoBarDelegate> delegate)
+      const override;
+  int GetInfobarIconID() const override;
+
+  // Trigger a manual translation when the necessary state (e.g. source
+  // language) is ready.
+  void ManualTranslateWhenReady();
+#endif
+  void SetPredefinedTargetLanguage(const std::string& translate_language_code);
+
+  bool IsAutofillAssistantRunning() const override;
+
+ private:
+  explicit VivaldiTranslateClient(content::WebContents* web_contents);
+  friend class content::WebContentsUserData<VivaldiTranslateClient>;
+
+  // content::WebContentsObserver implementation.
+  void WebContentsDestroyed() override;
+
+  std::unique_ptr<translate::ContentTranslateDriver> translate_driver_;
+  std::unique_ptr<translate::PerFrameContentTranslateDriver>
+      per_frame_translate_driver_;
+  std::unique_ptr<translate::TranslateManager> translate_manager_;
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+
+  DISALLOW_COPY_AND_ASSIGN(VivaldiTranslateClient);
+};
+
+#endif  // BROWSER_TRANSLATE_VIVALDI_TRANSLATE_CLIENT_H_

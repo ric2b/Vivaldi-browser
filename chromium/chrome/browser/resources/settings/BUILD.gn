@@ -224,6 +224,7 @@ preprocess_if_expr("preprocess_generated") {
     "languages_page/languages_browser_proxy.m.js",
     "languages_page/add_languages_dialog.js",
     "languages_page/languages_page.js",
+    "languages_page/languages_subpage.js",
     "lifetime_browser_proxy.m.js",
     "settings_menu/settings_menu.js",
     "on_startup_page/on_startup_page.js",
@@ -344,7 +345,7 @@ preprocess_if_expr("preprocess_generated") {
   }
 }
 
-grit("settings_resources") {
+grit("resources") {
   defines = chrome_grit_defines
 
   # These arguments are needed since the grd is generated at build time.
@@ -378,14 +379,12 @@ group("closure_compile") {
   ]
 
   if (is_chromeos_ash) {
-    deps += [
-      "../../../test/data/webui/settings/chromeos:closure_compile",
-      "chromeos:closure_compile",
-    ]
+    deps += [ "../../../test/data/webui/settings/chromeos:closure_compile" ]
   }
 }
 
 js_type_check("local_resources") {
+  uses_legacy_modules = true
   deps = [
     ":extension_control_browser_proxy",
     ":global_scroll_target_behavior",

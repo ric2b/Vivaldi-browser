@@ -412,11 +412,11 @@
 <translation id="7982789257301363584">Verkko</translation>
 <translation id="7997826902155442747">Prosessien tärkeysjärjestys</translation>
 <translation id="7999229196265990314">Luotiin seuraavat tiedostot:
-        
+
 Laajennus: <ph name="EXTENSION_FILE" />
 Avaintiedosto: <ph name="KEY_FILE" />
 
-Tallenna avaintiedosto suojattuun sijaintiin. Tarvitset sitä, jos haluat luoda uusia laajennusversioita.</translation>
+Tallenna avaintiedosto suojattuun sijaintiin. Sitä tarvitaan uusien laajennusversioiden luomiseksi.</translation>
 <translation id="8004582292198964060">Selain</translation>
 <translation id="8018313076035239964">Hallitse sitä, mitä tietoja verkkosivustot voivat käyttää ja mitä sisältöjä ne voivat näyttää</translation>
 <translation id="8032244173881942855">Välilehden suoratoisto ei onnistu.</translation>

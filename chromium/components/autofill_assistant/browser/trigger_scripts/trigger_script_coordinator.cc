@@ -4,7 +4,6 @@
 
 #include "components/autofill_assistant/browser/trigger_scripts/trigger_script_coordinator.h"
 
-#include <array>
 #include <map>
 #include <string>
 
@@ -21,22 +20,6 @@
 #include "net/http/http_status_code.h"
 
 namespace {
-
-constexpr std::array<const char*, 5> kWhitelistedScriptParameters = {
-    "DEBUG_BUNDLE_ID", "DEBUG_BUNDLE_VERSION", "DEBUG_SOCKET_ID",
-    "FALLBACK_BUNDLE_ID", "FALLBACK_BUNDLE_VERSION"};
-
-std::map<std::string, std::string> ExtractDebugScriptParameters(
-    const autofill_assistant::TriggerContext& trigger_context) {
-  std::map<std::string, std::string> debug_script_parameters;
-  for (const char* parameter : kWhitelistedScriptParameters) {
-    auto value = trigger_context.GetParameter(parameter);
-    if (value) {
-      debug_script_parameters.insert({parameter, *value});
-    }
-  }
-  return debug_script_parameters;
-}
 
 bool IsDialogOnboardingEnabled() {
   return base::FeatureList::IsEnabled(
@@ -73,9 +56,10 @@ void TriggerScriptCoordinator::Start(
     const GURL& deeplink_url,
     std::unique_ptr<TriggerContext> trigger_context) {
   deeplink_url_ = deeplink_url;
-  trigger_context_ = std::make_unique<TriggerContextImpl>(
-      ExtractDebugScriptParameters(*trigger_context),
-      trigger_context->experiment_ids());
+  trigger_context_ = std::move(trigger_context);
+
+  // Note: do not call ClientContext::Update here. We can only send the version
+  // string in the ClientContext.
   ClientContextProto client_context;
   client_context.mutable_chrome()->set_chrome_version(
       version_info::GetProductNameAndVersionForUserAgent());
@@ -83,7 +67,8 @@ void TriggerScriptCoordinator::Start(
   request_sender_->SendRequest(
       get_trigger_scripts_server_,
       ProtocolUtils::CreateGetTriggerScriptsRequest(
-          deeplink_url_, client_context, trigger_context_->GetParameters()),
+          deeplink_url_, client_context,
+          trigger_context_->GetScriptParameters()),
       base::BindOnce(&TriggerScriptCoordinator::OnGetTriggerScripts,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -323,6 +308,9 @@ void TriggerScriptCoordinator::DidFinishNavigation(
     Stop(Metrics::LiteScriptFinishedState::LITE_SCRIPT_PROMPT_FAILED_NAVIGATE);
     return;
   }
+
+  dynamic_trigger_conditions_->SetURL(GetCurrentURL());
+  RunOutOfScheduleTriggerConditionCheck();
 }
 
 void TriggerScriptCoordinator::OnVisibilityChanged(
@@ -393,6 +381,7 @@ void TriggerScriptCoordinator::StartCheckingTriggerConditions() {
 }
 
 void TriggerScriptCoordinator::CheckDynamicTriggerConditions() {
+  dynamic_trigger_conditions_->SetURL(GetCurrentURL());
   dynamic_trigger_conditions_->Update(
       web_controller_.get(),
       base::BindOnce(

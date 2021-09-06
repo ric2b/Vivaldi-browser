@@ -24,6 +24,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/drag_controller.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_targeter.h"
@@ -63,6 +64,7 @@ class MouseEnterExitEvent : public ui::MouseEvent {
 // is the reason this system exists at all).
 class AnnounceTextView : public View {
  public:
+  METADATA_HEADER(AnnounceTextView);
   ~AnnounceTextView() override = default;
 
   void Announce(const base::string16& text) {
@@ -84,6 +86,9 @@ class AnnounceTextView : public View {
  private:
   base::string16 announce_text_;
 };
+
+BEGIN_METADATA(AnnounceTextView, View)
+END_METADATA
 
 // This event handler receives events in the pre-target phase and takes care of
 // the following:
@@ -465,7 +470,12 @@ void RootView::OnMouseReleased(const ui::MouseEvent& event) {
     // We allow the view to delete us from the event dispatch callback. As such,
     // configure state such that we're done first, then call View.
     View* mouse_pressed_handler = mouse_pressed_handler_;
+
+    // The gesture handler should not be reset when handling the mouse release.
+    // Otherwise, the gesture movements in progress such as the gesture scroll
+    // is interrupted.
     SetMouseHandler(nullptr);
+
     ui::EventDispatchDetails dispatch_details =
         DispatchEvent(mouse_pressed_handler, &mouse_released);
     if (dispatch_details.dispatcher_destroyed)
@@ -487,7 +497,7 @@ void RootView::OnMouseCaptureLost() {
     // configure state such that we're done first, then call View.
     View* mouse_pressed_handler = mouse_pressed_handler_;
     View* gesture_handler = gesture_handler_;
-    SetMouseHandler(nullptr);
+    SetMouseAndGestureHandler(nullptr);
     if (mouse_pressed_handler)
       mouse_pressed_handler->OnMouseCaptureLost();
     else
@@ -627,12 +637,9 @@ bool RootView::OnMouseWheel(const ui::MouseWheelEvent& event) {
   return event.handled();
 }
 
-void RootView::SetMouseHandler(View* new_mh) {
-  // If we're clearing the mouse handler, clear explicit_mouse_handler_ as well.
-  explicit_mouse_handler_ = (new_mh != nullptr);
-  mouse_pressed_handler_ = new_mh;
-  gesture_handler_ = new_mh;
-  drag_info_.Reset();
+void RootView::SetMouseAndGestureHandler(View* new_handler) {
+  SetMouseHandler(new_handler);
+  gesture_handler_ = new_handler;
 }
 
 void RootView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -748,6 +755,13 @@ ui::EventDispatchDetails RootView::NotifyEnterExitOfDescendant(
   return ui::EventDispatchDetails();
 }
 
+void RootView::SetMouseHandler(View* new_mouse_handler) {
+  // If we're clearing the mouse handler, clear explicit_mouse_handler_ as well.
+  explicit_mouse_handler_ = (new_mouse_handler != nullptr);
+  mouse_pressed_handler_ = new_mouse_handler;
+  drag_info_.Reset();
+}
+
 bool RootView::CanDispatchToTarget(ui::EventTarget* target) {
   return event_dispatch_target_ == target;
 }
@@ -779,7 +793,7 @@ ui::EventDispatchDetails RootView::PostDispatchEvent(ui::EventTarget* target,
     // In case a drag was in progress, reset all the handlers. Otherwise, just
     // reset the gesture handler.
     if (gesture_handler_ && gesture_handler_ == mouse_pressed_handler_)
-      SetMouseHandler(nullptr);
+      SetMouseAndGestureHandler(nullptr);
     else
       gesture_handler_ = nullptr;
   }

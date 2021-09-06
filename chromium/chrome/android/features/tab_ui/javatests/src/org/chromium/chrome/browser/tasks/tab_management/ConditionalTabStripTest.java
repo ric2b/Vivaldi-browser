@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static android.os.Build.VERSION_CODES.M;
-
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.longClick;
@@ -36,6 +34,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.v
 
 import android.content.Context;
 import android.os.Build;
+import android.os.Build.VERSION_CODES;
 import android.support.test.InstrumentationRegistry;
 import android.view.View;
 import android.widget.ListView;
@@ -59,6 +58,7 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.TabsTest.SimulateClickOnMainThread;
@@ -170,8 +170,10 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(sdk_is_less_than = M, message = "crbug.com/1081832")
-    public void testStrip_updateWithAddition() throws Exception {
+    @DisableIf.Build(sdk_is_less_than = VERSION_CODES.O,
+            message = "Failing or flaky on N & P, see crbug.com/1177383 & crbug.com/1081832")
+    public void
+    testStrip_updateWithAddition() throws Exception {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         verifyHidingStrip();
 
@@ -445,7 +447,10 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
-    public void testStrip_enabled_notExpired() throws Exception {
+    @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.M, sdk_is_less_than = VERSION_CODES.O,
+            message = "Failing on N, see crbug.com/1177383")
+    public void
+    testStrip_enabled_notExpired() throws Exception {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         for (int i = 0; i < 3; i++) {
             createBlankPageWithLaunchType(cta, false, TabLaunchType.FROM_CHROME_UI);
@@ -482,7 +487,7 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1094998")
+    @FlakyTest(message = "https://crbug.com/1171567")
     public void testStrip_InfoBarOptOut() throws Exception {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         for (int i = 0; i < 3; i++) {
@@ -530,7 +535,7 @@ public class ConditionalTabStripTest {
 
     @Test
     @MediumTest
-    @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/1094998")
+    @FlakyTest(message = "https://crbug.com/1169672")
     public void testStrip_InfoBarOptIn() throws Exception {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         for (int i = 0; i < 3; i++) {
@@ -694,7 +699,8 @@ public class ConditionalTabStripTest {
 
     private void createBlankPageWithLaunchType(ChromeTabbedActivity cta, boolean isIncognito,
             @TabLaunchType int type) throws ExecutionException {
-        TabCreator tabCreator = cta.getTabCreator(isIncognito);
+        TabCreator tabCreator =
+                TestThreadUtils.runOnUiThreadBlocking(() -> cta.getTabCreator(isIncognito));
         LoadUrlParams loadUrlParams = new LoadUrlParams(UrlConstants.CHROME_BLANK_URL);
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> tabCreator.createNewTab(loadUrlParams, type, null));

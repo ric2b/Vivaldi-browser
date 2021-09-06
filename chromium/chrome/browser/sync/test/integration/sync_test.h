@@ -78,9 +78,33 @@ namespace syncer {
 class ProfileSyncService;
 }  // namespace syncer
 
+namespace switches {
+
+extern const char kPasswordFileForTest[];
+extern const char kSyncUserForTest[];
+extern const char kSyncPasswordForTest[];
+
+}  // namespace switches
+
 // This is the base class for integration tests for all sync data types. Derived
 // classes must be defined for each sync data type. Individual tests are defined
 // using the IN_PROC_BROWSER_TEST_F macro.
+//
+// The list below shows some command line switches that can customize test
+// behavior. It may become non-exaustive over time.
+// switches::kSyncServiceURL - By default, tests use a fake_server::FakeServer
+//    to emulate the sync server. This switch causes them to run against an
+//    external server instead, pointed by the provided URL. This translates into
+//    the ServerType of the test being EXTERNAL_LIVE_SERVER.
+// switches::kSyncUserForTest - Overrides the username of the syncing account.
+//    Mostly useful for EXTERNAL_LIVE_SERVER tests to use an allowlisted value.
+// switches::kSyncPasswordForTest - Same as above, but for the password.
+// switches::kPasswordFileForTests - Causes the username and password of the
+//    syncing account to be read from the passed file. The username must be on
+//    the first line and the password on the second. The individual switches for
+//    username and password are ignored if this is set.
+// Other switches may modify the behavior of helper classes frequently used in
+// sync integration tests, see StatusChangeChecker for example.
 class SyncTest : public PlatformBrowserTest {
  public:
   // The different types of live sync tests that can be implemented.
@@ -335,8 +359,6 @@ class SyncTest : public PlatformBrowserTest {
   // GAIA servers.
   void SetupMockGaiaResponsesForProfile(Profile* profile);
 
-  base::test::ScopedFeatureList feature_list_;
-
   // The FakeServer used in tests with server type IN_PROCESS_FAKE_SERVER.
   std::unique_ptr<fake_server::FakeServer> fake_server_;
 
@@ -519,6 +541,9 @@ class SyncTest : public PlatformBrowserTest {
   // Indicates whether to use a new user data dir.
   // Only used for external server tests with two clients.
   bool use_new_user_data_dir_ = false;
+
+  // The feature list to override features for all sync tests.
+  base::test::ScopedFeatureList feature_list_;
 
 #if !defined(OS_ANDROID)
   // Disable extension install verification.

@@ -98,10 +98,12 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
 
   // IDL method.
   DOMTokenList* resources() const;
+  DOMTokenList* scopes() const;
 
   const HashSet<KURL>& ValidResourceUrls() const {
     return valid_resource_urls_;
   }
+  const HashSet<KURL>& ValidScopeUrls() const { return valid_scope_urls_; }
 
   void ScheduleEvent();
 
@@ -114,7 +116,8 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   void LoadStylesheet(const LinkLoadParameters&,
                       const WTF::TextEncoding&,
                       FetchParameters::DeferOption,
-                      ResourceClient*);
+                      ResourceClient*,
+                      RenderBlockingBehavior render_blocking);
   bool IsAlternate() const {
     // TODO(crbug.com/1087043): Remove this if() condition once the feature has
     // landed and no compat issues are reported.
@@ -178,6 +181,8 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   LinkRelAttribute rel_attribute_;
   Member<DOMTokenList> resources_;
   HashSet<KURL> valid_resource_urls_;
+  Member<DOMTokenList> scopes_;
+  HashSet<KURL> valid_scope_urls_;
 
   bool created_by_parser_;
 };

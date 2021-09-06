@@ -33,7 +33,7 @@
 #include "content/public/browser/storage_partition.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #else
 #include "chrome/browser/signin/signin_util.h"
 #endif
@@ -244,6 +244,21 @@ void ChildAccountService::SetIsChildAccount(bool is_child_account) {
   for (auto& callback : status_received_callback_list_)
     std::move(callback).Run();
   status_received_callback_list_.clear();
+}
+
+void ChildAccountService::OnPrimaryAccountChanged(
+    const signin::PrimaryAccountChangeEvent& event_details) {
+  if (event_details.GetEventTypeFor(signin::ConsentLevel::kNotRequired) ==
+      signin::PrimaryAccountChangeEvent::Type::kSet) {
+    auto account_info =
+        identity_manager_->FindExtendedAccountInfoForAccountWithRefreshToken(
+            event_details.GetCurrentState().primary_account);
+    if (account_info.has_value()) {
+      OnExtendedAccountInfoUpdated(account_info.value());
+    }
+    // Otherwise OnExtendedAccountInfoUpdated will be notified once
+    // the account info is available.
+  }
 }
 
 void ChildAccountService::OnExtendedAccountInfoUpdated(

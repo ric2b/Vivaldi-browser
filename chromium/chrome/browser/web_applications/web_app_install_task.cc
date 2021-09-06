@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
@@ -187,6 +188,9 @@ void WebAppInstallTask::LoadAndInstallWebAppFromManifestWithFallback(
   CheckInstallPreconditions();
 
   Observe(contents);
+  if (ShouldStopInstall())
+    return;
+
   background_installation_ = true;
   install_callback_ = std::move(install_callback);
   install_source_ = install_source;
@@ -272,6 +276,9 @@ void WebAppInstallTask::UpdateWebAppFromInfo(
     InstallManager::OnceInstallCallback callback) {
   CheckInstallPreconditions();
   Observe(web_contents);
+  if (ShouldStopInstall())
+    return;
+
   install_callback_ = std::move(callback);
   background_installation_ = true;
 
@@ -432,6 +439,7 @@ void WebAppInstallTask::OnWebAppUrlLoadedCheckAndRetrieveManifest(
 
 void WebAppInstallTask::OnWebAppInstallabilityChecked(
     base::Optional<blink::Manifest> manifest,
+    const GURL& manifest_url,
     bool valid_manifest_for_web_app,
     bool is_installable) {
   if (ShouldStopInstall())
@@ -506,6 +514,7 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
     std::unique_ptr<WebApplicationInfo> web_app_info,
     bool force_shortcut_app,
     base::Optional<blink::Manifest> manifest,
+    const GURL& manifest_url,
     bool valid_manifest_for_web_app,
     bool is_installable) {
   if (ShouldStopInstall())
@@ -527,7 +536,7 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
                                         : ForInstallableSite::kNo;
 
   if (manifest)
-    UpdateWebAppInfoFromManifest(*manifest, web_app_info.get());
+    UpdateWebAppInfoFromManifest(*manifest, manifest_url, web_app_info.get());
 
   AppId app_id = GenerateAppIdFromURL(web_app_info->start_url);
 
@@ -655,6 +664,9 @@ void WebAppInstallTask::InstallWebAppFromInfoRetrieveIcons(
   CheckInstallPreconditions();
 
   Observe(web_contents);
+  if (ShouldStopInstall())
+    return;
+
   install_callback_ = std::move(callback);
   install_source_ = finalize_options.install_source;
   background_installation_ = true;
@@ -832,6 +844,12 @@ void WebAppInstallTask::OnInstallFinalizedCreateShortcuts(
   options.os_hooks[OsHookType::kFileHandlers] = true;
   options.os_hooks[OsHookType::kProtocolHandlers] = true;
   options.os_hooks[OsHookType::kUninstallationViaOsSettings] = true;
+#if defined(OS_WIN) || defined(OS_MAC) || \
+    (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
+  options.os_hooks[web_app::OsHookType::kUrlHandlers] = true;
+#else
+  options.os_hooks[web_app::OsHookType::kUrlHandlers] = false;
+#endif
 
   if (install_source_ == webapps::WebappInstallSource::SYNC)
     options.add_to_quick_launch_bar = false;

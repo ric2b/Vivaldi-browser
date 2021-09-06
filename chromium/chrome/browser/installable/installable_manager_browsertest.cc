@@ -139,8 +139,7 @@ class CallbackTester {
   void OnDidFinishInstallableCheck(const InstallableData& data) {
     errors_ = data.errors;
     manifest_url_ = data.manifest_url;
-    if (data.manifest)
-      manifest_ = *data.manifest;
+    manifest_ = data.manifest;
     primary_icon_url_ = data.primary_icon_url;
     if (data.primary_icon)
       primary_icon_.reset(new SkBitmap(*data.primary_icon));
@@ -196,7 +195,7 @@ class NestedCallbackTester {
   void OnDidFinishFirstCheck(const InstallableData& data) {
     errors_ = data.errors;
     manifest_url_ = data.manifest_url;
-    manifest_ = *data.manifest;
+    manifest_ = data.manifest;
     primary_icon_url_ = data.primary_icon_url;
     if (data.primary_icon)
       primary_icon_.reset(new SkBitmap(*data.primary_icon));
@@ -215,12 +214,12 @@ class NestedCallbackTester {
     EXPECT_EQ(primary_icon_.get(), data.primary_icon);
     EXPECT_EQ(valid_manifest_, data.valid_manifest);
     EXPECT_EQ(has_worker_, data.has_worker);
-    EXPECT_EQ(manifest_.IsEmpty(), data.manifest->IsEmpty());
-    EXPECT_EQ(manifest_.start_url, data.manifest->start_url);
-    EXPECT_EQ(manifest_.display, data.manifest->display);
-    EXPECT_EQ(manifest_.name, data.manifest->name);
-    EXPECT_EQ(manifest_.short_name, data.manifest->short_name);
-    EXPECT_EQ(manifest_.display_override, data.manifest->display_override);
+    EXPECT_EQ(manifest_.IsEmpty(), data.manifest.IsEmpty());
+    EXPECT_EQ(manifest_.start_url, data.manifest.start_url);
+    EXPECT_EQ(manifest_.display, data.manifest.display);
+    EXPECT_EQ(manifest_.name, data.manifest.name);
+    EXPECT_EQ(manifest_.short_name, data.manifest.short_name);
+    EXPECT_EQ(manifest_.display_override, data.manifest.display_override);
 
     std::move(quit_closure_).Run();
   }
@@ -343,6 +342,11 @@ class InstallableManagerOfflineCapabilityBrowserTest
 
   bool IsServiceWorkerOfflineSupported() {
     return is_service_worker_offline_supported_;
+  }
+
+  bool IsCheckOfflineCapableFeatureEnabled() {
+    return offline_capability_type_ == CheckOfflineCapabilityMode::WARN_ONLY ||
+           offline_capability_type_ == CheckOfflineCapabilityMode::ENFORCE;
   }
 
   // Check the result of `tester` depending on whether or not a service worker
@@ -1680,7 +1684,7 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest, DebugModeWithNoManifest) {
             tester->errors());
 }
 
-IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
+IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
                        DebugModeAccumulatesErrorsWithManifest) {
   base::RunLoop run_loop;
   std::unique_ptr<CallbackTester> tester(
@@ -1693,11 +1697,20 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
                                        "/banners/play_app_manifest.json"));
   run_loop.Run();
 
-  EXPECT_EQ(std::vector<InstallableStatusCode>(
-                {START_URL_NOT_VALID, MANIFEST_MISSING_NAME_OR_SHORT_NAME,
-                 MANIFEST_DISPLAY_NOT_SUPPORTED, MANIFEST_MISSING_SUITABLE_ICON,
-                 NO_URL_FOR_SERVICE_WORKER, NO_ACCEPTABLE_ICON}),
-            tester->errors());
+  if (IsCheckOfflineCapableFeatureEnabled()) {
+    EXPECT_EQ(
+        std::vector<InstallableStatusCode>(
+            {START_URL_NOT_VALID, MANIFEST_MISSING_NAME_OR_SHORT_NAME,
+             MANIFEST_DISPLAY_NOT_SUPPORTED, MANIFEST_MISSING_SUITABLE_ICON,
+             NO_URL_FOR_SERVICE_WORKER, NO_ACCEPTABLE_ICON}),
+        tester->errors());
+  } else {
+    EXPECT_EQ(std::vector<InstallableStatusCode>(
+                  {START_URL_NOT_VALID, MANIFEST_MISSING_NAME_OR_SHORT_NAME,
+                   MANIFEST_DISPLAY_NOT_SUPPORTED,
+                   MANIFEST_MISSING_SUITABLE_ICON, NO_ACCEPTABLE_ICON}),
+              tester->errors());
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
@@ -1746,18 +1759,30 @@ IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
                 browser(), "/banners/no_manifest_test_page.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(InstallableManagerBrowserTest,
+IN_PROC_BROWSER_TEST_P(InstallableManagerOfflineCapabilityBrowserTest,
                        GetAllInstallabilityErrorsWithPlayAppManifest) {
-  EXPECT_EQ(std::vector<content::InstallabilityError>(
-                {GetInstallabilityError(START_URL_NOT_VALID),
-                 GetInstallabilityError(MANIFEST_MISSING_NAME_OR_SHORT_NAME),
-                 GetInstallabilityError(MANIFEST_DISPLAY_NOT_SUPPORTED),
-                 GetInstallabilityError(MANIFEST_MISSING_SUITABLE_ICON),
-                 GetInstallabilityError(NO_URL_FOR_SERVICE_WORKER),
-                 GetInstallabilityError(NO_ACCEPTABLE_ICON)}),
-            NavigateAndGetAllInstallabilityErrors(
-                browser(), GetURLOfPageWithServiceWorkerAndManifest(
-                               "/banners/play_app_manifest.json")));
+  if (IsCheckOfflineCapableFeatureEnabled()) {
+    EXPECT_EQ(std::vector<content::InstallabilityError>(
+                  {GetInstallabilityError(START_URL_NOT_VALID),
+                   GetInstallabilityError(MANIFEST_MISSING_NAME_OR_SHORT_NAME),
+                   GetInstallabilityError(MANIFEST_DISPLAY_NOT_SUPPORTED),
+                   GetInstallabilityError(MANIFEST_MISSING_SUITABLE_ICON),
+                   GetInstallabilityError(NO_URL_FOR_SERVICE_WORKER),
+                   GetInstallabilityError(NO_ACCEPTABLE_ICON)}),
+              NavigateAndGetAllInstallabilityErrors(
+                  browser(), GetURLOfPageWithServiceWorkerAndManifest(
+                                 "/banners/play_app_manifest.json")));
+  } else {
+    EXPECT_EQ(std::vector<content::InstallabilityError>(
+                  {GetInstallabilityError(START_URL_NOT_VALID),
+                   GetInstallabilityError(MANIFEST_MISSING_NAME_OR_SHORT_NAME),
+                   GetInstallabilityError(MANIFEST_DISPLAY_NOT_SUPPORTED),
+                   GetInstallabilityError(MANIFEST_MISSING_SUITABLE_ICON),
+                   GetInstallabilityError(NO_ACCEPTABLE_ICON)}),
+              NavigateAndGetAllInstallabilityErrors(
+                  browser(), GetURLOfPageWithServiceWorkerAndManifest(
+                                 "/banners/play_app_manifest.json")));
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(InstallableManagerAllowlistOriginBrowserTest,

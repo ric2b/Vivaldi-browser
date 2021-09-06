@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "ash/components/audio/cras_audio_handler.h"
 #include "ash/public/cpp/multi_user_window_manager_observer.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -21,9 +22,7 @@
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_common.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
-#include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -142,6 +141,8 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void OnWidgetBoundsChanged(views::Widget* widget,
                              const gfx::Rect& new_bounds) override;
 
+  // TODO (crbug.com/1168114): remove whole observer hierarchy, it is not needed
+  // anymore.
   // ash::MultiUserWindowManagerObserver:
   void OnUserSwitchAnimationFinished() override;
 
@@ -151,7 +152,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
     RESTORE_UNKNOWN,
     RESTORE_WIZARD,
     RESTORE_SIGN_IN,
-    RESTORE_ADD_USER_INTO_SESSION,
   };
 
   // Type of animations to run after the login screen.
@@ -160,8 +160,6 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
     ANIMATION_WORKSPACE,  // Use initial workspace animation (drop and
                           // and fade in workspace). Used for user login.
     ANIMATION_FADE_OUT,   // Fade out login screen. Used for app launch.
-    ANIMATION_ADD_USER,   // Use UserSwitchAnimatorChromeOS animation when
-                          // adding a user into multi-profile session.
   };
 
   // Schedules workspace transition animation.

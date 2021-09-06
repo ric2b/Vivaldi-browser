@@ -49,6 +49,7 @@
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "build/build_config.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/cdm/browser/cdm_message_filter_android.h"
@@ -136,8 +137,7 @@ const uint32_t kAwContentsMessageFilteredClasses[] = {FrameMsgStart};
 // methods on IO thread.
 class AwContentsMessageFilter
     : public content::BrowserMessageFilter,
-      public content::BrowserAssociatedInterface<mojom::RenderMessageFilter>,
-      public mojom::RenderMessageFilter {
+      public content::BrowserAssociatedInterface<mojom::RenderMessageFilter> {
  public:
   explicit AwContentsMessageFilter(int process_id);
 
@@ -160,8 +160,7 @@ AwContentsMessageFilter::AwContentsMessageFilter(int process_id)
     : content::BrowserMessageFilter(
           kAwContentsMessageFilteredClasses,
           base::size(kAwContentsMessageFilteredClasses)),
-      content::BrowserAssociatedInterface<mojom::RenderMessageFilter>(this,
-                                                                      this),
+      content::BrowserAssociatedInterface<mojom::RenderMessageFilter>(this),
       process_id_(process_id) {}
 
 AwContentsMessageFilter::~AwContentsMessageFilter() = default;
@@ -268,7 +267,8 @@ void AwContentBrowserClient::ConfigureNetworkContextParams(
     bool in_memory,
     const base::FilePath& relative_partition_path,
     network::mojom::NetworkContextParams* network_context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+    cert_verifier::mojom::CertVerifierCreationParams*
+        cert_verifier_creation_params) {
   DCHECK(context);
 
   content::GetNetworkService()->ConfigureHttpAuthPrefs(
@@ -568,10 +568,9 @@ void AwContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 }
 
 void AwContentBrowserClient::OverrideWebkitPrefs(
-    content::RenderViewHost* rvh,
+    content::WebContents* web_contents,
     blink::web_pref::WebPreferences* web_prefs) {
-  AwSettings* aw_settings = AwSettings::FromWebContents(
-      content::WebContents::FromRenderViewHost(rvh));
+  AwSettings* aw_settings = AwSettings::FromWebContents(web_contents);
   if (aw_settings) {
     aw_settings->PopulateWebPreferences(web_prefs);
   }
@@ -768,8 +767,12 @@ bool AwContentBrowserClient::ShouldOverrideUrlLoading(
       url, has_user_gesture, is_redirect, is_main_frame, ignore_navigation);
 }
 
-bool AwContentBrowserClient::ShouldCreateThreadPool() {
-  return g_should_create_thread_pool;
+bool AwContentBrowserClient::CreateThreadPool(base::StringPiece name) {
+  if (g_should_create_thread_pool) {
+    base::ThreadPoolInstance::Create(name);
+    return true;
+  }
+  return false;
 }
 
 std::unique_ptr<content::LoginDelegate>

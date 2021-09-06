@@ -45,13 +45,12 @@ class SigninScreenHandlerDelegate;
 class OobeUI : public ui::MojoWebUIController {
  public:
   // List of known types of OobeUI. Type added as path in chrome://oobe url, for
-  // example chrome://oobe/user-adding.
+  // example chrome://oobe/login.
   static const char kAppLaunchSplashDisplay[];
   static const char kGaiaSigninDisplay[];
   static const char kLockDisplay[];
   static const char kLoginDisplay[];
   static const char kOobeDisplay[];
-  static const char kUserAddingDisplay[];
 
   class Observer {
    public:
@@ -221,5 +220,10 @@ class OobeUI : public ui::MojoWebUIController {
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove when moved to ash.
+namespace ash {
+using ::chromeos::OobeUI;
+}
 
 #endif  // CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_OOBE_UI_H_

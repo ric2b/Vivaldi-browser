@@ -214,6 +214,10 @@ std::string ATAudioDecoder::GetDisplayName() const {
   return "ATAudioDecoder";
 }
 
+AudioDecoderType ATAudioDecoder::GetDecoderType() const {
+  return AudioDecoderType::kDecrypting;
+}
+
 void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                 CdmContext* cdm_context,
                                 InitCB init_cb,

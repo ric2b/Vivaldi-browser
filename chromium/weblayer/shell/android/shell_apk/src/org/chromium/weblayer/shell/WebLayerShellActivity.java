@@ -47,12 +47,12 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentTransaction;
 
-import org.chromium.base.CommandLine;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.compat.ApiHelperForR;
 import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.BrowsingDataType;
 import org.chromium.weblayer.ContextMenuParams;
+import org.chromium.weblayer.DarkModeStrategy;
 import org.chromium.weblayer.ErrorPageCallback;
 import org.chromium.weblayer.FaviconCallback;
 import org.chromium.weblayer.FaviconFetcher;
@@ -73,6 +73,7 @@ import org.chromium.weblayer.UrlBarOptions;
 import org.chromium.weblayer.UserIdentityCallback;
 import org.chromium.weblayer.WebLayer;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -92,6 +93,7 @@ public class WebLayerShellActivity extends AppCompatActivity {
     }
 
     private static final String NON_INCOGNITO_PROFILE_NAME = "DefaultProfile";
+    private static final String EXTRA_START_IN_INCOGNITO = "EXTRA_START_IN_INCOGNITO";
 
     private static class ContextMenuCreator
             implements View.OnCreateContextMenuListener, MenuItem.OnMenuItemClickListener {
@@ -257,12 +259,15 @@ public class WebLayerShellActivity extends AppCompatActivity {
     private boolean mSetDarkMode;
     private boolean mInIncognitoMode;
     private boolean mEnableAltTopView;
+    private int mDarkModeStrategy = R.id.dark_mode_web_theme;
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         mSetDarkMode = AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES;
+        mInIncognitoMode = getIntent().getBooleanExtra(EXTRA_START_IN_INCOGNITO, false);
+
         setContentView(R.layout.main);
         TextView versionText = (TextView) findViewById(R.id.version_text);
         versionText.setText(getString(
@@ -307,6 +312,8 @@ public class WebLayerShellActivity extends AppCompatActivity {
         popup.getMenu()
                 .findItem(R.id.translate_menu_id)
                 .setVisible(mBrowser.getActiveTab().canTranslate());
+        popup.getMenu().findItem(R.id.enable_incognito_menu_id).setVisible(!mInIncognitoMode);
+        popup.getMenu().findItem(R.id.disable_incognito_menu_id).setVisible(mInIncognitoMode);
         boolean isDesktopUserAgent = mBrowser.getActiveTab().isDesktopUserAgentEnabled();
         popup.getMenu().findItem(R.id.desktop_site_menu_id).setVisible(!isDesktopUserAgent);
         popup.getMenu().findItem(R.id.no_desktop_site_menu_id).setVisible(isDesktopUserAgent);
@@ -355,22 +362,49 @@ public class WebLayerShellActivity extends AppCompatActivity {
                                          Toast.LENGTH_SHORT)
                                     .show();
                         });
+                return true;
+            }
+
+            if (item.getItemId() == R.id.enable_incognito_menu_id) {
+                restartShell(true);
+                return true;
+            }
+
+            if (item.getItemId() == R.id.disable_incognito_menu_id) {
+                restartShell(false);
+                return true;
             }
 
             if (item.getItemId() == R.id.desktop_site_menu_id) {
                 mBrowser.getActiveTab().setDesktopUserAgentEnabled(true);
+                return true;
             }
 
             if (item.getItemId() == R.id.no_desktop_site_menu_id) {
                 mBrowser.getActiveTab().setDesktopUserAgentEnabled(false);
+                return true;
             }
 
             if (item.getItemId() == R.id.set_translate_target_lang_menu_id) {
                 mBrowser.getActiveTab().setTranslateTargetLanguage("de");
+                return true;
             }
 
             if (item.getItemId() == R.id.clear_translate_target_lang_menu_id) {
                 mBrowser.getActiveTab().setTranslateTargetLanguage("");
+                return true;
+            }
+
+            if (item.getItemId() == R.id.add_to_homescreen) {
+                try {
+                    // Since the API is still experimental, it's private.
+                    Method addToHomescreen = Tab.class.getDeclaredMethod("addToHomescreen");
+                    addToHomescreen.setAccessible(true);
+                    addToHomescreen.invoke(mBrowser.getActiveTab());
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to start addToHomescreen", e);
+                }
+                return true;
             }
 
             return false;
@@ -394,6 +428,7 @@ public class WebLayerShellActivity extends AppCompatActivity {
                 .findItem(R.id.toggle_controls_animations_id)
                 .setChecked(mAnimateControlsChanges);
         popup.getMenu().findItem(R.id.toggle_dark_mode).setChecked(mSetDarkMode);
+        popup.getMenu().findItem(mDarkModeStrategy).setChecked(true);
 
         popup.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.toggle_top_view_id) {
@@ -439,6 +474,25 @@ public class WebLayerShellActivity extends AppCompatActivity {
             if (item.getItemId() == R.id.toggle_dark_mode) {
                 mSetDarkMode = !mSetDarkMode;
                 setDarkMode(mSetDarkMode);
+                return true;
+            }
+
+            if (item.getItemId() == R.id.dark_mode_web_theme) {
+                mDarkModeStrategy = R.id.dark_mode_web_theme;
+                mBrowser.setDarkModeStrategy(DarkModeStrategy.WEB_THEME_DARKENING_ONLY);
+                return true;
+            }
+
+            if (item.getItemId() == R.id.dark_mode_user_agent) {
+                mDarkModeStrategy = R.id.dark_mode_user_agent;
+                mBrowser.setDarkModeStrategy(DarkModeStrategy.USER_AGENT_DARKENING_ONLY);
+                return true;
+            }
+
+            if (item.getItemId() == R.id.dark_mode_prefer_web_theme) {
+                mDarkModeStrategy = R.id.dark_mode_prefer_web_theme;
+                mBrowser.setDarkModeStrategy(
+                        DarkModeStrategy.PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING);
                 return true;
             }
 
@@ -515,8 +569,11 @@ public class WebLayerShellActivity extends AppCompatActivity {
                 // Simulate a delayed load.
                 final Handler handler = new Handler(Looper.getMainLooper());
                 handler.postDelayed(() -> {
-                    avatarLoadedCallback.onReceiveValue(BitmapFactory.decodeResource(
-                            getApplicationContext().getResources(), R.drawable.avatar_sunglasses));
+                    Bitmap bitmap = BitmapFactory.decodeResource(
+                            getApplicationContext().getResources(), R.drawable.avatar_sunglasses);
+                    // Curveball: set an arbitrary density.
+                    bitmap.setDensity(120);
+                    avatarLoadedCallback.onReceiveValue(bitmap);
                 }, 3000);
             }
         });
@@ -719,11 +776,6 @@ public class WebLayerShellActivity extends AppCompatActivity {
             }
         }
 
-        if (CommandLine.isInitialized()
-                && CommandLine.getInstance().hasSwitch("start-in-incognito")) {
-            mInIncognitoMode = true;
-        }
-
         String profileName = mInIncognitoMode ? null : NON_INCOGNITO_PROFILE_NAME;
 
         Fragment fragment = WebLayer.createBrowserFragment(profileName);
@@ -803,6 +855,18 @@ public class WebLayerShellActivity extends AppCompatActivity {
             }
         }
         super.onBackPressed();
+    }
+
+    @SuppressWarnings("checkstyle:SystemExitCheck") // Allowed since this shouldn't be a crash.
+    private void restartShell(boolean enableIncognito) {
+        finish();
+
+        Intent intent = new Intent();
+        intent.setClassName(getPackageName(), getClass().getName());
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(EXTRA_START_IN_INCOGNITO, enableIncognito);
+        startActivity(intent);
+        System.exit(0);
     }
 
     private void updateFavicon(@NonNull Tab tab) {

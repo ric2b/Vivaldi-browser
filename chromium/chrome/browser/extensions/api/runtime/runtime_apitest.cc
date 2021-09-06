@@ -36,20 +36,15 @@ class RuntimeApiTest : public ExtensionApiTest,
   RuntimeApiTest(const RuntimeApiTest&) = delete;
   RuntimeApiTest& operator=(const RuntimeApiTest&) = delete;
 
-  const Extension* LoadExtensionWithParamFlag(const base::FilePath& path) {
-    int flags = kFlagEnableFileAccess;
-    if (GetParam() == ContextType::kServiceWorker)
-      flags |= ExtensionBrowserTest::kFlagRunAsServiceWorkerBasedExtension;
-
-    return LoadExtensionWithFlags(path, flags);
+  const Extension* LoadExtensionWithParamOptions(const base::FilePath& path) {
+    return LoadExtension(path, {.load_as_service_worker =
+                                    GetParam() == ContextType::kServiceWorker});
   }
 
-  bool RunTestWithParamFlag(const std::string& extension_name) {
-    int flags = kFlagEnableFileAccess;
-    if (GetParam() == ContextType::kServiceWorker)
-      flags |= ExtensionBrowserTest::kFlagRunAsServiceWorkerBasedExtension;
-
-    return RunExtensionTestWithFlags(extension_name, flags, kFlagNone);
+  bool RunTestWithParamOptions(const char* extension_name) {
+    return RunExtensionTest(
+        {.name = extension_name},
+        {.load_as_service_worker = GetParam() == ContextType::kServiceWorker});
   }
 };
 
@@ -63,7 +58,7 @@ INSTANTIATE_TEST_SUITE_P(ServiceWorker,
 
 // Tests the privileged components of chrome.runtime.
 IN_PROC_BROWSER_TEST_P(RuntimeApiTest, ChromeRuntimePrivileged) {
-  ASSERT_TRUE(RunTestWithParamFlag("runtime/privileged")) << message_;
+  ASSERT_TRUE(RunTestWithParamOptions("runtime/privileged")) << message_;
 }
 
 // Tests the unprivileged components of chrome.runtime.
@@ -93,15 +88,15 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest, ChromeRuntimeUninstallURL) {
       extensions::ScopedTestDialogAutoConfirm::ACCEPT);
   ExtensionTestMessageListener ready_listener("ready", false);
   ASSERT_TRUE(
-      LoadExtensionWithParamFlag(test_data_dir_.AppendASCII("runtime")
-                                     .AppendASCII("uninstall_url")
-                                     .AppendASCII("sets_uninstall_url")));
+      LoadExtensionWithParamOptions(test_data_dir_.AppendASCII("runtime")
+                                        .AppendASCII("uninstall_url")
+                                        .AppendASCII("sets_uninstall_url")));
   EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
-  ASSERT_TRUE(RunTestWithParamFlag("runtime/uninstall_url")) << message_;
+  ASSERT_TRUE(RunTestWithParamOptions("runtime/uninstall_url")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_P(RuntimeApiTest, GetPlatformInfo) {
-  ASSERT_TRUE(RunTestWithParamFlag("runtime/get_platform_info")) << message_;
+  ASSERT_TRUE(RunTestWithParamOptions("runtime/get_platform_info")) << message_;
 }
 
 namespace {
@@ -340,9 +335,9 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest,
   ExtensionTestMessageListener ready_listener("ready", false);
   // Load an extension that has set an uninstall url.
   scoped_refptr<const extensions::Extension> extension =
-      LoadExtensionWithParamFlag(test_data_dir_.AppendASCII("runtime")
-                                     .AppendASCII("uninstall_url")
-                                     .AppendASCII("sets_uninstall_url"));
+      LoadExtensionWithParamOptions(test_data_dir_.AppendASCII("runtime")
+                                        .AppendASCII("uninstall_url")
+                                        .AppendASCII("sets_uninstall_url"));
   EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
   ASSERT_TRUE(extension.get());
   extension_service()->AddExtension(extension.get());
@@ -366,9 +361,9 @@ IN_PROC_BROWSER_TEST_P(RuntimeApiTest,
   // Load the same extension again, except blocklist it after installation.
   ExtensionTestMessageListener ready_listener_reload("ready", false);
   extension =
-      LoadExtensionWithParamFlag(test_data_dir_.AppendASCII("runtime")
-                                     .AppendASCII("uninstall_url")
-                                     .AppendASCII("sets_uninstall_url"));
+      LoadExtensionWithParamOptions(test_data_dir_.AppendASCII("runtime")
+                                        .AppendASCII("uninstall_url")
+                                        .AppendASCII("sets_uninstall_url"));
   EXPECT_TRUE(ready_listener_reload.WaitUntilSatisfied());
   extension_service()->AddExtension(extension.get());
   ASSERT_TRUE(extension_service()->IsExtensionEnabled(extension->id()));

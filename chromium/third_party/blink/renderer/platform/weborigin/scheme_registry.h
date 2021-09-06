@@ -51,8 +51,6 @@ class PLATFORM_EXPORT SchemeRegistry {
  public:
   static bool ShouldTreatURLSchemeAsRestrictingMixedContent(const String&);
 
-  static bool ShouldTreatURLSchemeAsNoAccess(const String&);
-
   // Display-isolated schemes can only be displayed (in the sense of
   // SecurityOrigin::canDisplay) by documents from the same scheme.
   static void RegisterURLSchemeAsDisplayIsolated(const String&);
@@ -97,9 +95,6 @@ class PLATFORM_EXPORT SchemeRegistry {
   // HTTP-like schemes that are treated as supporting the Fetch API.
   static void RegisterURLSchemeAsSupportingFetchAPI(const String& scheme);
   static bool ShouldTreatURLSchemeAsSupportingFetchAPI(const String& scheme);
-
-  // https://fetch.spec.whatwg.org/#fetch-scheme
-  static bool IsFetchScheme(const String& scheme);
 
   // https://url.spec.whatwg.org/#special-scheme
   static bool IsSpecialScheme(const String& scheme);

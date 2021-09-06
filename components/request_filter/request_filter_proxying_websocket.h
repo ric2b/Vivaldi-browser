@@ -38,7 +38,7 @@ namespace vivaldi {
 class RequestFilterProxyingWebSocket
     : public RequestFilterManager::Proxy,
       public network::mojom::WebSocketHandshakeClient,
-      public network::mojom::AuthenticationHandler,
+      public network::mojom::WebSocketAuthenticationHandler,
       public network::mojom::TrustedHeaderClient {
  public:
   using WebSocketFactory = content::ContentBrowserClient::WebSocketFactory;
@@ -49,7 +49,7 @@ class RequestFilterProxyingWebSocket
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
           handshake_client,
-      mojo::PendingRemote<network::mojom::AuthenticationHandler>
+      mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
           authentication_handler,
       mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client,
       bool has_extra_headers,
@@ -74,7 +74,7 @@ class RequestFilterProxyingWebSocket
       mojo::ScopedDataPipeConsumerHandle readable,
       mojo::ScopedDataPipeProducerHandle writable) override;
 
-  // network::mojom::AuthenticationHandler method:
+  // network::mojom::WebSocketAuthenticationHandler method:
   void OnAuthRequired(const net::AuthChallengeInfo& auth_info,
                       const scoped_refptr<net::HttpResponseHeaders>& headers,
                       const net::IPEndPoint& remote_endpoint,
@@ -95,7 +95,7 @@ class RequestFilterProxyingWebSocket
       std::vector<network::mojom::HttpHeaderPtr> additional_headers,
       mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
           handshake_client,
-      mojo::PendingRemote<network::mojom::AuthenticationHandler>
+      mojo::PendingRemote<network::mojom::WebSocketAuthenticationHandler>
           authentication_handler,
       mojo::PendingRemote<network::mojom::TrustedHeaderClient> header_client,
       bool has_extra_headers,
@@ -136,9 +136,9 @@ class RequestFilterProxyingWebSocket
       forwarding_handshake_client_;
   mojo::Receiver<network::mojom::WebSocketHandshakeClient>
       receiver_as_handshake_client_{this};
-  mojo::Remote<network::mojom::AuthenticationHandler>
+  mojo::Remote<network::mojom::WebSocketAuthenticationHandler>
       forwarding_authentication_handler_;
-  mojo::Receiver<network::mojom::AuthenticationHandler>
+  mojo::Receiver<network::mojom::WebSocketAuthenticationHandler>
       receiver_as_auth_handler_{this};
   mojo::Remote<network::mojom::TrustedHeaderClient> forwarding_header_client_;
   mojo::Receiver<network::mojom::TrustedHeaderClient>

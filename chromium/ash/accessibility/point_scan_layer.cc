@@ -30,73 +30,46 @@ display::Display GetPrimaryDisplay() {
 }
 }  // namespace
 
-PointScanLayer::PointScanLayer(AccessibilityLayerDelegate* delegate)
-    : AccessibilityLayer(delegate) {
+PointScanLayer::PointScanLayer(AccessibilityLayerDelegate* delegate,
+                               PointScanLayer::Orientation orientation,
+                               PointScanLayer::Type type)
+    : AccessibilityLayer(delegate), orientation_(orientation), type_(type) {
   aura::Window* root_window =
       Shell::GetRootWindowForDisplayId(GetPrimaryDisplay().id());
   CreateOrUpdateLayer(root_window, "PointScanning", gfx::Rect(),
                       /*stack_at_top=*/true);
   SetOpacity(1.0);
-  bounds_ = GetPrimaryDisplay().bounds();
-  layer()->SetBounds(bounds_);
+  layer()->SetBounds(GetPrimaryDisplay().bounds());
 }
 
-void PointScanLayer::StartHorizontalRangeScanning() {
-  is_range_scan_ = true;
-  gfx::Point start(kDefaultPaddingDips, 0);
-  gfx::Point end(bounds_.bottom_left().x() + kDefaultPaddingDips,
-                 bounds_.bottom_left().y());
-  line_.start = start;
-  line_.end = end;
-  is_moving_ = true;
-  is_horizontal_range_ = true;
-}
+void PointScanLayer::Start() {
+  gfx::Point start;
+  gfx::Point end;
 
-void PointScanLayer::StartHorizontalScanning() {
-  is_range_scan_ = false;
-  gfx::Point end = bounds_.bottom_left();
-  bounds_.set_origin(line_.start);
-  line_.end = end;
-  is_moving_ = true;
-  is_horizontal_range_ = false;
-}
+  // Set the end point, based on the orientation.
+  if (orientation_ == PointScanLayer::Orientation::HORIZONTAL)
+    end = bounds().bottom_left();
+  else if (orientation_ == PointScanLayer::Orientation::VERTICAL)
+    end = bounds().top_right();
 
-void PointScanLayer::StartVerticalRangeScanning() {
-  is_range_scan_ = true;
-  gfx::Point start(0, kDefaultPaddingDips);
-  gfx::Point end(bounds_.top_right().x(),
-                 bounds_.top_right().y() + kDefaultPaddingDips);
+  // Ranges need to offset |line_| by the range width.
+  if (type_ == PointScanLayer::Type::RANGE) {
+    if (orientation_ == PointScanLayer::Orientation::HORIZONTAL) {
+      start.Offset(kDefaultPaddingDips, 0);
+      end.Offset(kDefaultPaddingDips, 0);
+    } else if (orientation_ == PointScanLayer::Orientation::VERTICAL) {
+      start.Offset(0, kDefaultPaddingDips);
+      end.Offset(0, kDefaultPaddingDips);
+    }
+  }
+
   line_.start = start;
   line_.end = end;
   is_moving_ = true;
 }
 
-void PointScanLayer::StartVerticalScanning() {
-  is_range_scan_ = false;
-  gfx::Point end = bounds_.top_right();
-  bounds_.set_origin(line_.start);
-  line_.end = end;
-  is_moving_ = true;
-}
-
-void PointScanLayer::PauseHorizontalRangeScanning() {
+void PointScanLayer::Pause() {
   is_moving_ = false;
-}
-
-void PointScanLayer::PauseHorizontalScanning() {
-  is_moving_ = false;
-}
-
-void PointScanLayer::PauseVerticalRangeScanning() {
-  is_moving_ = false;
-}
-
-void PointScanLayer::PauseVerticalScanning() {
-  is_moving_ = false;
-}
-
-gfx::Rect PointScanLayer::GetBounds() const {
-  return bounds_;
 }
 
 bool PointScanLayer::IsMoving() const {
@@ -123,11 +96,11 @@ void PointScanLayer::OnPaintLayer(const ui::PaintContext& context) {
 
   SkPath path;
 
-  if (is_range_scan_) {
-    if (is_horizontal_range_) {
+  if (type_ == PointScanLayer::Type::RANGE) {
+    if (orientation_ == PointScanLayer::Orientation::HORIZONTAL) {
       path.moveTo(line_.start.x() + kDefaultRangeWidthDips, line_.start.y());
       path.lineTo(line_.end.x() + kDefaultRangeWidthDips, line_.end.y());
-    } else {
+    } else if (orientation_ == PointScanLayer::Orientation::VERTICAL) {
       path.moveTo(line_.start.x(), line_.start.y() + kDefaultRangeHeightDips);
       path.lineTo(line_.end.x(), line_.end.y() + kDefaultRangeHeightDips);
     }

@@ -35,7 +35,7 @@
         "id": "ItemType",
         "type": "string",
         "description": "What kind of item.",
-        "enum": [ "normal", "checkbox", "radio" ]
+        "enum": [ "command", "checkbox", "radio", "folder"]
       },
       {
         "id": "Rect",
@@ -60,19 +60,15 @@
         "description": "One menu item.",
         "properties": {
           "id": {"type": "integer", "description": "The unique id of item."},
-          "label": {"type": "string", "description": "Text in item."},
-          "type": {"$ref": "ItemType", "optional": true, "description": "Defaults to 'normal'."},
+          "name": {"type": "string", "description": "Text in item."},
+          "type": {"$ref": "ItemType", "optional": false, "description": "Defaults to 'normal'."},
           "selected": {"type": "boolean", "optional": true, "description": "Whether item is initially selected. Default to false."},
           "visible": {"type": "boolean", "optional": true, "description": "Whether item is visible or not. Defaults to true."},
           "checked": {"type": "boolean", "optional": true, "description": "true if the checkbox is checked. Ignored unless type is 'checkbox' or 'radiobutton'."},
-          "group": {"type": "integer", "optional": true, "description": "The radiobutton group this item belongs to. Must be present for a radio button."},
+          "radiogroup": {"type": "integer", "optional": true, "description": "The radiobutton group this item belongs to. Must be present for a radio button."},
           "persistent": {"type": "boolean", "optional": true, "description": "If true the menu item will remain open after menu item is clicked with mouse."},
-          "disabled": {"type": "boolean", "optional": true, "description": "true if item should appear as grayed out."},
-          "emphasized": {"type": "boolean", "optional": true, "description": "true if the item should appear in an emphasized style (typically bold)."},
           "shortcut": {"type": "string", "optional": true, "description": "Shortcut to be displayed next to label."},
           "url": {"type": "string", "optional": true, "description": "Url that can be used to determine a corresponding icon."},
-          "parameter": {"type": "string", "optional": true, "description": "Parameter to command. Sent unaltered with the callback."},
-          "index": {"type": "integer", "optional": true, "description": "Index in menu list. Can only be used insert into an existing list."},
           "icons": {"$ref": "Icons", "optional": true, "description": "Icons for light and dark menus. There must be two icons and the last shall be for menus with a dark background."}
         }
       },
@@ -92,8 +88,8 @@
           "id": {"type": "string", "description": "Parent id of data to display."},
           "type": {"$ref": "ContainerType", "description": "What kind of data to expand in this container."},
           "offset": {"type": "integer", "description": "Offset into folder/parent data."},
-          "groupFolders": {"type": "boolean", "optional": true, "description": "If sorted, this flag will group any subfolders together."},
-          "edge": {"$ref": "Edge", "optional": true, "description": "Where to place extra menu items"},
+          "groupFolders": {"type": "boolean", "description": "If sorted, this flag will group any subfolders together."},
+          "edge": {"$ref": "Edge", "description": "Where to place extra menu items"},
           "sortField": {"$ref": "SortField", "optional": true, "description": "Sort key for elements."},
           "sortOrder": {"$ref": "SortOrder", "optional": true, "description": "Sort order for elements."}
         }
@@ -164,7 +160,7 @@
         "id": "BookmarkCommand",
         "type": "string",
         "description": "Defines a non-navigation bookmark action.",
-        "enum": [ "edit", "addactivetab", "addfolder", "addbookmark", "cut", "copy", "paste"]
+        "enum": [ "edit", "addactivetab", "addfolder", "addbookmark", "addseparator", "cut", "copy", "paste"]
       },
       {
         "id": "BookmarkAction",

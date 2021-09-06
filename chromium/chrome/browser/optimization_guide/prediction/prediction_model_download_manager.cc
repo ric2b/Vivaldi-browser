@@ -36,10 +36,9 @@ constexpr char kGoogApiKey[] = "X-Goog-Api-Key";
 // The SHA256 hash of the public key for the Optimization Guide Server that
 // we require models to come from.
 constexpr uint8_t kPublisherKeyHash[] = {
-    0x0f, 0x01, 0x7c, 0x8e, 0x09, 0xaf, 0x7d, 0x61, 0x54, 0xcb, 0xde,
-    0x9c, 0x80, 0x59, 0xcf, 0x49, 0x3d, 0x08, 0xdf, 0x60, 0x3d, 0x7d,
-    0x4d, 0xd7, 0x8a, 0xa6, 0xfb, 0x63, 0x43, 0x28, 0xbd, 0x0b};
-
+    0x66, 0xa1, 0xd9, 0x3e, 0x4e, 0x5a, 0x66, 0x8a, 0x0f, 0xd3, 0xfa,
+    0xa3, 0x70, 0x71, 0x42, 0x16, 0x0d, 0x2d, 0x68, 0xb0, 0x53, 0x02,
+    0x5c, 0x7f, 0xd0, 0x0c, 0xa1, 0x6e, 0xef, 0xdd, 0x63, 0x7a};
 const net::NetworkTrafficAnnotationTag
     kOptimizationGuidePredictionModelsTrafficAnnotation =
         net::DefineNetworkTrafficAnnotation("optimization_guide_model_download",
@@ -125,18 +124,14 @@ void PredictionModelDownloadManager::StartDownload(const GURL& download_url) {
     // to have this be a high priority download with no network restrictions.
     download_params.scheduling_params.priority =
         download::SchedulingParams::Priority::HIGH;
-    download_params.scheduling_params.battery_requirements =
-        download::SchedulingParams::BatteryRequirements::BATTERY_INSENSITIVE;
-    download_params.scheduling_params.network_requirements =
-        download::SchedulingParams::NetworkRequirements::NONE;
   } else {
     download_params.scheduling_params.priority =
         download::SchedulingParams::Priority::NORMAL;
-    download_params.scheduling_params.battery_requirements =
-        download::SchedulingParams::BatteryRequirements::BATTERY_INSENSITIVE;
-    download_params.scheduling_params.network_requirements =
-        download::SchedulingParams::NetworkRequirements::OPTIMISTIC;
   }
+  download_params.scheduling_params.battery_requirements =
+      download::SchedulingParams::BatteryRequirements::BATTERY_INSENSITIVE;
+  download_params.scheduling_params.network_requirements =
+      download::SchedulingParams::NetworkRequirements::NONE;
 
   download_service_->StartDownload(download_params);
 }
@@ -170,8 +165,8 @@ void PredictionModelDownloadManager::OnDownloadServiceReady(
   for (const std::string& pending_download_guid : pending_download_guids)
     pending_download_guids_.insert(pending_download_guid);
 
-  for (const auto& successful_download : successful_downloads)
-    OnDownloadSucceeded(successful_download.first, successful_download.second);
+  // Successful downloads should already be notified via |onDownloadSucceeded|,
+  // so we don't do anything with them here.
 }
 
 void PredictionModelDownloadManager::OnDownloadServiceUnavailable() {
@@ -218,11 +213,11 @@ PredictionModelDownloadManager::ProcessDownload(
   if (!switches::ShouldSkipModelDownloadVerificationForTesting()) {
     // Verify that the |file_path| contains a valid CRX file.
     std::string public_key;
-    crx_file::VerifierResult verifier_result =
-        crx_file::Verify(file_path, crx_file::VerifierFormat::CRX3,
-                         /*required_key_hashes=*/{},
-                         /*required_file_hash=*/{}, &public_key,
-                         /*crx_id=*/nullptr);
+    crx_file::VerifierResult verifier_result = crx_file::Verify(
+        file_path, crx_file::VerifierFormat::CRX3,
+        /*required_key_hashes=*/{},
+        /*required_file_hash=*/{}, &public_key,
+        /*crx_id=*/nullptr, /*compressed_verified_contents=*/nullptr);
     if (verifier_result != crx_file::VerifierResult::OK_FULL) {
       RecordPredictionModelDownloadStatus(
           PredictionModelDownloadStatus::kFailedCrxVerification);

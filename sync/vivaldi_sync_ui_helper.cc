@@ -18,6 +18,9 @@ VivaldiSyncUIHelper::VivaldiSyncUIHelper(
     Profile* profile,
     VivaldiProfileSyncService* sync_manager)
     : profile_(profile), sync_manager_(sync_manager) {
+}
+
+void VivaldiSyncUIHelper::RegisterObserver() {
   sync_manager_->AddObserver(this);
 }
 

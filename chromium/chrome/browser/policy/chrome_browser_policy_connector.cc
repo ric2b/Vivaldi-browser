@@ -73,7 +73,7 @@ bool command_line_enabled_for_testing = false;
 }  // namespace
 
 ChromeBrowserPolicyConnector::ChromeBrowserPolicyConnector()
-    : BrowserPolicyConnector(base::Bind(&BuildHandlerList)) {
+    : BrowserPolicyConnector(base::BindRepeating(&BuildHandlerList)) {
 #if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   chrome_browser_cloud_management_controller_ =
       std::make_unique<ChromeBrowserCloudManagementController>(
@@ -98,6 +98,11 @@ void ChromeBrowserPolicyConnector::Init(
       new DeviceManagementService(std::move(configuration)));
   device_management_service->ScheduleInitialization(
       kServiceInitializationStartupDelay);
+
+#if defined(OS_ANDROID)
+  pollicy_cache_updater_ = std::make_unique<android::PolicyCacheUpdater>(
+      GetPolicyService(), GetHandlerList());
+#endif
 
   InitInternal(local_state, std::move(device_management_service));
 }

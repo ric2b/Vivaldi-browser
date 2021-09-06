@@ -17,6 +17,8 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.ConfigurationChangedObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
+import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures.AdaptiveToolbarButtonVariant;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogManagerObserver;
@@ -44,7 +46,7 @@ public class VoiceToolbarButtonController
 
     private final VoiceSearchDelegate mVoiceSearchDelegate;
 
-    private final ButtonData mButtonData;
+    private final ButtonDataImpl mButtonData;
     private final ObserverList<ButtonDataObserver> mObservers = new ObserverList<>();
 
     private Integer mMinimumWidthDp;
@@ -87,14 +89,14 @@ public class VoiceToolbarButtonController
         mModalDialogManagerObserver = new ModalDialogManagerObserver() {
             @Override
             public void onDialogAdded(PropertyModel model) {
-                mButtonData.isEnabled = false;
-                notifyObservers(mButtonData.canShow);
+                mButtonData.setEnabled(false);
+                notifyObservers(mButtonData.canShow());
             }
 
             @Override
             public void onLastDialogDismissed() {
-                mButtonData.isEnabled = true;
-                notifyObservers(mButtonData.canShow);
+                mButtonData.setEnabled(true);
+                notifyObservers(mButtonData.canShow());
             }
         };
         mModalDialogManager = modalDialogManager;
@@ -107,9 +109,10 @@ public class VoiceToolbarButtonController
             mVoiceSearchDelegate.startVoiceRecognition();
         };
 
-        mButtonData = new ButtonData(/*canShow=*/false, buttonDrawable, onClickListener,
+        mButtonData = new ButtonDataImpl(/*canShow=*/false, buttonDrawable, onClickListener,
                 R.string.accessibility_toolbar_btn_mic,
-                /*supportsTinting=*/true, /*iphCommandBuilder=*/null, /*isEnabled=*/true);
+                /*supportsTinting=*/true, /*iphCommandBuilder=*/null, /*isEnabled=*/true,
+                AdaptiveToolbarButtonVariant.VOICE);
 
         mScreenWidthDp = context.getResources().getConfiguration().screenWidthDp;
     }
@@ -120,8 +123,14 @@ public class VoiceToolbarButtonController
             return;
         }
         mScreenWidthDp = configuration.screenWidthDp;
-        mButtonData.canShow = shouldShowVoiceButton(mActiveTabSupplier.get());
-        notifyObservers(mButtonData.canShow);
+        mButtonData.setCanShow(shouldShowVoiceButton(mActiveTabSupplier.get()));
+        notifyObservers(mButtonData.canShow());
+    }
+
+    /** Triggers checking and possibly updating the mic visibility */
+    public void updateMicButtonState() {
+        mButtonData.setCanShow(shouldShowVoiceButton(mActiveTabSupplier.get()));
+        notifyObservers(mButtonData.canShow());
     }
 
     @Override
@@ -143,14 +152,12 @@ public class VoiceToolbarButtonController
 
     @Override
     public ButtonData get(Tab tab) {
-        mButtonData.canShow = shouldShowVoiceButton(tab);
+        mButtonData.setCanShow(shouldShowVoiceButton(tab));
         return mButtonData;
     }
 
     private boolean shouldShowVoiceButton(Tab tab) {
-        if (!FeatureList.isInitialized()
-                || !ChromeFeatureList.isEnabled(ChromeFeatureList.VOICE_BUTTON_IN_TOP_TOOLBAR)
-                || tab == null || tab.isIncognito()
+        if (!FeatureList.isInitialized() || !isFeatureEnabled() || tab == null || tab.isIncognito()
                 || !mVoiceSearchDelegate.isVoiceSearchEnabled()) {
             return false;
         }
@@ -165,6 +172,15 @@ public class VoiceToolbarButtonController
         if (!isDeviceWideEnough) return false;
 
         return UrlUtilities.isHttpOrHttps(tab.getUrl());
+    }
+
+    private static boolean isFeatureEnabled() {
+        if (AdaptiveToolbarFeatures.isEnabled()) {
+            return AdaptiveToolbarFeatures.getSingleVariantMode()
+                    == AdaptiveToolbarButtonVariant.VOICE;
+        } else {
+            return ChromeFeatureList.isEnabled(ChromeFeatureList.VOICE_BUTTON_IN_TOP_TOOLBAR);
+        }
     }
 
     private void notifyObservers(boolean hint) {

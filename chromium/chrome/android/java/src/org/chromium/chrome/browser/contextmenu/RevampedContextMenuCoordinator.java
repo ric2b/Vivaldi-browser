@@ -26,6 +26,7 @@ import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.Pe
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.widget.ContextMenuDialog;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
+import org.chromium.content_public.browser.LoadCommittedDetails;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.MenuSourceType;
@@ -118,7 +119,7 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
             View chipAnchorView = layout.findViewById(R.id.context_menu_chip_anchor_point);
             mChipController = new RevampedContextMenuChipController(activity, chipAnchorView);
             chipDelegate.getChipRenderParams((chipRenderParams) -> {
-                if (chipDelegate.isValidChipRenderParams(chipRenderParams)) {
+                if (chipDelegate.isValidChipRenderParams(chipRenderParams) && mDialog.isShowing()) {
                     mChipController.showChip(chipRenderParams);
                 }
             });
@@ -201,7 +202,7 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
 
         mWebContentsObserver = new WebContentsObserver(mWebContents) {
             @Override
-            public void navigationEntryCommitted() {
+            public void navigationEntryCommitted(LoadCommittedDetails details) {
                 dismissDialog();
             }
         };
@@ -288,6 +289,15 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
     }
 
     @VisibleForTesting
+    Callback<ChipRenderParams> getChipRenderParamsCallbackForTesting(ChipDelegate chipDelegate) {
+        return (chipRenderParams) -> {
+            if (chipDelegate.isValidChipRenderParams(chipRenderParams) && mDialog.isShowing()) {
+                mChipController.showChip(chipRenderParams);
+            }
+        };
+    }
+
+    @VisibleForTesting
     void initializeHeaderCoordinatorForTesting(Activity activity, ContextMenuParams params,
             Profile profile, ContextMenuNativeDelegate nativeDelegate) {
         mHeaderCoordinator = new RevampedContextMenuHeaderCoordinator(
@@ -304,6 +314,27 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
                 R.string.contextmenu_shop_image_with_google_lens;
         chipRenderParamsForTesting.onClickCallback = () -> {};
         mChipController.showChip(chipRenderParamsForTesting);
+    }
+
+    @VisibleForTesting
+    void simulateTranslateImageClassificationForTesting() {
+        // Don't need to initialize controller because that should be triggered by
+        // forcing feature flags.
+        mChipController.setFakeLensQueryResultForTesting(); // IN-TEST
+        ChipRenderParams chipRenderParamsForTesting = new ChipRenderParams();
+        chipRenderParamsForTesting.titleResourceId =
+                R.string.contextmenu_translate_image_with_google_lens;
+        chipRenderParamsForTesting.onClickCallback = () -> {};
+        mChipController.showChip(chipRenderParamsForTesting);
+    }
+
+    @VisibleForTesting
+    ChipRenderParams simulateImageClassificationForTesting() {
+        // Don't need to initialize controller because that should be triggered by
+        // forcing feature flags.
+        mChipController.setFakeLensQueryResultForTesting(); // IN-TEST
+        ChipRenderParams chipRenderParamsForTesting = new ChipRenderParams();
+        return chipRenderParamsForTesting;
     }
 
     // Public only to allow references from RevampedContextMenuUtils.java

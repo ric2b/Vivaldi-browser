@@ -196,6 +196,9 @@
         <message name="IDS_INSTALL_MAKE_STANDALONE_AVAIL" desc="Register-standalone-as-available checkbox text">
           Make standalone Vivaldi available as a default app
         </message>
+        <message name="IDS_DISABLE_AUTOUPDATE" desc="Disable by default automatic updates.">
+          Disable automatic updates (not recommended)
+        </message>
         <message name="IDS_INSTALL_RELAUNCH_WARNING" desc="Static text warning about close and relaunch">
           Note: If updating a running Vivaldi browser, that instance will be closed and relaunched
         </message>

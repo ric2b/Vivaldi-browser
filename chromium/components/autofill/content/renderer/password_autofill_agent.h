@@ -27,7 +27,6 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "content/public/renderer/render_frame_observer.h"
-#include "content/public/renderer/render_view_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -319,16 +318,17 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
     DISALLOW_COPY_AND_ASSIGN(FocusStateNotifier);
   };
 
-  // This class keeps track of autofilled password input elements and makes sure
-  // the autofilled password value is not accessible to JavaScript code until
-  // the user interacts with the page.
+  // This class keeps track of autofilled username and password input elements
+  // and ensures that the autofilled values are not accessible to JavaScript
+  // code until the user interacts with the page. This restriction improves
+  // privacy (crbug.com/798492) and reduces attack surface (crbug.com/777272).
   class PasswordValueGatekeeper {
    public:
     PasswordValueGatekeeper();
     ~PasswordValueGatekeeper();
 
-    // Call this for every autofilled password field, so that the gatekeeper
-    // protects the value accordingly.
+    // Call this for every autofilled username and password field, so that
+    // the gatekeeper protects the value accordingly.
     void RegisterElement(blink::WebInputElement* element);
 
     // Call this to notify the gatekeeper that the user interacted with the

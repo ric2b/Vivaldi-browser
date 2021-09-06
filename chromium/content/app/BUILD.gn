@@ -67,10 +67,13 @@ source_set("content_main_runner_app") {
   sources = [
     "content_main_runner_impl.cc",
     "content_main_runner_impl.h",
+    "partition_alloc_support.cc",
+    "partition_alloc_support.h",
   ]
 
   configs += extra_configs
   deps = content_app_deps + [
+           "//components/power_scheduler",
            "//content/browser",
            "//content/gpu:gpu_sources",
            "//content/public/browser:browser_sources",

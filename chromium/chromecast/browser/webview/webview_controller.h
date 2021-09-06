@@ -39,6 +39,9 @@ class WebviewController : public CastWebContents::Delegate,
   WebviewController(content::BrowserContext* browser_context,
                     Client* client,
                     bool enabled_for_dev);
+  WebviewController(std::unique_ptr<content::BrowserContext> browser_context,
+                    Client* client,
+                    bool enabled_for_dev);
   ~WebviewController() override;
 
   // Returns a navigation throttle for the current navigation request, if one is
@@ -64,11 +67,14 @@ class WebviewController : public CastWebContents::Delegate,
 
  protected:
   FRIEND_TEST_ALL_PREFIXES(WebviewTest, SetInsets);
+  FRIEND_TEST_ALL_PREFIXES(WebviewTest, UserDataOverrideOnFirstRequest);
   FRIEND_TEST_ALL_PREFIXES(WebviewTest, UserDataOverride);
+  FRIEND_TEST_ALL_PREFIXES(WebviewTest, VerifyNavigationDelegation);
 
   content::WebContents* GetWebContents() override;
 
  private:
+  void HandleLoadUrl(const webview::NavigateRequest& request);
   void HandleUpdateSettings(const webview::UpdateSettingsRequest& request);
   void HandleSetAutoMediaPlaybackPolicy(
       const webview::SetAutoMediaPlaybackPolicyRequest& request);
@@ -85,6 +91,10 @@ class WebviewController : public CastWebContents::Delegate,
 
   // content::WebContentsObserver
   void DidFirstVisuallyNonEmptyPaint() override;
+
+  // BrowserContext instances must outlive their WebContents, so destroy this
+  // last.
+  std::unique_ptr<content::BrowserContext> owned_context_;
 
   const bool enabled_for_dev_;
   std::unique_ptr<content::WebContents> contents_;

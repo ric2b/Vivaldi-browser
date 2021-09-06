@@ -49,8 +49,6 @@ class CORE_EXPORT NGGridTrackCollectionBase {
     wtf_size_t range_track_count_;
   };
 
-  bool IsTrackWithinBounds(wtf_size_t track_number) const;
-
   // Gets the range index for the range that contains the given track number.
   wtf_size_t RangeIndexFromTrackNumber(wtf_size_t track_number) const;
 
@@ -109,13 +107,14 @@ class CORE_EXPORT NGGridBlockTrackCollection
   // Sets the specified, implicit tracks, along with a given auto repeat value.
   void SetSpecifiedTracks(const NGGridTrackList* explicit_tracks,
                           const NGGridTrackList* implicit_tracks,
+                          wtf_size_t start_offset,
                           wtf_size_t auto_repeat_count);
   // Ensures that after FinalizeRanges is called, a range will start at the
   // |track_number|, and a range will end at |track_number| + |span_length|
   void EnsureTrackCoverage(wtf_size_t track_number, wtf_size_t span_length);
   // Build the collection of ranges based on information provided by
   // SetSpecifiedTracks and EnsureTrackCoverage.
-  void FinalizeRanges();
+  void FinalizeRanges(wtf_size_t start_offset);
 
   bool IsRangeImplicit(wtf_size_t range_index) const;
   const Range& RangeAtRangeIndex(wtf_size_t range_index) const;
@@ -150,8 +149,8 @@ class CORE_EXPORT NGGridBlockTrackCollection
 
   // Starting and ending tracks mark where ranges will start and end.
   // Once the ranges have been built in FinalizeRanges, these are cleared.
-  Vector<wtf_size_t> starting_tracks_;
-  Vector<wtf_size_t> ending_tracks_;
+  Vector<wtf_size_t> start_lines_;
+  Vector<wtf_size_t> end_lines_;
   Vector<Range> ranges_;
 };
 
@@ -195,7 +194,7 @@ class CORE_EXPORT NGGridSet {
  public:
   NGGridSet(wtf_size_t track_count, bool is_collapsed);
   // |is_content_box_size_indefinite| is used to normalize percentage track
-  // sizing functions; from https://drafts.csswg.org/css-grid-1/#track-sizes:
+  // sizing functions; from https://drafts.csswg.org/css-grid-2/#track-sizes:
   //   "If the size of the grid container depends on the size of its tracks,
   //   then the <percentage> must be treated as 'auto'".
   NGGridSet(wtf_size_t track_count,
@@ -216,6 +215,9 @@ class CORE_EXPORT NGGridSet {
   void SetGrowthLimit(LayoutUnit growth_limit);
   void SetPlannedIncrease(LayoutUnit planned_increase) {
     planned_increase_ = planned_increase;
+  }
+  void SetFitContentLimit(LayoutUnit fit_content_limit) {
+    fit_content_limit_ = fit_content_limit;
   }
   void SetItemIncurredIncrease(LayoutUnit item_incurred_increase) {
     item_incurred_increase_ = item_incurred_increase;
@@ -299,8 +301,8 @@ class CORE_EXPORT NGGridLayoutAlgorithmTrackCollection
     wtf_size_t end_set_index_;
   };
 
-  using SetIterator = SetIteratorBase<false>;
-  using ConstSetIterator = SetIteratorBase<true>;
+  typedef SetIteratorBase<false> SetIterator;
+  typedef SetIteratorBase<true> ConstSetIterator;
 
   NGGridLayoutAlgorithmTrackCollection() = default;
   // |is_content_box_size_indefinite| is used to normalize percentage track
@@ -308,6 +310,9 @@ class CORE_EXPORT NGGridLayoutAlgorithmTrackCollection
   NGGridLayoutAlgorithmTrackCollection(
       const NGGridBlockTrackCollection& block_track_collection,
       bool is_content_box_size_indefinite);
+
+  wtf_size_t EndLineOfImplicitGrid() const;
+  bool IsGridLineWithinImplicitGrid(wtf_size_t grid_line) const;
 
   // Returns the number of sets in the collection.
   wtf_size_t SetCount() const;

@@ -506,14 +506,14 @@ void ContentDecryptionModuleAdapter::InitializeVideoDecoder(
 
 void ContentDecryptionModuleAdapter::DecryptAndDecodeAudio(
     scoped_refptr<media::DecoderBuffer> encrypted,
-    const AudioDecodeCB& audio_decode_cb) {
+    AudioDecodeCB audio_decode_cb) {
   NOTREACHED()
       << "ContentDecryptionModuleAdapter does not support audio decoding";
 }
 
 void ContentDecryptionModuleAdapter::DecryptAndDecodeVideo(
     scoped_refptr<media::DecoderBuffer> encrypted,
-    const VideoDecodeCB& video_decode_cb) {
+    VideoDecodeCB video_decode_cb) {
   NOTREACHED()
       << "ContentDecryptionModuleAdapter does not support video decoding";
 }
@@ -551,7 +551,8 @@ void ContentDecryptionModuleAdapter::OnConnectionError() {
 
   // We've lost our communication, so reject all outstanding promises and close
   // any open sessions.
-  cdm_promise_adapter_.Clear();
+  cdm_promise_adapter_.Clear(
+      media::CdmPromiseAdapter::ClearReason::kConnectionError);
   cdm_session_tracker_.CloseRemainingSessions(session_closed_cb_);
 }
 

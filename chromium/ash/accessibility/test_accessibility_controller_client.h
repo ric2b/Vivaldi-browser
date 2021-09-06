@@ -5,11 +5,11 @@
 #ifndef ASH_ACCESSIBILITY_TEST_ACCESSIBILITY_CONTROLLER_CLEINT_H_
 #define ASH_ACCESSIBILITY_TEST_ACCESSIBILITY_CONTROLLER_CLEINT_H_
 
+#include "ash/components/audio/sounds.h"
 #include "ash/public/cpp/accessibility_controller_client.h"
 #include "ash/public/cpp/accessibility_controller_enums.h"
 #include "base/macros.h"
 #include "base/optional.h"
-#include "chromeos/audio/chromeos_sounds.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 
 namespace ash {
@@ -29,7 +29,7 @@ class TestAccessibilityControllerClient : public AccessibilityControllerClient {
   void TriggerAccessibilityAlert(AccessibilityAlert alert) override;
   void TriggerAccessibilityAlertWithMessage(
       const std::string& message) override;
-  void PlayEarcon(chromeos::Sound sound_key) override;
+  void PlayEarcon(Sound sound_key) override;
   base::TimeDelta PlayShutdownSound() override;
   void HandleAccessibilityGesture(ax::mojom::Gesture gesture,
                                   gfx::PointF location) override;
@@ -48,7 +48,7 @@ class TestAccessibilityControllerClient : public AccessibilityControllerClient {
                                   double value) override;
   void SetA11yOverrideWindow(aura::Window* a11y_override_window) override;
 
-  base::Optional<chromeos::Sound> GetPlayedEarconAndReset();
+  base::Optional<Sound> GetPlayedEarconAndReset();
 
   AccessibilityAlert last_a11y_alert() const { return last_a11y_alert_; }
   ax::mojom::Gesture last_a11y_gesture() const { return last_a11y_gesture_; }
@@ -66,7 +66,7 @@ class TestAccessibilityControllerClient : public AccessibilityControllerClient {
  private:
   AccessibilityAlert last_a11y_alert_ = AccessibilityAlert::NONE;
   std::string last_alert_message_;
-  base::Optional<chromeos::Sound> sound_key_;
+  base::Optional<Sound> sound_key_;
   bool is_dictation_active_ = false;
   SelectToSpeakPanelAction last_select_to_speak_panel_action_ =
       SelectToSpeakPanelAction::kNone;

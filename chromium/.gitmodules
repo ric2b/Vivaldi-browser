@@ -76,9 +76,6 @@
 [submodule "third_party/minigbm/src"]
 	path = third_party/minigbm/src
 	url = ../../chromiumos/platform/minigbm.git
-[submodule "third_party/vulkan-deps"]
-	path = third_party/vulkan-deps
-	url = ../../vulkan-deps.git
 [submodule "third_party/smhasher/src"]
 	path = third_party/smhasher/src
 	url = ../../external/smhasher.git
@@ -300,16 +297,19 @@
 	url = ../../external/github.com/google/ukey2.git
 [submodule "buildtools/clang_format/script"]
 	path = buildtools/clang_format/script
-	url = ../llvm-project/cfe/tools/clang-format.git
+	url = ../../external/github.com/llvm/llvm-project/clang/tools/clang-format.git
+[submodule "third_party/ots/src"]
+	path = third_party/ots/src
+	url = ../../external/github.com/khaledhosny/ots.git
 [submodule "third_party/expat/src"]
 	path = third_party/expat/src
 	url = ../../external/github.com/libexpat/libexpat.git
-[submodule "third_party/wds/src"]
-	path = third_party/wds/src
-	url = ../../external/github.com/01org/wds.git
 [submodule "third_party/snappy/src"]
 	path = third_party/snappy/src
 	url = ../../external/github.com/google/snappy.git
+[submodule "third_party/vulkan-deps"]
+	path = third_party/vulkan-deps
+	url = ../../vulkan-deps.git
 [submodule "third_party/openscreen/src"]
 	path = third_party/openscreen/src
 	url = ../../openscreen.git

@@ -27,7 +27,6 @@
 #import "SUSystemUpdateInfo.h"
 #import "SUSignatures.h"
 #import "SUOperatingSystem.h"
-#import "SUGlobalUpdateLock.h"
 
 NSString *const SUUpdaterDidFinishLoadingAppCastNotification = @"SUUpdaterDidFinishLoadingAppCastNotification";
 NSString *const SUUpdaterDidFindValidUpdateNotification = @"SUUpdaterDidFindValidUpdateNotification";
@@ -122,11 +121,11 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
     id updater = [sharedUpdaters objectForKey:[NSValue valueWithNonretainedObject:bundle]];
     if (updater)
-    {
+	{
         self = updater;
-    }
-    else if (self)
-    {
+	}
+	else if (self)
+	{
         if (sharedUpdaters == nil) {
             sharedUpdaters = [[NSMutableDictionary alloc] init];
         }
@@ -223,8 +222,6 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
         [self.host setBool:NO forUserDefaultsKey:SUUpdateRelaunchingMarkerKey];
     }
 
-    [[SUGlobalUpdateLock sharedLock] unlock];  // For safety, remove active lock if present in any case and not just when relaunching from an app update
-    
     if (shouldPrompt) {
         NSArray<NSDictionary<NSString *, NSString *> *> *profileInfo = [SUSystemProfiler systemProfileArrayForHost:self.host];
         // Always say we're sending the system profile here so that the delegate displays the parameters it would send.
@@ -251,8 +248,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)updateDriverDidFinish:(NSNotification *)note
 {
-    if ([note object] == self.driver && [self.driver finished])
-    {
+	if ([note object] == self.driver && [self.driver finished])
+	{
         self.driver = nil;
         [self updateLastUpdateCheckDate];
         [self scheduleNextUpdateCheck];
@@ -279,16 +276,16 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)scheduleNextUpdateCheck
 {
-    if (self.checkTimer)
-    {
+	if (self.checkTimer)
+	{
         [self.checkTimer invalidate];
         self.checkTimer = nil; // Timer is non-repeating, may have invalidated itself, so we had to retain it.
     }
-    if (![self automaticallyChecksForUpdates]) return;
+	if (![self automaticallyChecksForUpdates]) return;
 
     // How long has it been since last we checked for an update?
     NSDate *lastCheckDate = [self lastUpdateCheckDate];
-    if (!lastCheckDate) { lastCheckDate = [NSDate distantPast]; }
+	if (!lastCheckDate) { lastCheckDate = [NSDate distantPast]; }
     NSTimeInterval intervalSinceCheck = [[NSDate date] timeIntervalSinceDate:lastCheckDate];
 
     // Now we want to figure out how long until we check again.
@@ -380,13 +377,13 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)checkForUpdatesWithDriver:(SUUpdateDriver *)d
 {
-    if ([self updateInProgress]) { return; }
-    if (self.checkTimer) { [self.checkTimer invalidate]; self.checkTimer = nil; }  // Timer is non-repeating, may have invalidated itself, so we had to retain it.
+	if ([self updateInProgress]) { return; }
+	if (self.checkTimer) { [self.checkTimer invalidate]; self.checkTimer = nil; }		// Timer is non-repeating, may have invalidated itself, so we had to retain it.
 
     [self updateLastUpdateCheckDate];
 
     if( [self.delegate respondsToSelector: @selector(updaterMayCheckForUpdates:)] && ![self.delegate updaterMayCheckForUpdates: self] )
-    {
+	{
         [self scheduleNextUpdateCheck];
         return;
     }
@@ -422,8 +419,8 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)unregisterAsObserver
 {
-    @try
-    {
+	@try
+	{
         [[NSNotificationCenter defaultCenter] removeObserver:self];
         [[NSUserDefaultsController sharedUserDefaultsController] removeObserver:self forKeyPath:[@"values." stringByAppendingString:SUScheduledCheckIntervalKey]];
         [[NSUserDefaultsController sharedUserDefaultsController] removeObserver:self forKeyPath:[@"values." stringByAppendingString:SUEnableAutomaticChecksKey]];
@@ -436,7 +433,7 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
-    if (context == (__bridge void *)(SUUpdaterDefaultsObservationContext))
+	if (context == (__bridge void *)(SUUpdaterDefaultsObservationContext))
     {
         // Allow a small delay, because perhaps the user or developer wants to change both preferences. This allows the developer to interpret a zero check interval as a sign to disable automatic checking.
         // Or we may get this from the developer and from our own KVO observation, this will effectively coalesce them.
@@ -490,7 +487,7 @@ static NSString *const SUUpdaterDefaultsObservationContext = @"SUUpdaterDefaults
     }
 
     // Otherwise, automatically downloading updates is allowed. Does the user want it?
-    return [self.host boolForKey:SUAutomaticallyUpdateKey];
+    return [self.host boolForUserDefaultsKey:SUAutomaticallyUpdateKey];
 }
 
 - (void)setFeedURL:(NSURL *)feedURL
@@ -572,12 +569,12 @@ static NSString *escapeURLComponent(NSString *str) {
     if ([self.delegate respondsToSelector:@selector(feedParametersForUpdater:sendingSystemProfile:)]) {
         parameters = [parameters arrayByAddingObjectsFromArray:[self.delegate feedParametersForUpdater:self sendingSystemProfile:sendingSystemProfile]];
     }
-    if (sendingSystemProfile)
-    {
+	if (sendingSystemProfile)
+	{
         parameters = [parameters arrayByAddingObjectsFromArray:[SUSystemProfiler systemProfileArrayForHost:self.host]];
         [self.host setObject:[NSDate date] forUserDefaultsKey:SULastProfileSubmitDateKey];
     }
-    if ([parameters count] == 0) { return baseFeedURL; }
+	if ([parameters count] == 0) { return baseFeedURL; }
 
     // Build up the parameterized URL.
     NSMutableArray *parameterStrings = [NSMutableArray array];
@@ -620,7 +617,7 @@ static NSString *escapeURLComponent(NSString *str) {
 - (void)dealloc
 {
     [self unregisterAsObserver];
-    if (checkTimer) { [checkTimer invalidate]; }  // Timer is non-repeating, may have invalidated itself, so we had to retain it.
+	if (checkTimer) { [checkTimer invalidate]; }		// Timer is non-repeating, may have invalidated itself, so we had to retain it.
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)item

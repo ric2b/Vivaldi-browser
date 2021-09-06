@@ -50,8 +50,8 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chromeos/constants/chromeos_switches.h"
+#include "ash/constants/ash_switches.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "components/arc/arc_util.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -497,10 +497,16 @@ void ExternalWebAppManager::OnExternalWebAppsSynchronized(
                               url_and_result.second.code);
     if (url_and_result.second.did_uninstall_and_replace) {
       ++uninstall_and_replace_count;
+    }
+    // We mark the app as migrated to a web app as long as the installation
+    // was successful, even if the previous app was not installed. This ensures
+    // we properly re-install apps if the migration feature is rolled back.
+    if (IsSuccess(url_and_result.second.code)) {
       auto iter = desired_uninstalls.find(url_and_result.first);
-      DCHECK(iter != desired_uninstalls.end());
-      for (const auto& uninstalled_id : iter->second) {
-        MarkAppAsMigratedToWebApp(profile_, uninstalled_id, true);
+      if (iter != desired_uninstalls.end()) {
+        for (const auto& uninstalled_id : iter->second) {
+          MarkAppAsMigratedToWebApp(profile_, uninstalled_id, true);
+        }
       }
     }
   }
@@ -537,7 +543,7 @@ base::FilePath ExternalWebAppManager::GetConfigDir() {
   // As of mid 2018, only Chrome OS has default/external web apps, and
   // chrome::DIR_STANDALONE_EXTERNAL_EXTENSIONS is only defined for OS_LINUX,
   // which includes OS_CHROMEOS.
-  if (chromeos::ProfileHelper::IsPrimaryProfile(profile_)) {
+  if (chromeos::ProfileHelper::IsRegularProfile(profile_)) {
     if (g_config_dir_for_testing) {
       dir = *g_config_dir_for_testing;
     } else {

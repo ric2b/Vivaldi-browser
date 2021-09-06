@@ -15,8 +15,8 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater_observer.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 
-class ChromeAppListItem;
 class ChromeSearchResult;
 
 namespace ui {
@@ -79,6 +79,8 @@ class AppListModelUpdater {
   virtual void SetItemIsPersistent(const std::string& id, bool is_persistent) {}
   virtual void SetItemFolderId(const std::string& id,
                                const std::string& folder_id) {}
+  virtual void SetNotificationBadgeColor(const std::string& id,
+                                         const SkColor color) {}
 
   virtual void SetSearchResultMetadata(
       const std::string& id,

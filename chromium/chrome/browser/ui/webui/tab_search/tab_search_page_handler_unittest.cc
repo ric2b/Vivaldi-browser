@@ -50,7 +50,7 @@ class MockPage : public tab_search::mojom::Page {
   }
   mojo::Receiver<tab_search::mojom::Page> receiver_{this};
 
-  MOCK_METHOD0(TabsChanged, void());
+  MOCK_METHOD1(TabsChanged, void(tab_search::mojom::ProfileDataPtr));
   MOCK_METHOD1(TabUpdated, void(tab_search::mojom::TabPtr));
   MOCK_METHOD1(TabsRemoved, void(const std::vector<int32_t>& tab_ids));
 };
@@ -71,7 +71,7 @@ void ExpectNewTab(const tab_search::mojom::Tab* tab,
   EXPECT_GT(tab->last_active_time_ticks, base::TimeTicks());
 }
 
-void ExpectProfileTabs(tab_search::mojom::ProfileTabs* profile_tabs) {
+void ExpectProfileTabs(tab_search::mojom::ProfileData* profile_tabs) {
   ASSERT_EQ(2u, profile_tabs->windows.size());
   auto* window1 = profile_tabs->windows[0].get();
   ASSERT_EQ(2u, window1->tabs.size());
@@ -107,6 +107,9 @@ class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
  public:
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
+    web_contents_ = content::WebContents::Create(
+        content::WebContents::CreateParams(profile()));
+    web_ui_.set_web_contents(web_contents_.get());
     profile2_ = profile_manager()->CreateTestingProfile(
         "testing_profile2", nullptr, base::string16(), 0, std::string(),
         GetTestingFactories());
@@ -132,6 +135,7 @@ class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
     browser3_.reset();
     browser4_.reset();
     browser5_.reset();
+    web_contents_.reset();
     BrowserWithTestWindowTest::TearDown();
   }
 
@@ -181,6 +185,7 @@ class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
     return browser;
   }
 
+  std::unique_ptr<content::WebContents> web_contents_;
   content::TestWebUI web_ui_;
   Profile* profile2_;
   std::unique_ptr<Browser> browser2_;
@@ -201,7 +206,7 @@ TEST_F(TabSearchPageHandlerTest, GetTabs) {
   AddTabWithTitle(browser1(), GURL(kTabUrl2), kTabName2);
   AddTabWithTitle(browser1(), GURL(kTabUrl1), kTabName1);
 
-  EXPECT_CALL(page_, TabsChanged()).Times(1);
+  EXPECT_CALL(page_, TabsChanged(_)).Times(1);
   EXPECT_CALL(page_, TabUpdated(_)).Times(2);
   EXPECT_CALL(page_, TabsRemoved(_)).Times(2);
   handler()->mock_debounce_timer()->Fire();
@@ -210,9 +215,9 @@ TEST_F(TabSearchPageHandlerTest, GetTabs) {
   int32_t tab_id3 = 0;
 
   // Get Tabs.
-  tab_search::mojom::PageHandler::GetProfileTabsCallback callback1 =
+  tab_search::mojom::PageHandler::GetProfileDataCallback callback1 =
       base::BindLambdaForTesting(
-          [&](tab_search::mojom::ProfileTabsPtr profile_tabs) {
+          [&](tab_search::mojom::ProfileDataPtr profile_tabs) {
             ASSERT_EQ(2u, profile_tabs->windows.size());
             auto* window1 = profile_tabs->windows[0].get();
             ASSERT_TRUE(window1->active);
@@ -237,7 +242,7 @@ TEST_F(TabSearchPageHandlerTest, GetTabs) {
             tab_id2 = tab2->tab_id;
             tab_id3 = tab3->tab_id;
           });
-  handler()->GetProfileTabs(std::move(callback1));
+  handler()->GetProfileData(std::move(callback1));
 
   // Switch to 2nd tab.
   auto switch_to_tab_info = tab_search::mojom::SwitchToTabInfo::New();
@@ -245,12 +250,12 @@ TEST_F(TabSearchPageHandlerTest, GetTabs) {
   handler()->SwitchToTab(std::move(switch_to_tab_info));
 
   // Get Tabs again to verify tab switch.
-  tab_search::mojom::PageHandler::GetProfileTabsCallback callback2 =
+  tab_search::mojom::PageHandler::GetProfileDataCallback callback2 =
       base::BindLambdaForTesting(
-          [&](tab_search::mojom::ProfileTabsPtr profile_tabs) {
+          [&](tab_search::mojom::ProfileDataPtr profile_tabs) {
             ExpectProfileTabs(profile_tabs.get());
           });
-  handler()->GetProfileTabs(std::move(callback2));
+  handler()->GetProfileData(std::move(callback2));
 
   // Switch to 3rd tab.
   switch_to_tab_info = tab_search::mojom::SwitchToTabInfo::New();
@@ -258,19 +263,19 @@ TEST_F(TabSearchPageHandlerTest, GetTabs) {
   handler()->SwitchToTab(std::move(switch_to_tab_info));
 
   // Get Tabs again to verify tab switch.
-  tab_search::mojom::PageHandler::GetProfileTabsCallback callback3 =
+  tab_search::mojom::PageHandler::GetProfileDataCallback callback3 =
       base::BindLambdaForTesting(
-          [&](tab_search::mojom::ProfileTabsPtr profile_tabs) {
+          [&](tab_search::mojom::ProfileDataPtr profile_tabs) {
             ExpectProfileTabs(profile_tabs.get());
           });
-  handler()->GetProfileTabs(std::move(callback3));
+  handler()->GetProfileData(std::move(callback3));
 }
 
 // Ensure that repeated tab model changes do not result in repeated calls to
 // TabsChanged() and TabsChanged() is only called when the page handler's
 // timer fires.
 TEST_F(TabSearchPageHandlerTest, TabsChanged) {
-  EXPECT_CALL(page_, TabsChanged()).Times(3);
+  EXPECT_CALL(page_, TabsChanged(_)).Times(3);
   EXPECT_CALL(page_, TabUpdated(_)).Times(1);
   EXPECT_CALL(page_, TabsRemoved(_)).Times(3);
   FireTimer();  // Will call TabsChanged().
@@ -301,7 +306,7 @@ TEST_F(TabSearchPageHandlerTest, TabsChanged) {
 // Ensure that tab model changes in a browser with a different profile
 // will not call TabsChanged().
 TEST_F(TabSearchPageHandlerTest, TabsNotChanged) {
-  EXPECT_CALL(page_, TabsChanged()).Times(1);
+  EXPECT_CALL(page_, TabsChanged(_)).Times(1);
   EXPECT_CALL(page_, TabUpdated(_)).Times(0);
   FireTimer();  // Will call TabsChanged().
   ASSERT_FALSE(IsTimerRunning());
@@ -320,7 +325,7 @@ bool VerifyTabUpdated(const tab_search::mojom::TabPtr& tab) {
 
 // Verify tab update event is called correctly with data
 TEST_F(TabSearchPageHandlerTest, TabUpdated) {
-  EXPECT_CALL(page_, TabsChanged()).Times(1);
+  EXPECT_CALL(page_, TabsChanged(_)).Times(1);
   EXPECT_CALL(page_, TabUpdated(Truly(VerifyTabUpdated))).Times(1);
   EXPECT_CALL(page_, TabsRemoved(_)).Times(1);
   AddTabWithTitle(browser1(), GURL(kTabUrl1), kTabName1);

@@ -24,11 +24,12 @@ namespace features {
 // If enabled, calculate native window occlusion - Windows-only.
 const base::Feature kCalculateNativeWinOcclusion{
     "CalculateNativeWinOcclusion", base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kCalculateNativeWinOcclusionCheckVirtualDesktopUsed{
-    "CalculateNativeWinOcclusionCheckVirtualDesktopUsed",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // OW_WIN
+
+// Whether or not filenames are supported on the clipboard.
+// https://crbug.com/1175483
+const base::Feature kClipboardFilenames{"ClipboardFilenames",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Whether or not to delegate color queries to the color provider.
 const base::Feature kColorProviderRedirection = {
@@ -46,8 +47,19 @@ const base::Feature kNewShortcutMapping = {"NewShortcutMapping",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsNewShortcutMappingEnabled() {
-  return base::FeatureList::IsEnabled(kNewShortcutMapping);
+  // kImprovedKeyboardShortcuts supercedes kNewShortcutMapping.
+  return !IsImprovedKeyboardShortcutsEnabled() &&
+         base::FeatureList::IsEnabled(kNewShortcutMapping);
 }
+
+// This feature supercedes kNewShortcutMapping.
+const base::Feature kImprovedKeyboardShortcuts = {
+    "ImprovedKeyboardShortcuts", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsImprovedKeyboardShortcutsEnabled() {
+  return base::FeatureList::IsEnabled(kImprovedKeyboardShortcuts);
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Update of the virtual keyboard settings UI as described in
@@ -234,6 +246,16 @@ bool IsUseCommonSelectPopupEnabled() {
   return base::FeatureList::IsEnabled(features::kUseCommonSelectPopup);
 }
 
+// Enables keyboard accessible tooltip.
+const base::Feature kKeyboardAccessibleTooltip{
+    "KeyboardAccessibleTooltip", base::FEATURE_ENABLED_BY_DEFAULT};
+
+bool IsKeyboardAccessibleTooltipEnabled() {
+  static const bool keyboard_accessible_tooltip_enabled =
+      base::FeatureList::IsEnabled(features::kKeyboardAccessibleTooltip);
+  return keyboard_accessible_tooltip_enabled;
+}
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const base::Feature kHandwritingGesture = {"HandwritingGesture",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
@@ -307,6 +329,9 @@ const char kPredictionTypeDefaultFramesRatio[] = "0.5";
 
 const base::Feature kSwipeToMoveCursor{"SwipeToMoveCursor",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kUIDebugTools{"ui-debug-tools",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsSwipeToMoveCursorEnabled() {
   static const bool enabled =
