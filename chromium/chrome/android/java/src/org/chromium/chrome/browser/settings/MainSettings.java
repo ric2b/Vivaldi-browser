@@ -30,7 +30,6 @@ import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.safety_check.SafetyCheckSettingsFragment;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.SigninActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -55,7 +54,7 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.preferences.VivaldiSyncPreference;
@@ -114,7 +113,7 @@ public class MainSettings extends PreferenceFragmentCompat
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         mPasswordCheck = PasswordCheckFactory.getOrCreate(new SettingsLauncherImpl());
     }
 
@@ -173,26 +172,17 @@ public class MainSettings extends PreferenceFragmentCompat
     }
 
     private void createPreferences() {
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             SettingsUtils.addPreferencesFromResource(this, R.xml.vivaldi_main_preferences);
         else
         SettingsUtils.addPreferencesFromResource(this, R.xml.main_preferences);
 
-        // Vivaldi should not alter this.
-        if (!ChromeApplication.isVivaldi())
-        // If the flag for adding a "Security" section is enabled, the "Privacy" section will be
-        // renamed to a "Privacy and security" section and the "Security" section will be added
-        // under the renamed section. See (go/esb-clank-dd) for more context.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SAFE_BROWSING_SECTION_UI)) {
-            findPreference(PREF_PRIVACY).setTitle(R.string.prefs_privacy_security);
-        }
-
         cachePreferences();
 
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         mSyncPromoPreference.setOnStateChangedCallback(this::onSyncPromoPreferenceStateChanged);
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             removePreferenceIfPresent(PREF_SYNC_AND_SERVICES);
             if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext()))
                 removePreferenceIfPresent(VivaldiPreferences.SHOW_TAB_STRIP);
@@ -232,18 +222,7 @@ public class MainSettings extends PreferenceFragmentCompat
         }
 
         // Vivaldi should not alter this.
-        if (!ChromeApplication.isVivaldi())
-        // Only show the Safety check section if the Safety check flag is on.
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SAFETY_CHECK_ANDROID)) {
-            getPreferenceScreen().removePreference(findPreference(PREF_SAFETY_CHECK));
-        } else {
-            findPreference(PREF_SAFETY_CHECK)
-                    .setTitle(SafetyCheckSettingsFragment.getSafetyCheckSettingsElementTitle(
-                            getContext()));
-        }
-
-        // Vivaldi should not alter this.
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         // Replace the account section header, replace SyncAndServicesSettings with
         // ManageSyncSettings and add GoogleServicesSettings row if this flag is enabled.
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
@@ -300,7 +279,7 @@ public class MainSettings extends PreferenceFragmentCompat
             removePreferenceIfPresent(PREF_UI_THEME);
         }
 
-        if (!ChromeApplication.isVivaldi() &&
+        if (!ChromeApplicationImpl.isVivaldi() &&
                 DeveloperSettings.shouldShowDeveloperSettings()) {
             addPreferenceIfAbsent(PREF_DEVELOPER);
         } else {
@@ -333,7 +312,7 @@ public class MainSettings extends PreferenceFragmentCompat
     }
 
     private void updateSyncAndServicesPreference() {
-        if (ChromeApplication.isVivaldi()) return;
+        if (ChromeApplicationImpl.isVivaldi()) return;
         ChromeBasePreference preference = findPreference(PREF_SYNC_AND_SERVICES);
         preference.setIcon(SyncSettingsUtils.getSyncStatusIcon(getActivity()));
         preference.setSummary(SyncSettingsUtils.getSyncStatusSummary(getActivity()));
@@ -343,7 +322,7 @@ public class MainSettings extends PreferenceFragmentCompat
         String primaryAccountName = CoreAccountInfo.getEmailFrom(
                 IdentityServicesProvider.get()
                         .getIdentityManager(Profile.getLastUsedRegularProfile())
-                        .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED));
+                        .getPrimaryAccountInfo(ConsentLevel.SIGNIN));
         boolean showManageSync =
                 ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
                 && primaryAccountName != null;

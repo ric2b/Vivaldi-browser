@@ -7,9 +7,9 @@ namespace vivaldi {
 namespace constants {
 
 // Vivaldi registry.
-extern const wchar_t kVivaldiAutoUpdate[];
 extern const wchar_t kVivaldiDeltaPatchFailed[];
 extern const wchar_t kVivaldiKey[];
+extern const wchar_t kVivaldiAutoUpdateKey[];
 extern const wchar_t kVivaldiPinToTaskbarValue[];
 
 // Vivaldi installer settings from last install.
@@ -28,6 +28,7 @@ extern const wchar_t kVivaldiUpdateNotifierOldExe[];
 
 // Vivaldi installer command line switches.
 extern const char kVivaldiInstallDir[];
+extern const char kVivaldiLanguage[];
 extern const char kVivaldiMini[];
 extern const char kVivaldiRegisterStandalone[];
 extern const char kVivaldiSilent[];
@@ -36,6 +37,8 @@ extern const char kVivaldiUpdate[];
 
 // Vivaldi installer switches for debugging not supported in the official build.
 extern const char kVivaldiDebugTargetExe[];
+
+extern const wchar_t kUninstallSurveyUrl[];
 
 }  // namespace constants
 }  // namespace vivaldi

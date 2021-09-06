@@ -44,9 +44,8 @@ import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
 // Vivaldi
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
-import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -92,19 +91,7 @@ public class PrivacySettings
         PrivacyPreferencesManagerImpl privacyPrefManager =
                 PrivacyPreferencesManagerImpl.getInstance();
         SettingsUtils.addPreferencesFromResource(this, R.xml.privacy_preferences);
-        if (!ChromeApplication.isVivaldi()) {
-        assert NEW_PRIVACY_PREFERENCE_ORDER.length
-                == getPreferenceScreen().getPreferenceCount()
-            : "All preferences in the screen should be added in the new order list. "
-                        + "If you add a new preference, please also update "
-                        + "NEW_PRIVACY_PREFERENCE_ORDER.";
-
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_REORDERED_ANDROID)) {
-            for (int i = 0; i < NEW_PRIVACY_PREFERENCE_ORDER.length; i++) {
-                findPreference(NEW_PRIVACY_PREFERENCE_ORDER[i]).setOrder(i);
-            }
-        }
-        } // Vivaldi
+        getActivity().setTitle(R.string.prefs_privacy_security);
 
         if (PrivacySandboxBridge.isPrivacySandboxSettingsFunctional()) {
             findPreference(PREF_PRIVACY_SANDBOX)
@@ -123,23 +110,15 @@ public class PrivacySettings
             getPreferenceScreen().removePreference(findPreference(PREF_PRIVACY_SANDBOX));
         }
 
-        // If the flag for adding a "Safe Browsing" section UI is enabled, a "Safe Browsing" section
-        // will be added under this section and this section will be renamed to "Privacy and
-        // security". See (go/esb-clank-dd) for more context.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SAFE_BROWSING_SECTION_UI)) {
-            getActivity().setTitle(R.string.prefs_privacy_security);
-            Preference safeBrowsingPreference = findPreference(PREF_SAFE_BROWSING);
-            safeBrowsingPreference.setSummary(
-                    SafeBrowsingSettingsFragment.getSafeBrowsingSummaryString(getContext()));
-            safeBrowsingPreference.setOnPreferenceClickListener((preference) -> {
-                preference.getExtras().putInt(SafeBrowsingSettingsFragment.ACCESS_POINT,
-                        SettingsAccessPoint.PARENT_SETTINGS);
-                return false;
-            });
-        } else {
-            getActivity().setTitle(R.string.prefs_privacy);
-            getPreferenceScreen().removePreference(findPreference(PREF_SAFE_BROWSING));
-        }
+        Preference safeBrowsingPreference = findPreference(PREF_SAFE_BROWSING);
+        safeBrowsingPreference.setSummary(
+                SafeBrowsingSettingsFragment.getSafeBrowsingSummaryString(getContext()));
+        safeBrowsingPreference.setOnPreferenceClickListener((preference) -> {
+            preference.getExtras().putInt(
+                    SafeBrowsingSettingsFragment.ACCESS_POINT, SettingsAccessPoint.PARENT_SETTINGS);
+            return false;
+        });
+
         setHasOptionsMenu(true);
 
         mManagedPreferenceDelegate = createManagedPreferenceDelegate();
@@ -156,24 +135,23 @@ public class PrivacySettings
         networkPredictionPref.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
 
         Preference secureDnsPref = findPreference(PREF_SECURE_DNS);
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             secureDnsPref.setVisible(true);
         else
         secureDnsPref.setVisible(SecureDnsSettings.isUiEnabled());
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             getPreferenceScreen().removePreference(findPreference(PREF_SYNC_AND_SERVICES_LINK));
-            Preference safeBrowsingPreference = findPreference(PREF_SAFE_BROWSING);
-            if (safeBrowsingPreference != null) {
-                getActivity().setTitle(R.string.prefs_privacy);
-                getPreferenceScreen().removePreference(safeBrowsingPreference);
+            Preference prefSafeBrowsing = findPreference(PREF_SAFE_BROWSING);
+            if (prefSafeBrowsing != null) {
+                getActivity().setTitle(R.string.prefs_privacy_security);
+                getPreferenceScreen().removePreference(prefSafeBrowsing);
             }
         } else {
         Preference syncAndServicesLink = findPreference(PREF_SYNC_AND_SERVICES_LINK);
         syncAndServicesLink.setSummary(buildSyncAndServicesLink());
         }
 
-        // Vivaldi
         ChromeSwitchPreference webRtcBroadcastIpPref =
                 (ChromeSwitchPreference) findPreference(PREF_WEBRTC_BROADCAST_IP);
         if (webRtcBroadcastIpPref != null) {
@@ -242,6 +220,7 @@ public class PrivacySettings
                         ? WEBRTC_IP_HANDLING_POLICY_DEFAULT
                         : WEBRTC_IP_HANDLING_POLICY_DISABLE_NON_PROXIED_UDP);
         }
+
         return true;
     }
 

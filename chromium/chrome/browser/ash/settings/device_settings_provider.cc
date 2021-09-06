@@ -23,15 +23,14 @@
 #include "base/syslog_logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/device_settings_cache.h"
 #include "chrome/browser/ash/settings/stats_reporting_controller.h"
-#include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_policy_decoder_chromeos.h"
 #include "chrome/browser/chromeos/policy/off_hours/off_hours_proto_parser.h"
-#include "chrome/browser/chromeos/policy/system_proxy_manager.h"
+#include "chrome/browser/chromeos/policy/system_proxy_handler.h"
 #include "chrome/browser/chromeos/tpm_firmware_update.h"
-#include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/tpm/install_attributes.h"
@@ -48,7 +47,7 @@ using google::protobuf::RepeatedPtrField;
 
 namespace em = enterprise_management;
 
-namespace chromeos {
+namespace ash {
 
 namespace {
 
@@ -65,14 +64,15 @@ const char* const kKnownSettings[] = {
     kAccountsPrefEphemeralUsersEnabled,
     kAccountsPrefLoginScreenDomainAutoComplete,
     kAccountsPrefShowUserNamesOnSignIn,
-    kAccountsPrefSupervisedUsersEnabled,
     kAccountsPrefTransferSAMLCookies,
     kAccountsPrefUsers,
     kAllowBluetooth,
     kAllowedConnectionTypesForUpdate,
     kAllowRedeemChromeOsRegistrationOffers,
     kAttestationForContentProtectionEnabled,
+    kBorealisAllowedForDevice,
     kCastReceiverName,
+    kDeviceAllowedBluetoothServices,
     kDeviceAttestationEnabled,
     kDeviceAutoUpdateTimeRestrictions,
     kDeviceCrostiniArcAdbSideloadingAllowed,
@@ -140,6 +140,7 @@ const char* const kKnownSettings[] = {
     kReportDeviceVpdInfo,
     kReportDeviceAppInfo,
     kReportDeviceSystemInfo,
+    kReportDevicePrintJobs,
     kReportOsUpdateStatus,
     kReportRunningKioskApp,
     kReportUploadFrequency,
@@ -193,8 +194,6 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
   // true is default permissive value and false is safe prohibitive value.
   // Exceptions:
   //   kAccountsPrefEphemeralUsersEnabled has a default value of false.
-  //   kAccountsPrefSupervisedUsersEnabled has a default value of false
-  //     for enterprise devices and true for consumer devices.
   //   kAccountsPrefTransferSAMLCookies has a default value of false.
   //   kAccountsPrefFamilyLinkAccountsAllowed has a default value of false.
   if (policy.has_allow_new_users() &&
@@ -226,7 +225,7 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
         policy.user_allowlist().user_allowlist_size() > 0));
   new_values_cache->SetBoolean(
       kAccountsPrefFamilyLinkAccountsAllowed,
-      chromeos::features::IsFamilyLinkOnSchoolDeviceEnabled() &&
+      features::IsFamilyLinkOnSchoolDeviceEnabled() &&
           user_allowlist_enforced &&
           policy.has_family_link_accounts_allowed() &&
           policy.family_link_accounts_allowed()
@@ -244,13 +243,6 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
       !policy.has_guest_mode_enabled() ||
           !policy.guest_mode_enabled().has_guest_mode_enabled() ||
           policy.guest_mode_enabled().guest_mode_enabled());
-
-  bool supervised_users_enabled = false;
-  if (!InstallAttributes::Get()->IsEnterpriseManaged()) {
-    supervised_users_enabled = true;
-  }
-  new_values_cache->SetBoolean(kAccountsPrefSupervisedUsersEnabled,
-                               supervised_users_enabled);
 
   new_values_cache->SetBoolean(
       kAccountsPrefShowUserNamesOnSignIn,
@@ -660,6 +652,10 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
       new_values_cache->SetBoolean(kReportDeviceSystemInfo,
                                    reporting_policy.report_system_info());
     }
+    if (reporting_policy.has_report_print_jobs()) {
+      new_values_cache->SetBoolean(kReportDevicePrintJobs,
+                                   reporting_policy.report_print_jobs());
+    }
   }
 }
 
@@ -690,7 +686,8 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     // If the policy is missing, default to reporting enabled on enterprise-
     // enrolled devices, c.f. crbug/456186.
     new_values_cache->SetBoolean(
-        kStatsReportingPref, InstallAttributes::Get()->IsEnterpriseManaged());
+        kStatsReportingPref,
+        chromeos::InstallAttributes::Get()->IsEnterpriseManaged());
   }
 
   if (!policy.has_release_channel() ||
@@ -1019,7 +1016,7 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
   // Default value of the policy in case it's missing.
   bool show_low_disk_space_notification = true;
   // Disable the notification by default for enrolled devices.
-  if (InstallAttributes::Get()->IsEnterpriseManaged())
+  if (chromeos::InstallAttributes::Get()->IsEnterpriseManaged())
     show_low_disk_space_notification = false;
   if (policy.has_device_show_low_disk_space_notification()) {
     const em::DeviceShowLowDiskSpaceNotificationProto& container(
@@ -1059,6 +1056,25 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
       allowlist.Append(std::move(ids));
     }
     new_values_cache->SetValue(kUsbDetachableAllowlist, std::move(allowlist));
+  }
+
+  if (policy.has_device_borealis_allowed()) {
+    const em::DeviceBorealisAllowedProto& container(
+        policy.device_borealis_allowed());
+    if (container.has_allowed()) {
+      new_values_cache->SetValue(kBorealisAllowedForDevice,
+                                 base::Value(container.allowed()));
+    }
+  }
+
+  if (policy.has_device_allowed_bluetooth_services()) {
+    base::Value list(base::Value::Type::LIST);
+    const em::DeviceAllowedBluetoothServicesProto& container(
+        policy.device_allowed_bluetooth_services());
+    for (const auto& service_uuid : container.allowlist())
+      list.Append(service_uuid);
+    new_values_cache->SetValue(kDeviceAllowedBluetoothServices,
+                               std::move(list));
   }
 }
 
@@ -1163,8 +1179,8 @@ void DeviceSettingsProvider::DoSet(const std::string& path,
     // Temporary store new setting in
     // |device_settings_|. |device_settings_| will be stored on a disk
     // as soon as an ownership of device the will be taken.
-    OwnerSettingsServiceChromeOS::UpdateDeviceSettings(path, in_value,
-                                                       device_settings_);
+    OwnerSettingsServiceAsh::UpdateDeviceSettings(path, in_value,
+                                                  device_settings_);
     em::PolicyData data;
     data.set_username(device_settings_service_->GetUsername());
     CHECK(device_settings_.SerializeToString(data.mutable_policy_value()));
@@ -1192,42 +1208,45 @@ void DeviceSettingsProvider::OwnershipStatusChanged() {
   // in this case, as during normal operation, the contents of the cache should
   // never overwrite actual device settings.
   if (new_ownership_status == DeviceSettingsService::OWNERSHIP_TAKEN &&
-      ownership_status_ == DeviceSettingsService::OWNERSHIP_NONE &&
-      device_settings_service_->HasPrivateOwnerKey()) {
-    // There shouldn't be any pending writes, since the cache writes are all
-    // immediate.
-    DCHECK(!store_callback_factory_.HasWeakPtrs());
+      ownership_status_ == DeviceSettingsService::OWNERSHIP_NONE) {
+    if (device_settings_service_->HasPrivateOwnerKey()) {
+      // There shouldn't be any pending writes, since the cache writes are all
+      // immediate.
+      DCHECK(!store_callback_factory_.HasWeakPtrs());
 
-    trusted_status_ = TEMPORARILY_UNTRUSTED;
-    // Apply the locally-accumulated device settings on top of the initial
-    // settings from the service and write back the result.
-    if (device_settings_service_->device_settings()) {
-      em::ChromeDeviceSettingsProto new_settings(
-          *device_settings_service_->device_settings());
-      new_settings.MergeFrom(device_settings_);
-      device_settings_.Swap(&new_settings);
+      trusted_status_ = TEMPORARILY_UNTRUSTED;
+      // Apply the locally-accumulated device settings on top of the initial
+      // settings from the service and write back the result.
+      if (device_settings_service_->device_settings()) {
+        em::ChromeDeviceSettingsProto new_settings(
+            *device_settings_service_->device_settings());
+        new_settings.MergeFrom(device_settings_);
+        device_settings_.Swap(&new_settings);
+      }
+
+      std::unique_ptr<em::PolicyData> policy(new em::PolicyData());
+      policy->set_username(device_settings_service_->GetUsername());
+      CHECK(device_settings_.SerializeToString(policy->mutable_policy_value()));
+      if (!device_settings_service_->GetOwnerSettingsService()
+               ->CommitTentativeDeviceSettings(std::move(policy))) {
+        LOG(ERROR) << "Can't store policy";
+      }
+
+      // TODO(https://crbug.com/433840): Some of the above code can be
+      // simplified or removed, once the DoSet function is removed - then there
+      // will be no pending writes. This is because the only value that needs to
+      // be written as a pending write is kStatsReportingPref, and this is now
+      // handled by the StatsReportingController - see below. Once DoSet is
+      // removed and there are no pending writes that are being maintained by
+      // DeviceSettingsProvider, this code for updating the signed settings for
+      // the new owner should probably be moved outside of
+      // DeviceSettingsProvider.
+
+      StatsReportingController::Get()->OnOwnershipTaken(
+          device_settings_service_->GetOwnerSettingsService());
+    } else if (chromeos::InstallAttributes::Get()->IsEnterpriseManaged()) {
+      StatsReportingController::Get()->ClearPendingValue();
     }
-
-    std::unique_ptr<em::PolicyData> policy(new em::PolicyData());
-    policy->set_username(device_settings_service_->GetUsername());
-    CHECK(device_settings_.SerializeToString(policy->mutable_policy_value()));
-    if (!device_settings_service_->GetOwnerSettingsService()
-             ->CommitTentativeDeviceSettings(std::move(policy))) {
-      LOG(ERROR) << "Can't store policy";
-    }
-
-    // TODO(https://crbug.com/433840): Some of the above code can be simplified
-    // or removed, once the DoSet function is removed - then there will be no
-    // pending writes. This is because the only value that needs to be written
-    // as a pending write is kStatsReportingPref, and this is now handled by the
-    // StatsReportingController - see below.
-    // Once DoSet is removed and there are no pending writes that are being
-    // maintained by DeviceSettingsProvider, this code for updating the signed
-    // settings for the new owner should probably be moved outside of
-    // DeviceSettingsProvider.
-
-    StatsReportingController::Get()->OnOwnershipTaken(
-        device_settings_service_->GetOwnerSettingsService());
   }
 
   ownership_status_ = new_ownership_status;
@@ -1315,7 +1334,8 @@ void DeviceSettingsProvider::UpdateValuesCache(
 bool DeviceSettingsProvider::MitigateMissingPolicy() {
   // First check if the device has been owned already and if not exit
   // immediately.
-  if (InstallAttributes::Get()->GetMode() != policy::DEVICE_MODE_CONSUMER)
+  if (chromeos::InstallAttributes::Get()->GetMode() !=
+      policy::DEVICE_MODE_CONSUMER)
     return false;
 
   // If we are here the policy file were corrupted or missing. This can happen
@@ -1429,4 +1449,4 @@ bool DeviceSettingsProvider::UpdateFromService() {
   return settings_loaded;
 }
 
-}  // namespace chromeos
+}  // namespace ash

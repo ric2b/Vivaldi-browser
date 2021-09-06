@@ -30,7 +30,7 @@ import org.chromium.components.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The SelectableItemView for items displayed in the browsing history UI.
@@ -110,7 +110,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> implements 
             setStartIconDrawable(mFaviconHelper.getDefaultFaviconDrawable(
                     getContext().getResources(), item.getUrl(), true));
             if (mHistoryManager != null) requestIcon();
-            if (!ChromeApplication.isVivaldi())
+            if (!ChromeApplicationImpl.isVivaldi())
             mTitleView.setTextColor(
                     ApiCompatibilityUtils.getColor(getResources(),R.color.default_text_color));
         }
@@ -173,7 +173,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> implements 
     @Override
     public void onLargeIconAvailable(Bitmap icon, int fallbackColor, boolean isFallbackColorDefault,
             @IconType int iconType) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             largeIconAvailableVivaldi(icon, fallbackColor, isFallbackColorDefault,
                     iconType);
             return;

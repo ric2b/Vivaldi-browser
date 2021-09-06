@@ -34,7 +34,7 @@ import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.widget.ChromeBulletSpan;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The view to describle incognito mode.
@@ -304,7 +304,7 @@ public class IncognitoDescriptionView extends LinearLayout {
                         : R.string.new_tab_otr_subtitle);
         boolean learnMoreInSubtitle = mWidthDp > WIDE_LAYOUT_THRESHOLD_DP;
 
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         mLearnMore.setVisibility(learnMoreInSubtitle ? View.GONE : View.VISIBLE);
 
         if (!learnMoreInSubtitle) {

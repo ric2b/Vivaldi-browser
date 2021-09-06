@@ -35,7 +35,7 @@ class OperaImporter : public Importer {
   // Returns false on error in which case error is filled with an error message.
   bool ImportBookMarks(std::string* error);
 
-  // void ReadFaviconIndexFile(base::string16 domain, );
+  // void ReadFaviconIndexFile(std::u16string domain, );
 
   bool ImportNotes(std::string* error);
   bool ImportSpeedDial(std::string* error);
@@ -63,17 +63,17 @@ class OperaImporter : public Importer {
   uint32_t wand_version_;
   bool master_password_required_;
 
-  base::string16 master_password_;
+  std::u16string master_password_;
 
   std::string master_password_block_;
 
   /*
   struct favicon_item {
     uint index;
-    base::string16 favicon_filename;
+    std::u16string favicon_filename;
   };
 
-  unordered_map<base::string16, pair<base::string16, >>;
+  unordered_map<std::u16string, pair<std::u16string, >>;
   */
 
   DISALLOW_COPY_AND_ASSIGN(OperaImporter);

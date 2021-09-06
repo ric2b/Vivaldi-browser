@@ -148,9 +148,9 @@ void AccountTable::FillAccountRow(sql::Statement& statement,
                                   AccountRow* account) {
   int column_index = 0;
   AccountID id = statement.ColumnInt64(column_index++);
-  base::string16 name = statement.ColumnString16(column_index++);
+  std::u16string name = statement.ColumnString16(column_index++);
   std::string url = statement.ColumnString(column_index++);
-  base::string16 username = statement.ColumnString16(column_index++);
+  std::u16string username = statement.ColumnString16(column_index++);
   int type = statement.ColumnInt(column_index++);
   int interval = statement.ColumnInt(column_index++);
 

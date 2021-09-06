@@ -35,7 +35,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Common logic for bookmark and folder rows.
@@ -120,7 +120,7 @@ public abstract class BookmarkRow
                             ? IMPORTANT_FOR_ACCESSIBILITY_YES
                             : IMPORTANT_FOR_ACCESSIBILITY_NO);
 
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 mMoreIcon.setVisibility(View.GONE);
         }
     }

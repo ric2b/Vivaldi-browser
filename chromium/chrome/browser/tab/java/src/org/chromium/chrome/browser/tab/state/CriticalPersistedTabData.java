@@ -247,7 +247,8 @@ public class CriticalPersistedTabData extends PersistedTabData {
         return "Critical";
     }
 
-    private static @Nullable @TabLaunchType Integer getLaunchType(
+    @VisibleForTesting
+    static @Nullable @TabLaunchType Integer getLaunchType(
             CriticalPersistedTabDataProto.LaunchTypeAtCreation protoLaunchType) {
         switch (protoLaunchType) {
             case FROM_LINK:
@@ -276,6 +277,10 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 return TabLaunchType.FROM_STARTUP;
             case FROM_START_SURFACE:
                 return TabLaunchType.FROM_START_SURFACE;
+            case FROM_TAB_GROUP_UI:
+                return TabLaunchType.FROM_TAB_GROUP_UI;
+            case FROM_LONGPRESS_BACKGROUND_IN_GROUP:
+                return TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP;
             case SIZE:
                 return TabLaunchType.SIZE;
             default:
@@ -286,7 +291,8 @@ public class CriticalPersistedTabData extends PersistedTabData {
         }
     }
 
-    private static CriticalPersistedTabDataProto.LaunchTypeAtCreation getLaunchType(
+    @VisibleForTesting
+    static CriticalPersistedTabDataProto.LaunchTypeAtCreation getLaunchType(
             @Nullable @TabLaunchType Integer protoLaunchType) {
         if (protoLaunchType == null) {
             return CriticalPersistedTabDataProto.LaunchTypeAtCreation.UNKNOWN;
@@ -320,6 +326,11 @@ public class CriticalPersistedTabData extends PersistedTabData {
                 return CriticalPersistedTabDataProto.LaunchTypeAtCreation.FROM_STARTUP;
             case TabLaunchType.FROM_START_SURFACE:
                 return CriticalPersistedTabDataProto.LaunchTypeAtCreation.FROM_START_SURFACE;
+            case TabLaunchType.FROM_TAB_GROUP_UI:
+                return CriticalPersistedTabDataProto.LaunchTypeAtCreation.FROM_TAB_GROUP_UI;
+            case TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP:
+                return CriticalPersistedTabDataProto.LaunchTypeAtCreation
+                        .FROM_LONGPRESS_BACKGROUND_IN_GROUP;
             case TabLaunchType.SIZE:
                 return CriticalPersistedTabDataProto.LaunchTypeAtCreation.SIZE;
             default:
@@ -376,15 +387,24 @@ public class CriticalPersistedTabData extends PersistedTabData {
         }
         return () -> {
             try (TraceEvent e = TraceEvent.scoped("CriticalPersistedTabData.Serialize")) {
-                if (byteBuffer == null) {
-                    builder.setWebContentsStateBytes(ByteString.EMPTY);
-                } else {
-                    byteBuffer.rewind();
-                    builder.setWebContentsStateBytes(ByteString.copyFrom(byteBuffer));
-                }
-                return builder.build().toByteArray();
+                // TODO(crbug.com/1203298) migrate to ByteString.copyFrom(ByteBuffer ...)
+                // in a thread safe way to avoid intermediate ByteBuffer -> byte[]. Be careful as
+                // this has caused crashes in the past crbug.com/1195550.
+                return builder
+                        .setWebContentsStateBytes(byteBuffer == null
+                                        ? ByteString.EMPTY
+                                        : ByteString.copyFrom(getContentStateByteArray(byteBuffer)))
+                        .build()
+                        .toByteArray();
             }
         };
+    }
+
+    protected static byte[] getContentStateByteArray(ByteBuffer buffer) {
+        byte[] contentsStateBytes = new byte[buffer.limit()];
+        buffer.rewind();
+        buffer.get(contentsStateBytes);
+        return contentsStateBytes;
     }
 
     @Override

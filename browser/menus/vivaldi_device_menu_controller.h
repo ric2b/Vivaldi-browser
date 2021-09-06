@@ -31,7 +31,8 @@ class DeviceMenuController {
                        Mode mode);
   ~DeviceMenuController();
 
-  void Populate(Browser* browser, base::string16 label,
+  void Populate(Browser* browser,
+                std::u16string label,
                 ui::SimpleMenuModel* menu_model,
                 ui::SimpleMenuModel::Delegate* delegate);
   bool HandleCommand(int command_id, int event_flags);

@@ -45,7 +45,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Coordinator for showing UI for a list of tabs. Can be used in GRID or STRIP modes.
@@ -71,7 +71,7 @@ public class TabListCoordinator
     }
 
     static final int GRID_LAYOUT_SPAN_COUNT_PORTRAIT = 2;
-    static final int GRID_LAYOUT_SPAN_COUNT_LANDSCAPE = 3;
+    static final int GRID_LAYOUT_SPAN_COUNT_LANDSCAPE = 4; // Vivaldi overwrite.
     private final TabListMediator mMediator;
     private final TabListRecyclerView mRecyclerView;
     private final SimpleRecyclerViewAdapter mAdapter;
@@ -213,7 +213,7 @@ public class TabListCoordinator
         }
 
         if (!attachToParent) {
-            if(ChromeApplication.isVivaldi()) {
+            if(ChromeApplicationImpl.isVivaldi()) {
                 mRecyclerView = (TabListRecyclerView) LayoutInflater.from(context).inflate(
                         R.layout.vivaldi_tab_list_recycler_view_layout, parentView, false);
             } else
@@ -244,8 +244,11 @@ public class TabListCoordinator
                 priceWelcomeMessageController, componentName, itemType);
 
         if (mMode == TabListMode.GRID) {
+            // Note(david@vivaldi.com): Calculate grid span count depending on screen size.
+            int spanCount = mMediator.calculateGridSpanCount(
+                    context.getResources().getConfiguration().orientation);
             GridLayoutManager gridLayoutManager =
-                    new GridLayoutManager(context, GRID_LAYOUT_SPAN_COUNT_PORTRAIT);
+                    new GridLayoutManager(context, spanCount); // Vivaldi: consider new span count.
             mRecyclerView.setLayoutManager(gridLayoutManager);
             mMediator.registerOrientationListener(gridLayoutManager);
             mMediator.updateSpanCountForOrientation(

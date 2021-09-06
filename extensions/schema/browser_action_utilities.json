@@ -151,19 +151,17 @@
         "name": "getToolbarExtensions",
         "type": "function",
         "description": "",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "ExtensionInfo" }
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "ExtensionInfo" }
+            }
+          ]
+        }
       },
       {
         "name": "executeExtensionAction",
@@ -249,20 +247,19 @@
             "name": "extensionId",
             "type": "string",
             "description": "The id for the extension we want to get the menu for."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "items",
-                "type": "array",
-                "items": { "$ref": "MenuItem" },
-                "description": "Menu items if the extension supplies a custom menu."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "items",
+              "type": "array",
+              "items": { "$ref": "MenuItem" },
+              "description": "Menu items if the extension supplies a custom menu."
+            }
+          ]
+        }
       },
       {
         "name": "executeMenuAction",

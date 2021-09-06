@@ -19,14 +19,15 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lens.LensFeature;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
+import org.chromium.chrome.browser.omnibox.status.StatusCoordinator.PageInfoAction;
 import org.chromium.chrome.browser.omnibox.status.StatusView;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
@@ -113,6 +114,8 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
      * @param overrideUrlLoadingDelegate Delegate that allows customization of url loading behavior.
      * @param backKeyBehavior Delegate that allows customization of back key behavior.
      * @param searchEngineLogoUtils Utils to query the state of the search engine logos feature.
+     * @param launchAssistanceSettingsAction Runnable launching settings for voice assistance.
+     * @param pageInfoAction Displays page info popup.
      */
     public LocationBarCoordinator(View locationBarLayout, View autocompleteAnchorView,
             ObservableSupplier<Profile> profileObservableSupplier,
@@ -124,7 +127,9 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
             IncognitoStateProvider incognitoStateProvider,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
             OverrideUrlLoadingDelegate overrideUrlLoadingDelegate,
-            BackKeyBehaviorDelegate backKeyBehavior, SearchEngineLogoUtils searchEngineLogoUtils) {
+            BackKeyBehaviorDelegate backKeyBehavior, SearchEngineLogoUtils searchEngineLogoUtils,
+            @NonNull Runnable launchAssistanceSettingsAction,
+            @NonNull PageInfoAction pageInfoAction) {
         mLocationBarLayout = (LocationBarLayout) locationBarLayout;
         mWindowDelegate = windowDelegate;
         mWindowAndroid = windowAndroid;
@@ -140,7 +145,7 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
                 PrivacyPreferencesManagerImpl.getInstance(), overrideUrlLoadingDelegate,
                 LocaleManager.getInstance(), mTemplateUrlServiceSupplier, backKeyBehavior,
                 windowAndroid, isTablet() && isTabletLayout(), searchEngineLogoUtils,
-                LensController.getInstance());
+                AppHooks.get().getLensController(), launchAssistanceSettingsAction);
         mUrlCoordinator =
                 new UrlBarCoordinator((UrlBar) mUrlBar, windowDelegate, actionModeCallback,
                         mCallbackController.makeCancelable(mLocationBarMediator::onUrlFocusChange),
@@ -152,7 +157,7 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
         mStatusCoordinator = new StatusCoordinator(isTablet(), statusView, mUrlCoordinator,
                 incognitoStateProvider, modalDialogManagerSupplier, locationBarDataProvider,
                 mTemplateUrlServiceSupplier, searchEngineLogoUtils, profileObservableSupplier,
-                windowAndroid);
+                windowAndroid, pageInfoAction);
         mLocationBarMediator.setCoordinators(
                 mUrlCoordinator, mAutocompleteCoordinator, mStatusCoordinator);
 
@@ -308,8 +313,9 @@ public final class LocationBarCoordinator implements LocationBar, NativeInitObse
         return mLocationBarMediator.getVoiceRecognitionHandler();
     }
 
+    @Nullable
     @Override
-    public FakeboxDelegate getFakeboxDelegate() {
+    public OmniboxStub getOmniboxStub() {
         return mLocationBarMediator;
     }
 

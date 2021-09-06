@@ -2274,8 +2274,16 @@ void MainThreadSchedulerImpl::DidCommitProvisionalLoad(
   // If this either isn't a history inert commit or it's a reload then we must
   // reset the task cost estimators.
   if (is_main_frame && (!is_web_history_inert_commit || is_reload)) {
-    base::AutoLock lock(any_thread_lock_);
-    ResetForNavigationLocked();
+    RAILMode old_rail_mode;
+    RAILMode new_rail_mode;
+    {
+      base::AutoLock lock(any_thread_lock_);
+      old_rail_mode = main_thread_only().current_policy.rail_mode();
+      ResetForNavigationLocked();
+      new_rail_mode = main_thread_only().current_policy.rail_mode();
+    }
+    if (old_rail_mode == new_rail_mode && isolate())
+      isolate()->UpdateLoadStartTime();
   }
 }
 
@@ -2434,14 +2442,6 @@ MainThreadSchedulerImpl::V8TaskRunner() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 MainThreadSchedulerImpl::CompositorTaskRunner() {
-  if (scheduling_settings()
-          .mbi_compositor_task_runner_per_agent_scheduling_group) {
-    NOTREACHED() << "When MbiPerAGSCompositorTaskRunner is enabled, "
-                    "MainThreadSchedulerImpl::CompositorTaskRunner() shouldn't "
-                    "be used. We are planning to remove "
-                    "MainThreadSchedulerImpl::CompositorTaskRunner() in the "
-                    "near future.";
-  }
   return compositor_task_runner_;
 }
 

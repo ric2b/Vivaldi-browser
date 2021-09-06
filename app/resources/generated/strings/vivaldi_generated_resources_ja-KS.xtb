@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">サイトがファイル何個も連続でダウンロードしようとしてきたら止める</translation>
 <translation id="5039804452771397117">ええよ</translation>
 <translation id="5057110919553308744">拡張機能クリックしたとき</translation>
+<translation id="5059526285558225588">シェアするやつ選んで</translation>
 <translation id="5063480226653192405">使用状況</translation>
 <translation id="5116628073786783676">芸名付けて音声保存するわ... (&amp;V)</translation>
 <translation id="5143374789336132547">拡張機能「<ph name="EXTENSION_NAME" />」はんが、ホームボタンクリックしたときに表示されるページが変えたで。</translation>
@@ -458,7 +459,6 @@
 <translation id="8823704566850948458">パスワード自動こしらえる...</translation>
 <translation id="8859174528519900719">サブフレーム: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">さらのウィンドウでリンク開く (&amp;W)</translation>
-<translation id="8910146161325739742">画面シェア</translation>
 <translation id="8915370057835397490">候補を読み込んどるで</translation>
 <translation id="8916476537757519021">プライベートサブフレーム: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScriptメモリー</translation>

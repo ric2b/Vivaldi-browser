@@ -20,7 +20,7 @@
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-#include "sync/vivaldi_sync_urls.h"
+#include "app/vivaldi_constants.h"
 
 namespace history {
 
@@ -31,15 +31,15 @@ namespace {
 // TODO(msramek): Find a way to keep these URLs in sync with what is used
 // in WebHistoryService.
 
-const char kLookupUrl[] = TEST_SYNC_URL("/apis/history/api/lookup");
+const char kLookupUrl[] = KNOWN_404("/apis/history/api/lookup");
 
-const char kDeleteUrl[] = TEST_SYNC_URL("/apis/history/api/delete");
+const char kDeleteUrl[] = KNOWN_404("/apis/history/api/delete");
 
 const char kChromeClient[] = "chrome";
 
 const char kWebAndAppClient[] = "web_app";
 
-const char kSyncServerHost[] = SYNC_HOSTNAME; //"clients4.google.com";
+const char kSyncServerHost[] = HOSTNAME_404; //"clients4.google.com";
 
 }  // namespace
 

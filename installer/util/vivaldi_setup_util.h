@@ -6,16 +6,16 @@
 #include "base/files/file_path.h"
 #include "base/win/windows_types.h"
 #include "chrome/installer/util/util_constants.h"
+#include "base/version.h"
 
 #include "installer/util/vivaldi_install_constants.h"
+#include "installer/util/vivaldi_install_util.h"
+
+// Vivaldi-specific code for setup.exe
 
 class WorkItemList;
 
 namespace installer {
-
-// Marker to annotate Vivaldi-specific changes in the installer when it is
-// otherwise not clear if the change is from a Vivaldi patch.
-constexpr bool kVivaldi = true;
 
 class InstallerState;
 struct InstallParams;
@@ -47,6 +47,9 @@ void UnregisterUpdateNotifier(const installer::InstallerState& installer_state);
 
 // Shows a modal messagebox with the installer result localized string.
 void ShowInstallerResultMessage(int string_resource_id);
+
+// Does the post uninstall operations - open the URL to the uninstall survey.
+void DoPostUninstallOperations(const base::Version& version);
 
 // Helpers to check various Vivaldi-specific command-line flags.
 bool IsInstallUpdate();

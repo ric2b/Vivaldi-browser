@@ -45,20 +45,19 @@
           {
             "name": "params",
             "$ref": "ThumbnailParams"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Returns results",
-            "parameters": [
-              {
-                "name": "thumbnail",
-                "type": "string",
-                "description": "Thumbnail in base64 format."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Returns results",
+          "parameters": [
+            {
+              "name": "thumbnail",
+              "type": "string",
+              "description": "Thumbnail in base64 format."
+            }
+          ]
+        }
       },
       {
         "name": "showPageInfo",

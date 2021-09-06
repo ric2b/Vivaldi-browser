@@ -87,7 +87,7 @@ import java.util.List;
 // Vivaldi
 import android.content.res.Configuration;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.NavigationPopup;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 
@@ -550,7 +550,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
         // Note (david@vivaldi.com): When in tab switcher more prevent all touch events to the child
         // views.
-        if (ChromeApplication.isVivaldi() && isInTabSwitcherMode()) return true;
+        if (ChromeApplicationImpl.isVivaldi() && isInTabSwitcherMode()) return true;
 
         return super.onInterceptTouchEvent(ev);
     }
@@ -1311,7 +1311,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
             mHomeButton.setAlpha(previousAlpha);
         }
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             if (mPanelButton != null && mPanelButton.getVisibility() != View.GONE)
                 drawLocationBarButton(mPanelButton, canvas, floatAlpha);
             if (mForwardButton != null && mForwardButton.getVisibility() != View.GONE)
@@ -1382,7 +1382,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
             mTabSwitcherAnimationTabStackDrawable.setBounds(
                     mToggleTabStackButton.getDrawable().getBounds());
             mTabSwitcherAnimationTabStackDrawable.setAlpha(rgbAlpha);
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 drawLocationBarButton(mToggleTabStackButton, canvas, floatAlpha);
             else
             mTabSwitcherAnimationTabStackDrawable.draw(canvas);
@@ -1690,7 +1690,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
                             isIncognito(), false /* isTablet */);
             // Note(david@vivaldi.com): Home button visibility will be handled in
             // onBottomToolbarVisibilityChanged().
-            if (!ChromeApplication.isVivaldi())
+            if (!ChromeApplicationImpl.isVivaldi())
             if (hideHomeButton) {
                 removeHomeButton();
             } else {
@@ -1908,7 +1908,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         if (inTabSwitcherMode) {
             // Note(david@vivaldi.com) To avoid the blinking effects while opening the tab switcher
             // in Vivaldi.
-            if (!ChromeApplication.isVivaldi()) {
+            if (!ChromeApplicationImpl.isVivaldi()) {
             if (mUrlFocusLayoutAnimator != null && mUrlFocusLayoutAnimator.isRunning()) {
                 mUrlFocusLayoutAnimator.end();
                 mUrlFocusLayoutAnimator = null;
@@ -2037,7 +2037,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     @Override
     public boolean shouldIgnoreSwipeGesture() {
         // NOTE(david@vivaldi.com): In Vivaldi we don't allow gesture when in Tab Switcher Mode
-        if (ChromeApplication.isVivaldi() && isInTabSwitcherMode()) return true;
+        if (ChromeApplicationImpl.isVivaldi() && isInTabSwitcherMode()) return true;
         return super.shouldIgnoreSwipeGesture() || mUrlExpansionFraction > 0f
                 || mNtpSearchBoxTranslation.y < 0f;
     }
@@ -2191,6 +2191,9 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
         // Vivaldi
         mShieldButton.onUrlFocusChange(hasFocus);
+        // For Vivaldi, hide menu (V) button so it doesn't mix with the location bar buttons.
+        if (ChromeApplicationImpl.isVivaldi())
+            getMenuButtonCoordinator().setVisibility(!hasFocus);
 
         triggerUrlFocusAnimation(hasFocus);
     }
@@ -2547,7 +2550,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         // https://crbug.com/832594 for more info.
         if (mTabSwitcherState != EXITING_TAB_SWITCHER) {
             // Note (david@vivaldi.com): Not needed in Vivaldi.
-            if(!ChromeApplication.isVivaldi())
+            if(!ChromeApplicationImpl.isVivaldi())
             updateToolbarBackgroundFromState(mVisualState);
         }
 
@@ -2944,7 +2947,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
         // Vivaldi - the search engine icon is always visible on NTP; the translation X
         // should not be modified regardless of focus state.
-        if (!ChromeApplication.isVivaldi()) {
+        if (!ChromeApplicationImpl.isVivaldi()) {
         boolean scrollingOnNtp = !hasFocus && statusCoordinator.isSearchEngineStatusIconVisible()
                 && UrlUtilities.isNTPUrl(getToolbarDataProvider().getCurrentUrl());
         if (scrollingOnNtp) {
@@ -2972,7 +2975,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     }
 
     private int getAdditionalOffsetForNTP() {
-        return getResources().getDimensionPixelSize(R.dimen.sei_search_box_lateral_padding)
+        return getResources().getDimensionPixelSize(R.dimen.location_bar_lateral_padding)
                 - getResources().getDimensionPixelSize(R.dimen.sei_location_bar_lateral_padding);
     }
 
@@ -3053,7 +3056,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         // For all other buttons we apply |GONE| when in portrait mode with toolbar at the bottom.
         if (orientation == Configuration.ORIENTATION_PORTRAIT && !VivaldiUtils.isTopToolbarOn())
             visibility = GONE;
-        mHomeButton.setVisibility(visibility);
+        mHomeButton.setVisibility(VivaldiUtils.shouldShowStartPageIcon() ? VISIBLE : visibility);
         mBackButton.setVisibility(visibility);
         mForwardButton.setVisibility(visibility);
         mToolbarButtonsContainer.requestLayout();

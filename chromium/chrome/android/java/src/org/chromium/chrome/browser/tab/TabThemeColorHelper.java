@@ -14,7 +14,7 @@ import org.chromium.url.GURL;
 
 // Vivaldi
 import android.graphics.Bitmap;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -36,7 +36,7 @@ public class TabThemeColorHelper extends EmptyTabObserver {
     private void updateIfNeeded(Tab tab, boolean didWebContentsThemeColorChange) {
         // Note(david@vivaldi.com): Calculating the actual theme colour here and don't bother what
         // Chromium is doing.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             VivaldiUtils.calculateThemeColor(tab, mUpdateCallback);
             return;
         }

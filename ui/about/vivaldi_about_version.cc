@@ -29,14 +29,18 @@ void UpdateVersionUIDataSource(content::WebUIDataSource* html_source) {
                              ? "Stable channel"
                              : VIVALDI_PRODUCT_VERSION);
 #endif
+  html_source->AddLocalizedString("productLicense",
+                                  IDS_VIVALDI_VERSION_UI_LICENSE_NEW);
 
-  html_source->AddString("productLicense",
-                         l10n_util::GetStringFUTF16(
-                             IDS_VIVALDI_VERSION_UI_LICENSE,
-                             base::ASCIIToUTF16(chrome::kChromiumProjectURL),
-                             base::ASCIIToUTF16(chrome::kChromeUICreditsURL)));
+  html_source->AddLocalizedString("productCredits",
+                                  IDS_VIVALDI_VERSION_UI_CREDITS);
+
+  html_source->AddString("productLicenseChromiumURL",
+                         base::UTF8ToUTF16(chrome::kChromiumProjectURL));
+
+  html_source->AddString("productLicenseCreditsURL",
+                         base::UTF8ToUTF16(chrome::kChromeUICreditsURL));
+
   html_source->AddLocalizedString("productTOS", IDS_ABOUT_TERMS_OF_SERVICE);
-  html_source->AddResourcePath("vivaldi_about_version.js",
-                               IDR_VIVALDI_VERSION_UI_JS);
 }
 }  // namespace vivaldi

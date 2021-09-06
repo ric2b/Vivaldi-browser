@@ -114,7 +114,7 @@ bool EventTypeDatabase::UpdateEventTypeRow(const EventTypeRow& event) {
 void EventTypeDatabase::FillEventTypeRow(sql::Statement& s,
                                          EventTypeRow* event) {
   EventTypeID id = s.ColumnInt64(0);
-  base::string16 name = s.ColumnString16(1);
+  std::u16string name = s.ColumnString16(1);
   std::string color = s.ColumnString(2);
   int iconindex = s.ColumnInt(3);
   event->set_id(id);

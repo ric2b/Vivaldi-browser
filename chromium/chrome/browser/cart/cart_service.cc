@@ -4,13 +4,16 @@
 
 #include "chrome/browser/cart/cart_service.h"
 #include "base/json/json_reader.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/cart/cart_db_content.pb.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/browser_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/ntp_features.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
 namespace {
@@ -76,6 +79,8 @@ CartService::~CartService() = default;
 void CartService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kCartModuleHidden, false);
   registry->RegisterIntegerPref(prefs::kCartModuleWelcomeSurfaceShownTimes, 0);
+  registry->RegisterBooleanPref(prefs::kCartDiscountAcknowledged, false);
+  registry->RegisterBooleanPref(prefs::kCartDiscountEnabled, false);
 }
 
 void CartService::Hide() {
@@ -147,7 +152,7 @@ void CartService::RestoreRemovedCart(const GURL& cart_url,
 }
 
 void CartService::IncreaseWelcomeSurfaceCounter() {
-  if (!ShouldShowWelcomSurface())
+  if (!ShouldShowWelcomeSurface())
     return;
   int times = profile_->GetPrefs()->GetInteger(
       prefs::kCartModuleWelcomeSurfaceShownTimes);
@@ -155,10 +160,54 @@ void CartService::IncreaseWelcomeSurfaceCounter() {
                                    times + 1);
 }
 
-bool CartService::ShouldShowWelcomSurface() {
+bool CartService::ShouldShowWelcomeSurface() {
   return profile_->GetPrefs()->GetInteger(
              prefs::kCartModuleWelcomeSurfaceShownTimes) <
          kWelcomSurfaceShowLimit;
+}
+
+void CartService::AcknowledgeDiscountConsent(bool should_enable) {
+  if (base::GetFieldTrialParamValueByFeature(
+          ntp_features::kNtpChromeCartModule,
+          ntp_features::kNtpChromeCartModuleDataParam) == "fake") {
+    return;
+  }
+  profile_->GetPrefs()->SetBoolean(prefs::kCartDiscountAcknowledged, true);
+  profile_->GetPrefs()->SetBoolean(prefs::kCartDiscountEnabled, should_enable);
+}
+
+bool CartService::ShouldShowDiscountConsent() {
+  if (ShouldShowWelcomeSurface() ||
+      base::GetFieldTrialParamValueByFeature(
+          ntp_features::kNtpChromeCartModule,
+          ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam) !=
+          "true") {
+    return false;
+  }
+  if (base::GetFieldTrialParamValueByFeature(
+          ntp_features::kNtpChromeCartModule,
+          ntp_features::kNtpChromeCartModuleDataParam) == "fake") {
+    return true;
+  }
+  return !profile_->GetPrefs()->GetBoolean(prefs::kCartDiscountAcknowledged);
+}
+
+bool CartService::IsCartDiscountEnabled() {
+  if (base::GetFieldTrialParamValueByFeature(
+          ntp_features::kNtpChromeCartModule,
+          ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam) !=
+      "true") {
+    return false;
+  }
+  return profile_->GetPrefs()->GetBoolean(prefs::kCartDiscountEnabled);
+}
+
+void CartService::SetCartDiscountEnabled(bool enabled) {
+  DCHECK(base::GetFieldTrialParamValueByFeature(
+             ntp_features::kNtpChromeCartModule,
+             ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam) ==
+         "true");
+  profile_->GetPrefs()->SetBoolean(prefs::kCartDiscountEnabled, enabled);
 }
 
 void CartService::LoadCartsWithFakeData(CartDB::LoadCallback callback) {
@@ -211,6 +260,9 @@ void CartService::AddCartsWithFakeData() {
   dummy_proto1.set_merchant("Cart Foo");
   dummy_proto1.set_merchant_cart_url(dummy_url1.spec());
   dummy_proto1.set_timestamp(time_now + 6);
+  dummy_proto1.mutable_discount_info()->set_discount_text(
+      l10n_util::GetStringFUTF8(IDS_NTP_MODULES_CART_DISCOUNT_CHIP_AMOUNT,
+                                u"15%"));
   dummy_proto1.add_product_image_urls(
       "https://encrypted-tbn3.gstatic.com/"
       "shopping?q=tbn:ANd9GcQpn38jB2_BANnHUFa7kHJsf6SyubcgeU1lNYO_"
@@ -246,6 +298,9 @@ void CartService::AddCartsWithFakeData() {
   dummy_proto3.set_merchant("Cart Baz");
   dummy_proto3.set_merchant_cart_url(dummy_url3.spec());
   dummy_proto3.set_timestamp(time_now + 4);
+  dummy_proto3.mutable_discount_info()->set_discount_text(
+      l10n_util::GetStringFUTF8(IDS_NTP_MODULES_CART_DISCOUNT_CHIP_UP_TO_AMOUNT,
+                                u"$50"));
   cart_db_->AddCart(dummy_proto3.key(), dummy_proto3,
                     base::BindOnce(&CartService::OnOperationFinished,
                                    weak_ptr_factory_.GetWeakPtr()));

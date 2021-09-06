@@ -86,6 +86,10 @@ static_library("browser") {
     "translate/vivaldi_translate_language_list.h",
     "vivaldi_default_bookmarks.cc",
     "vivaldi_default_bookmarks.h",
+    "translate/vivaldi_translate_client.cc",
+    "translate/vivaldi_translate_client.h",
+    "translate/vivaldi_translate_frame_binder.cc",
+    "translate/vivaldi_translate_frame_binder.h",
   ]
   if (is_android) {
     sources += [
@@ -128,14 +132,12 @@ static_library("browser") {
       "menus/vivaldi_menubar.h",
       "menus/vivaldi_profile_menu_controller.h",
       "menus/vivaldi_profile_menu_controller.cc",
+      "menus/vivaldi_pwa_link_menu_controller.h",
+      "menus/vivaldi_pwa_link_menu_controller.cc",
       "menus/vivaldi_pwa_menu_controller.h",
       "menus/vivaldi_pwa_menu_controller.cc",
       "menus/vivaldi_render_view_context_menu.h",
       "menus/vivaldi_render_view_context_menu.cc",
-      "translate/vivaldi_translate_client.cc",
-      "translate/vivaldi_translate_client.h",
-      "translate/vivaldi_translate_frame_binder.cc",
-      "translate/vivaldi_translate_frame_binder.h",
       "vivaldi_browser_finder.cc",
       "vivaldi_browser_finder.h",
       "vivaldi_webcontents_util.cc",

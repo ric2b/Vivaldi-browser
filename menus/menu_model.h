@@ -41,7 +41,7 @@ class Menu_Model : public KeyedService {
   bool Move(const Menu_Node* node, const Menu_Node* new_parent, size_t index);
   Menu_Node* Add(std::unique_ptr<Menu_Node> node, Menu_Node* parent,
                  size_t index);
-  bool SetTitle(Menu_Node* node, const base::string16& title);
+  bool SetTitle(Menu_Node* node, const std::u16string& title);
   bool SetParameter(Menu_Node* node, const std::string& parameter);
   bool SetContainerMode(Menu_Node* node, const std::string& mode);
   bool SetContainerEdge(Menu_Node* node, const std::string& edge);

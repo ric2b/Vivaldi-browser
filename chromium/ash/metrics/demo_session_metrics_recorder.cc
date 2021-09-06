@@ -48,16 +48,12 @@ constexpr int kMaxPeriodsWithoutActivity =
 DemoModeApp GetAppFromAppId(const std::string& app_id) {
   // Each version of the Highlights app is bucketed into the same value.
   if (app_id == extension_misc::kHighlightsAppId ||
-      app_id == extension_misc::kHighlightsEveAppId ||
-      app_id == extension_misc::kHighlightsNocturneAppId ||
       app_id == extension_misc::kHighlightsAtlasAppId) {
     return DemoModeApp::kHighlights;
   }
 
   // Each version of the Screensaver app is bucketed into the same value.
   if (app_id == extension_misc::kScreensaverAppId ||
-      app_id == extension_misc::kScreensaverEveAppId ||
-      app_id == extension_misc::kScreensaverNocturneAppId ||
       app_id == extension_misc::kScreensaverAtlasAppId ||
       app_id == extension_misc::kScreensaverKraneZdksAppId) {
     return DemoModeApp::kScreensaver;
@@ -75,8 +71,14 @@ DemoModeApp GetAppFromAppId(const std::string& app_id) {
     return DemoModeApp::kCalendar;
   if (app_id == extension_misc::kGoogleDocsDemoAppId)
     return DemoModeApp::kGoogleDocsChromeApp;
+  if (app_id == extension_misc::kGoogleDocsPwaAppId)
+    return DemoModeApp::kGoogleDocsPwa;
+  if (app_id == extension_misc::kGoogleMeetPwaAppId)
+    return DemoModeApp::kGoogleMeetPwa;
   if (app_id == extension_misc::kGoogleSheetsDemoAppId)
     return DemoModeApp::kGoogleSheetsChromeApp;
+  if (app_id == extension_misc::kGoogleSheetsPwaAppId)
+    return DemoModeApp::kGoogleSheetsPwa;
   if (app_id == extension_misc::kGoogleSlidesDemoAppId)
     return DemoModeApp::kGoogleSlidesChromeApp;
   if (app_id == kHelpAppId)
@@ -87,6 +89,19 @@ DemoModeApp GetAppFromAppId(const std::string& app_id) {
     return DemoModeApp::kWebStore;
   if (app_id == extension_misc::kYoutubeAppId)
     return DemoModeApp::kYouTube;
+  if (app_id == extension_misc::kYoutubePwaAppId)
+    return DemoModeApp::kYoutubePwa;
+  if (app_id == extension_misc::kSpotifyAppId)
+    return DemoModeApp::kSpotify;
+  if (app_id == extension_misc::kBeFunkyAppId)
+    return DemoModeApp::kBeFunky;
+  if (app_id == extension_misc::kClipchampAppId)
+    return DemoModeApp::kClipchamp;
+  if (app_id == extension_misc::kGeForceNowAppId)
+    return DemoModeApp::kGeForceNow;
+  if (app_id == extension_misc::kZoomAppId)
+    return DemoModeApp::kZoom;
+
   return DemoModeApp::kOtherChromeApp;
 }
 

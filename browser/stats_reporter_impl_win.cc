@@ -1,9 +1,10 @@
 #include "browser/stats_reporter_impl.h"
 
+#include <string>
+
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/registry.h"
 
@@ -20,9 +21,9 @@ std::string StatsReporterImpl::GetUserIdFromLegacyStorage() {
   if (!key.Valid())
     return std::string();
 
-  base::string16 reg_user_id;
+  std::wstring reg_user_id;
   if (key.ReadValue(kUniqueUserValue, &reg_user_id) == ERROR_SUCCESS) {
-    return base::UTF16ToUTF8(reg_user_id);
+    return base::WideToUTF8(reg_user_id);
   }
   return std::string();
 }

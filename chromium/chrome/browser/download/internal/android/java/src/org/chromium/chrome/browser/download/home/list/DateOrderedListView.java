@@ -29,7 +29,8 @@ import org.chromium.ui.modelutil.ForwardingListObservable;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.modelutil.RecyclerViewAdapter;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * The View component of a DateOrderedList.  This takes the DateOrderedListModel and creates the
@@ -122,6 +123,7 @@ class DateOrderedListView {
      */
     private static int getPaddingForDisplayStyle(
             UiConfig.DisplayStyle displayStyle, Resources resources) {
+        // Vivaldi
         if (BuildConfig.IS_VIVALDI) return 0;
         int padding = 0;
         if (displayStyle.horizontal == HorizontalDisplayStyle.WIDE) {

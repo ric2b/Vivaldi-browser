@@ -47,6 +47,7 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.components.query_tiles.QueryTile;
@@ -67,7 +68,7 @@ import java.util.List;
 /**
  * Handles updating the model state for the currently visible omnibox suggestions.
  */
-class AutocompleteMediator implements OnSuggestionsReceivedListener, StartStopWithNativeObserver,
+/* Vivaldi */ public class AutocompleteMediator implements OnSuggestionsReceivedListener, StartStopWithNativeObserver,
                                       OmniboxSuggestionsDropdown.Observer, SuggestionHost {
     private static final String TAG = "Autocomplete";
     private static final int SUGGESTION_NOT_FOUND = -1;
@@ -75,17 +76,17 @@ class AutocompleteMediator implements OnSuggestionsReceivedListener, StartStopWi
 
     // Delay triggering the omnibox results upon key press to allow the location bar to repaint
     // with the new characters.
-    private static final long OMNIBOX_SUGGESTION_START_DELAY_MS = 30;
+    /* Vivaldi */ public static final long OMNIBOX_SUGGESTION_START_DELAY_MS = 30;
     private static final int OMNIBOX_HISTOGRAMS_MAX_SUGGESTIONS = 10;
 
     private final Context mContext;
     private final AutocompleteDelegate mDelegate;
-    private final UrlBarEditingTextStateProvider mUrlBarEditingTextProvider;
+    /* Vivaldi */ public final UrlBarEditingTextStateProvider mUrlBarEditingTextProvider;
     private final PropertyModel mListPropertyModel;
     private final ModelList mSuggestionModels;
     private final Handler mHandler;
     @Nullable
-    private AutocompleteResult mAutocompleteResult;
+    /* Vivaldi */ public AutocompleteResult mAutocompleteResult;
     @Nullable
     private Runnable mCurrentAutocompleteRequest;
     @Nullable
@@ -337,7 +338,21 @@ class AutocompleteMediator implements OnSuggestionsReceivedListener, StartStopWi
             mUrlFocusTime = System.currentTimeMillis();
             setSuggestionVisibilityState(SuggestionVisibilityState.PENDING_ALLOW);
 
-            postAutocompleteRequest(this::startZeroSuggest, SCHEDULE_FOR_IMMEDIATE_EXECUTION);
+            // Ask directly for zero-suggestions related to current input, unless the user is
+            // currently visiting SearchActivity and the input is populated from the launch intent.
+            // For SearchActivity, in most cases the input will be empty, triggering the same
+            // response (starting zero suggestions), but if the Activity was launched with a QUERY,
+            // then the query might point to a different URL than the reported Page, and the
+            // suggestion would take the user to the DSE home page.
+            // This is tracked by MobileStartup.LaunchCause / EXTERNAL_SEARCH_ACTION_INTENT
+            // metric.
+            if (mDataProvider.getPageClassification(false)
+                    != PageClassification.ANDROID_SEARCH_WIDGET_VALUE) {
+                postAutocompleteRequest(this::startZeroSuggest, SCHEDULE_FOR_IMMEDIATE_EXECUTION);
+            } else {
+                String text = mUrlBarEditingTextProvider.getTextWithoutAutocomplete();
+                onTextChanged(text, text);
+            }
         } else {
             cancelAutocompleteRequests();
             if (mNativeInitialized) mDropdownViewInfoListManager.recordSuggestionsShown();
@@ -749,7 +764,7 @@ class AutocompleteMediator implements OnSuggestionsReceivedListener, StartStopWi
      * Load the url corresponding to the typed omnibox text.
      * @param eventTime The timestamp the load was triggered by the user.
      */
-    void loadTypedOmniboxText(long eventTime) {
+    /* Vivaldi */ public void loadTypedOmniboxText(long eventTime) {
         final String urlText = mUrlBarEditingTextProvider.getTextWithAutocomplete();
         if (mNativeInitialized) {
             findMatchAndLoadUrl(urlText, eventTime);
@@ -799,7 +814,7 @@ class AutocompleteMediator implements OnSuggestionsReceivedListener, StartStopWi
      * @param inputStart The timestamp the input was started.
      * @param inVisibleSuggestionList Whether the suggestion is in the visible suggestion list.
      */
-    private void loadUrlForOmniboxMatch(int matchPosition, @NonNull AutocompleteMatch suggestion,
+    /* Vivaldi */ public void loadUrlForOmniboxMatch(int matchPosition, @NonNull AutocompleteMatch suggestion,
             @NonNull GURL url, long inputStart, boolean inVisibleSuggestionList) {
         SuggestionsMetrics.recordFocusToOpenTime(System.currentTimeMillis() - mUrlFocusTime);
 

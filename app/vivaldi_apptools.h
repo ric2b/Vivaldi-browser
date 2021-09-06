@@ -1,18 +1,28 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2021 Vivaldi Technologies AS. All rights reserved
 
 #ifndef APP_VIVALDI_APPTOOLS_H_
 #define APP_VIVALDI_APPTOOLS_H_
 
 #include <string>
 #include "base/base_export.h"
+#include "base/callback_list.h"
 #include "base/strings/string_piece.h"
 
 namespace base {
 class CommandLine;
 }
+namespace content {
+class WebContents;
+}
 class GURL;
 
 namespace vivaldi {
+
+// Implementation is in vivaldi_running.cc
+BASE_EXPORT base::CallbackListSubscription AddExtDataUpdatedCallback(
+    base::RepeatingCallback<void(content::WebContents*)>);
+BASE_EXPORT base::RepeatingCallbackList<void(content::WebContents*)>&
+GetExtDataUpdatedCallbackList();
 
 bool IsVivaldiApp(base::StringPiece extension_id);
 

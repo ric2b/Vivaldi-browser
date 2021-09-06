@@ -1,17 +1,26 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2017-2021 Vivaldi Technologies AS. All rights reserved.
 
 #include "components/datasource/desktop_data_source_win.h"
 
 #include <Shobjidl.h>
 #include <wrl/client.h>
 
+#include "base/base64.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "skia/ext/skia_utils_win.h"
+
+namespace {
+// 1 pixel transparent PNG
+const char kDefaultFallbackImageBase64[] =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mOsrwcAAYMBABbFvR"
+    "QAAAAASUVORK5CYII=";
+}
 
 DesktopWallpaperDataClassHandlerWin::DesktopWallpaperDataClassHandlerWin() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -96,24 +105,50 @@ void DesktopWallpaperDataClassHandlerWin::GetDataOnFileThread(
     content::URLDataSource::GotDataCallback callback) {
   base::FilePath f(file_path);
   base::File file(f, base::File::FLAG_READ | base::File::FLAG_OPEN);
-  int64_t len = file.GetLength();
-  if (len > 0) {
+
+  do {
+    if (!file.IsValid()) {
+      break;
+    }
+    int64_t len = file.GetLength();
+    if (len <= 0) {
+      break;
+    }
     std::vector<unsigned char> buffer(len);
     int read_len =
       file.Read(0, reinterpret_cast<char*>(&buffer[0]), len);
-    if (read_len == len) {
-      scoped_refptr<base::RefCountedMemory> image_data(
-          base::RefCountedBytes::TakeVector(&buffer));
-      // Unretained is used because Chromium's URLDataSource and so this
-      // class is destroyed on UI thread strictly after all outstanding
-      // GotDataCallback callbacks runs on UI thread.
-      base::PostTask(
-          FROM_HERE,
-          {content::BrowserThread::UI},
-          base::BindOnce(
-              &DesktopWallpaperDataClassHandlerWin::SendDataResultsOnUiThread,
-              base::Unretained(this), std::move(image_data),
-              std::move(file_path), std::move(callback)));
+    if (read_len != len) {
+      break;
     }
-  }
+    scoped_refptr<base::RefCountedMemory> image_data(
+        base::RefCountedBytes::TakeVector(&buffer));
+    // Unretained is used because Chromium's URLDataSource and so this
+    // class is destroyed on UI thread strictly after all outstanding
+    // GotDataCallback callbacks runs on UI thread.
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &DesktopWallpaperDataClassHandlerWin::SendDataResultsOnUiThread,
+            base::Unretained(this), std::move(image_data),
+            std::move(file_path), std::move(callback)));
+    return;
+  } while (false);
+
+  // New theme code on the js side will throw an uncaught
+  // chrome.runtime.lastError that cannot be avoided if no data is sent, so send
+  // fallback data here.
+  std::string data = kDefaultFallbackImageBase64;
+  base::Base64Decode(data, &data);
+  scoped_refptr<base::RefCountedMemory> image_data(
+      base::RefCountedString::TakeString(&data));
+
+  // Unretained is used because Chromium's URLDataSource and so this
+  // class is destroyed on UI thread strictly after all outstanding
+  // GotDataCallback callbacks runs on UI thread.
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &DesktopWallpaperDataClassHandlerWin::SendDataResultsOnUiThread,
+          base::Unretained(this), std::move(image_data), std::move(file_path),
+          std::move(callback)));
 }

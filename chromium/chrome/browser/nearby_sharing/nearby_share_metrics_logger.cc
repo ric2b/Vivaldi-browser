@@ -44,7 +44,19 @@ enum class TransferFinalStatus {
   kMediaUnavailable = 7,
   kNotEnoughSpace = 8,
   kUnsupportedAttachmentType = 9,
-  kMaxValue = kUnsupportedAttachmentType
+  kDecodeAdvertisementFailed = 10,
+  kMissingTransferUpdateCallback = 11,
+  kMissingShareTarget = 12,
+  kMissingEndpointId = 13,
+  kMissingPayloads = 14,
+  kPairedKeyVerificationFailed = 15,
+  kInvalidIntroductionFrame = 16,
+  kIncompletePayloads = 17,
+  kFailedToCreateShareTarget = 18,
+  kFailedToInitiateOutgoingConnection = 19,
+  kFailedToReadOutgoingConnectionResponse = 20,
+  kUnexpectedDisconnection = 21,
+  kMaxValue = kUnexpectedDisconnection
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -160,6 +172,30 @@ TransferFinalStatus TransferMetadataStatusToTransferFinalStatus(
       return TransferFinalStatus::kNotEnoughSpace;
     case TransferMetadata::Status::kUnsupportedAttachmentType:
       return TransferFinalStatus::kUnsupportedAttachmentType;
+    case TransferMetadata::Status::kDecodeAdvertisementFailed:
+      return TransferFinalStatus::kDecodeAdvertisementFailed;
+    case TransferMetadata::Status::kMissingTransferUpdateCallback:
+      return TransferFinalStatus::kMissingTransferUpdateCallback;
+    case TransferMetadata::Status::kMissingShareTarget:
+      return TransferFinalStatus::kMissingShareTarget;
+    case TransferMetadata::Status::kMissingEndpointId:
+      return TransferFinalStatus::kMissingEndpointId;
+    case TransferMetadata::Status::kMissingPayloads:
+      return TransferFinalStatus::kMissingPayloads;
+    case TransferMetadata::Status::kPairedKeyVerificationFailed:
+      return TransferFinalStatus::kPairedKeyVerificationFailed;
+    case TransferMetadata::Status::kInvalidIntroductionFrame:
+      return TransferFinalStatus::kInvalidIntroductionFrame;
+    case TransferMetadata::Status::kIncompletePayloads:
+      return TransferFinalStatus::kIncompletePayloads;
+    case TransferMetadata::Status::kFailedToCreateShareTarget:
+      return TransferFinalStatus::kFailedToCreateShareTarget;
+    case TransferMetadata::Status::kFailedToInitiateOutgoingConnection:
+      return TransferFinalStatus::kFailedToInitiateOutgoingConnection;
+    case TransferMetadata::Status::kFailedToReadOutgoingConnectionResponse:
+      return TransferFinalStatus::kFailedToReadOutgoingConnectionResponse;
+    case TransferMetadata::Status::kUnexpectedDisconnection:
+      return TransferFinalStatus::kUnexpectedDisconnection;
     case TransferMetadata::Status::kUnknown:
     case TransferMetadata::Status::kConnecting:
     case TransferMetadata::Status::kAwaitingLocalConfirmation:
@@ -364,6 +400,24 @@ void RecordNearbyShareEstablishConnectionMetrics(
   }
   base::UmaHistogramEnumeration(
       "Nearby.Share.Connection.EstablishOutgoingConnectionStatus", status);
+
+  // Log a high-level success/failure metric, ignoring cancellations.
+  if (!cancelled) {
+    base::UmaHistogramBoolean(
+        "Nearby.Share.Connection.EstablishOutgoingConnection.Success", success);
+  }
+}
+
+void RecordNearbyShareTimeFromInitiateSendToRemoteDeviceNotificationMetric(
+    base::TimeDelta time) {
+  base::UmaHistogramTimes(
+      "Nearby.Share.TimeFromInitiateSendToRemoteDeviceNotification", time);
+}
+
+void RecordNearbyShareTimeFromLocalAcceptToTransferStartMetric(
+    base::TimeDelta time) {
+  base::UmaHistogramTimes("Nearby.Share.TimeFromLocalAcceptToTransferStart",
+                          time);
 }
 
 void RecordNearbySharePayloadFileAttachmentTypeMetric(
@@ -514,12 +568,38 @@ void RecordNearbyShareTransferFinalStatusMetric(
   base::UmaHistogramEnumeration("Nearby.Share.DeviceType" + send_or_receive,
                                 type);
 
-  TransferFinalStatus final_status =
-      TransferMetadataStatusToTransferFinalStatus(status);
+  // Log the detailed transfer final status enum.
+  {
+    TransferFinalStatus final_status =
+        TransferMetadataStatusToTransferFinalStatus(status);
+    const std::string prefix = "Nearby.Share.Transfer.FinalStatus";
+    base::UmaHistogramEnumeration(prefix, final_status);
+    base::UmaHistogramEnumeration(prefix + send_or_receive, final_status);
+    base::UmaHistogramEnumeration(prefix + share_target_type, final_status);
+    base::UmaHistogramEnumeration(prefix + contact_or_not, final_status);
+  }
 
-  const std::string prefix = "Nearby.Share.Transfer.FinalStatus";
-  base::UmaHistogramEnumeration(prefix, final_status);
-  base::UmaHistogramEnumeration(prefix + send_or_receive, final_status);
-  base::UmaHistogramEnumeration(prefix + share_target_type, final_status);
-  base::UmaHistogramEnumeration(prefix + contact_or_not, final_status);
+  // Log the transfer success/failure for high-level success and Critical User
+  // Journey (CUJ) metrics.
+  {
+    base::Optional<bool> success;
+    switch (TransferMetadata::ToResult(status)) {
+      case TransferMetadata::Result::kSuccess:
+        success = true;
+        break;
+      case TransferMetadata::Result::kFailure:
+        success = false;
+        break;
+      case TransferMetadata::Result::kIndeterminate:
+        success.reset();
+        break;
+    }
+    if (success.has_value()) {
+      const std::string prefix = "Nearby.Share.Transfer.Success";
+      base::UmaHistogramBoolean(prefix, *success);
+      base::UmaHistogramBoolean(
+          prefix + send_or_receive + share_target_type + contact_or_not,
+          *success);
+    }
+  }
 }

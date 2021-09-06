@@ -43,6 +43,8 @@ class CSSDefaultStyleSheets final
  public:
   CORE_EXPORT static CSSDefaultStyleSheets& Instance();
 
+  static StyleSheetContents* ParseUASheet(const String&);
+
   CSSDefaultStyleSheets();
   CSSDefaultStyleSheets(const CSSDefaultStyleSheets&) = delete;
   CSSDefaultStyleSheets& operator=(const CSSDefaultStyleSheets&) = delete;
@@ -75,6 +77,7 @@ class CSSDefaultStyleSheets final
 
   StyleSheetContents* DefaultStyleSheet() { return default_style_sheet_.Get(); }
   StyleSheetContents* QuirksStyleSheet() { return quirks_style_sheet_.Get(); }
+  StyleSheetContents* PopupStyleSheet() { return popup_style_sheet_.Get(); }
   StyleSheetContents* SvgStyleSheet() { return svg_style_sheet_.Get(); }
   StyleSheetContents* MathmlStyleSheet() { return mathml_style_sheet_.Get(); }
   StyleSheetContents* MediaControlsStyleSheet() {
@@ -133,6 +136,7 @@ class CSSDefaultStyleSheets final
   Member<StyleSheetContents> media_controls_style_sheet_;
   Member<StyleSheetContents> text_track_style_sheet_;
   Member<StyleSheetContents> fullscreen_style_sheet_;
+  Member<StyleSheetContents> popup_style_sheet_;
   Member<StyleSheetContents> webxr_overlay_style_sheet_;
   Member<StyleSheetContents> marker_style_sheet_;
   Member<StyleSheetContents> forced_colors_style_sheet_;

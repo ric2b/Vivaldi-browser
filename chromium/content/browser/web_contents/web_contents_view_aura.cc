@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -174,7 +175,7 @@ void PrepareDragForDownload(const DropData& drop_data,
   const std::string& page_encoding = web_contents->GetEncoding();
 
   // Parse the download metadata.
-  base::string16 mime_type;
+  std::u16string mime_type;
   base::FilePath file_name;
   GURL download_url;
   if (!ParseDownloadMetadata(drop_data.download_metadata,
@@ -306,13 +307,13 @@ bool ShouldIncludeVirtualFiles(const DropData& drop_data) {
 void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
   drop_data->did_originate_from_renderer = data.DidOriginateFromRenderer();
 
-  base::string16 plain_text;
+  std::u16string plain_text;
   data.GetString(&plain_text);
   if (!plain_text.empty())
     drop_data->text = plain_text;
 
   GURL url;
-  base::string16 url_title;
+  std::u16string url_title;
   data.GetURLAndTitle(ui::FilenameToURLPolicy::DO_NOT_CONVERT_FILENAMES, &url,
                       &url_title);
   if (url.is_valid()) {
@@ -320,7 +321,7 @@ void PrepareDropData(DropData* drop_data, const ui::OSExchangeData& data) {
     drop_data->url_title = url_title;
   }
 
-  base::string16 html;
+  std::u16string html;
   GURL html_base_url;
   data.GetHtml(&html, &html_base_url);
   if (!html.empty())
@@ -998,7 +999,7 @@ RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForChildWidget(
   return new RenderWidgetHostViewAura(render_widget_host);
 }
 
-void WebContentsViewAura::SetPageTitle(const base::string16& title) {
+void WebContentsViewAura::SetPageTitle(const std::u16string& title) {
   window_->SetTitle(title);
   aura::Window* child_window = GetContentNativeView();
   if (child_window)
@@ -1290,7 +1291,7 @@ void WebContentsViewAura::DragEnteredCallback(
   current_rwh_for_drag_ = target_rwh->GetWeakPtr();
   current_rvh_for_drag_ =
       GetRenderViewHostID(web_contents_->GetRenderViewHost());
-  current_drop_data_.reset(drop_data.release());
+  current_drop_data_ = std::move(drop_data);
   current_rwh_for_drag_->FilterDropData(current_drop_data_.get());
 
   blink::DragOperationsMask op_mask =
@@ -1308,7 +1309,7 @@ void WebContentsViewAura::DragEnteredCallback(
   gfx::PointF screen_pt(display::Screen::GetScreen()->GetCursorScreenPoint());
   current_rwh_for_drag_->DragTargetDragEnter(
       *current_drop_data_, transformed_pt.value(), screen_pt, op_mask,
-      ui::EventFlagsToWebEventModifiers(event.flags()));
+      ui::EventFlagsToWebEventModifiers(event.flags()), base::DoNothing());
 
   if (drag_dest_delegate_) {
     drag_dest_delegate_->OnDragEnter();
@@ -1390,7 +1391,7 @@ void WebContentsViewAura::DragUpdatedCallback(
       ConvertToDragOperationsMask(event.source_operations());
   target_rwh->DragTargetDragOver(
       transformed_pt.value(), screen_pt, op_mask,
-      ui::EventFlagsToWebEventModifiers(event.flags()));
+      ui::EventFlagsToWebEventModifiers(event.flags()), base::DoNothing());
 
   if (drag_dest_delegate_)
     drag_dest_delegate_->OnDragOver();
@@ -1575,7 +1576,8 @@ void WebContentsViewAura::CompleteDrop(RenderWidgetHostImpl* target_rwh,
                                        int key_modifiers) {
   web_contents_->Focus();
 
-  target_rwh->DragTargetDrop(drop_data, client_pt, screen_pt, key_modifiers);
+  target_rwh->DragTargetDrop(drop_data, client_pt, screen_pt, key_modifiers,
+                             base::DoNothing());
   if (drag_dest_delegate_)
     drag_dest_delegate_->OnDrop();
 

@@ -44,8 +44,6 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
   };
 
   CanvasResourceDispatcher(CanvasResourceDispatcherClient*,
-                           scoped_refptr<base::SingleThreadTaskRunner>
-                               agent_group_scheduler_compositor_task_runner,
                            uint32_t client_id,
                            uint32_t sink_id,
                            int placeholder_canvas_id,
@@ -83,6 +81,8 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
   void OnBeginFramePausedChanged(bool paused) final {}
   void ReclaimResources(
       const WTF::Vector<viz::ReturnedResource>& resources) final;
+  void OnCompositorFrameTransitionDirectiveProcessed(
+      uint32_t sequence_id) final {}
 
   void DidAllocateSharedBitmap(base::ReadOnlySharedMemoryRegion region,
                                const gpu::Mailbox& id);
@@ -147,9 +147,6 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
   viz::BeginFrameAck current_begin_frame_ack_;
 
   CanvasResourceDispatcherClient* client_;
-
-  scoped_refptr<base::SingleThreadTaskRunner>
-      agent_group_scheduler_compositor_task_runner_;
 
   std::unique_ptr<power_scheduler::PowerModeVoter> animation_power_mode_voter_;
 

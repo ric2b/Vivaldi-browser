@@ -28,7 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Activity that allows a user to add or edit a bookmark folder. This activity has two modes: adding
@@ -94,7 +94,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
      * Starts an edit folder activity. Require the context to fire an intent.
      */
     public static void startEditFolderActivity(Context context, BookmarkId idToEdit) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             VivaldiBookmarkAddEditFolderActivity.startEditFolderActivity(context, idToEdit);
             return;
         }
@@ -111,7 +111,7 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
      */
     public static void startAddFolderActivity(BookmarkFolderSelectActivity activity,
             List<BookmarkId> bookmarksToMove) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             VivaldiBookmarkAddEditFolderActivity.startAddFolderActivity(activity, bookmarksToMove);
             return;
         }

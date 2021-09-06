@@ -50,7 +50,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -191,9 +191,9 @@ class TabListRecyclerView
      */
     void startShowing(boolean animate) {
         // NOTE (david@vivaldi.com): Showing animation is handled in the |TabSwitcherView|.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             // Note(david@vivaldi.com): Update the top margin according to the toolbar.
-            if (ChromeApplication.isVivaldi()) {
+            if (ChromeApplicationImpl.isVivaldi()) {
                 int toolbarHeight = ((ChromeTabbedActivity) getContext())
                         .getToolbarManager()
                         .getToolbar()
@@ -453,7 +453,7 @@ class TabListRecyclerView
      */
     void startHiding(boolean animate) {
         // NOTE (david@vivaldi.com): Hiding animation is handled in the |TabSwitcherView|.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mListener.startedHiding(animate);
             mListener.finishedHiding();
             return;
@@ -593,14 +593,22 @@ class TabListRecyclerView
             actions.remove(topAction);
         }
         // Cannot move down if current tab is the last X tab where X is the span count.
-        if (getAdapter().getItemCount() - position <= spanCount) {
+        if (getSwappableItemCount() - position <= spanCount) {
             actions.remove(downAction);
         }
         // Cannot move the last tab to its right.
-        if (position == getAdapter().getItemCount() - 1) {
+        if (position == getSwappableItemCount() - 1) {
             actions.remove(rightAction);
         }
         return actions;
+    }
+
+    private int getSwappableItemCount() {
+        int count = 0;
+        for (int i = 0; i < getAdapter().getItemCount(); i++) {
+            if (getAdapter().getItemViewType(i) == TabProperties.UiType.CLOSABLE) count++;
+        }
+        return count;
     }
 
     @Override

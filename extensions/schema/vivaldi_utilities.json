@@ -111,6 +111,21 @@
         }
       },
       {
+        "id": "WhatsNewResults",
+        "type": "object",
+        "description": "Object that describes how a What's new page can be used.",
+        "properties": {
+          "show": {
+            "type": "boolean",
+            "description": "true if the What's new page can be shown, otherwise false."
+          },
+          "firstrun": {
+            "type": "boolean",
+            "description": "true if this the first time the Whats new page is shown. Do not use if 'show' is false."
+          }
+        }
+      },
+      {
         "id": "UrlFragment",
         "type": "object",
         "description": "To be used in context of UrlFragments below. A fragment should be considered not present if 'begin' and 'end' are both 0.",
@@ -295,20 +310,18 @@
         "name": "clearAllRecentlyClosedSessions",
         "type": "function",
         "description": "Clears the list of recently closed tabs and/or windows.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "type": "boolean",
-                "name": "result",
-                "description": "A boolean variable stating if removing recently closed tabs and/or windows call was successfull or not"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result",
+              "description": "A boolean variable stating if removing recently closed tabs and/or windows call was successfull or not"
+            }
+          ]
+        }
       },
       {
         "name": "isTabInLastSession",
@@ -319,19 +332,18 @@
             "name": "tabId",
             "type": "integer",
             "description": "The tab id to check if part of the session"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "isInSession",
-                "type": "boolean",
-                "description": "true if the given tabId is loaded from the session and has since not been navigated in, otherwise false."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "isInSession",
+              "type": "boolean",
+              "description": "true if the given tabId is loaded from the session and has since not been navigated in, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "isUrlValid",
@@ -342,18 +354,17 @@
             "type": "string",
             "description": "The URL to validate",
             "name": "url"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "$ref": "UrlValidResults"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "$ref": "UrlValidResults"
+            }
+          ]
+        }
       },
       {
         "name": "getUrlFragments",
@@ -392,18 +403,17 @@
             "name": "tabId",
             "type": "integer",
             "description": "The page to examine"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "text",
-                "type": "string"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "text",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "selectFile",
@@ -427,19 +437,18 @@
             "name": "type",
             "$ref": "SelectFileDialogType",
             "description": "Type of file select dialog, defaults to 'file'."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "type": "string",
-                "description": "Full path to the selected file.",
-                "name": "path"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "string",
+              "description": "Full path to the selected file.",
+              "name": "path"
+            }
+          ]
+        }
       },
       {
         "name": "selectLocalImage",
@@ -449,20 +458,19 @@
           {
             "name": "params",
             "$ref": "SelectLocalImageParams"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "True when an image path was selected and successfully stored."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "True when an image path was selected and successfully stored."
+            }
+          ]
+        }
       },
       {
         "name": "getVersion",
@@ -491,37 +499,33 @@
         "name": "getFFMPEGState",
         "type": "function",
         "description": "Helper function for Linux. Reads the env. variable VIVALDI_FFMPEG_FOUND and returns the result",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "value",
-                "type": "boolean",
-                "description": "True if env. variable is set to YES, otherwise False (also if variable does not exists)."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "value",
+              "type": "boolean",
+              "description": "True if env. variable is set to YES, otherwise False (also if variable does not exists)."
+            }
+          ]
+        }
       },
       {
         "name": "getMediaAvailableState",
         "type": "function",
         "description": "Windows: Returns whether this version of the OS has media codecs installed. Might return false on N versions of Windows.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "value",
-                "type": "boolean",
-                "description": "true if codecs are available, otherwise false (typically N versions of Windows with no media pack installed)."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "value",
+              "type": "boolean",
+              "description": "true if codecs are available, otherwise false (typically N versions of Windows with no media pack installed)."
+            }
+          ]
+        }
       },
       {
         "name": "setSharedData",
@@ -532,20 +536,19 @@
             "name": "keyValuePair",
             "$ref": "SharedDataValue",
             "description": "The Key-value."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "newvalue",
-                "type": "boolean",
-                "description": "true if a new value was set, false if an existing value was updated."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "newvalue",
+              "type": "boolean",
+              "description": "true if a new value was set, false if an existing value was updated."
+            }
+          ]
+        }
       },
       {
         "name": "getSharedData",
@@ -556,56 +559,51 @@
             "name": "keyValuePair",
             "$ref": "SharedDataValue",
             "description": "The Key-value, the value is the default value returned if the key does not exist."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "value",
-                "type": "any",
-                "description": "Data value."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "value",
+              "type": "any",
+              "description": "Data value."
+            }
+          ]
+        }
       },
       {
         "name": "getSystemDateFormat",
         "type": "function",
         "description": "Returns various date/time system formats",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "DateFormats"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "DateFormats"
+            }
+          ]
+        }
       },
       {
         "name": "getSystemCountry",
         "type": "function",
         "description": "Return the system settings for the country if available.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "country",
-                "type": "string",
-                "description": "2-letter ISO code for the country"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "country",
+              "type": "string",
+              "description": "2-letter ISO code for the country"
+            }
+          ]
+        }
       },
       {
         "name": "setLanguage",
@@ -615,112 +613,97 @@
           {
             "name": "locale",
             "type": "string"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Return value true for success, false for failure.",
-            "parameters": [
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Return value true for success, false for failure.",
+          "parameters": []
+        }
       },
       {
         "name": "getLanguage",
         "type": "function",
         "description": "Gets the active Vivaldi language code.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Return the language code.",
-            "parameters": [
-              {
-                "name": "langCode",
-                "type": "string"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "description": "Return the language code.",
+          "parameters": [
+            {
+              "name": "langCode",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "setVivaldiAsDefaultBrowser",
         "type": "function",
         "description": "Set Vivaldi as the default browser.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "isVivaldiDefaultBrowser",
         "type": "function",
         "description": "Is Vivaldi the default browser.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "launchNetworkSettings",
         "type": "function",
         "description": "Launch network settings.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "savePage",
         "type": "function",
         "description": "Saves web page.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+          ]
+        }
       },
       {
         "name": "openPage",
         "type": "function",
         "description": "Open web page.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": []
+        }
       },
       {
         "name": "setDefaultContentSettings",
@@ -738,8 +721,7 @@
           {
             "type": "function",
             "name": "callback",
-            "parameters": [
-            ]
+            "parameters": []
           }
         ]
       },
@@ -751,18 +733,17 @@
           {
             "name": "contentSetting",
             "type": "string"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "setBlockThirdPartyCookies",
@@ -773,66 +754,58 @@
             "name": "cookieMode",
             "$ref": "CookieMode",
             "description": "Cookie control for third party cookies."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "getBlockThirdPartyCookies",
         "type": "function",
         "description": "Set Vivaldi default content settings.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "cookieMode",
-            "parameters": [
-              {
-                "name": "cookieMode",
-                "$ref": "CookieMode",
-                "description": "Cookie control for third party cookies."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "cookieMode",
+              "$ref": "CookieMode",
+              "description": "Cookie control for third party cookies."
+            }
+          ]
+        }
       },
       {
         "name": "openTaskManager",
         "type": "function",
         "description": "Opens Vivaldi task manager dialog.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
       },
       {
         "name": "getStartupAction",
         "type": "function",
         "description": "Returns the startup action.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "string"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "setStartupAction",
@@ -847,36 +820,33 @@
             "name": "urls",
             "type": "array",
             "items": { "type": "string" }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "string"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "canShowWhatsNewPage",
         "type": "function",
-        "description": "Checks whether showing the what new page is allowed.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "boolean",
-                "description": "true if the whats new page can be shown, otherwise false."
-              }
-            ]
-          }
-        ]
+        "description": "Checks whether showing the What's new page is allowed.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "$ref": "WhatsNewResults",
+              "description": "Describes how, if at all, a What's new page can be used."
+            }
+          ]
+        }
       },
       {
         "name": "showPasswordDialog",
@@ -925,56 +895,51 @@
             "name": "flowDirection",
             "$ref": "FlowDirection",
             "description": "The direction the dialog should be positioned based on the rect."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "results",
-                "type": "boolean",
-                "description": "true if the dialog is known, otherwise false."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true if the dialog is known, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "isRazerChromaAvailable",
         "type": "function",
         "description": "Is the Razer Chroma API available.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "boolean",
-                "description": "true if the Razer Chroma API is available, otherwise false."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true if the Razer Chroma API is available, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "isRazerChromaReady",
         "type": "function",
         "description": "Is the Razer Chroma API initialized and ready to accept commands.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "boolean",
-                "description": "true if the Razer Chroma API is ready, otherwise false."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true if the Razer Chroma API is ready, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "setRazerChromaColor",
@@ -988,37 +953,34 @@
               "$ref": "Color",
               "description": "Array of colors to be set for the configured lights. If multiple colors are set, it will cycle quickly between them from the first to the last."
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "boolean",
-                "description": "true if the Razer Chroma API is available, otherwise false."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "boolean",
+              "description": "true if the Razer Chroma API is available, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "isDownloadManagerReady",
         "type": "function",
         "description": "Checks whether the download manager has initialized. If not, register for the onDownloadManagerReady event to be notified when it's ready.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "ready",
-                "type": "boolean",
-                "description": "true if the download manager is ready, otherwise false."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "ready",
+              "type": "boolean",
+              "description": "true if the download manager is ready, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "setContentSettings",
@@ -1064,19 +1026,18 @@
             "name": "dialogName",
             "$ref": "DialogName",
             "description": "Dialog name to check for visibility."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "isOpen",
-                "type": "boolean",
-                "description": "true if the dialog is open, otherwise false."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "isOpen",
+              "type": "boolean",
+              "description": "true if the dialog is open, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "focusDialog",
@@ -1087,19 +1048,18 @@
             "name": "dialogName",
             "$ref": "DialogName",
             "description": "Dialog name to check for visibility."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "wasFocused",
-                "type": "boolean",
-                "description": "true if the dialog was focused, otherwise false."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "wasFocused",
+              "type": "boolean",
+              "description": "true if the dialog was focused, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "startChromecast",
@@ -1112,18 +1072,16 @@
         "name": "isFirstRun",
         "type": "function",
         "description": "chrome::IsChromeFirstRun()",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "generateQRCode",
@@ -1140,19 +1098,18 @@
             "$ref": "CaptureQRDestination",
             "description": "Destination of the QR capture, defaults to 'dataurl'.",
             "optional": true
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string",
-                "description": "data url with the generated image if |destination| is 'dataurl' or missing."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string",
+              "description": "data url with the generated image if |destination| is 'dataurl' or missing."
+            }
+          ]
+        }
       }
     ],
     "events": [

@@ -15,7 +15,6 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../print_preview_utils.js';
 import './destination_dialog_css.js';
 import './destination_list.js';
-import './invitation_promo.js';
 import './print_preview_search_box.js';
 import './print_preview_shared_css.js';
 import './print_preview_vars_css.js';
@@ -32,7 +31,6 @@ import {beforeNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/p
 
 import {Destination} from '../data/destination.js';
 import {DestinationStore} from '../data/destination_store.js';
-import {InvitationStore} from '../data/invitation_store.js';
 import {PrintServerStore} from '../data/print_server_store.js';
 import {Metrics, MetricsContext} from '../metrics.js';
 import {NativeLayerImpl} from '../native_layer.js';
@@ -54,9 +52,6 @@ Polymer({
       type: Object,
       observer: 'onDestinationStoreSet_',
     },
-
-    /** @type {?InvitationStore} */
-    invitationStore: Object,
 
     activeUser: {
       type: String,
@@ -94,15 +89,6 @@ Polymer({
     searchQuery_: {
       type: Object,
       value: null,
-    },
-
-    /** @private */
-    saveToDriveFlagEnabled_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('printSaveToDrive');
-      },
-      readOnly: true,
     },
 
     /** @private {boolean} */
@@ -247,17 +233,14 @@ Polymer({
    * @private
    */
   getDestinationList_() {
-    const destinations = this.destinationStore.destinations(this.activeUser);
-    // When |saveToDriveFlagEnabled_| is true, we don't want to show a
-    // 'Save to Drive' option in the destination dialog.
-    if (this.saveToDriveFlagEnabled_) {
-      return destinations.filter(
-          destination => destination.id !== Destination.GooglePromotedId.DOCS &&
-              destination.id !==
-                  Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS);
-    }
-
-    return destinations;
+    // Filter out the 'Save to Drive' option so it is not shown in the
+    // list of available options.
+    return this.destinationStore.destinations(this.activeUser)
+        .filter(
+            destination =>
+                destination.id !== Destination.GooglePromotedId.DOCS &&
+                destination.id !==
+                    Destination.GooglePromotedId.SAVE_TO_DRIVE_CROS);
   },
 
   /** @private */

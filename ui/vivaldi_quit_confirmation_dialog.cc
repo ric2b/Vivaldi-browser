@@ -19,27 +19,27 @@ namespace vivaldi {
 
 constexpr int kDefaultWidth = 450;  // Default width of the dialog.
 
-base::string16 VivaldiDialogQuitDelegate::GetWindowTitle() {
+std::u16string VivaldiDialogQuitDelegate::GetWindowTitle() {
   return l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_WARNING_TITLE);
 }
 
-base::string16 VivaldiDialogQuitDelegate::GetBodyText() {
+std::u16string VivaldiDialogQuitDelegate::GetBodyText() {
   return l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_WARNING);
 }
 
-base::string16 VivaldiDialogQuitDelegate::GetCheckboxText() {
+std::u16string VivaldiDialogQuitDelegate::GetCheckboxText() {
   return l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_DONOTSHOW);
 }
 
-base::string16 VivaldiDialogCloseWindowDelegate::GetWindowTitle() {
+std::u16string VivaldiDialogCloseWindowDelegate::GetWindowTitle() {
   return l10n_util::GetStringUTF16(IDS_WINDOW_CLOSE_CONFIRMATION_WARNING_TITLE);
 }
 
-base::string16 VivaldiDialogCloseWindowDelegate::GetBodyText() {
+std::u16string VivaldiDialogCloseWindowDelegate::GetBodyText() {
   return l10n_util::GetStringUTF16(IDS_WINDOW_CLOSE_CONFIRMATION_WARNING);
 }
 
-base::string16 VivaldiDialogCloseWindowDelegate::GetCheckboxText() {
+std::u16string VivaldiDialogCloseWindowDelegate::GetCheckboxText() {
   // Re-use existing string
   return l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_DONOTSHOW);
 }
@@ -101,7 +101,7 @@ ui::ModalType VivaldiQuitConfirmationDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
 }
 
-base::string16 VivaldiQuitConfirmationDialog::GetWindowTitle() const {
+std::u16string VivaldiQuitConfirmationDialog::GetWindowTitle() const {
   return delegate_->GetWindowTitle();
 }
 

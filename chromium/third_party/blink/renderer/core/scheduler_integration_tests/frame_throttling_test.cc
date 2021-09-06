@@ -536,8 +536,7 @@ TEST_P(FrameThrottlingTest, ThrottledFrameCompositing) {
   auto* frame_view = frame_element->contentDocument()->View();
   EXPECT_FALSE(frame_view->CanThrottleRendering());
   auto* frame_layout_view = frame_view->GetLayoutView();
-  EXPECT_TRUE(frame_layout_view->Compositor()->CanBeComposited(
-      frame_layout_view->Layer()));
+  EXPECT_TRUE(frame_layout_view->Layer()->CanBeComposited());
   auto* frame_graphics_layer =
       frame_layout_view->Layer()->GraphicsLayerBacking(frame_layout_view);
   EXPECT_TRUE(frame_graphics_layer);
@@ -566,8 +565,7 @@ TEST_P(FrameThrottlingTest, ThrottledFrameCompositing) {
   CompositeFrame();
   EXPECT_FALSE(frame_view->CanThrottleRendering());
   ASSERT_EQ(frame_layout_view, frame_view->GetLayoutView());
-  EXPECT_TRUE(frame_layout_view->Compositor()->CanBeComposited(
-      frame_layout_view->Layer()));
+  EXPECT_TRUE(frame_layout_view->Layer()->CanBeComposited());
   EXPECT_EQ(container->GetCompositingState(), kNotComposited);
   EXPECT_EQ(
       frame_graphics_layer,
@@ -1384,6 +1382,7 @@ TEST_P(FrameThrottlingTest, UpdatePaintPropertiesOnUnthrottling) {
   // The first update unthrottles the frame, the second actually update layout
   // and paint properties etc.
   CompositeFrame();
+  EXPECT_TRUE(frame_document->GetLayoutView()->Layer()->SelfNeedsRepaint());
   CompositeFrame();
   EXPECT_FALSE(frame_document->View()->CanThrottleRendering());
   EXPECT_EQ(FloatSize(0, 20), inner_div->GetLayoutObject()
@@ -2026,7 +2025,7 @@ TEST_P(FrameThrottlingTest, CullRectUpdate) {
   EXPECT_FALSE(frame_document->View()->ShouldThrottleRenderingForTest());
   EXPECT_EQ(IntRect(0, 0, 630, 100),
             frame_object->FirstFragment().GetCullRect().Rect());
-  EXPECT_EQ(IntRect(-4000, -4000, 8630, 8100),
+  EXPECT_EQ(IntRect(0, 0, 630, 100),
             child_layout_view->FirstFragment().GetCullRect().Rect());
   EXPECT_FALSE(child_layout_view->Layer()->NeedsCullRectUpdate());
 }

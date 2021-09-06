@@ -26,6 +26,7 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.WebContentsFactory;
+import org.chromium.chrome.browser.browserservices.intents.WebDisplayMode;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
@@ -47,7 +48,6 @@ import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
-import org.chromium.chrome.browser.webapps.WebDisplayMode;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
@@ -62,7 +62,7 @@ import org.chromium.ui.base.WindowDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.url.GURL;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 import org.vivaldi.browser.qrcode.VivaldiQrCodeScanDialog;
 
@@ -183,15 +183,15 @@ public class SearchActivity extends AsyncInitializationActivity
         };
         mLocationBarCoordinator = new LocationBarCoordinator(mSearchBox, anchorView,
                 mProfileSupplier, mSearchBoxDataProvider, null, new WindowDelegate(getWindow()),
-                getWindowAndroid(),
-                /*activityTabSupplier=*/() -> null, /*modalDialogManagerSupplier=*/
-                getModalDialogManagerSupplier(),
-                /*shareDelegateSupplier=*/null, /*incognitoStateProvider=*/null,
-                getLifecycleDispatcher(), overrideUrlLoadingDelegate,
-                /*backKeyBehavior=*/this, SearchEngineLogoUtils.getInstance());
+                getWindowAndroid(), /*activityTabSupplier=*/() -> null,
+                getModalDialogManagerSupplier(), /*shareDelegateSupplier=*/null,
+                /*incognitoStateProvider=*/null, getLifecycleDispatcher(),
+                overrideUrlLoadingDelegate, /*backKeyBehavior=*/this,
+                SearchEngineLogoUtils.getInstance(), /*launchAssistanceSettingsAction=*/() -> {},
+                /*pageInfoAction=*/(tab, permission) -> {});
         mLocationBarCoordinator.setUrlBarFocusable(true);
         mLocationBarCoordinator.setShouldShowMicButtonWhenUnfocused(true);
-        mLocationBarCoordinator.getFakeboxDelegate().addUrlFocusChangeListener(this);
+        mLocationBarCoordinator.getOmniboxStub().addUrlFocusChangeListener(this);
 
         // Kick off everything needed for the user to type into the box.
         beginQuery();
@@ -350,7 +350,7 @@ public class SearchActivity extends AsyncInitializationActivity
 
     private void beginQuery() {
         // Vivaldi
-        if (ChromeApplication.isVivaldi() && IntentUtils.safeGetBooleanExtra(
+        if (ChromeApplicationImpl.isVivaldi() && IntentUtils.safeGetBooleanExtra(
                 getIntent(), SearchWidgetProvider.EXTRA_VIVALDI_START_QR_CODE_SCAN, false)) {
             VivaldiQrCodeScanDialog dialog = VivaldiQrCodeScanDialog.newInstance();
             dialog.show(getFragmentManager(), null);
@@ -367,9 +367,8 @@ public class SearchActivity extends AsyncInitializationActivity
         // we are using shortcuts in the widget.
         SearchEngineIconHandler.get().restoreDSE();
         if (mTab != null && mTab.isInitialized()) mTab.destroy();
-        if (mLocationBarCoordinator != null
-                && mLocationBarCoordinator.getFakeboxDelegate() != null) {
-            mLocationBarCoordinator.getFakeboxDelegate().removeUrlFocusChangeListener(this);
+        if (mLocationBarCoordinator != null && mLocationBarCoordinator.getOmniboxStub() != null) {
+            mLocationBarCoordinator.getOmniboxStub().removeUrlFocusChangeListener(this);
         }
         mHandler.removeCallbacksAndMessages(null);
         super.onDestroy();

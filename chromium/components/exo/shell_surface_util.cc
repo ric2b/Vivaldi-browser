@@ -168,6 +168,14 @@ Surface* GetTargetSurfaceForLocatedEvent(
     root_surface = GetShellRootSurface(widget->GetNativeWindow());
     if (!root_surface)
       return nullptr;
+
+    ShellSurfaceBase* shell_surface_base =
+        GetShellSurfaceBaseForWindow(widget->GetNativeWindow());
+    // Check if it's overlay window.
+    if (!shell_surface_base->host_window()->Contains(window) &&
+        shell_surface_base->GetWidget()->GetNativeWindow() != window) {
+      return nullptr;
+    }
   }
 
   // Create a clone of the event as targeter may update it during the
@@ -273,7 +281,7 @@ bool ConsumedByIme(aura::Window* window, const ui::KeyEvent& event) {
   // treat keydown as a trigger of text inputs. We need suppression for keydown.
   //
   // Same condition as components/arc/ime/arc_ime_service.cc#InsertChar.
-  const base::char16 ch = event.GetCharacter();
+  const char16_t ch = event.GetCharacter();
   const bool is_control_char =
       (0x00 <= ch && ch <= 0x1f) || (0x7f <= ch && ch <= 0x9f);
   if (!is_control_char && !ui::IsSystemKeyModifier(event.flags()))

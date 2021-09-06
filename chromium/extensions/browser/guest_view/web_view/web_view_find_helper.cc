@@ -4,6 +4,7 @@
 
 #include "extensions/browser/guest_view/web_view/web_view_find_helper.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/memory/scoped_refptr.h"
@@ -91,7 +92,7 @@ void WebViewFindHelper::EndFindSession(int session_request_id, bool canceled) {
 
 void WebViewFindHelper::Find(
     content::WebContents* guest_web_contents,
-    const base::string16& search_text,
+    const std::u16string& search_text,
     blink::mojom::FindOptionsPtr options,
     scoped_refptr<WebViewInternalFindFunction> find_function) {
   // Need a new request_id for each new find request.
@@ -111,7 +112,7 @@ void WebViewFindHelper::Find(
       insert_result.first->second->options().Clone();
 
   if (current_find_session_) {
-    const base::string16& current_search_text =
+    const std::u16string& current_search_text =
         current_find_session_->search_text();
     bool current_match_case = current_find_session_->options()->match_case;
     full_options->new_session = current_search_text.empty() ||
@@ -169,8 +170,10 @@ void WebViewFindHelper::FindReply(int request_id,
   }
 
   // Clears the results for |findupdate| for a new find session.
-  if (!find_info->replied() && find_info->options()->new_session)
-    find_update_event_.reset(new FindUpdateEvent(find_info->search_text()));
+  if (!find_info->replied() && find_info->options()->new_session) {
+    find_update_event_ =
+        std::make_unique<FindUpdateEvent>(find_info->search_text());
+  }
 
 
   double scale = 1.0f;
@@ -249,9 +252,8 @@ void WebViewFindHelper::FindResults::PrepareResults(
 }
 
 WebViewFindHelper::FindUpdateEvent::FindUpdateEvent(
-    const base::string16& search_text)
-    : search_text_(search_text) {
-}
+    const std::u16string& search_text)
+    : search_text_(search_text) {}
 
 WebViewFindHelper::FindUpdateEvent::~FindUpdateEvent() {
 }
@@ -273,7 +275,7 @@ void WebViewFindHelper::FindUpdateEvent::PrepareResults(
 
 WebViewFindHelper::FindInfo::FindInfo(
     int request_id,
-    const base::string16& search_text,
+    const std::u16string& search_text,
     blink::mojom::FindOptionsPtr options,
     scoped_refptr<WebViewInternalFindFunction> find_function)
     : request_id_(request_id),

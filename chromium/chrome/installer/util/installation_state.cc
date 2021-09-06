@@ -14,6 +14,8 @@
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/util_constants.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 namespace installer {
 
 namespace {
@@ -47,6 +49,18 @@ ProductState::ProductState()
 ProductState::~ProductState() {}
 
 bool ProductState::Initialize(bool system_install) {
+  // For Vivaldi, as we support multiple installations, we read the version from
+  // the executable and ignore any registry settings.
+  if (kVivaldi) {
+    Clear();
+    base::Version version =
+        vivaldi::GetInstallVersion(vivaldi::GetInstallBinaryDir());
+    if (!version.IsValid())
+      return false;
+    version_ = std::make_unique<base::Version>(version);
+    return true;
+  }
+
   static const DWORD kAccess = KEY_QUERY_VALUE | KEY_WOW64_32KEY;
   const std::wstring clients_key(install_static::GetClientsKeyPath());
   const std::wstring state_key(install_static::GetClientStateKeyPath());

@@ -15,6 +15,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_view_host.h"
 #include "content/public/common/child_process_host.h"
 
 using content::BrowserThread;
@@ -151,11 +152,11 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
           static_cast<Profile*>(browser_context)->GetOriginalProfile() ==
               browser_context_));
   RequestFilterProxyingURLLoaderFactory::StartProxying(
-      browser_context, render_process_id,
-      frame ? frame->GetProcess()->GetID()
-            : content::ChildProcessHost::kInvalidUniqueID,
-      frame ? frame->GetRoutingID() : MSG_ROUTING_NONE, &request_handler_,
-      &request_id_generator_, std::move(navigation_id),
+      browser_context,
+      frame ? frame->GetProcess()->GetID() : render_process_id,
+      frame ? frame->GetRoutingID() : MSG_ROUTING_NONE,
+      frame ? frame->GetRenderViewHost()->GetRoutingID() : MSG_ROUTING_NONE,
+      &request_handler_, &request_id_generator_, std::move(navigation_id),
       std::move(proxied_receiver), std::move(target_factory_remote),
       std::move(header_client_receiver), std::move(forwarding_header_client),
       proxies_.get(), type);

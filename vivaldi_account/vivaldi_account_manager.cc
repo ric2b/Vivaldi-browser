@@ -11,6 +11,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromium/net/http/http_request_headers.h"
 #include "components/os_crypt/os_crypt.h"
@@ -19,6 +20,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "net/base/escape.h"
 #include "net/http/http_status_code.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "vivaldi_account/vivaldi_account_manager_request_handler.h"
@@ -31,8 +33,6 @@ namespace vivaldi {
 
 namespace {
 
-constexpr char kIdentityServerUrl[] = "https://login.vivaldi.net/oauth2/token";
-constexpr char kOpenIdUrl[] = "https://login.vivaldi.net/oauth2/userinfo";
 constexpr char kClientId[] = "2s_O6XheApKcXNKG3jUeHjPRKDMa";
 constexpr char kClientSecret[] = "AESC013J3umoN7tpkuaHROXAD28a";
 
@@ -59,7 +59,7 @@ constexpr char kPictureUrlKey[] = "picture";
 
 constexpr char kErrorDescriptionKey[] = "error_description";
 
-const base::string16 kVivaldiDomain = base::UTF8ToUTF16("vivaldi.net");
+const std::u16string kVivaldiDomain = base::UTF8ToUTF16("vivaldi.net");
 
 base::Optional<base::DictionaryValue> ParseServerResponse(
     std::unique_ptr<std::string> data) {
@@ -126,7 +126,6 @@ VivaldiAccountManager::FetchError::FetchError(FetchErrorType type,
 
 VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
     : profile_(profile), password_handler_(profile, this) {
-
 #if defined(OS_ANDROID)
   VivaldiAccountManagerAndroid::CreateNow();
 #endif
@@ -249,9 +248,12 @@ void VivaldiAccountManager::Login(const std::string& untrimmed_username,
       url_encoded_client_secret.c_str(), url_encoded_username.c_str(),
       url_encoded_password.c_str(), url_encoded_device_id.c_str());
 
+  const GURL identity_server_url(g_browser_process->local_state()->GetString(
+      vivaldiprefs::kVivaldiAccountServerUrlIdentity));
+
   access_token_request_handler_ =
       std::make_unique<VivaldiAccountManagerRequestHandler>(
-          profile_, GURL(kIdentityServerUrl), body, net::HttpRequestHeaders(),
+          profile_, identity_server_url, body, net::HttpRequestHeaders(),
           base::BindRepeating(&VivaldiAccountManager::OnTokenRequestDone,
                               base::Unretained(this), true));
   if (save_password)
@@ -288,9 +290,12 @@ void VivaldiAccountManager::RequestNewToken() {
 
   ClearTokens();
 
+  const GURL identity_server_url(g_browser_process->local_state()->GetString(
+      vivaldiprefs::kVivaldiAccountServerUrlIdentity));
+
   access_token_request_handler_ =
       std::make_unique<VivaldiAccountManagerRequestHandler>(
-          profile_, GURL(kIdentityServerUrl), body, net::HttpRequestHeaders(),
+          profile_, identity_server_url, body, net::HttpRequestHeaders(),
           base::BindRepeating(&VivaldiAccountManager::OnTokenRequestDone,
                               base::Unretained(this), false));
 }
@@ -327,7 +332,9 @@ void VivaldiAccountManager::OnTokenRequestDone(
     std::unique_ptr<std::string> response_body) {
   if (!url_loader->ResponseInfo() || !url_loader->ResponseInfo()->headers) {
     access_token_request_handler_->Retry();
-    NotifyTokenFetchFailed(NETWORK_ERROR, "", url_loader->NetError());
+    NotifyTokenFetchFailed(NETWORK_ERROR,
+                           net::ErrorToShortString(url_loader->NetError()),
+                           url_loader->NetError());
     return;
   }
 
@@ -383,12 +390,14 @@ void VivaldiAccountManager::OnTokenRequestDone(
   NotifyTokenFetchSucceeded();
 
   if (account_info_.account_id.empty() || account_info_.picture_url.empty()) {
+    const GURL open_id_server_url(g_browser_process->local_state()->GetString(
+        vivaldiprefs::kVivaldiAccountServerUrlOpenId));
     net::HttpRequestHeaders headers;
     headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
                       std::string("Bearer ") + access_token_);
     account_info_request_handler_ =
         std::make_unique<VivaldiAccountManagerRequestHandler>(
-            profile_, GURL(kOpenIdUrl), "", headers,
+            profile_, open_id_server_url, "", headers,
             base::BindRepeating(
                 &VivaldiAccountManager::OnAccountInfoRequestDone,
                 base::Unretained(this)));
@@ -402,7 +411,9 @@ void VivaldiAccountManager::OnAccountInfoRequestDone(
     std::unique_ptr<std::string> response_body) {
   if (!url_loader->ResponseInfo() || !url_loader->ResponseInfo()->headers) {
     account_info_request_handler_->Retry();
-    NotifyAccountInfoFetchFailed(NETWORK_ERROR, "", url_loader->NetError());
+    NotifyAccountInfoFetchFailed(
+        NETWORK_ERROR, net::ErrorToShortString(url_loader->NetError()),
+        url_loader->NetError());
     return;
   }
 

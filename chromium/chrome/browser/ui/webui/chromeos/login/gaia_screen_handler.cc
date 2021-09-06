@@ -33,25 +33,26 @@
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
+#include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/ash/certificate_provider/certificate_provider_service.h"
 #include "chrome/browser/ash/certificate_provider/certificate_provider_service_factory.h"
 #include "chrome/browser/ash/certificate_provider/pin_dialog_manager.h"
+#include "chrome/browser/ash/login/reauth_stats.h"
 #include "chrome/browser/ash/login/saml/public_saml_url_fetcher.h"
 #include "chrome/browser/ash/login/saml/saml_metric_utils.h"
 #include "chrome/browser/ash/login/screens/network_error.h"
 #include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
+#include "chrome/browser/ash/login/session/user_session_manager.h"
+#include "chrome/browser/ash/login/signin_partition_manager.h"
+#include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/login/ui/login_display_host_webui.h"
+#include "chrome/browser/ash/login/ui/user_adding_screen.h"
+#include "chrome/browser/ash/login/users/chrome_user_manager.h"
+#include "chrome/browser/ash/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/authpolicy/authpolicy_helper.h"
-#include "chrome/browser/chromeos/login/reauth_stats.h"
-#include "chrome/browser/chromeos/login/signin_partition_manager.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
-#include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
-#include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
@@ -288,7 +289,7 @@ base::Value MakeSecurityTokenPinDialogParameters(
       "formattedError",
       GenerateErrorMessage(error_label, attempts_left, enable_user_input));
   if (attempts_left == -1) {
-    params.SetStringKey("formattedAttemptsLeft", base::string16());
+    params.SetStringKey("formattedAttemptsLeft", std::u16string());
   } else {
     params.SetStringKey(
         "formattedAttemptsLeft",
@@ -454,7 +455,9 @@ void GaiaScreenHandler::LoadGaiaWithPartitionAndVersionAndConsent(
   params.SetString("clientVersion", version_info::GetVersionNumber());
   if (!platform_version->empty())
     params.SetString("platformVersion", *platform_version);
-  params.SetString("releaseChannel", chrome::GetChannelName());
+  // Extended stable channel is not supported on Chrome OS Ash.
+  params.SetString("releaseChannel",
+                   chrome::GetChannelName(chrome::WithExtendedStable(false)));
   params.SetString("endpointGen", kEndpointGen);
 
   std::string email_domain;
@@ -766,6 +769,17 @@ void GaiaScreenHandler::HandleCompleteAuthentication(
     return;
   }
 
+  // Record amount of time from the moment screen was shown till
+  // completeAuthentication signal come. Only for no SAML flow and only during
+  // first run in OOBE.
+  if (elapsed_timer_ && !using_saml &&
+      session_manager::SessionManager::Get()->session_state() ==
+          session_manager::SessionState::OOBE) {
+    base::UmaHistogramMediumTimes("OOBE.GaiaLoginTime",
+                                  elapsed_timer_->Elapsed());
+    elapsed_timer_.reset();
+  }
+
   const std::string sanitized_email = gaia::SanitizeEmail(email);
   LoginDisplayHost::default_host()->SetDisplayEmail(sanitized_email);
 
@@ -1051,9 +1065,8 @@ void GaiaScreenHandler::StartClearingCookies(
   LOG_ASSERT(Profile::FromWebUI(web_ui()) ==
              profile_helper->GetSigninProfile());
   profile_helper->ClearSigninProfile(
-      base::AdaptCallbackForRepeating(base::BindOnce(
-          &GaiaScreenHandler::OnCookiesCleared, weak_factory_.GetWeakPtr(),
-          std::move(on_clear_callback))));
+      base::BindOnce(&GaiaScreenHandler::OnCookiesCleared,
+                     weak_factory_.GetWeakPtr(), std::move(on_clear_callback)));
 }
 
 void GaiaScreenHandler::OnCookiesCleared(base::OnceClosure on_clear_callback) {
@@ -1110,6 +1123,7 @@ void GaiaScreenHandler::SetSAMLPrincipalsAPIUsed(bool is_third_party_idp,
 
 void GaiaScreenHandler::Show() {
   ShowScreen(GaiaView::kScreenId);
+  elapsed_timer_ = std::make_unique<base::ElapsedTimer>();
   hidden_ = false;
 }
 

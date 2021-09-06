@@ -26,11 +26,9 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
  public:
   // invalidation_service as parameter to work around possible effects of
   // immedatiate move of init_params
-  VivaldiProfileSyncService(
-      syncer::ProfileSyncService::InitParams* init_params,
-      Profile* profile,
-      std::shared_ptr<VivaldiInvalidationService> invalidation_service,
-      VivaldiAccountManager* account_manager);
+  VivaldiProfileSyncService(syncer::ProfileSyncService::InitParams* init_params,
+                            Profile* profile,
+                            VivaldiAccountManager* account_manager);
   ~VivaldiProfileSyncService() override;
 
   base::WeakPtr<VivaldiProfileSyncService> AsWeakPtr() {
@@ -40,10 +38,6 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
   void Initialize();
 
   void ClearSyncData();
-
-  VivaldiInvalidationService* invalidation_service() {
-    return invalidation_service_.get();
-  }
 
   bool is_clearing_sync_data() { return is_clearing_sync_data_; }
 
@@ -73,7 +67,6 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
 
   Profile* profile_;
 
-  std::shared_ptr<VivaldiInvalidationService> invalidation_service_;
   VivaldiSyncUIHelper ui_helper_;
 
   base::WeakPtrFactory<VivaldiProfileSyncService> weak_factory_;

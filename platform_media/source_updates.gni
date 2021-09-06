@@ -165,9 +165,12 @@ if (is_mac) {
   }
 
   update_target("//sandbox/policy/mac:package_sb_files") {
-    sources -= ["renderer.sb"]
+    sources -= ["renderer.sb",
+                "gpu.sb"]
     sources += [get_label_info("//vivaldi/platform_media/mac:generate_sb_files", "target_gen_dir")+"/renderer.sb"]
-    deps = ["//vivaldi/platform_media/mac:generate_sb_files"]
+    sources += [get_label_info("//vivaldi/platform_media/mac:generate_gpu_sb_files", "target_gen_dir")+"/gpu.sb"]
+    deps = ["//vivaldi/platform_media/mac:generate_sb_files",
+            "//vivaldi/platform_media/mac:generate_gpu_sb_files"]
   }
 }
 

@@ -9,6 +9,7 @@ import android.graphics.Canvas;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -17,6 +18,8 @@ import android.view.ViewStub;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.resources.ResourceFactory;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar.DrawingInfo;
@@ -28,8 +31,9 @@ import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import org.chromium.ui.widget.OptimizedFrameLayout;
 
-import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.ui.base.DeviceFormFactor;
+// Vivaldi
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -43,6 +47,9 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
 
     private SwipeGestureListener mSwipeGestureListener;
 
+    // Vivaldi
+    private ChromeActivity mChromeActivity;
+
     /**
      * Constructs a new control container.
      * <p>
@@ -54,6 +61,8 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
     public ToolbarControlContainer(Context context, AttributeSet attrs) {
         super(context, attrs);
         mTabStripHeight = context.getResources().getDimension(R.dimen.tab_strip_height);
+        // Vivaldi
+        mChromeActivity = (ChromeActivity) context;
     }
 
     @Override
@@ -108,7 +117,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         assert toolbarView != null;
 
         // Note(david@vivaldi.com): This looks ugly in Vivaldi. Skip it.
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         if (toolbarView instanceof ToolbarTablet) {
             // On tablet, draw a fake tab strip and toolbar until the compositor is
             // ready to draw the real tab strip. (On phone, the toolbar is made entirely
@@ -159,7 +168,12 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
 
         @Override
         protected ViewResourceAdapter createResourceAdapter() {
-            return new ToolbarViewResourceAdapter(this);
+            boolean useHardwareBitmapDraw = false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                useHardwareBitmapDraw = CachedFeatureFlags.isEnabled(
+                        ChromeFeatureList.TOOLBAR_USE_HARDWARE_BITMAP_DRAW);
+            }
+            return new ToolbarViewResourceAdapter(this, useHardwareBitmapDraw);
         }
 
         public void setToolbar(Toolbar toolbar) {
@@ -182,8 +196,8 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         private int mTabStripHeightPx;
 
         /** Builds the resource adapter for the toolbar. */
-        public ToolbarViewResourceAdapter(View toolbarContainer) {
-            super(toolbarContainer);
+        public ToolbarViewResourceAdapter(View toolbarContainer, boolean useHardwareBitmapDraw) {
+            super(toolbarContainer, useHardwareBitmapDraw);
             mToolbarContainer = toolbarContainer;
         }
 
@@ -256,14 +270,8 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
         // Don't react on touch events if the toolbar container is not fully visible.
         if (!isToolbarContainerFullyVisible()) return true;
 
-        // Note(david@vivaldi.com): When |isInTabSwitcherMode| we don't eat the event.
-        if (ChromeApplication.isVivaldi()) {
-            View toolbarView = findViewById(R.id.toolbar);
-            assert toolbarView != null;
-            if (toolbarView instanceof ToolbarPhone)
-                if(((ToolbarPhone) toolbarView).isInTabSwitcherMode())
-                    return false;
-        }
+        // Note(david@vivaldi.com): When in overview mode we don't eat the event.
+        if (mChromeActivity.isInOverviewMode()) return false;
 
         // If we have ACTION_DOWN in this context, that means either no child consumed the event or
         // this class is the top UI at the event position. Then, we don't need to feed the event to

@@ -329,41 +329,37 @@
         "name": "getAll",
         "type": "function",
         "description": "Retrieves all contacts",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "Contact"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "Contact"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "getAllEmailAddresses",
         "type": "function",
         "description": "Retrieves all email addresses for all contacts",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "EmailAddress"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "EmailAddress"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "create",
@@ -373,19 +369,18 @@
           {
             "$ref": "CreateUpdateDetails",
             "name": "contact"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Contact"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
+            }
+          ]
+        }
       },
       {
         "name": "createMany",
@@ -399,19 +394,18 @@
               "$ref": "CreateUpdateDetails"
             },
             "minItems": 1
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "CreateManyContactsResults"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "CreateManyContactsResults"
+            }
+          ]
+        }
       },
       {
         "name": "update",
@@ -426,19 +420,18 @@
           {
             "$ref": "CreateUpdateDetails",
             "name": "changes"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Contact"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
+            }
+          ]
+        }
       },
       {
         "name": "delete",
@@ -448,19 +441,18 @@
           {
             "type": "string",
             "name": "id"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "addPropertyItem",
@@ -470,19 +462,18 @@
           {
             "$ref": "AddPropertyDetails",
             "name": "propertyToAdd"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Contact"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
+            }
+          ]
+        }
       },
       {
         "name": "addEmailAddress",
@@ -493,19 +484,18 @@
             "$ref": "EmailAddressAddUpdate",
             "name": "emailToAdd",
             "description": "Object holding the fields for the email address to create"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Contact"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
+            }
+          ]
+        }
       },
       {
         "name": "updateEmailAddress",
@@ -521,19 +511,18 @@
             "$ref": "EmailAddressAddUpdate",
             "name": "emailToUpdate",
             "description": "Object holding the fields for the email address to update"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Contact"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
+            }
+          ]
+        }
       },
       {
         "name": "removeEmailAddress",
@@ -556,19 +545,18 @@
                 "description": "The id of email address to remove"
               }
             }
-          },
-          {
-              "type": "function",
-              "name": "callback",
-              "optional": true,
-              "parameters": [
-                {
-                  "name": "result",
-                  "$ref": "Contact"
-                }
-              ]
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
             }
-        ]
+          ]
+        }
       },
       {
         "name": "updatePropertyItem",
@@ -578,19 +566,18 @@
           {
             "$ref": "UpdatePropertyDetails",
             "name": "propertyToUpdate"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Contact"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
+            }
+          ]
+        }
       },
       {
         "name": "removePropertyItem",
@@ -600,19 +587,18 @@
           {
             "$ref": "RemovePropertyDetails",
             "name": "propertyToRemove"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Contact"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Contact"
+            }
+          ]
+        }
       }
     ],
     "events": [

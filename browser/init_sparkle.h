@@ -5,22 +5,13 @@
 
 #include "url/gurl.h"
 
-namespace base {
-class CommandLine;
-}
-
 namespace init_sparkle {
 
-struct Config {
-  GURL appcast_url;
-  bool with_custom_url = false;
-};
-
-Config GetConfig(const base::CommandLine& command_line);
+GURL GetAppcastUrl();
 
 #if defined(OS_MAC)
 
-void Initialize(const base::CommandLine& command_line);
+void Initialize();
 
 #endif
 }  // namespace vivaldi

@@ -46,8 +46,8 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.h"
-#include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
+#include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -87,6 +87,7 @@
 #include "ui/devtools/devtools_connector.h"
 //#include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/vivaldi_location_bar.h"
 #include "ui/vivaldi_native_app_window_views.h"
 #include "ui/vivaldi_quit_confirmation_dialog.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -137,13 +138,21 @@ VivaldiAutofillBubbleHandler::ShowSaveAddressProfileBubble(
   return nullptr;
 }
 
+autofill::AutofillBubbleBase*
+VivaldiAutofillBubbleHandler::ShowEditAddressProfileDialog(
+    content::WebContents* web_contents,
+    autofill::EditAddressProfileDialogController* controller) {
+  return nullptr;
+}
+
 namespace {
 static base::TimeTicks g_first_window_creation_time;
 
 std::unique_ptr<content::WebContents> CreateBrowserWebContents(
-    Profile* profile,
+    Browser* browser,
     content::RenderFrameHost* creator_frame,
     const GURL& app_url) {
+  Profile* profile = browser->profile();
   scoped_refptr<content::SiteInstance> site_instance =
       content::SiteInstance::CreateForURL(profile, app_url);
 
@@ -163,10 +172,10 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
                  << create_params.opener_render_process_id
                  << "). Routing disabled.";
     }
-  } else {
-      LOG(INFO) << "VivaldiWindow WebContents will be created in the process ("
-                 << extension_process_id << ")";
   }
+  LOG(INFO) << "VivaldiWindow WebContents will be created in the process "
+            << extension_process_id
+            << ", window_id=" << browser->session_id().id();
 
   std::unique_ptr<content::WebContents> web_contents =
       content::WebContents::Create(create_params);
@@ -189,28 +198,19 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
 
 }  // namespace
 
+VivaldiBrowserWindowParams::VivaldiBrowserWindowParams() = default;
+VivaldiBrowserWindowParams::~VivaldiBrowserWindowParams() = default;
+
 // VivaldiBrowserWindow --------------------------------------------------------
 
-VivaldiBrowserWindow::VivaldiBrowserWindow() : web_contents_delegate_(this) {
+VivaldiBrowserWindow::VivaldiBrowserWindow() {
   if (g_first_window_creation_time.is_null()) {
     g_first_window_creation_time = base::TimeTicks::Now();
   }
 }
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
-  // Explicitly set browser_ to NULL.
-  browser_.reset();
-}
-
-void VivaldiBrowserWindow::SetBrowser(std::unique_ptr<Browser> browser) {
-  // We should always be set as vivaldi in Browser.
-  DCHECK(browser->is_vivaldi());
-  DCHECK(!browser_);
-  browser_ = std::move(browser);
-
-  DCHECK(!location_bar_);
-  location_bar_ = std::make_unique<VivaldiLocationBar>();
-  location_bar_->SetBrowser(browser_.get());
+  OnDidFinishNavigation(false);
 }
 
 // static
@@ -234,23 +234,32 @@ VivaldiBrowserWindow* VivaldiBrowserWindow::CreateVivaldiBrowserWindow(
   VivaldiBrowserWindowParams params;
   params.minimum_size = gfx::Size(500, 300);
   params.native_decorations = browser->profile()->GetPrefs()->GetBoolean(
-                     vivaldiprefs::kWindowsUseNativeDecoration);
+      vivaldiprefs::kWindowsUseNativeDecoration);
   chrome::GetSavedWindowBoundsAndShowState(
       browser.get(), &params.content_bounds, &params.state);
+  params.resource_relative_url = "browser.html";
 
   VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
-  window->SetBrowser(std::move(browser));
-  window->CreateWebContents(params, nullptr);
-  window->LoadContents("browser.html");
+  window->CreateWebContents(std::move(browser), params);
 
   return window;
 }
 
 void VivaldiBrowserWindow::CreateWebContents(
-    const VivaldiBrowserWindowParams& params,
-    content::RenderFrameHost* creator_frame) {
-  DCHECK(browser_);
+    std::unique_ptr<Browser> browser,
+    const VivaldiBrowserWindowParams& params) {
+  DCHECK(browser);
+  DCHECK(!browser_);
   DCHECK(!web_contents());
+  // We should always be set as vivaldi in Browser.
+  DCHECK(browser->is_vivaldi());
+  DCHECK(!browser->window() || browser->window() == this);
+  browser_ = std::move(browser);
+  DCHECK_EQ(window_type_, NORMAL);
+  if (params.settings_window) {
+    window_type_ = SETTINGS;
+  }
+  location_bar_ = std::make_unique<VivaldiLocationBar>(*this);
 #if defined(OS_WIN)
   JumpListFactory::GetForProfile(browser_->profile());
 #endif
@@ -265,11 +274,12 @@ void VivaldiBrowserWindow::CreateWebContents(
   DCHECK(app_url.possibly_invalid_spec() == vivaldi::kVivaldiAppURLDomain);
 
   web_contents_ =
-      CreateBrowserWebContents(browser_->profile(), creator_frame, app_url);
+      CreateBrowserWebContents(browser_.get(), params.creator_frame, app_url);
 
   web_contents_delegate_.Initialize();
 
-  SetViewType(web_contents(), extensions::VIEW_TYPE_APP_WINDOW);
+  extensions::SetViewType(web_contents(),
+                          extensions::mojom::ViewType::kAppWindow);
 
   // The following lines are copied from ChromeAppDelegate::InitWebContents().
   favicon::CreateContentFaviconDriverForWebContents(web_contents());
@@ -313,8 +323,8 @@ void VivaldiBrowserWindow::CreateWebContents(
         extension()->GetResource(iter.second);
     if (!resource.empty()) {
       info_list.push_back(extensions::ImageLoader::ImageRepresentation(
-        resource, extensions::ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
-        gfx::Size(iter.first, iter.first), ui::SCALE_FACTOR_100P));
+          resource, extensions::ImageLoader::ImageRepresentation::ALWAYS_RESIZE,
+          gfx::Size(iter.first, iter.first), ui::SCALE_FACTOR_100P));
     }
   }
   extensions::ImageLoader* loader = extensions::ImageLoader::Get(GetProfile());
@@ -322,8 +332,21 @@ void VivaldiBrowserWindow::CreateWebContents(
       extension(), info_list,
       base::BindOnce(&VivaldiBrowserWindow::OnIconImagesLoaded,
                      weak_ptr_factory_.GetWeakPtr()));
+
   // TODO(pettern): Crashes on shutdown, fix.
   // extensions::ExtensionRegistry::Get(browser_->profile())->AddObserver(this);
+
+  // Ensure we force show the window after some time no matter what.
+  // base::Unretained() is safe as this owns the timer.
+  show_delay_timeout_ = std::make_unique<base::OneShotTimer>();
+  show_delay_timeout_->Start(
+      FROM_HERE, base::TimeDelta::FromMilliseconds(5000),
+      base::BindOnce(&VivaldiBrowserWindow::ForceShow, base::Unretained(this)));
+
+  GURL resource_url = extension_->GetResourceURL(params.resource_relative_url);
+  web_contents()->GetController().LoadURL(resource_url, content::Referrer(),
+                                          ui::PAGE_TRANSITION_LINK,
+                                          std::string());
 }
 
 void VivaldiBrowserWindow::OnIconImagesLoaded(gfx::ImageFamily image_family) {
@@ -336,24 +359,6 @@ void VivaldiBrowserWindow::OnExtensionUnloaded(
     extensions::UnloadedExtensionReason reason) {
   if (vivaldi::kVivaldiAppId == extension->id())
     views_->Close();
-}
-
-void VivaldiBrowserWindow::LoadContents(
-    const std::string& resource_relative_url) {
-  DCHECK(web_contents());
-
-  // Ensure we force show the window after some time no matter what.
-  // base::Unretained() is safe as this owns the timer.
-  DCHECK(!show_delay_timeout_);
-  show_delay_timeout_ = std::make_unique<base::OneShotTimer>();
-  show_delay_timeout_->Start(
-      FROM_HERE, base::TimeDelta::FromMilliseconds(5000),
-      base::Bind(&VivaldiBrowserWindow::ForceShow, base::Unretained(this)));
-
-  GURL resource_url = extension_->GetResourceURL(resource_relative_url);
-  web_contents()->GetController().LoadURL(resource_url, content::Referrer(),
-                                          ui::PAGE_TRANSITION_LINK,
-                                          std::string());
 }
 
 void VivaldiBrowserWindow::ContentsDidStartNavigation() {
@@ -443,7 +448,7 @@ void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
     if (tab_strip_model->IsTabPinned(i)) {
       tabs_to_move.push_back(sessions::SessionTabHelper::IdForTab(
                                  tab_strip_model->GetWebContentsAt(i))
-              .id());
+                                 .id());
     }
   }
 
@@ -566,10 +571,10 @@ void VivaldiBrowserWindow::ContinueClose(bool quiting,
   } else {
     // Notify about the cancellation of window close so
     // events can be sent to the web ui.
-    content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
-      content::Source<Browser>(browser()),
-      content::NotificationService::NoDetails());
+    // content::NotificationService::current()->Notify(
+    //  chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
+    //  content::Source<Browser>(browser()),
+    //  content::NotificationService::NoDetails());
   }
 }
 
@@ -1008,14 +1013,14 @@ void VivaldiBrowserWindow::UpdateTitleBar() {
   views_->UpdateWindowIcon();
 }
 
-base::string16 VivaldiBrowserWindow::GetTitle() {
+std::u16string VivaldiBrowserWindow::GetTitle() {
   if (!extension_)
-    return base::string16();
+    return std::u16string();
 
   // WebContents::GetTitle() will return the page's URL if there's no <title>
   // specified. However, we'd prefer to show the name of the extension in that
   // case, so we directly inspect the NavigationEntry's title.
-  base::string16 title;
+  std::u16string title;
   content::NavigationEntry* entry =
       web_contents() ? web_contents()->GetController().GetLastCommittedEntry()
                      : nullptr;
@@ -1153,6 +1158,10 @@ bool VivaldiBrowserWindow::DoBrowserControlsShrinkRendererSize(
   return false;
 }
 
+ui::NativeTheme* VivaldiBrowserWindow::GetNativeTheme() {
+  return nullptr;
+}
+
 int VivaldiBrowserWindow::GetTopControlsHeight() const {
   return 0;
 }
@@ -1162,24 +1171,23 @@ bool VivaldiBrowserWindow::CanUserExitFullscreen() const {
 }
 
 VivaldiBrowserWindow::VivaldiManagePasswordsIconView::
-    VivaldiManagePasswordsIconView(Browser* browser)
-    : browser_(browser) {}
+    VivaldiManagePasswordsIconView(VivaldiBrowserWindow& window)
+    : window_(window) {}
 
 void VivaldiBrowserWindow::VivaldiManagePasswordsIconView::SetState(
     password_manager::ui::State state) {
-  DCHECK(browser_);
   extensions::VivaldiUtilitiesAPI* utils_api =
       extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
-          browser_->profile());
+          window_.browser()->profile());
   bool show = state == password_manager::ui::State::PENDING_PASSWORD_STATE;
   show = state != password_manager::ui::State::INACTIVE_STATE;
-  utils_api->OnPasswordIconStatusChanged(browser_->session_id().id(), show);
+  utils_api->OnPasswordIconStatusChanged(window_.id(), show);
 }
 
 bool VivaldiBrowserWindow::VivaldiManagePasswordsIconView::Update() {
   // contents can be null when we recover after UI process crash.
   content::WebContents* web_contents =
-      browser_->tab_strip_model()->GetActiveWebContents();
+      window_.browser()->tab_strip_model()->GetActiveWebContents();
   if (web_contents) {
     ManagePasswordsUIController::FromWebContents(web_contents)
         ->UpdateIconAndBubbleState(this);
@@ -1201,7 +1209,7 @@ void VivaldiBrowserWindow::NavigationStateChanged(
     content::InvalidateTypes changed_flags) {
   if (changed_flags & content::INVALIDATE_TYPE_LOAD) {
     if (source == GetActiveWebContents()) {
-      base::string16 statustext =
+      std::u16string statustext =
           CoreTabHelper::FromWebContents(source)->GetStatusText();
       ::vivaldi::BroadcastEvent(
           extensions::vivaldi::window_private::OnActiveTabStatusText::
@@ -1234,21 +1242,16 @@ bool VivaldiBrowserWindow::IsOnCurrentWorkspace() const {
 
 void VivaldiBrowserWindow::UpdatePageActionIcon(PageActionIconType type) {
   if (type == PageActionIconType::kManagePasswords) {
-    if (!icon_view_) {
-      icon_view_.reset(new VivaldiManagePasswordsIconView(browser_.get()));
-    }
-    icon_view_->Update();
+    icon_view_.Update();
   }
 }
 
 autofill::AutofillBubbleHandler*
 VivaldiBrowserWindow::GetAutofillBubbleHandler() {
   if (!autofill_bubble_handler_) {
-    autofill_bubble_handler_ =
-        std::make_unique<VivaldiAutofillBubbleHandler>();
+    autofill_bubble_handler_ = std::make_unique<VivaldiAutofillBubbleHandler>();
   }
   return autofill_bubble_handler_.get();
-
 }
 
 qrcode_generator::QRCodeGeneratorBubbleView*
@@ -1256,31 +1259,30 @@ VivaldiBrowserWindow::ShowQRCodeGeneratorBubble(
     content::WebContents* contents,
     qrcode_generator::QRCodeGeneratorBubbleController* controller,
     const GURL& url) {
-
   sessions::SessionTabHelper* const session_tab_helper =
-    sessions::SessionTabHelper::FromWebContents(contents);
+      sessions::SessionTabHelper::FromWebContents(contents);
 
-  // This is called if the user uses the page context menu to generate a QR code.
+  // This is called if the user uses the page context menu to generate a QR
+  // code.
   vivaldi::BroadcastEvent(
       extensions::vivaldi::utilities::OnShowQRCode::kEventName,
       extensions::vivaldi::utilities::OnShowQRCode::Create(
-        session_tab_helper->session_id().id(), url.spec()),
+          session_tab_helper->session_id().id(), url.spec()),
       browser_->profile());
 
   return nullptr;
 }
 
-void VivaldiBrowserWindow::AddOnDidFinishFirstNavigationCallback(
-    DidFinishFirstNavigationCallback callback) {
-  on_did_finish_first_navigation_callbacks_.push_back(std::move(callback));
+void VivaldiBrowserWindow::SetDidFinishNavigationCallback(
+    DidFinishNavigationCallback callback) {
+  DCHECK(callback);
+  DCHECK(!did_finish_navigation_callback_);
+  did_finish_navigation_callback_ = std::move(callback);
 }
 
-void VivaldiBrowserWindow::OnDidFinishFirstNavigation() {
-  did_finish_first_navigation_ = true;
-  std::vector<DidFinishFirstNavigationCallback> callbacks;
-  std::swap(callbacks, on_did_finish_first_navigation_callbacks_);
-  for (auto& callback : callbacks) {
-    std::move(callback).Run(true /* did_finish */);
+void VivaldiBrowserWindow::OnDidFinishNavigation(bool success) {
+  if (did_finish_navigation_callback_) {
+    std::move(did_finish_navigation_callback_).Run(success ? this : nullptr);
   }
 }
 

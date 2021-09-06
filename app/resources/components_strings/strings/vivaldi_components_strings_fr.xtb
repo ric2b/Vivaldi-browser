@@ -211,7 +211,7 @@
 <translation id="8241712895048303527">Bloquer sur ce site</translation>
 <translation id="8286036467436129157">Connexion</translation>
 <translation id="8288807391153049143">Afficher le certificat</translation>
-<translation id="8289355894181816810">Contactez votre administrateur réseau si vous n’êtes pas sûr(e) de vous.</translation>
+<translation id="8289355894181816810">Contactez votre administrateur réseau si vous ne savez pas de quoi il s’agit.</translation>
 <translation id="8332188693563227489">L’accès à <ph name="HOST_NAME" /> a été refusé</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a mis trop de temps à répondre.</translation>
 <translation id="8503813439785031346">Nom d’utilisateur</translation>
@@ -226,6 +226,7 @@
 <translation id="9039213469156557790">De plus, cette page inclut d’autres ressources qui ne sont pas sécurisées. Ces ressources peuvent être consultées par des tiers pendant leur transfert, et modifiées par un pirate informatique dans le but de changer le comportement de cette page.</translation>
 <translation id="9062620674789239642">Il a peut-être été déplacé, modifié ou supprimé.</translation>
 <translation id="9069693763241529744">Bloqué par une extension</translation>
+<translation id="910924428752220542">Mots de passe Vivaldi</translation>
 <translation id="9169664750068251925">Toujours bloquer sur ce site</translation>
 <translation id="9180553614777056266">Bloqueur de publicités</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilise un protocole incompatible.</translation>

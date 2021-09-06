@@ -38,11 +38,19 @@ extern const char kVivaldiUniqueUserId[];
 extern const char kVivaldiStatsNextDailyPing[];
 extern const char kVivaldiStatsNextWeeklyPing[];
 extern const char kVivaldiStatsNextMonthlyPing[];
+extern const char kVivaldiStatsNextTrimestrialPing[];
+extern const char kVivaldiStatsNextSemestrialPing[];
+extern const char kVivaldiStatsNextYearlyPing[];
 extern const char kVivaldiStatsExtraPing[];
 extern const char kVivaldiStatsExtraPingTime[];
+extern const char kVivaldiStatsPingsSinceLastMonth[];
 extern const char kVivaldiProfileImagePath[];
 extern const char kVivaldiTranslateLanguageList[];
 extern const char kVivaldiTranslateLanguageListLastUpdate[];
+extern const char kVivaldiAccountServerUrlIdentity[];
+extern const char kVivaldiAccountServerUrlOpenId[];
+extern const char kVivaldiSyncServerUrl[];
+extern const char kVivaldiSyncNotificationsServerUrl[];
 
 }  // namespace vivaldiprefs
 

@@ -84,6 +84,10 @@ update_target("//chrome/installer/util:with_no_strings") {
       "//vivaldi/installer/util/marker_file_work_item.h",
       "//vivaldi/installer/util/vivaldi_install_util.cc",
       "//vivaldi/installer/util/vivaldi_install_util.h",
+      "//vivaldi/installer/win/detached_thread.cc",
+      "//vivaldi/installer/win/detached_thread.h",
+      "//vivaldi/installer/win/vivaldi_install_l10n.cc",
+      "//vivaldi/installer/win/vivaldi_install_l10n.h",
     ]
   }
 }

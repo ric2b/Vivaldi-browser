@@ -64,6 +64,7 @@
 <translation id="3732388226447288666">Животиња 2</translation>
 <translation id="3732439195215136813">Животиња 5</translation>
 <translation id="3795800845758778870">Нажалост, ваша подешавања Brave прегледача нису доступна док је тај прегледач отворен. Да бисте увезли та подешавања у Vivaldi, сачувајте свој рад и затворите све прозоре Brave прегледача. Затим кликните на Настави.</translation>
+<translation id="3822431842304177896">Нови разделник</translation>
 <translation id="3832132597516774400">Пејзаж 5</translation>
 <translation id="3914946330804881301">Увезено из Opera</translation>
 <translation id="3921292902397893431">Чудовиште 8</translation>
@@ -129,7 +130,7 @@
 <translation id="7496505986576158197">Vivaldi прегледач су омогућили пројекат отвореног кода <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и други <ph name="BEGIN_LINK_OSS" />софтвер отвореног кода<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Покретање програма за ажурирање није успело. Проверите да ли рачунар има довољно меморије или простора на диску и покушајте поново касније.</translation>
 <translation id="7658239707568436148">Откажи</translation>
-<translation id="7715497554424665066">Игнориши ажурирање</translation>
+<translation id="7715497554424665066">&amp;Занемари ажурирање</translation>
 <translation id="7724603315864178912">Исеци</translation>
 <translation id="7727481996062361502">Потврђивање ажурирања...</translation>
 <translation id="7793738202466490491">Додај као догађај календара</translation>

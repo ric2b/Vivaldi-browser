@@ -15,7 +15,7 @@ import org.chromium.components.bookmarks.BookmarkType;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 import org.vivaldi.browser.speeddial.SpeedDialUtils;
 
@@ -81,7 +81,7 @@ public class BookmarkModel extends BookmarkBridge {
      * is disabled.
      */
      void deleteBookmarks(BookmarkId... bookmarks) {
-        if (ChromeApplication.isVivaldi()) { deleteBookmarksPublic(bookmarks); return; }
+        if (ChromeApplicationImpl.isVivaldi()) { deleteBookmarksPublic(bookmarks); return; }
         assert bookmarks != null && bookmarks.length > 0;
         // Store all titles of bookmarks.
         List<String> titles = new ArrayList<>();
@@ -107,7 +107,7 @@ public class BookmarkModel extends BookmarkBridge {
      * bookmark list. The bookmarks are appended at the end.
      */
     void moveBookmarks(List<BookmarkId> bookmarkIds, BookmarkId newParentId) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             List<BookmarkId> list = getChildIDsVivaldi(newParentId,
                     true, true, false);
             int appendIndex = list.size();

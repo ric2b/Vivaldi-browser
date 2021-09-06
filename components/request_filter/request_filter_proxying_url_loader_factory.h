@@ -36,7 +36,8 @@ class RequestFilterProxyingURLLoaderFactory
     InProgressRequest(
         RequestFilterProxyingURLLoaderFactory* factory,
         uint64_t request_id,
-        int32_t routing_id,
+        int32_t view_routing_id,
+        int32_t frame_routing_id,
         int32_t network_service_request_id,
         uint32_t options,
         const network::ResourceRequest& request,
@@ -46,6 +47,7 @@ class RequestFilterProxyingURLLoaderFactory
     // For CORS preflights
     InProgressRequest(RequestFilterProxyingURLLoaderFactory* factory,
                       uint64_t request_id,
+                      int32_t frame_routing_id,
                       const network::ResourceRequest& request);
     ~InProgressRequest() override;
 
@@ -63,6 +65,8 @@ class RequestFilterProxyingURLLoaderFactory
     void ResumeReadingBodyFromNet() override;
 
     // network::mojom::URLLoaderClient:
+    void OnReceiveEarlyHints(
+        network::mojom::EarlyHintsPtr early_hints) override;
     void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override;
     void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                            network::mojom::URLResponseHeadPtr head) override;
@@ -137,12 +141,17 @@ class RequestFilterProxyingURLLoaderFactory
                         bool is_navigation_request);
     void HandleBeforeRequestRedirect();
 
+    network::URLLoaderCompletionStatus CreateURLLoaderCompletionStatus(
+        int error_code,
+        bool collapse_initiator = false);
+
     RequestFilterProxyingURLLoaderFactory* const factory_;
     network::ResourceRequest request_;
     const base::Optional<url::Origin> original_initiator_;
     const uint64_t request_id_ = 0;
     const int32_t network_service_request_id_ = 0;
-    const int32_t routing_id_ = 0;
+    const int32_t view_routing_id_ = MSG_ROUTING_NONE;
+    const int32_t frame_routing_id_ = MSG_ROUTING_NONE;
     const uint32_t options_ = 0;
     const net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
     mojo::Receiver<network::mojom::URLLoader> proxied_loader_receiver_;
@@ -207,9 +216,9 @@ class RequestFilterProxyingURLLoaderFactory
 
   RequestFilterProxyingURLLoaderFactory(
       content::BrowserContext* browser_context,
-      int initiator_render_process_id,
       int render_process_id,
-      int render_frame_id,
+      int frame_routing_id,
+      int view_routing_id,
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
       base::Optional<int64_t> navigation_id,
@@ -227,9 +236,9 @@ class RequestFilterProxyingURLLoaderFactory
 
   static void StartProxying(
       content::BrowserContext* browser_context,
-      int initiator_render_process_id,
       int render_process_id,
-      int render_frame_id,
+      int frame_routing_id,
+      int view_routing_id,
       RequestFilterManager::RequestHandler* request_handler,
       RequestFilterManager::RequestIDGenerator* request_id_generator,
       base::Optional<int64_t> navigation_id,
@@ -246,7 +255,6 @@ class RequestFilterProxyingURLLoaderFactory
   // network::mojom::URLLoaderFactory:
   void CreateLoaderAndStart(
       mojo::PendingReceiver<network::mojom::URLLoader> loader_request,
-      int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& request,
@@ -278,9 +286,9 @@ class RequestFilterProxyingURLLoaderFactory
   void MaybeRemoveProxy();
 
   content::BrowserContext* const browser_context_;
-  const int initiator_render_process_id_;
   const int render_process_id_;
-  const int render_frame_id_;
+  const int frame_routing_id_;
+  const int view_routing_id_;
   RequestFilterManager::RequestHandler* request_handler_;
   RequestFilterManager::RequestIDGenerator* const request_id_generator_;
   base::Optional<int64_t> navigation_id_;

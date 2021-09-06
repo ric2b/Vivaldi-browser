@@ -85,32 +85,19 @@ void SessionService::SetTabExtData(const SessionID& window_id,
   ScheduleCommand(sessions::CreateSetExtDataCommand(tab_id, ext_data));
 }
 
-bool SessionService::VivaldiObserve(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  // Returns true if notification handled
-  switch (type) {
-    case content::NOTIFICATION_EXTDATA_UPDATED: {
-      content::WebContents* web_contents =
-          content::Source<content::WebContents>(source).ptr();
-      sessions::SessionTabHelper* session_tab_helper =
-          sessions::SessionTabHelper::FromWebContents(web_contents);
-      if (!session_tab_helper)
-        return true;
-      SetTabExtData(session_tab_helper->window_id(),
-                    session_tab_helper->session_id(),
-                    web_contents->GetExtData());
-      return true;
-    }
+void SessionService::OnExtDataUpdated(content::WebContents* web_contents) {
+  sessions::SessionTabHelper* session_tab_helper =
+      sessions::SessionTabHelper::FromWebContents(web_contents);
+  if (!session_tab_helper)
+    return;
 
-    default:
-      return false;
-  }
+  SetTabExtData(session_tab_helper->window_id(),
+                session_tab_helper->session_id(),
+                web_contents->GetExtData());
 }
 
 /* static */
-bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
+bool SessionServiceBase::ShouldTrackVivaldiBrowser(Browser* browser) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   base::Optional<base::Value> json =
       base::JSONReader::Read(browser->ext_data(), options);
@@ -135,7 +122,7 @@ bool SessionService::ShouldTrackVivaldiBrowser(Browser* browser) {
 }
 
 /* static */
-bool SessionService::ShouldTrackBrowserOfType(Browser::Type type) {
+bool SessionServiceBase::ShouldTrackBrowserOfType(Browser::Type type) {
   sessions::SessionWindow::WindowType window_type =
       WindowTypeForBrowserType(type);
   return window_type == sessions::SessionWindow::TYPE_NORMAL;
@@ -270,10 +257,10 @@ bool VivaldiSessionService::ShouldTrackWindow(Browser* browser,
       !browser->is_trusted_source()) {
     return false;
   }
-  if (!SessionService::ShouldTrackVivaldiBrowser(browser)) {
+  if (!SessionServiceBase::ShouldTrackVivaldiBrowser(browser)) {
     return false;
   }
-  return SessionService::ShouldTrackBrowserOfType(browser->type());
+  return SessionServiceBase::ShouldTrackBrowserOfType(browser->type());
 }
 
 // Based on BaseSessionService::ScheduleCommand

@@ -36,7 +36,8 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.io.Closeable;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * The top level coordinator for the download home UI.  This is currently an in progress class and
@@ -75,10 +76,7 @@ class DownloadManagerCoordinatorImpl
                 mDeleteCoordinator::showSnackbar, mSelectionDelegate, this::notifyFilterChanged,
                 createDateOrderedListObserver(), modalDialogManager, prefService, faviconProvider,
                 discardableReferencePool);
-        if (BuildConfig.IS_VIVALDI)
-            mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
-                    mSelectionDelegate, config.isSeparateActivity, tracker);
-        else
+        // Vivaldi
         mToolbarCoordinator = new ToolbarCoordinator(mActivity, this, mListCoordinator,
                 mSelectionDelegate, config.isSeparateActivity, tracker);
 
@@ -98,7 +96,6 @@ class DownloadManagerCoordinatorImpl
         if (!BuildConfig.IS_VIVALDI)
         mMainView.setBackgroundColor(
                 ApiCompatibilityUtils.getColor(mActivity.getResources(), R.color.default_bg_color));
-
         FrameLayout.LayoutParams listParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
         listParams.setMargins(0,

@@ -125,8 +125,8 @@ void NotificationTable::FillNotificationRow(const sql::Statement& s,
   int column_index = 0;
   NotificationID id = s.ColumnInt64(column_index++);
   EventID event_id = s.ColumnInt64(column_index++);
-  base::string16 name = s.ColumnString16(column_index++);
-  base::string16 description = s.ColumnString16(column_index++);
+  std::u16string name = s.ColumnString16(column_index++);
+  std::u16string description = s.ColumnString16(column_index++);
   base::Time when =
       base::Time::FromInternalValue(s.ColumnInt64(column_index++));
   int period = s.ColumnInt(column_index++);

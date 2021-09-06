@@ -117,7 +117,7 @@ class ImportDataStartImportFunction : public ExtensionFunction,
   void ImportData(const base::ListValue* args);
 
   ResponseAction HandleChooseBookmarksFileOrFolder(
-      const base::string16& title,
+      const std::u16string& title,
       base::StringPiece extension,
       const base::FilePath& default_file,
       bool file_selection);

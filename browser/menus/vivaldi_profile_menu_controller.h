@@ -32,7 +32,7 @@ class ProfileMenuController {
   static void CollectTargetProfiles(
     Profile* active_profile, std::vector<ProfileAttributesEntry*>& list);
 
-  void Populate(base::string16 label,
+  void Populate(std::u16string label,
                 ui::SimpleMenuModel* menu_model,
                 ui::SimpleMenuModel::Delegate* delegate);
   bool HandleCommand(int command_id, int event_flags);

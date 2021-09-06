@@ -19,6 +19,7 @@ import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomiza
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
+import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -26,7 +27,7 @@ import org.chromium.components.embedder_support.util.UrlUtilities;
 // Vivaldi
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Provides information regarding homepage enabled states and URI.
@@ -170,6 +171,19 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
     }
 
     /**
+     * Determines whether the homepage is set to something other than the NTP or empty/null. This is
+     * the same as {@link #isHomepageNonNtp()}, but uses {@link UrlUtilities#isCanonicalizedNTPUrl}
+     * instead of {@link UrlUtilities#isNTPUrl} to make it possible to use before native is loaded.
+     * Prefer {@link #isHomepageNonNtp()} if possible.
+     * @return Whether the current homepage is something other than the NTP.
+     */
+    public static boolean isHomepageNonNtpPreNative() {
+        String currentHomepage = getHomepageUri();
+        return !TextUtils.isEmpty(currentHomepage)
+                && !ReturnToChromeExperimentsUtil.isCanonicalizedNTPUrl(currentHomepage);
+    }
+
+    /**
      * Get homepage URI without checking if the homepage is enabled.
      * @return Homepage URI based on policy and shared preference settings.
      */
@@ -178,7 +192,7 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
             return HomepagePolicyManager.getHomepageUrl();
         }
         if (getPrefHomepageUseChromeNTP()) {
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 return VivaldiUrlConstants.NTP_NON_NATIVE_URL;
             return UrlConstants.NTP_NON_NATIVE_URL;
         }

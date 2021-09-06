@@ -97,6 +97,7 @@
 <translation id="4235360514405112390">有效</translation>
 <translation id="4250431568374086873">你與這個網站的連線可能有安全漏洞</translation>
 <translation id="4265872034478892965">依據管理員的設定允許</translation>
+<translation id="4305666528087210886">無法存取你的檔案</translation>
 <translation id="4312866146174492540">封鎖 (預設)</translation>
 <translation id="4356973930735388585">攻擊者可能會試圖透過這個網站在你的電腦上安裝危險程式，藉此竊取或刪除你的資訊 (例如相片、密碼、郵件和信用卡資料)。</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" /> 個 Cookie</translation>
@@ -150,6 +151,7 @@
 <translation id="6165508094623778733">瞭解詳情</translation>
 <translation id="6177128806592000436">你與這個網站的連線不安全</translation>
 <translation id="6203231073485539293">檢查網際網路連線</translation>
+<translation id="6225522625585012689">請前往 &lt;strong&gt;vivaldi://policy&lt;/strong&gt; 檢視遭到封鎖的網址清單，以及由系統管理員所強制執行的其他政策。</translation>
 <translation id="625755898061068298">你已選擇針對這個網站停用安全性警告功能。</translation>
 <translation id="6264485186158353794">返回安全性瀏覽</translation>
 <translation id="6305205051461490394">無法連上 <ph name="URL" />。</translation>
@@ -221,7 +223,9 @@
 <translation id="9011424611726486705">開啟網站設定</translation>
 <translation id="9025348182339809926">(無效)</translation>
 <translation id="9039213469156557790">此外，這個網頁含有其他不安全的資源。其他人可能會在資源傳輸期間檢視這些資源，攻擊者也可能會修改這些資源，進而變更網頁行為。</translation>
+<translation id="9062620674789239642">檔案可能已遭到移動、編輯或刪除。</translation>
 <translation id="9069693763241529744">依據延伸套件設定封鎖</translation>
+<translation id="910924428752220542">Vivaldi密碼</translation>
 <translation id="9169664750068251925">永遠禁止在這個網站執行</translation>
 <translation id="9180553614777056266">廣告封鎖器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不支援的通訊協定。</translation>

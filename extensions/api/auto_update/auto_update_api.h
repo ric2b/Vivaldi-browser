@@ -5,6 +5,7 @@
 
 #include <memory>
 
+#include "base/version.h"
 #include "extensions/browser/extension_function.h"
 
 #include "extensions/schema/autoupdate.h"
@@ -13,7 +14,7 @@ namespace extensions {
 
 class AutoUpdateAPI {
  public:
-static void Init() {
+  static void Init() {
 #ifdef OS_WIN
     InitUpgradeDetection();
 #endif
@@ -25,13 +26,15 @@ static void Init() {
 #endif
   }
 
-  static void SendDidFindValidUpdate(const std::string& url);
-  static void SendWillDownloadUpdate();
-  static void SendDidDownloadUpdate();
-  static void SendWillInstallUpdateOnQuit();
+  static void SendDidFindValidUpdate(const std::string& url,
+                                     const base::Version& version);
+  static void SendWillDownloadUpdate(const base::Version& version);
+  static void SendDidDownloadUpdate(const base::Version& version);
+  static void SendWillInstallUpdateOnQuit(const base::Version& version);
   static void SendUpdaterWillRelaunchApplication();
   static void SendUpdaterDidRelaunchApplication();
-  static void SendDidAbortWithError();
+  static void SendDidAbortWithError(const std::string& error,
+                                    const std::string& reason);
 
  private:
 #ifdef OS_WIN
@@ -98,6 +101,19 @@ class AutoUpdateDisableUpdateNotifierFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateDisableUpdateNotifierFunction);
+};
+
+class AutoUpdateInstallUpdateAndRestartFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.installUpdateAndRestart",
+                             AUTOUPDATE_INSTALLUPDATEANDRESTART)
+  AutoUpdateInstallUpdateAndRestartFunction() = default;
+
+ private:
+  ~AutoUpdateInstallUpdateAndRestartFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(AutoUpdateInstallUpdateAndRestartFunction);
 };
 
 class AutoUpdateGetAutoInstallUpdatesFunction : public ExtensionFunction {

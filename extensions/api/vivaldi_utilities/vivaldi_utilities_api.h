@@ -35,7 +35,8 @@ namespace extensions {
 
 class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
                             public EventRouter::Observer,
-                            public base::PowerObserver,
+                            public base::PowerStateObserver,
+                            public base::PowerSuspendObserver,
                             public content::DownloadManager::Observer {
  public:
   explicit VivaldiUtilitiesAPI(content::BrowserContext* context);

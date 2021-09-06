@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">複数ファイルの自動ダウンロードをどのサイトにも許可しない</translation>
 <translation id="5039804452771397117">許可</translation>
 <translation id="5057110919553308744">拡張機能をクリックしたとき</translation>
+<translation id="5059526285558225588">共有する内容を選択</translation>
 <translation id="5063480226653192405">使用状況</translation>
 <translation id="5116628073786783676">名前を付けて音声を保存... (&amp;V)</translation>
 <translation id="5143374789336132547">拡張機能「<ph name="EXTENSION_NAME" />」により、ホームボタンをクリックしたときに表示されるページが変更されました。</translation>
@@ -458,7 +459,6 @@
 <translation id="8823704566850948458">パスワードを自動生成...</translation>
 <translation id="8859174528519900719">サブフレーム: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">新しいウィンドウでリンクを開く (&amp;W)</translation>
-<translation id="8910146161325739742">画面を共有する</translation>
 <translation id="8915370057835397490">候補を読み込んでいます</translation>
 <translation id="8916476537757519021">プライベートサブフレーム: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScriptメモリー</translation>

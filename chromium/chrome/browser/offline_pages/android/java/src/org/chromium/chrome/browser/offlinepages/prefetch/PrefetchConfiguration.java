@@ -10,8 +10,8 @@ import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.ProfileKey;
 
-import org.chromium.base.BuildConfig;
-
+// Vivaldi
+import org.chromium.build.BuildConfig;
 /**
  * Allows the querying and setting of Offline Prefetch related configurations.
  */

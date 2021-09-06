@@ -61,16 +61,26 @@ update_target("//components/version_info:version_info") {
     "//vivaldi/app/vivaldi_version_info.cc",
     "//vivaldi/app/vivaldi_version_info.h",
   ]
+  deps += [
+    "//vivaldi/prefs:prefs_files_generator",
+  ]
 }
 
 if (is_mac) {
-  update_target("//chrome:chrome_resources") {
+  update_target("//chrome:chrome_app_icon") {
     sources -= [
       "app/theme/$branding_path_component/mac/app.icns",
-      "app/theme/$branding_path_component/mac/document.icns",
     ]
     sources += [
       "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/app.icns",
+    ]
+  }
+
+  update_target("//chrome:chrome_resources") {
+    sources -= [
+      "app/theme/$branding_path_component/mac/document.icns",
+    ]
+    sources += [
       "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/document.icns",
     ]
   }
@@ -151,9 +161,9 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
     }
     vivaldi_translations = get_path_info(vivaldi_source, "dir") +"/${vivaldi_translation_dir}/${_vivaldi_file_prefix}"
 
-    foreach(locale, locales + vivaldi_pending_locales- ["en-US"]) {
-      extra_inputs += ["${vivaldi_translations}$locale.xtb"]
-    }
+    #foreach(locale, locales + vivaldi_pending_locales- ["en-US"]) {
+    #  extra_inputs += ["${vivaldi_translations}$locale.xtb"]
+    #}
   }
 
   merge_extra_grit_defines = []
@@ -186,23 +196,39 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
 
 if (is_win) {
   update_template_instance("//chrome/installer/util:generate_strings") {
-    _temp_default_embedded_i18_locales = default_embedded_i18_locales
-    foreach(_temp_locale, vivaldi_pending_locales) {
-      _found = false
-      foreach(_temp_prior_locale, _temp_default_embedded_i18_locales) {
-        if (_temp_prior_locale == _temp_locale) {
-          _found = true
-        }
-      }
-      if (!_found) {
-        _temp_default_embedded_i18_locales += [_temp_locale]
-      }
+    extractor_datafile =
+        "//vivaldi/installer/win/create_vivaldi_installer_string_rc.py"
+
+    _languages_json = read_file(
+        "//vivaldi/vivapp/src/constants/language-list.json", "json"
+    )
+    _languages = _languages_json.languages
+    _vivaldi_translation_locales = [ ]
+    foreach(code_and_names, _languages.list) {
+      _vivaldi_translation_locales += [ code_and_names[0] ]
     }
-    grd_files_info += [ [
+    _vivaldi_translation_locales -= [ "en-US" ]
+
+    # Remove translations for Chromium installer strings for languages that we
+    # do not support.
+    chromium_strings = grd_files_info[0]
+    chromium_only_locales = chromium_strings[3] +
+        _vivaldi_translation_locales - _vivaldi_translation_locales
+    chromium_strings[3] -= chromium_only_locales
+
+    # The above removed "no" which Chromium grit files use for historical
+    # reasons instead of "nb" that we use in our files. Restore that.
+    chromium_strings[3] += ["no"]
+
+    grd_files_info = []
+    grd_files_info = [
+      chromium_strings,
+      [
         "//vivaldi/app/resources/strings/",
         "vivaldi_strings",
         "strings",
-        _temp_default_embedded_i18_locales - ["iw", "no"] + ["he", "nb"]
-    ] ]
+        _vivaldi_translation_locales
+      ]
+    ]
   }
 }

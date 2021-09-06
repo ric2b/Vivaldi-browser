@@ -74,6 +74,13 @@ class PermissionRequestManager
    public:
     virtual void OnBubbleAdded() {}
     virtual void OnBubbleRemoved() {}
+    // Called when the current batch of requests have been handled and the
+    // bubble is no longer visible. Note that there might be some queued
+    // permission requests that will get shown after this. This differs from
+    // OnBubbleRemoved() in that the bubble may disappear while there are still
+    // in-flight requests (e.g. when switching tabs while the bubble is still
+    // visible).
+    virtual void OnRequestsFinalized() {}
 
    protected:
     virtual ~Observer() = default;
@@ -129,7 +136,8 @@ class PermissionRequestManager
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void DocumentOnLoadCompletedInMainFrame() override;
+  void DocumentOnLoadCompletedInMainFrame(
+      content::RenderFrameHost* render_frame_host) override;
   void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override;
   void WebContentsDestroyed() override;
   void OnVisibilityChanged(content::Visibility visibility) override;
@@ -179,6 +187,11 @@ class PermissionRequestManager
   base::Optional<PermissionUmaUtil::PredictionGrantLikelihood>
   prediction_grant_likelihood_for_testing() {
     return prediction_grant_likelihood_;
+  }
+
+  base::Optional<permissions::PermissionPromptDisposition>
+  current_request_prompt_disposition_for_testing() {
+    return current_request_prompt_disposition_;
   }
 
  private:
@@ -258,6 +271,13 @@ class PermissionRequestManager
   // the object alive. The infobar system hides the actual infobar UI and modals
   // prevent tab switching.
   std::unique_ptr<PermissionPrompt> view_;
+
+  // The disposition for the currently active permission prompt, if any.
+  // Recorded separately because the `view_` might not be available at prompt
+  // resolution in order to determine the disposition.
+  base::Optional<permissions::PermissionPromptDisposition>
+      current_request_prompt_disposition_;
+
   // We only show new prompts when |tab_is_hidden_| is false.
   bool tab_is_hidden_;
 
@@ -270,7 +290,7 @@ class PermissionRequestManager
     int render_process_id;
     int render_frame_id;
 
-    bool IsSourceFrameInactiveAndDisallowReactivation() const;
+    bool IsSourceFrameInactiveAndDisallowActivation() const;
   };
 
   base::circular_deque<PermissionRequest*> queued_requests_;

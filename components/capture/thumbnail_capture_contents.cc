@@ -10,8 +10,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/task/thread_pool.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_entry.h"
@@ -50,32 +50,30 @@ scoped_refptr<base::RefCountedMemory> ConvertToPNGOnWorkerThread(
 
 }  // namespace
 
-//static
+// static
 void ThumbnailCaptureContents::Capture(content::BrowserContext* browser_context,
-                                     const GURL& start_url,
-                                     gfx::Size initial_size,
-                                     gfx::Size target_size,
-                                     CaptureCallback callback) {
+                                       const GURL& start_url,
+                                       gfx::Size initial_size,
+                                       gfx::Size target_size,
+                                       CaptureCallback callback) {
   ThumbnailCaptureContents* capture = new ThumbnailCaptureContents();
-  capture->Start(browser_context, start_url,
-                 initial_size, target_size, std::move(callback));
+  capture->Start(browser_context, start_url, initial_size, target_size,
+                 std::move(callback));
 }
 
 ThumbnailCaptureContents::ThumbnailCaptureContents()
-    : weak_ptr_factory_(this) {
-}
+    : weak_ptr_factory_(this) {}
 
 ThumbnailCaptureContents::~ThumbnailCaptureContents() {
   DVLOG(1) << "Destroying ThumbnailCaptureContents for start_url="
            << start_url_.spec();
 }
 
-void ThumbnailCaptureContents::Start(
-    content::BrowserContext* browser_context,
-    const GURL& start_url,
-    gfx::Size initial_size,
-    gfx::Size target_size,
-    CaptureCallback callback) {
+void ThumbnailCaptureContents::Start(content::BrowserContext* browser_context,
+                                     const GURL& start_url,
+                                     gfx::Size initial_size,
+                                     gfx::Size target_size,
+                                     CaptureCallback callback) {
   DCHECK(!initial_size.IsEmpty());
   DCHECK(!target_size.IsEmpty());
   start_url_ = start_url;
@@ -229,8 +227,7 @@ void ThumbnailCaptureContents::DidStartLoading() {
 }
 
 void ThumbnailCaptureContents::DidRedirectNavigation(
-  content::NavigationHandle* navigation_handle) {
-}
+    content::NavigationHandle* navigation_handle) {}
 
 void ThumbnailCaptureContents::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
@@ -272,7 +269,7 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&ThumbnailCaptureContents::TryCapture,
-                      weak_ptr_factory_.GetWeakPtr(), false),
+                       weak_ptr_factory_.GetWeakPtr(), false),
         next_capture_try_wait_);
     return;
   }
@@ -347,7 +344,7 @@ void ThumbnailCaptureContents::OnIpcCaptureDone(
     bitmap = SkBitmap();
   }
   RespondAndDelete(std::move(bitmap));
- }
+}
 
 void ThumbnailCaptureContents::RenderProcessGone(
     base::TerminationStatus status) {

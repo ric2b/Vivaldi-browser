@@ -21,6 +21,44 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histograms>
 
+<variants name="Gap">
+  <variant name="1000ms"/>
+</variants>
+
+<variants name="MaxWindowSize">
+  <variant name="5000ms"/>
+</variants>
+
+<variants name="RequestDestination">
+  <variant name="audio"/>
+  <variant name="audioworklet"/>
+  <variant name="document"/>
+  <variant name="embed"/>
+  <variant name="empty"/>
+  <variant name="font"/>
+  <variant name="frame"/>
+  <variant name="iframe"/>
+  <variant name="image"/>
+  <variant name="manifest"/>
+  <variant name="object"/>
+  <variant name="paintworklet"/>
+  <variant name="report"/>
+  <variant name="script"/>
+  <variant name="serviceworker"/>
+  <variant name="sharedworker"/>
+  <variant name="style"/>
+  <variant name="track"/>
+  <variant name="video"/>
+  <variant name="webbundle"/>
+  <variant name="worker"/>
+  <variant name="xslt"/>
+</variants>
+
+<variants name="Window">
+  <variant name="SessionWindow"/>
+  <variant name="SessionWindowByInputs"/>
+</variants>
+
 <histogram name="PageActionController.ExtensionsWithPageActions" units="units"
     expires_after="2021-12-01">
   <owner>rdevlin.cronin@chromium.org</owner>
@@ -94,7 +132,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.AdDensity.MaxPercentByArea" units="%"
-    expires_after="2021-08-01">
+    expires_after="2021-10-04">
   <owner>justinmron@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -107,7 +145,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.AdDensity.MaxPercentByHeight" units="%"
-    expires_after="2021-08-01">
+    expires_after="2021-10-04">
   <owner>justinmron@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -156,7 +194,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.AllPages.PercentTotalBytesAds" units="%"
-    expires_after="2021-03-28">
+    expires_after="2022-03-28">
   <owner>alexmt@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -185,7 +223,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.HeavyAds.DisallowedByBlocklist"
-    enum="BooleanBlocked" expires_after="2021-08-01">
+    enum="BooleanBlocked" expires_after="2021-10-04">
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -430,6 +468,37 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="PageLoad.Clients.AMP.LayoutInstability.MaxCumulativeShiftScore.Subframe.{Navigation}{Window}.Gap{Gap}.Max{MaxWindowSize}"
+    units="scorex10" expires_after="M97">
+  <owner>hbsong@chromium.org</owner>
+  <owner>speed-metrics-dev@chromium.org</owner>
+  <summary>
+    Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that has
+    occurred in a {Window}, in the AMP subframe. The gap between two consecutive
+    shifts in a window is not bigger than {Gap} and the maximum window size is
+    {MaxWindowSize}. This metric's integral value is 100x the fractional
+    cumulative layout shift score described in the explainer. If the
+    {Navigation} is FullNavigation, we record the metric for non same-document
+    AMP navigations in the main frame, at the end of the AMP document lifetime,
+    such as when the document is being navigated away from. Otherwise, only
+    same-document navigations are included.
+  </summary>
+  <token key="Navigation">
+    <variant name=""/>
+    <variant name="FullNavigation."/>
+  </token>
+  <token key="Window" variants="Window">
+    <variant name=""/>
+  </token>
+  <token key="Gap" variants="Gap">
+    <variant name=""/>
+  </token>
+  <token key="MaxWindowSize" variants="MaxWindowSize">
+    <variant name=""/>
+  </token>
+</histogram>
+
+<histogram
     name="PageLoad.Clients.AMP.PaintTiming.InputToFirstContentfulPaint.Subframe"
     units="ms" expires_after="M97">
   <owner>bmcquade@chromium.org</owner>
@@ -533,7 +602,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.Scheme.HTTP.PaintTiming.UnderStat"
-    enum="PageLoadTimingUnderStat" expires_after="2021-07-22">
+    enum="PageLoadTimingUnderStat" expires_after="2021-09-26">
   <owner>tbansal@chromium.org</owner>
   <summary>
     Records if the time from navigation to first contentful paint was less than
@@ -561,7 +630,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.Scheme.HTTPS.PaintTiming.UnderStat"
-    enum="PageLoadTimingUnderStat" expires_after="2021-07-22">
+    enum="PageLoadTimingUnderStat" expires_after="2021-09-26">
   <owner>tbansal@chromium.org</owner>
   <summary>
     Records if the time from navigation to first contentful paint was less than
@@ -731,7 +800,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.ThirdParty.Origins.CookieRead2" units="Count"
-    expires_after="2021-08-01">
+    expires_after="2021-10-04">
   <owner>jkarlin@chromium.org</owner>
   <owner>yaoxia@chromium.org</owner>
   <summary>
@@ -741,7 +810,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.ThirdParty.Origins.CookieWrite2"
-    units="Count" expires_after="2021-08-01">
+    units="Count" expires_after="2021-10-04">
   <owner>jkarlin@chromium.org</owner>
   <owner>yaoxia@chromium.org</owner>
   <summary>
@@ -752,7 +821,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.ThirdParty.Origins.LocalStorageAccess2"
-    units="Count" expires_after="2021-07-04">
+    units="Count" expires_after="2021-09-05">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -762,7 +831,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Clients.ThirdParty.Origins.SessionStorageAccess2"
-    units="Count" expires_after="2021-07-11">
+    units="Count" expires_after="2021-09-12">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -948,7 +1017,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Experimental.Bytes.Total2" units="KB"
-    expires_after="2021-08-01">
+    expires_after="2021-10-04">
   <owner>jkarlin@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -1091,6 +1160,62 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="PageLoad.Experimental.Memory.Core.MainFrame.Max" units="KiB"
+    expires_after="2021-08-31">
+  <owner>cammie@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <owner>johnidel@chromium.org</owner>
+  <summary>
+    The maximum reported number of kilobytes of memory used by V8 by the main
+    frame in this pageload.
+
+    Only recorded if memory tracking is enabled. Recorded in PageLoadMetrics
+    when the page is destroyed.
+  </summary>
+</histogram>
+
+<histogram name="PageLoad.Experimental.Memory.Core.Subframe.Aggregate.Max"
+    units="KiB" expires_after="2021-08-31">
+  <owner>cammie@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <owner>johnidel@chromium.org</owner>
+  <summary>
+    The maximum reported aggregate number of kilobytes of memory used by V8 by
+    subframes in this pageload. The value recorded is the maximum simultaneous
+    usage by all subframes during this pageload, not including the main frame.
+
+    Only recorded if memory tracking is enabled. Recorded in PageLoadMetrics
+    when the page is destroyed.
+  </summary>
+</histogram>
+
+<histogram name="PageLoad.Experimental.Memory.Core.Total.Max" units="KiB"
+    expires_after="2021-08-31">
+  <owner>cammie@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <owner>johnidel@chromium.org</owner>
+  <summary>
+    The maximum reported aggregate number of kilobytes of memory used by V8 by
+    all frames in this pageload. The value recorded is the maximum simultaneous
+    usage by all frames during this pageload, including the main frame.
+
+    Only recorded if memory tracking is enabled. Recorded in PageLoadMetrics
+    when the page is destroyed.
+  </summary>
+</histogram>
+
+<histogram name="PageLoad.Experimental.Memory.Core.UpdateReceived"
+    units="BooleanReceived" expires_after="2021-08-31">
+  <owner>cammie@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <owner>johnidel@chromium.org</owner>
+  <summary>
+    Whether or not any V8 memory measurement updates were received by
+    UmaPageLoadMetricsObserver for this pageload. Only recorded if memory
+    tracking is enabled. Recorded in PageLoadMetrics when the page is destroyed.
+  </summary>
+</histogram>
+
 <histogram
     name="PageLoad.Experimental.NavigationTiming.FinalLoaderCallbackToNavigationCommitSent"
     units="ms" expires_after="2021-05-08">
@@ -1186,7 +1311,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToFirstLoaderCallback"
-    units="ms" expires_after="2021-08-01">
+    units="ms" expires_after="2021-10-04">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1197,7 +1322,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToFirstRequestStart"
-    units="ms" expires_after="2021-07-11">
+    units="ms" expires_after="2021-09-12">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1208,7 +1333,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToFirstResponseStart"
-    units="ms" expires_after="2021-08-01">
+    units="ms" expires_after="2021-10-04">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1219,7 +1344,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToNavigationCommitSent"
-    units="ms" expires_after="2021-07-11">
+    units="ms" expires_after="2021-09-12">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1239,6 +1364,78 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     with PageLoad metrics, we consider app backgrounding on Android to be the
     end of page load as well as the app could be evicted by Android anytime
     after that happens.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Experimental.PageTiming.CachedResourceLoadTime.{RequestDestination}"
+    units="ms" expires_after="2021-10-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the time from load start to when headers have been received for
+    resource requests which come from the cache. Logged for every
+    {RequestDestination} resource request from the cache.
+  </summary>
+  <token key="RequestDestination" variants="RequestDestination"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Experimental.PageTiming.CommitSentToFirstSubresourceLoadStart"
+    units="ms" expires_after="2021-10-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the time from when the navigation commit was sent to the renderer
+    to the first subresource load start. Logged for every page load which has
+    subresources.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Experimental.PageTiming.NavigationToFirstSubresourceLoadStart"
+    units="ms" expires_after="2021-10-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the time from navigation start to the first subresource load start.
+    Logged for every page load which has subresources.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Experimental.PageTiming.ResourceLoadTime.{RequestDestination}"
+    units="ms" expires_after="2021-10-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the time from load start to when headers have been received for
+    resource requests which do not come from the cache. Logged for every
+    {RequestDestination} resource request which is not from the cache.
+  </summary>
+  <token key="RequestDestination" variants="RequestDestination"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Experimental.PageTiming.TotalSubresourceLoadTimeAtFirstContentfulPaint"
+    units="ms" expires_after="2021-10-05">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the aggregate time of subresource requests (from start to when
+    headers have been received) which have been completed before the first
+    contentful paint. Logged for every page load.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Experimental.PaintTiming.FirstEligibleToPaintToFirstPaint"
+    units="ms" expires_after="2021-11-06">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the time from when the page is first eligible to paint to when the
+    first paint occurs. Logged for every foreground page load.
   </summary>
 </histogram>
 
@@ -1290,6 +1487,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     The time between the OS-level input event that initiated a navigation, and
     the first paint of the page that was loaded in the navigation, for
     background loads.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Experimental.PaintTiming.NavigationToFirstEligibleToPaint"
+    units="ms" expires_after="2021-11-06">
+  <owner>cduvall@chromium.org</owner>
+  <owner>jam@chromium.org</owner>
+  <summary>
+    Measures the time from navigation start to when the page is eligible to
+    paint. Logged for every foreground page load.
   </summary>
 </histogram>
 
@@ -1494,7 +1702,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.InteractiveTiming.FirstInputDelay.AfterBackForwardCacheRestore"
-    units="ms" expires_after="2021-06-30">
+    units="ms" expires_after="2021-08-29">
   <owner>altimin@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -1529,7 +1737,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.InteractiveTiming.FirstInputTimestamp4" units="ms"
-    expires_after="2021-06-27">
+    expires_after="2021-08-29">
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -1810,7 +2018,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.Internal.Renderer.PresentationTime.DeltaFromSwapTime"
-    units="ms" expires_after="2020-09-27">
+    units="ms" expires_after="2021-12-31">
+  <owner>jonross@chromium.org</owner>
   <owner>sadrul@chromium.org</owner>
   <summary>
     'Swap time' is the timestamp of the renderer submitting a CompositorFrame,
@@ -1822,17 +2031,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     compositor-frames that report a paint-timing metric (e.g.
     FirstContentfulPaint etc.), and after that frame has been displayed on
     screen.
+
+    The metric had expired on 2020-09-27, and re-enabled on 2021-03-17. So the
+    data within this period is incomplete.
   </summary>
 </histogram>
 
 <histogram name="PageLoad.Internal.Renderer.PresentationTime.Valid"
-    enum="Boolean" expires_after="2020-09-27">
+    enum="Boolean" expires_after="2021-12-31">
+  <owner>jonross@chromium.org</owner>
   <owner>sadrul@chromium.org</owner>
   <summary>
     This boolean keeps track of whether a valid presentation-timestamp was
     received or not. This is reported only for compositor-frames that report a
     paint-timing metric (e.g. FirstContentfulPaint etc.), and after that frame
     has been displayed on screen.
+
+    The metric had expired on 2020-09-27, and re-enabled on 2021-03-17. So the
+    data within this period is incomplete.
   </summary>
 </histogram>
 
@@ -1859,7 +2075,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.LayoutInstability.CumulativeShiftScore.AfterBackForwardCacheRestore"
-    units="scorex10" expires_after="2021-06-30">
+    units="scorex10" expires_after="2021-08-29">
   <owner>altimin@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -1884,7 +2100,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.LayoutInstability.CumulativeShiftScore.MainFrame.AfterBackForwardCacheRestore"
-    units="scorex10" expires_after="2021-06-30">
+    units="scorex10" expires_after="2021-08-29">
   <owner>altimin@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -1896,8 +2112,39 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram
+    name="PageLoad.LayoutInstability.MaxCumulativeShiftScore.{Bfcache}{Window}.Gap{Gap}.Max{MaxWindowSize}"
+    units="scorex10" expires_after="2021-12-29">
+  <owner>hbsong@chromium.org</owner>
+  <owner>speed-metrics-dev@chromium.org</owner>
+  <summary>
+    Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that has
+    occurred in a {Window}. The gap between two consecutive shifts in a window
+    is not bigger than {Gap} and the maximum window size is {MaxWindowSize}.
+    This metric's integral value is 100x the fractional cumulative layout shift
+    score described in the explainer. If {Bfcache} is triggered, we record the
+    metric when the user navigates away or closes the page after the page was
+    restored from back-forward cache. Otherwise, we record it at the end of the
+    page lifetime, such as when the page is being navigated away from or when a
+    tab is being closed.
+  </summary>
+  <token key="Window" variants="Window">
+    <variant name=""/>
+  </token>
+  <token key="Bfcache">
+    <variant name=""/>
+    <variant name="AfterBackForwardCacheRestore."/>
+  </token>
+  <token key="Gap" variants="Gap">
+    <variant name=""/>
+  </token>
+  <token key="MaxWindowSize" variants="MaxWindowSize">
+    <variant name=""/>
+  </token>
+</histogram>
+
 <histogram name="PageLoad.Memory.Aggregate.Max" units="KiB"
-    expires_after="2021-07-31">
+    expires_after="2021-08-31">
   <owner>cammie@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
@@ -2089,7 +2336,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="PageLoad.PaintTiming.NavigationToFirstPaint.AfterBackForwardCacheRestore"
-    units="ms" expires_after="2021-06-30">
+    units="ms" expires_after="2021-08-29">
   <owner>altimin@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -2252,12 +2499,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageLoad.ParseTiming.ParseDuration" units="ms"
-    expires_after="M81">
+    expires_after="2021-10-09">
   <owner>bmcquade@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <summary>
     Measures the time that the HTML parser was active, for main frame documents
     that finished parsing.
+
+    Warning: this histogram was expired after M81 and brought back 2021-04-13;
+    data may be missing.
   </summary>
 </histogram>
 
@@ -2386,7 +2636,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PageSerialization.MhtmlLoading.LoadResult"
-    enum="MhtmlLoadResult" expires_after="2021-06-27">
+    enum="MhtmlLoadResult" expires_after="2021-08-29">
   <owner>sclittle@chromium.org</owner>
   <owner>offline-dev@chromium.org</owner>
   <summary>Reports the result of an attempt to load an MHTML archive.</summary>

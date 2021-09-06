@@ -197,6 +197,12 @@ void VivaldiUIWebContentsDelegate::ActivateContents(
 
 void VivaldiUIWebContentsDelegate::RenderFrameCreated(
     content::RenderFrameHost* render_frame_host) {
+  // Follow ChromeExtensionWebContentsObserver::InitializeRenderFrame() and
+  // notify the renderer about the window id so
+  // chrome.extension.getViews({windowId}) works in our UI.
+  render_frame_host->Send(new ExtensionMsg_UpdateBrowserWindowId(
+      render_frame_host->GetRoutingID(), window_->id()));
+
   if (window_->requested_alpha_enabled()) {
     VivaldiNativeAppWindowViews* window_views = window_->views();
     if (window_views && window_views->CanHaveAlphaEnabled()) {
@@ -300,8 +306,9 @@ void VivaldiUIWebContentsDelegate::DidFinishNavigation(
   if (host->GetParent() == nullptr) {
     host->Send(new VivaldiFrameHostMsg_ResumeParser(host->routing_id()));
   }
-  // will run the callback set in WindowPrivateCreateFunction and then remove it.
-  window_->OnDidFinishFirstNavigation();
+  // will run the callback set in WindowPrivateCreateFunction and then remove
+  // it.
+  window_->OnDidFinishNavigation(/*success=*/true);
 }
 
 void VivaldiUIWebContentsDelegate::UpdateDraggableRegions(

@@ -376,7 +376,7 @@ void NotesBridge::SetNoteTitle(JNIEnv* env,
                                const JavaParamRef<jstring>& j_title) {
   DCHECK(IsLoaded());
   const NoteNode* note = GetNodeByID(id, type);
-  const base::string16 title =
+  const std::u16string title =
       base::android::ConvertJavaStringToUTF16(env, j_title);
 
   notes_model_->SetTitle(note, title);
@@ -389,7 +389,7 @@ void NotesBridge::SetNoteContent(JNIEnv* env,
                                  const JavaParamRef<jstring>& j_title) {
   DCHECK(IsLoaded());
   const NoteNode* note = GetNodeByID(id, type);
-  const base::string16 title =
+  const std::u16string title =
       base::android::ConvertJavaStringToUTF16(env, j_title);
 
   notes_model_->SetContent(note, title);
@@ -625,11 +625,11 @@ void NotesBridge::EndGroupingUndos(JNIEnv* env,
   // grouped_note_actions_.reset();
 }
 
-base::string16 NotesBridge::GetContent(const NoteNode* node) const {
+std::u16string NotesBridge::GetContent(const NoteNode* node) const {
   return node->GetContent();
 }
 
-base::string16 NotesBridge::GetTitle(const NoteNode* node) const {
+std::u16string NotesBridge::GetTitle(const NoteNode* node) const {
   return node->GetTitle();
 }
 

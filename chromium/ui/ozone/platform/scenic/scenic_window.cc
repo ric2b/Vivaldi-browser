@@ -5,6 +5,7 @@
 #include "ui/ozone/platform/scenic/scenic_window.h"
 
 #include <fuchsia/sys/cpp/fidl.h>
+#include <lib/sys/cpp/component_context.h>
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -12,6 +13,7 @@
 #include <vector>
 
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/process_context.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -28,7 +30,11 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
       delegate_(delegate),
       window_id_(manager_->AddWindow(this)),
       event_dispatcher_(this),
+      keyboard_service_(base::ComponentContextForProcess()
+                            ->svc()
+                            ->Connect<fuchsia::ui::input3::Keyboard>()),
       scenic_session_(manager_->GetScenic()),
+      safe_presenter_(&scenic_session_),
       view_ref_(std::move(properties.view_ref_pair.view_ref)),
       view_(&scenic_session_,
             std::move(std::move(properties.view_token)),
@@ -55,6 +61,12 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
   node_.AddChild(render_node_);
 
   delegate_->OnAcceleratedWidgetAvailable(window_id_);
+
+  keyboard_service_.set_error_handler([](zx_status_t status) {
+    ZX_LOG(ERROR, status) << "input3.Keyboard service disconnected.";
+  });
+  keyboard_client_ = std::make_unique<KeyboardClient>(keyboard_service_.get(),
+                                                      CloneViewRef(), this);
 }
 
 ScenicWindow::~ScenicWindow() {
@@ -78,10 +90,7 @@ void ScenicWindow::AttachSurfaceView(
   render_node_.DetachChildren();
   render_node_.AddChild(*surface_view_holder_);
 
-  scenic_session_.Present2(
-      /*requested_presentation_time=*/0,
-      /*requested_prediction_span=*/0,
-      [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
+  safe_presenter_.QueuePresent();
 }
 
 gfx::Rect ScenicWindow::GetBounds() const {
@@ -93,7 +102,7 @@ void ScenicWindow::SetBounds(const gfx::Rect& bounds) {
   bounds_ = bounds;
 }
 
-void ScenicWindow::SetTitle(const base::string16& title) {
+void ScenicWindow::SetTitle(const std::u16string& title) {
   NOTIMPLEMENTED();
 }
 
@@ -107,10 +116,7 @@ void ScenicWindow::Show(bool inactive) {
 
   // Call Present2() to ensure that the scenic session commands are processed,
   // which is necessary to receive metrics event from Scenic.
-  scenic_session_.Present2(
-      /*requested_presentation_time=*/0,
-      /*requested_prediction_span=*/0,
-      [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
+  safe_presenter_.QueuePresent();
 }
 
 void ScenicWindow::Hide() {
@@ -215,8 +221,16 @@ void ScenicWindow::SizeConstraintsChanged() {
 }
 
 void ScenicWindow::UpdateSize() {
-  gfx::SizeF scaled = ScaleSize(size_dips_, device_pixel_ratio_);
-  bounds_ = gfx::Rect(gfx::Size(ceilf(scaled.width()), ceilf(scaled.height())));
+  DCHECK_GT(device_pixel_ratio_, 0.0);
+  DCHECK(view_properties_);
+
+  const float width = view_properties_->bounding_box.max.x -
+                      view_properties_->bounding_box.min.x;
+  const float height = view_properties_->bounding_box.max.y -
+                       view_properties_->bounding_box.min.y;
+
+  bounds_ = gfx::Rect(ceilf(width * device_pixel_ratio_),
+                      ceilf(height * device_pixel_ratio_));
 
   // Update this window's Screen's dimensions to match the new size.
   ScenicScreen* screen = manager_->screen();
@@ -225,25 +239,24 @@ void ScenicWindow::UpdateSize() {
 
   // Translate the node by half of the view dimensions to put it in the center
   // of the view.
-  node_.SetTranslation(size_dips_.width() / 2.0, size_dips_.height() / 2.0,
-                       0.f);
+  node_.SetTranslation(width / 2.0, height / 2.0, 0.f);
 
   // Scale the render node so that surface rect can always be 1x1.
-  render_node_.SetScale(size_dips_.width(), size_dips_.height(), 1.f);
+  render_node_.SetScale(width, height, 1.f);
 
   // Resize input node to cover the whole surface.
-  scenic::Rectangle window_rect(&scenic_session_, size_dips_.width(),
-                                size_dips_.height());
+  scenic::Rectangle window_rect(&scenic_session_, width, height);
   input_node_.SetShape(window_rect);
 
   // This is necessary when using vulkan because ImagePipes are presented
   // separately and we need to make sure our sizes change is committed.
-  scenic_session_.Present2(
-      /*requested_presentation_time=*/0,
-      /*requested_prediction_span=*/0,
-      [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
+  safe_presenter_.QueuePresent();
 
-  delegate_->OnBoundsChanged(bounds_);
+  PlatformWindowDelegate::BoundsChange bounds;
+  bounds.bounds = bounds_;
+  bounds.system_ui_overlap =
+      ConvertInsets(device_pixel_ratio_, *view_properties_);
+  delegate_->OnBoundsChanged(bounds);
 }
 
 fuchsia::ui::views::ViewRef ScenicWindow::CloneViewRef() {
@@ -301,18 +314,13 @@ void ScenicWindow::OnViewMetrics(const fuchsia::ui::gfx::Metrics& metrics) {
   if (screen)
     screen->OnWindowMetrics(window_id_, device_pixel_ratio_);
 
-  if (!size_dips_.IsEmpty())
+  if (view_properties_)
     UpdateSize();
 }
 
 void ScenicWindow::OnViewProperties(
     const fuchsia::ui::gfx::ViewProperties& properties) {
-  float width = properties.bounding_box.max.x - properties.bounding_box.min.x -
-                properties.inset_from_min.x - properties.inset_from_max.x;
-  float height = properties.bounding_box.max.y - properties.bounding_box.min.y -
-                 properties.inset_from_min.y - properties.inset_from_max.y;
-
-  size_dips_.SetSize(width, height);
+  view_properties_ = properties;
   if (device_pixel_ratio_ > 0.0)
     UpdateSize();
 }
@@ -341,6 +349,16 @@ void ScenicWindow::DispatchEvent(ui::Event* event) {
     located_event->set_location_f(location);
   }
   delegate_->DispatchEvent(event);
+}
+
+// static
+gfx::Insets ScenicWindow::ConvertInsets(
+    float device_pixel_ratio,
+    const fuchsia::ui::gfx::ViewProperties& view_properties) {
+  return gfx::Insets(device_pixel_ratio * view_properties.inset_from_min.y,
+                     device_pixel_ratio * view_properties.inset_from_min.x,
+                     device_pixel_ratio * view_properties.inset_from_max.y,
+                     device_pixel_ratio * view_properties.inset_from_max.x);
 }
 
 }  // namespace ui

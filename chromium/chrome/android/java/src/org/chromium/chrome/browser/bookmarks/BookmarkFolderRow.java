@@ -15,7 +15,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 
 /**
@@ -33,7 +33,7 @@ public class BookmarkFolderRow extends BookmarkRow {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         setStartIconDrawable(BookmarkUtils.getFolderIcon(getContext(), BookmarkType.NORMAL));
     }
 
@@ -59,7 +59,7 @@ public class BookmarkFolderRow extends BookmarkRow {
                             : getResources().getString(R.string.reading_list_no_unread_pages));
         } else {
             int childCount = mDelegate.getModel().getTotalBookmarkCount(bookmarkId);
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 childCount = mDelegate.getModel().getChildCountWithoutSeparators(bookmarkId);
             mDescriptionView.setText((childCount > 0)
                             ? getResources().getQuantityString(
@@ -67,7 +67,7 @@ public class BookmarkFolderRow extends BookmarkRow {
                             : getResources().getString(R.string.no_bookmarks));
         }
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             if (bookmarkId.equals(mDelegate.getModel().getTrashFolderId())) {
                 setStartIconDrawable(VivaldiBookmarkUtils.getTrashFolderIcon(getContext()));
             } else {
@@ -85,7 +85,7 @@ public class BookmarkFolderRow extends BookmarkRow {
         @BookmarkType
         int type = (mBookmarkId == null) ? BookmarkType.NORMAL : mBookmarkId.getType();
 
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             return null;
         else
         return AppCompatResources.getColorStateList(

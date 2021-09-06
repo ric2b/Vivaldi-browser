@@ -59,7 +59,7 @@ class VivaldiNativeAppWindowViewsWin : public VivaldiNativeAppWindowViewsAura {
   int GetCommandIDForAppCommandID(int app_command_id) const;
 
   // The Windows Application User Model ID identifying the app.
-  base::string16 app_model_id_;
+  std::wstring app_model_id_;
 
   // Whether the InitParams indicated that this window should be translucent.
   bool is_translucent_;

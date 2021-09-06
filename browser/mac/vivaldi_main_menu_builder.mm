@@ -22,7 +22,7 @@ using Item = chrome::internal::MenuItemBuilder;
 base::scoped_nsobject<NSMenuItem> BuildAppMenu(NSApplication* nsapp,
                                                AppController* app_controller) {
 
-  base::string16 appname(l10n_util::GetStringUTF16(IDS_VIVALDI_APP_NAME));
+  std::u16string appname(l10n_util::GetStringUTF16(IDS_VIVALDI_APP_NAME));
 
   base::scoped_nsobject<NSMenuItem> item =
       Item(IDS_VIVALDI_APP_NAME)
@@ -190,7 +190,7 @@ base::scoped_nsobject<NSMenuItem> BuildWindowMenu(
 
 base::scoped_nsobject<NSMenuItem> BuildHelpMenu(NSApplication* nsapp,
                                                 AppController* app_controller) {
-  base::string16 productname(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
+  std::u16string productname(l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
 
   base::scoped_nsobject<NSMenuItem> item =
       Item(IDS_HELP_MENU_MAC)

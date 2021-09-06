@@ -46,7 +46,7 @@ import org.chromium.ui.base.LocalizationUtils;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.vivaldi.browser.common.VivaldiUtils;
 
@@ -172,7 +172,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
     public StripLayoutHelper(Context context, LayoutUpdateHost updateHost,
             LayoutRenderHost renderHost, boolean incognito) {
         // Note (david@vivaldi.com): In Vivaldi there is 1dp gap between the tabs.
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mTabOverlapWidth = 20.f;
         else
         mTabOverlapWidth = TAB_OVERLAP_WIDTH_DP;
@@ -233,7 +233,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
         mShouldCascadeTabs = DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
         // Note(david@vivaldi.com): We never cascade tabs in Vivaldi.
-        if (ChromeApplication.isVivaldi()) mShouldCascadeTabs = false;
+        if (ChromeApplicationImpl.isVivaldi()) mShouldCascadeTabs = false;
         mStripStacker = mShouldCascadeTabs ? mCascadingStripStacker : mScrollingStripStacker;
         mIsFirstLayoutPass = true;
 
@@ -396,7 +396,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         if (widthChanged) {
             computeAndUpdateTabWidth(false);
             // Note(david@vivaldi.com): We never cascade tabs in Vivaldi.
-            if (!ChromeApplication.isVivaldi()) {
+            if (!ChromeApplicationImpl.isVivaldi()) {
             setShouldCascadeTabs(width >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP);
             }
         }
@@ -626,7 +626,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 boolean shouldAnimate = !mNewTabButton.isVisible()
                         && !mAnimationsDisabledForTesting;
                 // Note(david@vivaldi.com): Only scroll when tab is selected.
-                if (ChromeApplication.isVivaldi() && selected)
+                if (ChromeApplicationImpl.isVivaldi() && selected)
                 setScrollForScrollingTabStacker(delta, shouldAnimate, time);
             } else if (delta != 0.f) {
                 mScroller.startScroll(mScrollOffset, 0, (int) delta, 0, time, EXPAND_DURATION_MS);
@@ -1267,7 +1267,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
         }
         // Note(david@vivaldi.com): We are abusing the ModelSelectorButton of the
         // |StripLayoutHelperManager| to create a new tab, instead of using this one here.
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         mNewTabButton.setVisible(true);
 
         // 3. Position the new tab button.
@@ -1704,7 +1704,7 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
 
     private boolean isSelectedTabCompletelyVisible(StripLayoutTab selectedTab) {
         // Note(david@vivaldi.com): We need to take the new mNewTabButtonWidth into account.
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             return selectedTab.isVisible() && selectedTab.getDrawX() >= 0
                     && selectedTab.getDrawX() + selectedTab.getWidth()
                     <= mWidth - mNewTabButtonWidth;

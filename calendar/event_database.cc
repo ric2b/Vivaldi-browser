@@ -240,16 +240,16 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   EventID id = s.ColumnInt64(0);
   CalendarID calendar_id = s.ColumnInt64(1);
   AlarmID alarm_id = s.ColumnInt64(2);
-  base::string16 title = s.ColumnString16(3);
-  base::string16 description = s.ColumnString16(4);
+  std::u16string title = s.ColumnString16(3);
+  std::u16string description = s.ColumnString16(4);
   base::Time start = base::Time::FromInternalValue(s.ColumnInt64(5));
   base::Time end = base::Time::FromInternalValue(s.ColumnInt64(6));
   int all_day = s.ColumnInt(7);
   int is_recurring = s.ColumnInt(8);
   base::Time start_recurring = base::Time::FromInternalValue(s.ColumnInt64(9));
   base::Time end_recurring = base::Time::FromInternalValue(s.ColumnInt64(10));
-  base::string16 location = s.ColumnString16(11);
-  base::string16 url = s.ColumnString16(12);
+  std::u16string location = s.ColumnString16(11);
+  std::u16string url = s.ColumnString16(12);
   std::string etag = s.ColumnString(13);
   std::string href = s.ColumnString(14);
   std::string uid = s.ColumnString(15);
@@ -259,7 +259,7 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   int trash = s.ColumnInt(19);
   base::Time trash_time = base::Time::FromInternalValue(s.ColumnInt64(20));
   int sequence = s.ColumnInt(21);
-  base::string16 ical = s.ColumnString16(22);
+  std::u16string ical = s.ColumnString16(22);
   std::string rrule = s.ColumnString(23);
   std::string organizer = s.ColumnString(24);
   std::string timezone = s.ColumnString(25);
@@ -267,9 +267,9 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   int priority = s.ColumnInt(27);
   std::string status = s.ColumnString(28);
   int percentage_complete = s.ColumnInt(29);
-  base::string16 categories = s.ColumnString16(30);
-  base::string16 component_class = s.ColumnString16(31);
-  base::string16 attachment = s.ColumnString16(32);
+  std::u16string categories = s.ColumnString16(30);
+  std::u16string component_class = s.ColumnString16(31);
+  std::u16string attachment = s.ColumnString16(32);
   base::Time completed = base::Time::FromInternalValue(s.ColumnInt64(33));
 
   event->id = id;

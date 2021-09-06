@@ -4,6 +4,7 @@
 
 #include "chrome/browser/download/download_ui_controller.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/callback.h"
@@ -132,8 +133,8 @@ DownloadUIController::DownloadUIController(content::DownloadManager* manager,
   }
 #else   // BUILDFLAG(IS_CHROMEOS_ASH)
   if (!delegate_) {
-    delegate_.reset(new DownloadShelfUIControllerDelegate(
-        Profile::FromBrowserContext(manager->GetBrowserContext())));
+    delegate_ = std::make_unique<DownloadShelfUIControllerDelegate>(
+        Profile::FromBrowserContext(manager->GetBrowserContext()));
   }
 #endif  // defined(OS_ANDROID)
 }
@@ -162,10 +163,6 @@ void DownloadUIController::OnDownloadCreated(content::DownloadManager* manager,
           "Security.SafetyTips.DownloadStarted",
           security_state_tab_helper->GetVisibleSecurityState()
               ->safety_tip_info.status);
-      UMA_HISTOGRAM_BOOLEAN(
-          "Security.LegacyTLS.DownloadStarted",
-          security_state::GetLegacyTLSWarningStatus(
-              *security_state_tab_helper->GetVisibleSecurityState()));
     }
   }
 

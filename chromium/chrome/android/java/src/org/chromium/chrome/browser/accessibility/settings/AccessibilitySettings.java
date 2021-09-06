@@ -24,7 +24,7 @@ import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.user_prefs.UserPrefs;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Fragment to keep track of all the accessibility related preferences.
@@ -85,7 +85,7 @@ public class AccessibilitySettings
         ChromeBaseCheckBoxPreference mAccessibilityTabSwitcherPref =
                 (ChromeBaseCheckBoxPreference) findPreference(
                         ChromePreferenceKeys.ACCESSIBILITY_TAB_SWITCHER);
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             getPreferenceScreen().removePreference(mAccessibilityTabSwitcherPref);
         } else {
         if (ChromeAccessibilityUtil.get().isAccessibilityEnabled()) {

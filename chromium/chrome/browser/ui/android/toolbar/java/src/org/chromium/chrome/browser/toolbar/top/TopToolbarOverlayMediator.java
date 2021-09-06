@@ -26,7 +26,7 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyModel;
 
 // Vivaldi
-import org.chromium.base.BuildConfig;
+import org.chromium.build.BuildConfig;
 
 /** The business logic for controlling the top toolbar's cc texture. */
 public class TopToolbarOverlayMediator {

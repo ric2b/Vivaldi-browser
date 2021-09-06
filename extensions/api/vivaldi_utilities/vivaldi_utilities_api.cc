@@ -77,6 +77,7 @@
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/lights/razer_chroma_handler.h"
@@ -85,10 +86,6 @@
 #include "ui/vivaldi_skia_utils.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
-
-// DO NOT REMOVE!! Needed by Final Official Release Branch builds
-// See UtilitiesCanShowWhatsNewPageFunction::Run()
-#include "prefs/vivaldi_gen_prefs.h"
 
 #if defined(OS_WIN)
 #if !defined(NTDDI_WIN10_19H1)
@@ -139,7 +136,8 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
   event_router->RegisterObserver(
       this, vivaldi::utilities::OnDownloadManagerReady::kEventName);
 
-  base::PowerMonitor::AddObserver(this);
+  base::PowerMonitor::AddPowerSuspendObserver(this);
+  base::PowerMonitor::AddPowerStateObserver(this);
 
   razer_chroma_handler_.reset(
       new RazerChromaHandler(Profile::FromBrowserContext(context)));
@@ -164,7 +162,8 @@ void VivaldiUtilitiesAPI::Shutdown() {
     delete it.second;
   }
 
-  base::PowerMonitor::RemoveObserver(this);
+  base::PowerMonitor::RemovePowerStateObserver(this);
+  base::PowerMonitor::RemovePowerSuspendObserver(this);
 
   if (razer_chroma_handler_ && razer_chroma_handler_->IsAvailable()) {
     razer_chroma_handler_->Shutdown();
@@ -445,7 +444,7 @@ void UtilitiesIsUrlValidFunction::OnDefaultProtocolClientWorkerFinished(
     // Ask the user if they want to allow the protocol, but only
     // if the url is a valid formatted url with a registered
     // program to handle it.
-    base::string16 application_name =
+    std::u16string application_name =
       shell_integration::GetApplicationNameForProtocol(url_);
 
     result_.external_handler = result_.url_valid && !application_name.empty();
@@ -625,7 +624,7 @@ namespace {
 struct FileSelectionOptions {
   void SetTitle(base::StringPiece str);
 
-  base::string16 title;
+  std::u16string title;
   ui::SelectFileDialog::Type type = ui::SelectFileDialog::SELECT_OPEN_FILE;
   ui::SelectFileDialog::FileTypeInfo file_type_info;
   std::string preferences_path;
@@ -1263,52 +1262,53 @@ ExtensionFunction::ResponseAction UtilitiesSetStartupActionFunction::Run() {
 
 ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
   namespace Results = vivaldi::utilities::CanShowWhatsNewPage::Results;
+  vivaldi::utilities::WhatsNewResults results;
 
-  bool can_show_whats_new = false;
+  results.show = false;
+  results.firstrun = false;
 
   // Show new features tab only for official final builds.
-#if defined(OFFICIAL_BUILD) && \
-   (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
-  Profile* profile =
-      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
-  bool version_changed = false;
-  std::string version = ::vivaldi::GetVivaldiVersionString();
-  std::string last_seen_version =
-    profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
+  if (::vivaldi::IsBetaOrFinal()) {
+    Profile* profile =
+        Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+    bool version_changed = false;
+    std::string version = ::vivaldi::GetVivaldiVersionString();
+    std::string last_seen_version =
+      profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
 
-  std::vector<std::string> version_array = base::SplitString(
-      version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  std::vector<std::string> last_seen_array = base::SplitString(
-      last_seen_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    std::vector<std::string> version_array = base::SplitString(
+        version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    std::vector<std::string> last_seen_array = base::SplitString(
+        last_seen_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-  if (version_array.size() != 4 || last_seen_array.size() != 4) {
-    version_changed = true;
-    profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
-                                   version);
-  } else {
-    int last_seen_major, version_major, last_seen_minor, version_minor;
-    if (base::StringToInt(version_array[0], &version_major) &&
-        base::StringToInt(last_seen_array[0], &last_seen_major) &&
-        base::StringToInt(version_array[1], &version_minor) &&
-        base::StringToInt(last_seen_array[1], &last_seen_minor)) {
-      version_changed =
-        (version_major > last_seen_major) ||
-        ((version_minor > last_seen_minor) &&
-         (version_major >= last_seen_major));
+    if (version_array.size() != 4 || last_seen_array.size() != 4) {
+      version_changed = true;
+      results.firstrun = last_seen_array.size() == 0;
       profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                      version);
+    } else {
+      int last_seen_major, version_major, last_seen_minor, version_minor;
+      if (base::StringToInt(version_array[0], &version_major) &&
+          base::StringToInt(last_seen_array[0], &last_seen_major) &&
+          base::StringToInt(version_array[1], &version_minor) &&
+          base::StringToInt(last_seen_array[1], &last_seen_minor)) {
+        version_changed =
+          (version_major > last_seen_major) ||
+          ((version_minor > last_seen_minor) &&
+          (version_major >= last_seen_major));
+        profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
+                                       version);
+      }
     }
+
+    const base::CommandLine* command_line =
+        base::CommandLine::ForCurrentProcess();
+    bool force_first_run = command_line->HasSwitch(switches::kForceFirstRun);
+    bool no_first_run = command_line->HasSwitch(switches::kNoFirstRun);
+    results.show = (version_changed || force_first_run) && !no_first_run;
   }
 
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  bool force_first_run = command_line->HasSwitch(switches::kForceFirstRun);
-  bool no_first_run = command_line->HasSwitch(switches::kNoFirstRun);
-  can_show_whats_new = (version_changed || force_first_run) &&
-      !no_first_run;
-#endif
-
-  return RespondNow(ArgumentList(Results::Create(can_show_whats_new)));
+  return RespondNow(ArgumentList(Results::Create(results)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesSetDialogPositionFunction::Run() {

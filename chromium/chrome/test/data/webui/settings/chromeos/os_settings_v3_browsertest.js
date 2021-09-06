@@ -27,7 +27,6 @@ var OSSettingsV3BrowserTest = class extends PolymerTest {
     return {
       enabled: [
         'chromeos::features::kEnableHostnameSetting',
-        'chromeos::features::kOsSettingsPolymer3',
         'chromeos::features::kUpdatedCellularActivationUi',
         'features::kCrostini',
       ],
@@ -41,14 +40,6 @@ var OSSettingsOsLanguagesPageV3Test = class extends OSSettingsV3BrowserTest {
   /** @override */
   get browsePreload() {
     return 'chrome://os-settings/test_loader.html?module=settings/chromeos/os_languages_page_tests.m.js';
-  }
-
-  /** @override */
-  get featureList() {
-    return {
-      enabled: super.featureList.enabled,
-      disabled: ['chromeos::features::kLanguageSettingsUpdate']
-    };
   }
 };
 
@@ -247,26 +238,6 @@ TEST_F(
     });
 
 // eslint-disable-next-line no-var
-var OSSettingsWallpaperSubpageV3Test = class extends OSSettingsV3BrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://os-settings/test_loader.html?module=settings/chromeos/wallpaper_subpage_test.m.js';
-  }
-
-  /** @override */
-  get featureList() {
-    return {
-      enabled: super.featureList.enabled.concat(
-          ['chromeos::features::kWallpaperWebUI']),
-    };
-  }
-};
-
-TEST_F('OSSettingsWallpaperSubpageV3Test', 'AllJsTests', () => {
-  mocha.run();
-});
-
-// eslint-disable-next-line no-var
 var OSSettingsPeoplePageOsSyncV3Test = class extends OSSettingsV3BrowserTest {
   /** @override */
   get browsePreload() {
@@ -347,6 +318,7 @@ TEST_F(
  ['AppManagementToggleRow', 'toggle_row_test.m.js'],
  ['AppManagementUninstallButton', 'uninstall_button_test.m.js'],
  ['BluetoothPage', 'bluetooth_page_tests.m.js'],
+ ['CellularBanner', 'cellular_banner_test.m.js'],
  ['CellularNetworksList', 'cellular_networks_list_test.m.js'],
  ['CellularSetupDialog', 'cellular_setup_dialog_test.m.js'],
  ['CrostiniPage', 'crostini_page_test.m.js'],
@@ -408,6 +380,7 @@ TEST_F(
  ['OsSettingsSearchBox', 'os_settings_search_box_test.m.js'],
  ['OSSettingsMenu', 'os_settings_menu_test.m.js'],
  ['OsSettingsPage', 'os_settings_page_test.m.js'],
+ ['NearbyShareConfirmPage', 'nearby_share_confirm_page_test.m.js'],
  ['NearbyShareReceiveDialog', 'nearby_share_receive_dialog_tests.m.js'],
  ['ParentalControlsPage', 'parental_controls_page_test.m.js'],
  ['PeoplePageChangePicture', 'people_page_change_picture_test.m.js'],

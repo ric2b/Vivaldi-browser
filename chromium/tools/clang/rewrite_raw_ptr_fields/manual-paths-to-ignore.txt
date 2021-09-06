@@ -39,6 +39,7 @@ sandbox/win/sandbox_poc/pocdll
 # Exclude directories that don't depend on //base, because nothing there uses
 # anything from /base.
 sandbox/linux/system_headers/
+components/history_clusters/core/
 
 # The folder holds headers that are duplicated in the Android source and need to
 # provide a stable C ABI. Can't depend on //base.
@@ -47,6 +48,15 @@ android_webview/public/
 # Exclude dependences of checked_ptr.h
 base/logging.h
 base/synchronization/lock_impl.h
+
+# Performance related exclusion based on sampling profiler data
+base/bind_internal.h
+base/message_loop/
+base/task/
+base/threading/
+base/timer/
+cc/
+content/browser/scheduler/responsiveness/
 
 # Exclude code that only runs inside a renderer process - renderer
 # processes are excluded for now from the MiraclePtr project scope,
@@ -90,7 +100,6 @@ chrome/app/vector_icons/google_chrome/
 chrome/browser/google/linkdoctor_internal/
 chrome/browser/internal/
 chrome/browser/media/engagement_internal/
-chrome/browser/media/kaleidoscope/internal/
 chrome/browser/resources/chromeos/quickoffice/
 chrome/browser/resources/media_router/extension/src/
 chrome/browser/resources/media_router_internal/

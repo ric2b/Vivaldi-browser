@@ -4,7 +4,7 @@
 #ifndef BROWSER_MENUS_PWA_MENU_CONTROLLER_H_
 #define BROWSER_MENUS_PWA_MENU_CONTROLLER_H_
 
-#include "base/strings/string16.h"
+#include <string>
 
 class Browser;
 
@@ -33,7 +33,7 @@ class PWAMenuController {
 
   // Using the same names as in SimpleMenuModel::Delegate
   bool IsItemForCommandIdDynamic(int command_id) const;
-  base::string16 GetLabelForCommandId(int command_id) const;
+  std::u16string GetLabelForCommandId(int command_id) const;
 
 
 

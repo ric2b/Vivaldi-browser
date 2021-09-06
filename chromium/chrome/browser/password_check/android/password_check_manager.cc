@@ -27,7 +27,7 @@
 
 namespace {
 
-base::string16 GetDisplayUsername(const base::string16& username) {
+std::u16string GetDisplayUsername(const std::u16string& username) {
   return username.empty()
              ? l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN)
              : username;
@@ -134,6 +134,28 @@ void PasswordCheckManager::UpdateCredential(
   insecure_credentials_manager_.UpdateCredential(credential, new_password);
 }
 
+void PasswordCheckManager::OnEditCredential(
+    const password_manager::CredentialView& credential,
+    const base::android::JavaParamRef<jobject>& context,
+    const base::android::JavaParamRef<jobject>& settings_launcher) {
+  password_manager::SavedPasswordsPresenter::SavedPasswordsView forms =
+      insecure_credentials_manager_.GetSavedPasswordsFor(credential);
+  if (forms.empty() || credential_edit_bridge_)
+    return;
+
+  const PasswordForm form =
+      insecure_credentials_manager_.GetSavedPasswordsFor(credential)[0];
+
+  credential_edit_bridge_ = CredentialEditBridge::MaybeCreate(
+      std::move(form), CredentialEditBridge::IsInsecureCredential(true),
+      saved_passwords_presenter_.GetUsernamesForRealm(
+          credential.signon_realm, form.IsUsingAccountStore()),
+      &saved_passwords_presenter_, nullptr,
+      base::BindOnce(&PasswordCheckManager::OnEditUIDismissed,
+                     base::Unretained(this)),
+      context, settings_launcher);
+}
+
 void PasswordCheckManager::RemoveCredential(
     const password_manager::CredentialView& credential) {
   insecure_credentials_manager_.RemoveCredential(credential);
@@ -191,6 +213,9 @@ void PasswordCheckManager::OnStateChanged(State state) {
     profile_->GetPrefs()->SetDouble(
         password_manager::prefs::kLastTimePasswordCheckCompleted,
         base::Time::Now().ToDoubleT());
+    profile_->GetPrefs()->SetTime(
+        password_manager::prefs::kSyncedLastTimePasswordCheckCompleted,
+        base::Time::Now());
   }
 
   if (state != State::kRunning) {
@@ -311,19 +336,15 @@ bool PasswordCheckManager::CanUseAccountCheck() const {
   SyncState sync_state = password_manager_util::GetPasswordSyncState(
       ProfileSyncServiceFactory::GetForProfile(profile_));
   switch (sync_state) {
-    case SyncState::NOT_SYNCING:
+    case SyncState::kNotSyncing:
       ABSL_FALLTHROUGH_INTENDED;
-    case SyncState::SYNCING_WITH_CUSTOM_PASSPHRASE:
+    case SyncState::kSyncingWithCustomPassphrase:
       return false;
 
-    case SyncState::SYNCING_NORMAL_ENCRYPTION:
+    case SyncState::kSyncingNormalEncryption:
       ABSL_FALLTHROUGH_INTENDED;
-    case SyncState::ACCOUNT_PASSWORDS_ACTIVE_NORMAL_ENCRYPTION:
+    case SyncState::kAccountPasswordsActiveNormalEncryption:
       return true;
-
-    default:
-      NOTREACHED();
-      return false;
   }
 }
 
@@ -361,20 +382,16 @@ bool PasswordCheckManager::ShouldFetchPasswordScripts() const {
   // Password change scripts are using password generation, so automatic
   // password change should not be offered to non sync users.
   switch (sync_state) {
-    case SyncState::NOT_SYNCING:
+    case SyncState::kNotSyncing:
       return false;
 
-    case SyncState::SYNCING_WITH_CUSTOM_PASSPHRASE:
+    case SyncState::kSyncingWithCustomPassphrase:
       ABSL_FALLTHROUGH_INTENDED;
-    case SyncState::SYNCING_NORMAL_ENCRYPTION:
+    case SyncState::kSyncingNormalEncryption:
       ABSL_FALLTHROUGH_INTENDED;
-    case SyncState::ACCOUNT_PASSWORDS_ACTIVE_NORMAL_ENCRYPTION:
+    case SyncState::kAccountPasswordsActiveNormalEncryption:
       return base::FeatureList::IsEnabled(
           password_manager::features::kPasswordScriptsFetching);
-
-    default:
-      NOTREACHED();
-      return false;
   }
 }
 
@@ -391,4 +408,8 @@ void PasswordCheckManager::FulfillPrecondition(CheckPreconditions condition) {
 
 void PasswordCheckManager::ResetPrecondition(CheckPreconditions condition) {
   fulfilled_preconditions_ &= ~condition;
+}
+
+void PasswordCheckManager::OnEditUIDismissed() {
+  credential_edit_bridge_.reset();
 }

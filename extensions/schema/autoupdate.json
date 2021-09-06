@@ -27,69 +27,67 @@
         "name": "isUpdateNotifierEnabled",
         "type": "function",
         "description": "Checks whether the update notifier is set to run on startup.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "type": "boolean",
-                "name": "result"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result"
+            }
+          ]
+        }
       },
       {
         "name": "enableUpdateNotifier",
         "type": "function",
         "description": "Sets the update notifier to run on startup and launches it.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "type": "boolean",
-                "name": "result"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result"
+            }
+          ]
+        }
       },
       {
         "name": "disableUpdateNotifier",
         "type": "function",
         "description": "Removes the update notifier from autorun and attempts to terminate it.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "type": "boolean",
-                "name": "result"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result"
+            }
+          ]
+        }
+      },
+      {
+        "name": "installUpdateAndRestart",
+        "type": "function",
+        "description": "Installs update & restart. Should be called after an onWillInstallUpdateOnQuit event has occurred.",
+        "parameters": []
       },
       {
         "name": "getAutoInstallUpdates",
         "type": "function",
         "description": "Checks whether we automatically install updates",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "type": "boolean",
-                "name": "result"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "result"
+            }
+          ]
+        }
       },
       {
         "name": "setAutoInstallUpdates",
@@ -114,6 +112,11 @@
             "name": "releaseNotesUrl",
             "type": "string",
             "description": "URL of the release notes of the update."
+          },
+          {
+            "type": "string",
+            "name": "version",
+            "description": "The version of the update or an empty string if not known"
           }
         ]
       },
@@ -122,6 +125,11 @@
         "type": "function",
         "description": "Fired when an update will be downloaded.",
         "parameters": [
+          {
+            "type": "string",
+            "name": "version",
+            "description": "The version of the update or an empty string if not known"
+          }
         ]
       },
       {
@@ -129,6 +137,11 @@
         "type": "function",
         "description": "Fired when an update has been downloaded.",
         "parameters": [
+          {
+            "type": "string",
+            "name": "version",
+            "description": "The version of the update or an empty string if not known"
+          }
         ]
       },
       {
@@ -136,6 +149,11 @@
         "type": "function",
         "description": "Fired when an update will be installed on restart or quit.",
         "parameters": [
+            {
+              "type": "string",
+              "name": "version",
+              "description": "The version that will be installed on quit or an empty string if not known"
+            }
         ]
       },
       {
@@ -157,6 +175,16 @@
         "type": "function",
         "description": "Fired when an update fails.",
         "parameters": [
+          {
+            "type": "string",
+            "name": "description",
+            "description": "Description of the error."
+          },
+          {
+            "type": "string",
+            "name": "reason",
+            "description": "The reason for the error."
+          }
         ]
       }
     ]

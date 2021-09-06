@@ -137,7 +137,7 @@
 <translation id="3222066309010235055">Vorrendern: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
-<translation id="3266179261140759675">Sofortige Trennung des Empfangs oder Versands ausstehender Daten beim schließen der Websites</translation>
+<translation id="3266179261140759675">Fertigstellen des Datenversands und -empfangs von kürzlich geschlossenen Websites nicht erlauben</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
 <translation id="3285322247471302225">Neuer &amp;Tab</translation>
 <translation id="3288047731229977326">Erweiterungen im Entwicklermodus können auf Ihrem Computer Schaden anrichten. Wenn Sie kein Entwickler sind, sollten Sie diese Erweiterungen im Entwicklermodus deaktivieren, um sicher zu sein.</translation>
@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Keiner Website erlauben, automatisch mehrere Dateien herunterzuladen</translation>
 <translation id="5039804452771397117">Erlauben</translation>
 <translation id="5057110919553308744">Wenn die Erweiterung angeklickt wird</translation>
+<translation id="5059526285558225588">Auswählen, was geteilt werden soll</translation>
 <translation id="5063480226653192405">Verwendung</translation>
 <translation id="5116628073786783676">Audio &amp;speichern unter...</translation>
 <translation id="5143374789336132547">Die Erweiterung "<ph name="EXTENSION_NAME" />" hat die Seite geändert, die beim Klick auf die Schaltfläche „Startseite” angezeigt wird.</translation>
@@ -458,7 +459,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8823704566850948458">Passwort vorschlagen…</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Link in neuem &amp;Fenster öffnen</translation>
-<translation id="8910146161325739742">Bildschirm freigeben</translation>
 <translation id="8915370057835397490">Vorschläge werden geladen</translation>
 <translation id="8916476537757519021">Privater Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript-Speicher</translation>

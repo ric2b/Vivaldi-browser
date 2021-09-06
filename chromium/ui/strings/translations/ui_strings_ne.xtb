@@ -22,7 +22,7 @@
 <translation id="1414271762428216854"><ph name="APP_NAME" />, स्थापना गरिएको एप</translation>
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" /> आदान प्रदान गर्न सकिएन</translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> लाई <ph name="SECOND_ITEM_TITLE" /> सँग साटियो</translation>
-<translation id="1498028757988366001">तपाईंले यसअघि यो कुरा खोज्नुभएको थियो। आफ्नो इतिहासबाट "<ph name="QUERY" />" मेटाउनुले तपाईंका सबै यन्त्रमा रहेको तपाईंको खाताबाट यसलाई सदाका लागि हटाउने छ।</translation>
+<translation id="1498028757988366001">तपाईंले यसअघि यो कुरा खोज्नुभएको थियो। आफ्नो इतिहासबाट "<ph name="QUERY" />" मेटाउनुले तपाईंका सबै डिभाइसमा रहेको तपाईंको खाताबाट यसलाई सदाका लागि हटाउने छ।</translation>
 <translation id="1510238584712386396">लन्चर</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{ १ मिनेट र }other{ # मिनेट र }}</translation>
 <translation id="1643823602425662293">सूचना</translation>
@@ -253,7 +253,7 @@
 <translation id="8725488761726303204">+<ph name="NUMBER" /> थप</translation>
 <translation id="8730621377337864115">गरियो</translation>
 <translation id="8772073294905169192">{HOURS,plural, =1{१ घन्टा}other{# घन्टा}}</translation>
-<translation id="8798099450830957504">पूर्वनिर्धारित</translation>
+<translation id="8798099450830957504">डिफल्ट</translation>
 <translation id="8806053966018712535">फोल्डर <ph name="FOLDER_NAME" /></translation>
 <translation id="883911313571074303">छविलाई एनोटेट गर्नुहोस्</translation>
 <translation id="8841375032071747811">पछाडि नामक बटन</translation>

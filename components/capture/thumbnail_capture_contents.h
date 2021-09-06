@@ -18,6 +18,7 @@
 #include "components/capture/capture_page.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace content {
 class BrowserContext;
@@ -35,9 +36,8 @@ class BrowserContext;
 
 namespace vivaldi {
 
-class ThumbnailCaptureContents
-    : protected content::WebContentsDelegate,
-      protected content::WebContentsObserver {
+class ThumbnailCaptureContents : protected content::WebContentsDelegate,
+                                 protected content::WebContentsObserver {
  public:
   using CaptureCallback =
       base::OnceCallback<void(scoped_refptr<base::RefCountedMemory> png_data)>;

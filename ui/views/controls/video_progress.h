@@ -33,7 +33,7 @@ class VIEWS_EXPORT VideoProgress: public views::View {
   // View overrides
   bool OnMousePressed(const ui::MouseEvent& event) override;
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
-  base::string16 GetTooltipText(const gfx::Point& p) const override;
+  std::u16string GetTooltipText(const gfx::Point& p) const override;
 
   void set_callback(
       base::RepeatingCallback<void(double, double)> seek_callback) {
@@ -44,12 +44,12 @@ class VIEWS_EXPORT VideoProgress: public views::View {
 
 private:
   void SetBarProgress(double progress);
-  void SetProgressTime(const base::string16& time);
-  void SetDuration(const base::string16& duration);
+  void SetProgressTime(const std::u16string& time);
+  void SetDuration(const std::u16string& duration);
   bool GetStringFromPosition(base::DurationFormatWidth time_format,
                              base::TimeDelta position,
-                             base::string16& time) const;
-  base::string16 StripHour(base::string16& time) const;
+                             std::u16string& time) const;
+  std::u16string StripHour(std::u16string& time) const;
 
   void HandleSeeking(const gfx::Point& location);
 

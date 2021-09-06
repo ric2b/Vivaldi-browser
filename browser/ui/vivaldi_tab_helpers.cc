@@ -20,7 +20,7 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
       web_contents);
   }
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (vivaldi::IsVivaldiRunning()) {
+  if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     extensions::VivaldiPrivateTabObserver::CreateForWebContents(web_contents);
   }
 #endif

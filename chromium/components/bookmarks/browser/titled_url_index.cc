@@ -25,7 +25,7 @@ namespace {
 
 // Returns a normalized version of the UTF16 string |text|.  If it fails to
 // normalize the string, returns |text| itself as a best-effort.
-base::string16 Normalize(const base::string16& text) {
+std::u16string Normalize(const std::u16string& text) {
   UErrorCode status = U_ZERO_ERROR;
   const icu::Normalizer2* normalizer2 =
       icu::Normalizer2::getInstance(nullptr, "nfkc", UNORM2_COMPOSE, status);
@@ -60,22 +60,22 @@ void TitledUrlIndex::SetNodeSorter(
 }
 
 void TitledUrlIndex::Add(const TitledUrlNode* node) {
-  for (const base::string16& term : ExtractIndexTerms(node))
+  for (const std::u16string& term : ExtractIndexTerms(node))
     RegisterNode(term, node);
 }
 
 void TitledUrlIndex::Remove(const TitledUrlNode* node) {
-  for (const base::string16& term : ExtractIndexTerms(node))
+  for (const std::u16string& term : ExtractIndexTerms(node))
     UnregisterNode(term, node);
 }
 
 std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsMatching(
-    const base::string16& input_query,
+    const std::u16string& input_query,
     size_t max_count,
     query_parser::MatchingAlgorithm matching_algorithm,
     bool match_ancestor_titles) {
-  const base::string16 query = Normalize(input_query);
-  std::vector<base::string16> terms = ExtractQueryWords(query);
+  const std::u16string query = Normalize(input_query);
+  std::vector<std::u16string> terms = ExtractQueryWords(query);
 
   // When |match_ancestor_titles| is true, |matches| shouldn't exclude nodes
   // that don't match every query term, as the query terms may match in the
@@ -139,7 +139,7 @@ base::Optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
 #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
   query_parser::QueryWordVector description_words, nickname_words;
 #endif
-  const base::string16 lower_title =
+  const std::u16string lower_title =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeTitle()));
   query_parser::QueryParser::ExtractQueryWords(lower_title, &title_words);
   base::OffsetAdjuster::Adjustments adjustments;
@@ -149,17 +149,17 @@ base::Optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
   if (match_ancestor_titles) {
     for (auto ancestor : node->GetTitledUrlNodeAncestorTitles()) {
       query_parser::QueryParser::ExtractQueryWords(
-          base::i18n::ToLower(Normalize(base::string16(ancestor))),
+          base::i18n::ToLower(Normalize(std::u16string(ancestor))),
           &ancestor_words);
     }
   }
 
 #if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
-  const base::string16 lower_description =
+  const std::u16string lower_description =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeDescription()));
   query_parser::QueryParser::ExtractQueryWords(lower_description,
                                                &description_words);
-  const base::string16 lower_nickname =
+  const std::u16string lower_nickname =
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeNickName()));
   query_parser::QueryParser::ExtractQueryWords(lower_nickname, &nickname_words);
 
@@ -214,7 +214,7 @@ base::Optional<TitledUrlMatch> TitledUrlIndex::MatchTitledUrlNodeWithQuery(
 }
 
 TitledUrlIndex::TitledUrlNodeSet TitledUrlIndex::RetrieveNodesMatchingAllTerms(
-    const std::vector<base::string16>& terms,
+    const std::vector<std::u16string>& terms,
     query_parser::MatchingAlgorithm matching_algorithm) const {
   if (terms.empty())
     return {};
@@ -232,7 +232,7 @@ TitledUrlIndex::TitledUrlNodeSet TitledUrlIndex::RetrieveNodesMatchingAllTerms(
 }
 
 TitledUrlIndex::TitledUrlNodeSet TitledUrlIndex::RetrieveNodesMatchingAnyTerms(
-    const std::vector<base::string16>& terms,
+    const std::vector<std::u16string>& terms,
     query_parser::MatchingAlgorithm matching_algorithm) const {
   if (terms.empty())
     return {};
@@ -250,7 +250,7 @@ TitledUrlIndex::TitledUrlNodeSet TitledUrlIndex::RetrieveNodesMatchingAnyTerms(
 }
 
 TitledUrlIndex::TitledUrlNodes TitledUrlIndex::RetrieveNodesMatchingTerm(
-    const base::string16& term,
+    const std::u16string& term,
     query_parser::MatchingAlgorithm matching_algorithm) const {
   Index::const_iterator i = index_.lower_bound(term);
   if (i == index_.end())
@@ -277,11 +277,11 @@ TitledUrlIndex::TitledUrlNodes TitledUrlIndex::RetrieveNodesMatchingTerm(
 }
 
 // static
-std::vector<base::string16> TitledUrlIndex::ExtractQueryWords(
-    const base::string16& query) {
-  std::vector<base::string16> terms;
+std::vector<std::u16string> TitledUrlIndex::ExtractQueryWords(
+    const std::u16string& query) {
+  std::vector<std::u16string> terms;
   if (query.empty())
-    return std::vector<base::string16>();
+    return std::vector<std::u16string>();
   query_parser::QueryParser::ParseQueryWords(
       base::i18n::ToLower(query), query_parser::MatchingAlgorithm::DEFAULT,
       &terms);
@@ -289,26 +289,27 @@ std::vector<base::string16> TitledUrlIndex::ExtractQueryWords(
 }
 
 // static
-std::vector<base::string16> TitledUrlIndex::ExtractIndexTerms(
+std::vector<std::u16string> TitledUrlIndex::ExtractIndexTerms(
     const TitledUrlNode* node) {
-  std::vector<base::string16> terms;
+  std::vector<std::u16string> terms;
 
-  for (const base::string16& term :
+  for (const std::u16string& term :
        ExtractQueryWords(Normalize(node->GetTitledUrlNodeTitle()))) {
     terms.push_back(term);
   }
 
-  for (const base::string16& term : ExtractQueryWords(CleanUpUrlForMatching(
+  for (const std::u16string& term : ExtractQueryWords(CleanUpUrlForMatching(
            node->GetTitledUrlNodeUrl(), /*adjustments=*/nullptr))) {
     terms.push_back(term);
   }
 
 #if defined(VIVALDI_BUILD) && defined(OS_ANDROID)
-  for (const base::string16& term : ExtractQueryWords(
+  for (const std::u16string& term :
+       ExtractQueryWords(
            Normalize(node->GetTitledUrlNodeDescription()))) {
     terms.push_back(term);
   }
-  for (const base::string16& term :
+  for (const std::u16string& term :
        ExtractQueryWords(Normalize(node->GetTitledUrlNodeNickName()))) {
     terms.push_back(term);
   }
@@ -317,13 +318,13 @@ std::vector<base::string16> TitledUrlIndex::ExtractIndexTerms(
   return terms;
 }
 
-void TitledUrlIndex::RegisterNode(const base::string16& term,
-                                 const TitledUrlNode* node) {
+void TitledUrlIndex::RegisterNode(const std::u16string& term,
+                                  const TitledUrlNode* node) {
   index_[term].insert(node);
 }
 
-void TitledUrlIndex::UnregisterNode(const base::string16& term,
-                                   const TitledUrlNode* node) {
+void TitledUrlIndex::UnregisterNode(const std::u16string& term,
+                                    const TitledUrlNode* node) {
   auto i = index_.find(term);
   if (i == index_.end()) {
     // We can get here if the node has the same term more than once. For

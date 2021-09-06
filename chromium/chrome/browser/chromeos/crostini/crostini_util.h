@@ -55,6 +55,21 @@ extern const char kCrostiniDlcName[];
 
 extern const base::FilePath::CharType kHomeDirectory[];
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class CrostiniAppLaunchAppType {
+  // An app which isn't in the CrostiniAppRegistry. This shouldn't happen.
+  kUnknownApp = 0,
+
+  // The main terminal app.
+  kTerminal = 1,
+
+  // An app for which there is something in the CrostiniAppRegistry.
+  kRegisteredApp = 2,
+
+  kMaxValue = kRegisteredApp,
+};
+
 struct LinuxPackageInfo;
 
 // A unique identifier for our containers.
@@ -194,7 +209,7 @@ void RemoveLxdContainerFromPrefs(Profile* profile,
 // Returns a string to be displayed in a notification with the estimated time
 // left for an operation to run which started and time |start| and is current
 // at |percent| way through.
-base::string16 GetTimeRemainingMessage(base::TimeTicks start, int percent);
+std::u16string GetTimeRemainingMessage(base::TimeTicks start, int percent);
 
 // Returns a pref value stored for a specific container.
 const base::Value* GetContainerPrefValue(Profile* profile,
@@ -210,6 +225,10 @@ void UpdateContainerPref(Profile* profile,
 const ContainerId& DefaultContainerId();
 
 bool IsCrostiniWindow(const aura::Window* window);
+
+void RecordAppLaunchHistogram(CrostiniAppLaunchAppType app_type);
+void RecordAppLaunchResultHistogram(CrostiniAppLaunchAppType type,
+                                    crostini::CrostiniResult reason);
 
 }  // namespace crostini
 

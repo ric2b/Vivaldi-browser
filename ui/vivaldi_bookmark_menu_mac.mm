@@ -23,8 +23,8 @@
 
 using bookmarks::BookmarkNode;
 
-static base::string16 Separator;
-static base::string16 SeparatorDescription;
+static std::u16string Separator;
+static std::u16string SeparatorDescription;
 static std::vector<int> MenuIds;
 static std::string ContainerEdge = "below";
 static unsigned int ContainerIndex = 0;

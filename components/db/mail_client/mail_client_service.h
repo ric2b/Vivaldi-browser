@@ -1,0 +1,164 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
+//
+// Based on code that is:
+//
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef COMPONENTS_DB_MAIL_CLIENT_MAIL_CLIENT_SERVICE_H_
+#define COMPONENTS_DB_MAIL_CLIENT_MAIL_CLIENT_SERVICE_H_
+
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "base/bind.h"
+#include "base/callback.h"
+#include "base/callback_list.h"
+#include "base/files/file_path.h"
+#include "base/logging.h"
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task/cancelable_task_tracker.h"
+#include "base/threading/thread_checker.h"
+#include "base/time/time.h"
+#include "components/keyed_service/core/keyed_service.h"
+#include "content/public/browser/notification_observer.h"
+
+#include "mail_client_backend.h"
+#include "mail_client_database_params.h"
+#include "mail_client_model_observer.h"
+
+class Profile;
+
+namespace base {
+class SequencedTaskRunner;
+class FilePath;
+class Thread;
+}  // namespace base
+
+namespace mail_client {
+
+struct MailClientDatabaseParams;
+class MailClientBackend;
+
+class MailClientService : public KeyedService {
+ public:
+  MailClientService();
+  ~MailClientService() override;
+
+  bool Init(bool no_db,
+            const MailClientDatabaseParams& mail_client_database_params);
+
+  // Called from shutdown service before shutting down the browser
+  void Shutdown() override;
+
+  void AddObserver(MailClientModelObserver* observer);
+  void RemoveObserver(MailClientModelObserver* observer);
+
+  // Call to schedule a given task for running on the MailClient thread with the
+  // specified priority. The task will have ownership taken.
+  void ScheduleTask(base::OnceClosure task);
+
+  // Returns true if this MailClient service is currently in a mode where
+  // extensive changes might happen, such as for import and sync. This is
+  // helpful for observers that are created after the service has started, and
+  // want to check state during their own initializer.
+  bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
+
+  typedef base::Callback<void(std::shared_ptr<MessageResult>)> MessageCallback;
+
+  typedef base::Callback<void(std::shared_ptr<SearchListIdRows>)>
+      EmailSearchCallback;
+
+  typedef base::Callback<void(std::shared_ptr<bool>)> ResultCallback;
+
+  base::CancelableTaskTracker::TaskId CreateMessages(
+      mail_client::MessageRows rows,
+      const ResultCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteMessages(
+      std::vector<SearchListID> search_list_ids,
+      const ResultCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId AddMessageBody(
+      SearchListID search_list_id,
+      std::u16string body,
+      const MessageCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId SearchEmail(
+      std::u16string search,
+      const EmailSearchCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId MatchMessage(
+      SearchListID search_list_id,
+      std::u16string search,
+      const ResultCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+ private:
+  class MailClientBackendDelegate;
+  friend class base::RefCountedThreadSafe<MailClientService>;
+  friend class MailClientBackendDelegate;
+  friend class MailClientBackend;
+
+  friend std::unique_ptr<MailClientService> CreateMailClientService(
+      const base::FilePath& mail_client_dir,
+      bool create_db);
+
+  void OnDBLoaded();
+
+  // Notify all MailClientServiceObservers registered that the
+  // MailClientService has finished loading.
+  void NotifyMailClientServiceLoaded();
+  void NotifyMailClientServiceBeingDeleted();
+
+  void Cleanup();
+
+  Profile* profile_;
+
+  base::ThreadChecker thread_checker_;
+
+  // The thread used by the MailClient service to run MailClientBackend
+  // operations. Intentionally not a BrowserThread because the sync integration
+  // unit tests need to create multiple MailClientServices which each have their
+  // own thread. Nullptr if TaskScheduler is used for MailClientBackend
+  // operations.
+  std::unique_ptr<base::Thread> thread_;
+
+  // The TaskRunner to which MailClientBackend tasks are posted. Nullptr once
+  // Cleanup() is called.
+  scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
+
+  // This pointer will be null once Cleanup() has been called, meaning no
+  // more calls should be made to the MailClient thread.
+  scoped_refptr<MailClientBackend> mail_client_backend_;
+
+  // Has the backend finished loading? The backend is loaded once Init has
+  // completed.
+  bool backend_loaded_;
+
+  // The observers.
+  base::ObserverList<MailClientModelObserver> observers_;
+
+  // See description of IsDoingExtensiveChanges above.
+  int extensive_changes_;
+
+  // All vended weak pointers are invalidated in Cleanup().
+  base::WeakPtrFactory<MailClientService> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(MailClientService);
+};
+
+}  // namespace mail_client
+
+#endif  // COMPONENTS_DB_MAIL_CLIENT_MAIL_CLIENT_SERVICE_H_

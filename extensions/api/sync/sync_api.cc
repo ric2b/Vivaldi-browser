@@ -15,7 +15,7 @@
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/browser_sync/browser_sync_switches.h"
@@ -28,7 +28,6 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "sync/vivaldi_invalidation_service.h"
 #include "sync/vivaldi_profile_sync_service.h"
 #include "sync/vivaldi_profile_sync_service_factory.h"
 #include "sync/vivaldi_sync_ui_helper.h"
@@ -547,9 +546,8 @@ SyncGetDefaultSessionNameFunction::~SyncGetDefaultSessionNameFunction() =
 
 ExtensionFunction::ResponseAction SyncGetDefaultSessionNameFunction::Run() {
   base::PostTaskAndReplyWithResult(
-      base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::BEST_EFFORT,
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
           .get(),
       FROM_HERE, base::BindOnce(&syncer::GetPersonalizableDeviceNameBlocking),
@@ -631,68 +629,6 @@ ExtensionFunction::ResponseAction SyncSetupCompleteFunction::Run() {
   SyncAPI::GetFactoryInstance()
       ->Get(Profile::FromBrowserContext(browser_context()))
       ->SyncSetupComplete();
-
-  return RespondNow(NoArguments());
-}
-
-ExtensionFunction::ResponseAction
-SyncUpdateNotificationClientStatusFunction::Run() {
-  std::unique_ptr<vivaldi::sync::UpdateNotificationClientStatus::Params> params(
-      vivaldi::sync::UpdateNotificationClientStatus::Params::Create(*args_));
-
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  VivaldiProfileSyncService* sync_manager =
-      VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(browser_context()));
-  if (!sync_manager)
-    return RespondNow(Error("Sync manager is unavailable"));
-
-  invalidation::InvalidatorState state =
-      (params->status == vivaldi::sync::SyncNotificationClientStatus::
-                             SYNC_NOTIFICATION_CLIENT_STATUS_CONNECTED)
-          ? invalidation::INVALIDATIONS_ENABLED
-          : invalidation::DEFAULT_INVALIDATION_ERROR;
-  sync_manager->invalidation_service()->UpdateInvalidatorState(state);
-
-  // If notifications just got re-enabled, just invalidate everything to
-  // compensate for potentially missed notifications.
-  if (state == invalidation::INVALIDATIONS_ENABLED) {
-    invalidation::TopicInvalidationMap invalidations;
-    for (const auto model_type : syncer::ProtocolTypes()) {
-      invalidation::Topic topic;
-      syncer::RealModelTypeToNotificationType(model_type, &topic);
-      invalidations.Insert(
-          invalidation::Invalidation::InitUnknownVersion(topic));
-    }
-    sync_manager->invalidation_service()->PerformInvalidation(invalidations);
-  }
-
-  return RespondNow(NoArguments());
-}
-
-ExtensionFunction::ResponseAction SyncNotificationReceivedFunction::Run() {
-  std::unique_ptr<vivaldi::sync::NotificationReceived::Params> params(
-      vivaldi::sync::NotificationReceived::Params::Create(*args_));
-
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  VivaldiProfileSyncService* sync_manager =
-      VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(browser_context()));
-  if (!sync_manager)
-    return RespondNow(Error("Sync manager is unavailable"));
-
-  // Ignore notifications for changes sent by us.
-  if (params->client_id !=
-      sync_manager->invalidation_service()->GetInvalidatorClientId()) {
-    int64_t version;
-    base::StringToInt64(params->version, &version);
-    invalidation::TopicInvalidationMap invalidations;
-    invalidations.Insert(invalidation::Invalidation::Init(
-        invalidation::Topic(params->notification_type), version, ""));
-    sync_manager->invalidation_service()->PerformInvalidation(invalidations);
-  }
 
   return RespondNow(NoArguments());
 }

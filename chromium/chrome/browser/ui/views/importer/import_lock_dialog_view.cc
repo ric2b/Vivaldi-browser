@@ -31,7 +31,7 @@ namespace importer {
 
 void ShowImportLockDialog(gfx::NativeWindow parent,
                           base::OnceCallback<void(bool)> callback,
-                          base::string16 importer_locktext) {
+                          std::u16string importer_locktext) {
   ImportLockDialogView::Show(parent, std::move(callback), importer_locktext);
 }
 
@@ -40,7 +40,7 @@ void ShowImportLockDialog(gfx::NativeWindow parent,
 // static
 void ImportLockDialogView::Show(gfx::NativeWindow parent,
                                 base::OnceCallback<void(bool)> callback,
-                                base::string16 importer_locktext) {
+                                std::u16string importer_locktext) {
   views::DialogDelegate::CreateDialogWidget(
       new ImportLockDialogView(std::move(callback),importer_locktext), nullptr, nullptr)
       ->Show();
@@ -49,7 +49,7 @@ void ImportLockDialogView::Show(gfx::NativeWindow parent,
 
 ImportLockDialogView::ImportLockDialogView(
     base::OnceCallback<void(bool)> callback,
-    base::string16 importer_locktext)
+    std::u16string importer_locktext)
     : callback_(std::move(callback)) {
   SetTitle(IDS_IMPORTER_LOCK_TITLE);
 

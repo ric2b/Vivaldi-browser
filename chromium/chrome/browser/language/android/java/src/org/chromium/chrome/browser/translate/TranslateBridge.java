@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.translate;
 
+import org.chromium.base.LocaleUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.language.settings.LanguageItem;
@@ -109,6 +110,16 @@ public class TranslateBridge {
     }
 
     /**
+     * The target language is stored in Translate format, which uses the old deprecated Java codes
+     * for several languages (Hebrew, Indonesian), and uses "tl" while Chromium uses "fil" for
+     * Tagalog/Filipino. This converts the target language into the correct Chromium format.
+     * @return The Chrome version of the users translate target language.
+     */
+    public static String getTargetLanguageForChromium() {
+        return LocaleUtils.getUpdatedLanguageForChromium(getTargetLanguage());
+    }
+
+    /**
      * Set the default target language the Translate Service will use.
      * @param String targetLanguage Language code of new target language.
      */
@@ -182,6 +193,18 @@ public class TranslateBridge {
         List<String> list = new ArrayList<>();
         TranslateBridgeJni.get().getAlwaysTranslateLanguages(list);
         return list;
+    }
+
+    /** @return List of languages that translation should not be prompted for. */
+    public static List<String> getNeverTranslateLanguages() {
+        List<String> list = new ArrayList<>();
+        TranslateBridgeJni.get().getNeverTranslateLanguages(list);
+        return list;
+    }
+
+    public static void setLanguageAlwaysTranslateState(
+            String languageCode, boolean alwaysTranslate) {
+        TranslateBridgeJni.get().setLanguageAlwaysTranslateState(languageCode, alwaysTranslate);
     }
 
     /**
@@ -262,6 +285,8 @@ public class TranslateBridge {
         void getChromeAcceptLanguages(List<LanguageItem> list);
         void getUserAcceptLanguages(List<String> list);
         void getAlwaysTranslateLanguages(List<String> list);
+        void getNeverTranslateLanguages(List<String> list);
+        void setLanguageAlwaysTranslateState(String language, boolean alwaysTranslate);
         void updateUserAcceptLanguages(String language, boolean add);
         void moveAcceptLanguage(String language, int offset);
         void setLanguageOrder(String[] codes);

@@ -44,21 +44,22 @@ template("vivaldi_extract_untranslated") {
 
   deps_list = []
   _untranslated_target_prefix = "$root_build_dir/translations/$file_target"
+  # List of Chromium strings visible in the Vivaldi UI.
   idlist = "//vivaldi/vivapp/bin/gettext/ids.txt"
 
-  foreach(locale, locales + vivaldi_pending_locales) {
+  foreach(locale, locales + vivaldi_pending_locales - ["ar-XB", "en-US", "en-XA"]) {
     name = "${target_name}_extract_$locale"
     deps_list += [":"+name]
 
     xtb_sources = []
     # Vivaldi support locales that Chromium doesn't, exclude ours for source in merge mode
     use_source_locale = !defined(vivaldi_source)
-    foreach(test_locale, locales - ["en-US"]) {
+    foreach(test_locale, locales) {
       if (test_locale == locale) {
         use_source_locale = true
       }
     }
-    if (use_source_locale && locale != "en-US"){
+    if (use_source_locale) {
       corrected_locale = locale
       if (defined(vivaldi_source) && (!defined(invoker.no_override_locales) || !invoker.no_override_locales)) {
         # Chromium uses "iw" for "he" and "no" for "nb" locales
@@ -71,9 +72,7 @@ template("vivaldi_extract_untranslated") {
       xtb_sources += ["${source_translations}${corrected_locale}.xtb"]
     }
     if (defined(vivaldi_source)) {
-      if (locale != "en-US") {
-        xtb_sources += ["${vivaldi_translations}$locale.xtb"]
-      }
+      xtb_sources += ["${vivaldi_translations}$locale.xtb"]
     }
 
     action(name) {
@@ -91,10 +90,10 @@ template("vivaldi_extract_untranslated") {
         "--vivaldi-file", file_target,
       ] + grit_defines + extra_grit_defines
       if (defined(vivaldi_source)) {
-        inputs += [vivaldi_source]
-        if (locale != "en-US"){
-          inputs += ["${vivaldi_translations}$locale.xtb"]
-        }
+        inputs += [
+          vivaldi_source,
+          "${vivaldi_translations}$locale.xtb",
+        ]
         args += [
           "--messages",
           rebase_path(idlist, root_build_dir),

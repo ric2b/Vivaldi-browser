@@ -3,9 +3,8 @@
 #ifndef BROWSER_MENUS_BOOKMARK_SUPPORT_H_
 #define BROWSER_MENUS_BOOKMARK_SUPPORT_H_
 
+#include <string>
 #include <vector>
-
-#include "base/strings/string16.h"
 
 namespace bookmarks {
 class BookmarkNode;
@@ -30,7 +29,7 @@ struct BookmarkSupport {
   ~BookmarkSupport();
   void initIcons(const std::vector<std::string>& icons);
   const gfx::Image& iconForNode(const bookmarks::BookmarkNode* node) const;
-  base::string16 add_label;
+  std::u16string add_label;
   std::vector<gfx::Image> icons;
   bool observer_enabled;
 };

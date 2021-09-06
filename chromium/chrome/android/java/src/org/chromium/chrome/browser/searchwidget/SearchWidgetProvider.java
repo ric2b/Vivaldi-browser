@@ -39,7 +39,7 @@ import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.search_engines.TemplateUrlService.LoadListener;
 import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Widget that lets the user search using their default search engine.
@@ -412,7 +412,7 @@ public class SearchWidgetProvider extends AppWidgetProvider {
     }
 
     static boolean shouldShowFullString() {
-        if (ChromeApplication.isVivaldi()) return true;
+        if (ChromeApplicationImpl.isVivaldi()) return true;
         boolean freIsNotNecessary = !FirstRunFlowSequencer.checkIfFirstRunIsNecessary(false, false);
         boolean noNeedToCheckForSearchDialog =
                 !LocaleManager.getInstance().needToCheckForSearchEnginePromo();

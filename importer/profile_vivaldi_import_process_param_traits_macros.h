@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "base/strings/string16.h"
 #include "base/values.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "content/public/common/common_param_traits.h"

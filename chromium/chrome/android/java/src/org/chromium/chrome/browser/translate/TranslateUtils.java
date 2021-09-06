@@ -6,7 +6,8 @@ package org.chromium.chrome.browser.translate;
 
 import org.chromium.chrome.browser.tab.Tab;
 
-import org.chromium.chrome.browser.ChromeApplication;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Utility classes related to the translate feature.
@@ -29,7 +30,10 @@ public class TranslateUtils {
      * @param menuLogging Whether logging should be performed in this check.
      */
     public static boolean canTranslateCurrentTab(Tab tab, boolean menuLogging) {
-        if (ChromeApplication.isVivaldi()) return false;
+        // Vivaldi - TODO(jarle): remove this when translation service goes live !!
+        if (BuildConfig.IS_FINAL_BUILD)
+            return false;
+
         return tab.getWebContents() != null
                 && TranslateBridge.canManuallyTranslate(tab, menuLogging);
     }

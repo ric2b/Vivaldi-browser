@@ -9,7 +9,6 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/vivaldi_paths.h"
@@ -206,7 +205,7 @@ class OperaImportObserver : public ProfileWriter,
     ++password_count;
   }
   void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
-                    const base::string16& top_level_folder_name) override {
+                    const std::u16string& top_level_folder_name) override {
     ASSERT_LE(bookmark_count + bookmarks.size(), base::size(OperaBookmarks));
 
     for (size_t i = 0; i < bookmarks.size(); i++) {
@@ -217,7 +216,7 @@ class OperaImportObserver : public ProfileWriter,
     }
   }
   void AddNotes(const std::vector<ImportedNotesEntry>& notes,
-                const base::string16& top_level_folder_name) override {
+                const std::u16string& top_level_folder_name) override {
     ASSERT_LE(notes_count + notes.size(), base::size(OperaNotes));
 
     for (size_t i = 0; i < notes.size(); i++) {

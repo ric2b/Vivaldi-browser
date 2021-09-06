@@ -40,6 +40,8 @@ import org.chromium.components.translate.TranslateOptions;
 import org.chromium.components.translate.TranslateTabLayout;
 import org.chromium.ui.widget.Toast;
 
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /**
  * Java version of the compact translate infobar.
  */
@@ -163,7 +165,9 @@ public class TranslateCompactInfoBar
             String sourceLanguageCode, String targetLanguageCode, boolean alwaysTranslate,
             boolean triggeredFromMenu, String[] allLanguages, String[] allLanguagesCodes,
             int[] allLanguagesHashCodes, String[] contentLanguagesCodes, int tabTextColor) {
-        super(R.drawable.infobar_translate_compact, 0, null, null);
+        // Vivaldi
+        super(R.drawable.infobar_translate_compact,
+                R.color.infobar_icon_drawable_color, null, null);
 
         if (TranslateFeatureList.isEnabled(
                     TranslateFeatureList.CONTENT_LANGUAGES_IN_LANGUAGE_PICKER)) {
@@ -183,12 +187,12 @@ public class TranslateCompactInfoBar
     @Override
     public void onPreferenceChange() {
         if (mNativeTranslateInfoBarPtr != 0) {
-            String[] currentContentLangauges =
+            String[] currentContentLanguages =
                     TranslateCompactInfoBarJni.get().getContentLanguagesCodes(
                             mNativeTranslateInfoBarPtr, TranslateCompactInfoBar.this);
-            mOptions.updateContentLanguages(currentContentLangauges);
+            mOptions.updateContentLanguages(currentContentLanguages);
             if (mLanguageMenuHelper != null) {
-                mLanguageMenuHelper.onContentLanguagesChanged(currentContentLangauges);
+                mLanguageMenuHelper.onContentLanguagesChanged(currentContentLanguages);
             }
         }
     }
@@ -487,6 +491,11 @@ public class TranslateCompactInfoBar
                 initMenuHelper(TranslateMenu.MENU_SOURCE_LANGUAGE);
                 mLanguageMenuHelper.show(TranslateMenu.MENU_SOURCE_LANGUAGE, getParentWidth());
                 return;
+            // Vivaldi
+            case TranslateMenu.ID_OVERFLOW_VIVALDI_INFO:
+                VivaldiUtils.launchVivaldiTranslateLearnMoreUri(getContext());
+                return;
+
             default:
                 assert false : "Unexpected overflow menu code";
         }

@@ -11,6 +11,7 @@
 #include "ash/capture_mode/capture_mode_session.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/capture_mode/video_recording_watcher.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/capture_mode_delegate.h"
 #include "ash/public/cpp/holding_space/holding_space_client.h"
@@ -22,6 +23,7 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
 #include "base/bind_post_task.h"
 #include "base/check.h"
@@ -622,19 +624,24 @@ void CaptureModeController::OnRecordedWindowSizeChanged(
 }
 
 bool CaptureModeController::ShouldBlockRecordingForContentProtection(
-    aura::Window* window) const {
-  if (window->IsRootWindow()) {
-    // Recording fullscreen or partial region of it. Block if this root has a
-    // window with protection.
-    for (const auto& iter : protected_windows_) {
-      if (iter.first->GetRootWindow() == window)
-        return true;
-    }
+    aura::Window* window_being_recorded) const {
+  DCHECK(window_being_recorded);
 
-    return false;
+  // The protected window can be a descendant of the window being recorded, for
+  // examples:
+  //   - When recording a fullscreen or partial region of it, the
+  //     |window_being_recorded| in this case is the root window, and a
+  //     protected window on this root will be a descendant.
+  //   - When recording a browser window showing a page with protected content,
+  //     the |window_being_recorded| in this case is the BrowserFrame, while the
+  //     protected window will be the RenderWidgetHostViewAura, which is also a
+  //     descendant.
+  for (const auto& iter : protected_windows_) {
+    if (window_being_recorded->Contains(iter.first))
+      return true;
   }
 
-  return protected_windows_.contains(window);
+  return false;
 }
 
 void CaptureModeController::EndSessionOrRecording(EndRecordingReason reason) {
@@ -746,7 +753,7 @@ void CaptureModeController::LaunchRecordingServiceAndStartRecording(
   // We bind the audio stream factory only if audio recording is enabled. This
   // is ok since the |audio_stream_factory| parameter in the recording service
   // APIs is optional, and can be not bound.
-  mojo::PendingRemote<audio::mojom::StreamFactory> audio_stream_factory;
+  mojo::PendingRemote<media::mojom::AudioStreamFactory> audio_stream_factory;
   if (enable_audio_recording_) {
     delegate_->BindAudioStreamFactory(
         audio_stream_factory.InitWithNewPipeAndPassReceiver());
@@ -846,10 +853,19 @@ void CaptureModeController::CaptureImage(const CaptureParams& capture_params,
     Stop();
 
   DCHECK(!capture_params.bounds.IsEmpty());
+
+  auto* cursor_manager = Shell::Get()->cursor_manager();
+  bool was_cursor_originally_blocked = cursor_manager->IsCursorLocked();
+  if (!was_cursor_originally_blocked) {
+    cursor_manager->HideCursor();
+    cursor_manager->LockCursor();
+  }
+
   ui::GrabWindowSnapshotAsyncPNG(
       capture_params.window, capture_params.bounds,
       base::BindOnce(&CaptureModeController::OnImageCaptured,
-                     weak_ptr_factory_.GetWeakPtr(), path));
+                     weak_ptr_factory_.GetWeakPtr(), path,
+                     was_cursor_originally_blocked));
 
   ++num_screenshots_taken_in_last_day_;
   ++num_screenshots_taken_in_last_week_;
@@ -881,7 +897,16 @@ void CaptureModeController::CaptureVideo(const CaptureParams& capture_params) {
 
 void CaptureModeController::OnImageCaptured(
     const base::FilePath& path,
+    bool was_cursor_originally_blocked,
     scoped_refptr<base::RefCountedMemory> png_bytes) {
+  if (!was_cursor_originally_blocked) {
+    auto* shell = Shell::Get();
+    auto* cursor_manager = shell->cursor_manager();
+    if (!shell->tablet_mode_controller()->InTabletMode())
+      cursor_manager->ShowCursor();
+    cursor_manager->UnlockCursor();
+  }
+
   if (!png_bytes || !png_bytes->size()) {
     LOG(ERROR) << "Failed to capture image.";
     ShowFailureNotification();

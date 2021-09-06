@@ -129,15 +129,7 @@
               {
                 "name": "windowId",
                 "type": "integer",
-                "description": "The window id of the created window if successful."
-              },
-              {
-                "name": "contentWindow",
-                "optional": true,
-                "type": "object",
-                "isInstanceOf": "Window",
-                "additionalProperties": { "type": "any" },
-                "description": "The JavaScript 'window' object for the ui."
+                "description": "The window id of the created window if successful or -1 on an error or if the user immediately closed the window."
               }
             ]
           }
@@ -147,19 +139,17 @@
         "name": "getCurrentId",
         "type": "function",
         "description": "Returns the window id of the window we are currently running inside.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "windowId",
-                "type": "integer",
-                "description": "The window id of the current window if successful."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "windowId",
+              "type": "integer",
+              "description": "The window id of the current window if successful."
+            }
+          ]
+        }
       },
       {
         "name": "setState",
@@ -268,17 +258,6 @@
             "type": "boolean",
             "name": "shown",
             "description": "Main menubar is shown (true) or hidden (false)."
-          }
-        ]
-      },
-      {
-        "name": "onWindowCloseCancelled",
-        "type": "function",
-        "description": "Fired when the window close has been cancelled.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "windowId"
           }
         ]
       },

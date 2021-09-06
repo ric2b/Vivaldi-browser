@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationStore, DestinationType, InvitationStore, LocalDestinationInfo, makeRecentDestination, NativeLayerImpl, RecentDestination} from 'chrome://print/print_preview.js';
+import {Destination, DestinationConnectionStatus, DestinationOrigin, DestinationStore, DestinationType, LocalDestinationInfo, makeRecentDestination, NativeLayerImpl, RecentDestination} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
@@ -54,9 +54,6 @@ suite(destination_dialog_cros_test.suiteName, function() {
   /** @type {!Array<!RecentDestination>} */
   let recentDestinations = [];
 
-  /** @type {boolean} */
-  const saveToDriveFlagEnabled = loadTimeData.getBoolean('printSaveToDrive');
-
   /** @override */
   suiteSetup(function() {
     setupTestListenerElement();
@@ -86,7 +83,6 @@ suite(destination_dialog_cros_test.suiteName, function() {
     dialog.activeUser = '';
     dialog.users = [];
     dialog.destinationStore = destinationStore;
-    dialog.invitationStore = new InvitationStore();
   });
 
   function finishSetup() {
@@ -193,27 +189,12 @@ suite(destination_dialog_cros_test.suiteName, function() {
     }
   }
 
-  /**
-   * @param {number} numPrinters The total number of available printers.
-   * @param {string} account The current active user account.
-   */
-  function assertNumPrintersWithDriveAccount(numPrinters, account) {
+  /** @param {number} numPrinters The total number of available printers. */
+  function assertNumPrintersVisible(numPrinters) {
     const list = dialog.$$('print-preview-destination-list');
     const printerItems = list.shadowRoot.querySelectorAll(
         'print-preview-destination-list-item:not([hidden])');
     assertEquals(numPrinters, printerItems.length);
-
-    if (saveToDriveFlagEnabled) {
-      return;
-    }
-
-    const drivePrinter = Array.from(printerItems).find(item => {
-      return item.destination.id === Destination.GooglePromotedId.DOCS;
-    });
-    assertEquals(!!drivePrinter, account !== '');
-    if (drivePrinter) {
-      assertEquals(account, drivePrinter.destination.account);
-    }
   }
 
   // Test that signing in and switching accounts works as expected.
@@ -244,7 +225,7 @@ suite(destination_dialog_cros_test.suiteName, function() {
         assertEquals(1, cloudPrintInterface.getCallCount('search'));
 
         // 6 printers, no Google drive (since not signed in).
-        assertNumPrintersWithDriveAccount(6, '');
+        assertNumPrintersVisible(6);
 
         // Set an active user.
         destinationStore.setActiveUser(user1);
@@ -256,11 +237,8 @@ suite(destination_dialog_cros_test.suiteName, function() {
         // Select shows the signed in user.
         assertSignedInState(user1, 1);
 
-        // Now have 7 printers (Google Drive), with user1 signed in.
-        // On CrOS we do not show Save to Drive destination so 6 printers
-        // expected.
-        const expectedPrinters = saveToDriveFlagEnabled ? 6 : 7;
-        assertNumPrintersWithDriveAccount(expectedPrinters, user1);
+        const expectedPrinters = 6;
+        assertNumPrintersVisible(expectedPrinters);
         assertEquals(3, nativeLayer.getCallCount('getPrinters'));
         // Cloud printers should have been re-fetched.
         assertEquals(2, cloudPrintInterface.getCallCount('search'));
@@ -280,8 +258,8 @@ suite(destination_dialog_cros_test.suiteName, function() {
         // Select shows the signed in user.
         assertSignedInState(user1, 2);
 
-        // Still have 7 printers (Google Drive), with user1 signed in.
-        assertNumPrintersWithDriveAccount(expectedPrinters, user1);
+        // Still have 6 printers, with user1 signed in.
+        assertNumPrintersVisible(expectedPrinters);
 
         // Select the second account.
         const whenEventFired = eventToPromise('account-change', dialog);
@@ -304,8 +282,8 @@ suite(destination_dialog_cros_test.suiteName, function() {
 
         assertSignedInState(user2, 2);
 
-        // 7 printers (Google Drive), with user2 signed in.
-        assertNumPrintersWithDriveAccount(expectedPrinters, user2);
+        // 6 printers, with user2 signed in.
+        assertNumPrintersVisible(expectedPrinters);
         assertEquals(3, nativeLayer.getCallCount('getPrinters'));
         // Cloud print should have been queried again for the new account.
         assertEquals(3, cloudPrintInterface.getCallCount('search'));

@@ -27,17 +27,23 @@
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
-#include "extensions/browser/extension_system_provider.h"
-#include "extensions/browser/extensions_browser_client.h"
+#include "extensions/buildflags/buildflags.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "sync/note_sync_service_factory.h"
 #include "sync/vivaldi_profile_sync_service.h"
 #include "sync/vivaldi_sync_client.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/extension_system_provider.h"
+#include "extensions/browser/extensions_browser_client.h"
+#endif
 
 namespace vivaldi {
 
@@ -117,12 +123,7 @@ KeyedService* VivaldiProfileSyncServiceFactory::BuildServiceInstanceFor(
   Profile* profile = Profile::FromBrowserContext(context);
 
   ProfileSyncService::InitParams init_params;
-  std::unique_ptr<VivaldiSyncClient> sync_client =
-      std::make_unique<VivaldiSyncClient>(profile);
-
-  auto invalidation_service = sync_client->GetVivaldiInvalidationService();
-
-  init_params.sync_client = std::move(sync_client);
+  init_params.sync_client = std::make_unique<VivaldiSyncClient>(profile);
   init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
   init_params.url_loader_factory =
       content::BrowserContext::GetDefaultStoragePartition(profile)
@@ -136,8 +137,13 @@ KeyedService* VivaldiProfileSyncServiceFactory::BuildServiceInstanceFor(
   init_params.identity_manager = IdentityManagerFactory::GetForProfile(profile);
   init_params.start_behavior = ProfileSyncService::MANUAL_START;
 
+  PrefService* local_state = g_browser_process->local_state();
+  if (local_state)
+    init_params.sync_server_url =
+        GURL(local_state->GetString(vivaldiprefs::kVivaldiSyncServerUrl));
+
   auto vpss = std::make_unique<VivaldiProfileSyncService>(
-      &init_params, profile, invalidation_service,
+      &init_params, profile,
       VivaldiAccountManagerFactory::GetForProfile(profile));
 
   vpss->Initialize();

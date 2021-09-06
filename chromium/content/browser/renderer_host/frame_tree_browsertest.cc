@@ -47,7 +47,7 @@ EvalJsResult GetOriginFromRenderer(FrameTreeNode* node) {
 
 class FrameTreeBrowserTest : public ContentBrowserTest {
  public:
-  FrameTreeBrowserTest() {}
+  FrameTreeBrowserTest() = default;
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -383,11 +383,9 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, NavigateChildToAboutBlank) {
       "    resolve(frames[0].self.origin);"
       "  }, 16);"
       "});");
-  // Since we used document.write(), the URL of the frame document changes to
-  // match the document that called it.
-  EXPECT_EQ(initiator->current_url(), target->current_url());
-  EXPECT_EQ(url::kHttpScheme, target->current_url().scheme());
   EXPECT_EQ(target->current_origin(), about_blank_origin);
+  EXPECT_EQ(GURL(url::kAboutBlankURL), target->current_url());
+  EXPECT_EQ(url::kAboutScheme, target->current_url().scheme());
   EXPECT_FALSE(target->current_origin().opaque());
   EXPECT_EQ("b.com", target->current_origin().host());
   EXPECT_EQ(url::kHttpScheme, target->current_origin().scheme());
@@ -804,7 +802,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
 
 class CrossProcessFrameTreeBrowserTest : public ContentBrowserTest {
  public:
-  CrossProcessFrameTreeBrowserTest() {}
+  CrossProcessFrameTreeBrowserTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     IsolateAllSitesForTesting(command_line);
@@ -1243,7 +1241,7 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
 // it from outsiders.
 class IsolateIcelandFrameTreeBrowserTest : public ContentBrowserTest {
  public:
-  IsolateIcelandFrameTreeBrowserTest() {}
+  IsolateIcelandFrameTreeBrowserTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Blink suppresses navigations to blob URLs of origins different from the

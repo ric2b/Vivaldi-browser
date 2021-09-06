@@ -12,14 +12,15 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "renderer/vivaldi_render_messages.h"
+#include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
 
-using content::BrowserThread;
-using content::RenderWidgetHost;
-using content::WebContents;
+#include "renderer/vivaldi_render_messages.h"
 
 namespace vivaldi {
 
@@ -35,6 +36,17 @@ void ReleaseSharedMemoryPixels(void* addr, void* context) {
   DCHECK(mapping->memory() == addr);
 }
 
+void OnCopySurfaceDone(float device_scale_factor,
+                       CapturePage::CaptureVisibleCallback callback,
+                       const SkBitmap& bitmap) {
+  bool success = true;
+  if (bitmap.drawsNothing()) {
+    LOG(ERROR) << "Failed RenderWidgetHostView::CopyFromSurface()";
+    success = false;
+  }
+  std::move(callback).Run(success, device_scale_factor, bitmap);
+}
+
 }  // namespace
 
 int CapturePage::s_callback_id = 0;
@@ -43,7 +55,43 @@ CapturePage::CapturePage() : weak_ptr_factory_(this) {}
 
 CapturePage::~CapturePage() {}
 
-// static
+/* static */
+void CapturePage::CaptureVisible(content::WebContents* web_contents,
+                                 const gfx::RectF& rect,
+                                 CaptureVisibleCallback callback) {
+  content::RenderWidgetHostView* view = nullptr;
+  if (!web_contents) {
+    LOG(ERROR) << "WebContents is null";
+  } else {
+    view = web_contents->GetRenderWidgetHostView();
+    if (!view || !view->GetRenderWidgetHost()) {
+      LOG(ERROR) << "View is invisible";
+      view = nullptr;
+    }
+  }
+  if (!view) {
+    std::move(callback).Run(false, 0.0f, SkBitmap());
+    return;
+  }
+
+  // CopyFromSurface takes the area in device-independent pixels. However, we
+  // want to capture all physical pixels. So scale the bitmap size accordingly.
+  gfx::SizeF size_f = rect.size();
+  const gfx::NativeView native_view = view->GetNativeView();
+  display::Screen* const screen = display::Screen::GetScreen();
+  const float device_scale_factor =
+      screen->GetDisplayNearestView(native_view).device_scale_factor();
+  size_f.Scale(device_scale_factor);
+
+  gfx::Rect capture_area(std::round(rect.x()), std::round(rect.y()),
+                         std::round(rect.width()), std::round(rect.height()));
+  gfx::Size bitmap_size = gfx::ToRoundedSize(size_f);
+  view->CopyFromSurface(capture_area, bitmap_size,
+                        base::BindOnce(&OnCopySurfaceDone, device_scale_factor,
+                                       std::move(callback)));
+}
+
+/* static */
 void CapturePage::Capture(content::WebContents* contents,
                           const CaptureParams& params,
                           DoneCallback callback) {
@@ -71,10 +119,8 @@ void CapturePage::CaptureImpl(content::WebContents* contents,
 
   WebContentsObserver::Observe(contents);
 
-  contents->GetMainFrame()->Send(
-      new VivaldiViewMsg_RequestThumbnailForFrame(
-          contents->GetMainFrame()->GetRoutingID(), param));
-
+  contents->GetMainFrame()->Send(new VivaldiViewMsg_RequestThumbnailForFrame(
+      contents->GetMainFrame()->GetRoutingID(), param));
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -119,14 +165,13 @@ void CapturePage::OnRequestThumbnailForFrameResponse(
     gfx::Size image_size,
     base::ReadOnlySharedMemoryRegion region,
     int client_id) {
-
   Result captured;
   do {
     if (callback_id != callback_id_) {
       if (!once_per_contents_)
         return;
       LOG(ERROR) << "unexpected callback id " << callback_id << " when "
-                << callback_id_ << " was expected";
+                 << callback_id_ << " was expected";
       break;
     }
 
@@ -201,7 +246,7 @@ bool CapturePage::Result::MovePixelsToBitmap(SkBitmap* bitmap) {
 }
 
 int CapturePage::Result::client_id() {
-    return client_id_;
+  return client_id_;
 }
 
-}  // namespace namespace vivaldi
+}  // namespace vivaldi

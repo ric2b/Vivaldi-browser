@@ -46,7 +46,7 @@
         "id": "ContainerContent",
         "type": "string",
         "description": "Defines functionality to set up on the C++ side. One or more menu items may be created.",
-        "enum": ["extensions", "imageinprofile", "linkinprofile", "notes", "pwa", "sendlinktodevices", "sendpagetodevices", "spellcheck", "spellcheckoptions", "speech"]
+        "enum": ["extensions", "imageinprofile", "linkinprofile", "notes", "pwa", "linkinpwa", "sendlinktodevices", "sendpagetodevices", "spellcheck", "spellcheckoptions", "speech"]
       },
       {
         "id": "Item",
@@ -305,14 +305,13 @@
               "windowId": {"type": "integer"},
               "icons": {"$ref": "Icons", "description": "Default and folder icons."}
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": false,
-            "description": "Notifies caller that menu has closed."
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Notifies caller that menu has closed.",
+          "parameters": []
+          }
       }
     ],
     "events": [

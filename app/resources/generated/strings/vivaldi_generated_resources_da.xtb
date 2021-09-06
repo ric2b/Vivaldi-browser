@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Tillad ikke, at nogen websites kan downloade flere filer automatisk</translation>
 <translation id="5039804452771397117">Tillad</translation>
 <translation id="5057110919553308744">Når du klikker på udvidelsen</translation>
+<translation id="5059526285558225588">Vælg, hvad du vil dele</translation>
 <translation id="5063480226653192405">Forbrug</translation>
 <translation id="5116628073786783676">Ge&amp;m lyd som...</translation>
 <translation id="5143374789336132547">Udvidelsen <ph name="EXTENSION_NAME" /> har ændret, hvilken side der vises, når du klikker på knappen Startside.</translation>
@@ -459,7 +460,6 @@ Opbevar din nøglefil på et sikkert sted. Du skal bruge den til at oprette nye 
 <translation id="8823704566850948458">Foreslå adgangskode...</translation>
 <translation id="8859174528519900719">Underramme: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Åbn link i nyt &amp;vindue</translation>
-<translation id="8910146161325739742">Del din skærm</translation>
 <translation id="8915370057835397490">Indlæser forslag</translation>
 <translation id="8916476537757519021">Underramme for inkognitotilstand: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript-hukommelse</translation>

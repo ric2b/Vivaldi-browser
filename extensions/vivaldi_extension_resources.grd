@@ -14,7 +14,6 @@
       <include name="IDR_WEB_VIEW_PRIVATE_EVENTS_JS" file="api/guest_view/web_view_private_events.js" type="BINDATA" />
       <include name="IDR_WEB_VIEW_PRIVATE_ATTRIBUTES_JS" file="api/guest_view/web_view_private_attributes.js" type="BINDATA" />
       <include name="IDR_WEB_VIEW_PRIVATE_CONSTANTS_JS" file="api/guest_view/web_view_private_constants.js" type="BINDATA" />
-      <include name="IDR_PRIVATE_WINDOW_CUSTOM_BINDINGS_JS" file="api/window/vivaldi_window_custom_bindings.js" type="BINDATA" />
       <if expr="is_macosx">
         <include name="IDR_NACL_SANDBOX_PROFILE" file="nacl_loader.sb" type="BINDATA" />
       </if>

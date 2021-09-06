@@ -15,6 +15,7 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactory;
@@ -25,6 +26,9 @@ import org.chromium.chrome.browser.page_annotations.PageAnnotationsServiceFactor
 import org.chromium.chrome.browser.page_annotations.ProductPriceUpdatePageAnnotation;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.proto.PriceTracking.BuyableProduct;
+import org.chromium.chrome.browser.tab.proto.PriceTracking.PriceTrackingData;
+import org.chromium.chrome.browser.tab.proto.PriceTracking.ProductPriceUpdate;
 import org.chromium.chrome.browser.tab.proto.ShoppingPersistedTabData.ShoppingPersistedTabDataProto;
 import org.chromium.components.optimization_guide.OptimizationGuideDecision;
 import org.chromium.components.optimization_guide.proto.HintsProto;
@@ -47,6 +51,8 @@ public class ShoppingPersistedTabData extends PersistedTabData {
             "price_tracking_stale_tab_threshold_seconds";
     private static final String TIME_TO_LIVE_MS_PARAM = "price_tracking_time_to_live_ms";
     private static final String DISPLAY_TIME_MS_PARAM = "price_tracking_display_time_ms";
+    private static final String PRICE_TRACKING_WITH_OPTIMIZATION_GUIDE_PARAM =
+            "price_tracking_with_optimization_guide";
 
     private static final int FRACTIONAL_DIGITS_LESS_THAN_TEN_UNITS = 2;
     private static final int FRACTIONAL_DIGITS_GREATER_THAN_TEN_UNITS = 0;
@@ -76,11 +82,19 @@ public class ShoppingPersistedTabData extends PersistedTabData {
             new IntCachedFieldTrialParameter(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
                     DISPLAY_TIME_MS_PARAM, (int) ONE_WEEK_MS);
 
+    public static final BooleanCachedFieldTrialParameter PRICE_TRACKING_WITH_OPTIMIZATION_GUIDE =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
+                    PRICE_TRACKING_WITH_OPTIMIZATION_GUIDE_PARAM, false);
+
     @VisibleForTesting
     public static final long NO_TRANSITIONS_OCCURRED = -1;
 
     @VisibleForTesting
     public static final long NO_PRICE_KNOWN = -1;
+
+    @VisibleForTesting
+    protected static PageAnnotationsServiceFactory sPageAnnotationsServiceFactory =
+            new PageAnnotationsServiceFactory();
 
     public long mLastPriceChangeTimeMs = NO_TRANSITIONS_OCCURRED;
 
@@ -93,10 +107,6 @@ public class ShoppingPersistedTabData extends PersistedTabData {
     @VisibleForTesting
     protected ObservableSupplierImpl<Boolean> mIsTabSaveEnabledSupplier =
             new ObservableSupplierImpl<>();
-
-    @VisibleForTesting
-    protected static PageAnnotationsServiceFactory sPageAnnotationsServiceFactory =
-            new PageAnnotationsServiceFactory();
 
     @VisibleForTesting
     protected EmptyTabObserver mUrlUpdatedObserver;
@@ -116,8 +126,16 @@ public class ShoppingPersistedTabData extends PersistedTabData {
     private static class OptimizationGuideBridgeFactoryHolder {
         private static final OptimizationGuideBridgeFactory sOptimizationGuideBridgeFactory;
         static {
-            sOptimizationGuideBridgeFactory = new OptimizationGuideBridgeFactory(
-                    Arrays.asList(HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR));
+            List<HintsProto.OptimizationType> optimizationTypes;
+            if (PRICE_TRACKING_WITH_OPTIMIZATION_GUIDE.getValue()) {
+                optimizationTypes =
+                        Arrays.asList(HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR,
+                                HintsProto.OptimizationType.PRICE_TRACKING);
+            } else {
+                optimizationTypes =
+                        Arrays.asList(HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR);
+            }
+            sOptimizationGuideBridgeFactory = new OptimizationGuideBridgeFactory(optimizationTypes);
         }
     }
 
@@ -216,11 +234,42 @@ public class ShoppingPersistedTabData extends PersistedTabData {
                             return;
                         }
 
-                        sPageAnnotationsServiceFactory.getForLastUsedProfile().getAnnotations(
-                                tab.getUrl(), (result) -> {
-                                    supplierCallback.onResult(
-                                            build(tab, result, previousShoppingPersistedTabData));
-                                });
+                        if (PRICE_TRACKING_WITH_OPTIMIZATION_GUIDE.getValue()) {
+                            OptimizationGuideBridgeFactoryHolder.sOptimizationGuideBridgeFactory
+                                    .create()
+                                    .canApplyOptimization(tab.getUrl(),
+                                            HintsProto.OptimizationType.PRICE_TRACKING,
+                                            (decision, metadata) -> {
+                                                if (decision != OptimizationGuideDecision.TRUE) {
+                                                    supplierCallback.onResult(null);
+                                                    return;
+                                                }
+                                                try {
+                                                    PriceTrackingData priceTrackingDataProto =
+                                                            PriceTrackingData.parseFrom(
+                                                                    metadata.getValue());
+                                                    supplierCallback.onResult(build(tab,
+                                                            priceTrackingDataProto,
+                                                            previousShoppingPersistedTabData));
+                                                } catch (InvalidProtocolBufferException e) {
+                                                    Log.i(TAG,
+                                                            String.format(Locale.US,
+                                                                    "There was a problem "
+                                                                            + "parsing "
+                                                                            + "PriceTracking"
+                                                                            + "DataProto. "
+                                                                            + "Details %s.",
+                                                                    e));
+                                                    supplierCallback.onResult(null);
+                                                }
+                                            });
+                        } else {
+                            sPageAnnotationsServiceFactory.getForLastUsedProfile().getAnnotations(
+                                    tab.getUrl(), (result) -> {
+                                        supplierCallback.onResult(build(
+                                                tab, result, previousShoppingPersistedTabData));
+                                    });
+                        }
                     });
                 },
                 ShoppingPersistedTabData.class, callback);
@@ -236,6 +285,16 @@ public class ShoppingPersistedTabData extends PersistedTabData {
     /**
      * Whether a BuyableProductAnnotation was found or not
      */
+    @IntDef({FoundBuyableProduct.NOT_FOUND, FoundBuyableProduct.FOUND,
+            FoundBuyableProduct.FOUND_WITH_PRICE_UPDATE})
+    @Retention(RetentionPolicy.SOURCE)
+    @interface FoundBuyableProduct {
+        int NOT_FOUND = 0;
+        int FOUND = 1;
+        int FOUND_WITH_PRICE_UPDATE = 2;
+        int NUM_ENTRIES = 3;
+    }
+
     @IntDef({FoundBuyableProductAnnotation.NOT_FOUND, FoundBuyableProductAnnotation.FOUND,
             FoundBuyableProductAnnotation.FOUND_WITH_PRICE_UPDATE})
     @Retention(RetentionPolicy.SOURCE)
@@ -278,12 +337,14 @@ public class ShoppingPersistedTabData extends PersistedTabData {
             res.setPreviousPriceMicros(productPriceUpdate.getOldPriceMicros());
             res.setCurrencyCode(productPriceUpdate.getCurrencyCode());
             res.setLastUpdatedMs(System.currentTimeMillis());
+            res.setMainOfferId(buyableProduct.getOfferId());
             foundBuyableProductAnnotation = FoundBuyableProductAnnotation.FOUND_WITH_PRICE_UPDATE;
         } else if (buyableProduct != null) {
             res.setPriceMicros(
                     buyableProduct.getCurrentPriceMicros(), previousShoppingPersistedTabData);
             res.setCurrencyCode(buyableProduct.getCurrencyCode());
             res.setLastUpdatedMs(System.currentTimeMillis());
+            res.setMainOfferId(buyableProduct.getOfferId());
             foundBuyableProductAnnotation = FoundBuyableProductAnnotation.FOUND;
         }
 
@@ -299,6 +360,80 @@ public class ShoppingPersistedTabData extends PersistedTabData {
             return res;
         }
         return null;
+    }
+
+    private static ShoppingPersistedTabData build(Tab tab, PriceTrackingData priceTrackingData,
+            ShoppingPersistedTabData previousShoppingPersistedTabData) {
+        ShoppingPersistedTabData res = new ShoppingPersistedTabData(tab);
+        @FoundBuyableProduct
+        int foundBuyableProduct = FoundBuyableProduct.NOT_FOUND;
+
+        ProductPriceUpdate productUpdate = priceTrackingData.getProductUpdate();
+        BuyableProduct buyableProduct = priceTrackingData.getBuyableProduct();
+
+        if (hasPriceUpdate(priceTrackingData)) {
+            res.setPriceMicros(productUpdate.getNewPrice().getAmountMicros());
+            res.setPreviousPriceMicros(productUpdate.getOldPrice().getAmountMicros());
+            res.setCurrencyCode(productUpdate.getOldPrice().getCurrencyCode());
+            res.setLastUpdatedMs(System.currentTimeMillis());
+            res.setMainOfferId(String.valueOf(buyableProduct.getOfferId()));
+            foundBuyableProduct = FoundBuyableProduct.FOUND_WITH_PRICE_UPDATE;
+        } else if (hasPrice(priceTrackingData)) {
+            res.setPriceMicros(buyableProduct.getCurrentPrice().getAmountMicros(),
+                    previousShoppingPersistedTabData);
+            res.setCurrencyCode(buyableProduct.getCurrentPrice().getCurrencyCode());
+            res.setLastUpdatedMs(System.currentTimeMillis());
+            res.setMainOfferId(String.valueOf(buyableProduct.getOfferId()));
+            foundBuyableProduct = FoundBuyableProduct.FOUND;
+        }
+
+        RecordHistogram.recordEnumeratedHistogram(
+                "Tabs.ShoppingPersistedTabData.FoundBuyableProduct", foundBuyableProduct,
+                FoundBuyableProduct.NUM_ENTRIES);
+        // Only persist this ShoppingPersistedTabData if it was correctly populated from the
+        // response
+        if (foundBuyableProduct == FoundBuyableProduct.FOUND
+                || foundBuyableProduct == FoundBuyableProduct.FOUND_WITH_PRICE_UPDATE) {
+            res.enableSaving();
+            return res;
+        }
+        return null;
+    }
+
+    private static boolean hasPriceUpdate(PriceTrackingData priceTrackingDataProto) {
+        if (!priceTrackingDataProto.hasBuyableProduct()
+                || !priceTrackingDataProto.hasProductUpdate()) {
+            return false;
+        }
+        ProductPriceUpdate productUpdateProto = priceTrackingDataProto.getProductUpdate();
+        if (!productUpdateProto.hasNewPrice() || !productUpdateProto.hasOldPrice()) {
+            return false;
+        }
+        if (!productUpdateProto.getNewPrice().hasCurrencyCode()
+                || !productUpdateProto.getOldPrice().hasCurrencyCode()) {
+            return false;
+        }
+        if (!productUpdateProto.getNewPrice().getCurrencyCode().equals(
+                    productUpdateProto.getOldPrice().getCurrencyCode())) {
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean hasPrice(PriceTrackingData priceTrackingDataProto) {
+        if (!priceTrackingDataProto.hasBuyableProduct()) {
+            return false;
+        }
+        if (!priceTrackingDataProto.getBuyableProduct().hasCurrentPrice()) {
+            return false;
+        }
+        if (!priceTrackingDataProto.getBuyableProduct().getCurrentPrice().hasAmountMicros()
+                || !priceTrackingDataProto.getBuyableProduct()
+                            .getCurrentPrice()
+                            .hasCurrencyCode()) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -365,11 +500,12 @@ public class ShoppingPersistedTabData extends PersistedTabData {
         mPreviousPriceMicros = previousPriceMicros;
     }
 
-    public void setOfferID(String offerID) {
-        mOfferId = offerID;
+    public void setMainOfferId(String offerId) {
+        mOfferId = offerId;
+        save();
     }
 
-    public String getOfferId() {
+    public String getMainOfferId() {
         return mOfferId;
     }
 
@@ -471,6 +607,9 @@ public class ShoppingPersistedTabData extends PersistedTabData {
                         .setPreviousPriceMicros(mPreviousPriceMicros)
                         .setLastUpdatedMs(getLastUpdatedMs())
                         .setLastPriceChangeTimeMs(mLastPriceChangeTimeMs);
+        if (mOfferId != null) {
+            builder.setMainOfferId(mOfferId);
+        }
 
         return () -> {
             return builder.build().toByteArray();
@@ -491,6 +630,7 @@ public class ShoppingPersistedTabData extends PersistedTabData {
             mPreviousPriceMicros = shoppingPersistedTabDataProto.getPreviousPriceMicros();
             setLastUpdatedMs(shoppingPersistedTabDataProto.getLastUpdatedMs());
             mLastPriceChangeTimeMs = shoppingPersistedTabDataProto.getLastPriceChangeTimeMs();
+            mOfferId = shoppingPersistedTabDataProto.getMainOfferId();
             return true;
         } catch (InvalidProtocolBufferException e) {
             Log.e(TAG,
@@ -532,6 +672,8 @@ public class ShoppingPersistedTabData extends PersistedTabData {
         return System.currentTimeMillis() - CriticalPersistedTabData.from(tab).getTimestampMillis();
     }
 
+    // TODO(crbug.com/1196860) remove as OptimizationType.PRICE_TRACKING deprecates the need for
+    // this
     private static void isShoppingPage(GURL url, Callback<Boolean> callback) {
         OptimizationGuideBridgeFactoryHolder.sOptimizationGuideBridgeFactory.create()
                 .canApplyOptimization(url, HintsProto.OptimizationType.SHOPPING_PAGE_PREDICTOR,

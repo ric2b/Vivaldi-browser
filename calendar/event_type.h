@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
@@ -86,16 +85,16 @@ class EventRow {
   EventID id;
   CalendarID calendar_id;
   AlarmID alarm_id = 0;
-  base::string16 title;
-  base::string16 description;
+  std::u16string title;
+  std::u16string description;
   base::Time start;
   base::Time end;
   bool all_day;
   bool is_recurring;
   base::Time start_recurring;
   base::Time end_recurring;
-  base::string16 location;
-  base::string16 url;
+  std::u16string location;
+  std::u16string url;
   RecurrenceExceptionRows recurrence_exceptions;
   std::string etag;
   std::string href;
@@ -106,7 +105,7 @@ class EventRow {
   bool trash = false;
   base::Time trash_time;
   int sequence;
-  base::string16 ical;
+  std::u16string ical;
   EventExceptions event_exceptions;
   std::string rrule;
   NotificationRows notifications;
@@ -120,9 +119,9 @@ class EventRow {
   int priority;
   std::string status;
   int percentage_complete;
-  base::string16 categories;
-  base::string16 component_class;
-  base::string16 attachment;
+  std::u16string categories;
+  std::u16string component_class;
+  std::u16string attachment;
   base::Time completed;
   int updateFields;
 
@@ -221,15 +220,15 @@ class EventTypeRow {
 
   EventTypeID id() const { return id_; }
   void set_id(EventTypeID id) { id_ = id; }
-  base::string16 name() const { return name_; }
-  void set_name(base::string16 name) { name_ = name; }
+  std::u16string name() const { return name_; }
+  void set_name(std::u16string name) { name_ = name; }
   std::string color() const { return color_; }
   void set_color(std::string color) { color_ = color; }
   int iconindex() const { return iconindex_; }
   void set_iconindex(int iconindex) { iconindex_ = iconindex; }
 
   EventTypeID id_;
-  base::string16 name_;
+  std::u16string name_;
   std::string color_;
   int iconindex_;
 };
@@ -260,7 +259,7 @@ struct EventType {
   ~EventType();
   EventType(const EventType& event_type);
   EventTypeID event_type_id;
-  base::string16 name;
+  std::u16string name;
   std::string color = "";
   int iconindex = 0;
   int updateFields;

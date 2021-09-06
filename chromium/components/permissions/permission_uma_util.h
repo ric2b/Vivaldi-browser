@@ -66,6 +66,7 @@ enum class RequestTypeForUma {
   PERMISSION_WINDOW_PLACEMENT = 25,
   PERMISSION_FONT_ACCESS = 26,
   PERMISSION_IDLE_DETECTION = 27,
+  PERMISSION_FILE_HANDLING = 28,
   // NUM must be the last value in the enum.
   NUM
 };
@@ -271,6 +272,9 @@ class PermissionUmaUtil {
 
   static void RecordTimeElapsedBetweenGrantAndRevoke(ContentSettingsType type,
                                                      base::TimeDelta delta);
+
+  static std::string GetPermissionActionString(
+      PermissionAction permission_action);
 
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation

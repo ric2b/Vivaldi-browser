@@ -95,6 +95,18 @@ _OS_SPECIFIC_FILTER = {}
 _OS_SPECIFIC_FILTER['win'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=299
     'ChromeLogPathCapabilityTest.testChromeLogPath',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=1196363
+    'ChromeDownloadDirTest.testFileDownloadAfterTabHeadless',
+    'ChromeDownloadDirTest.testFileDownloadWithClickHeadless',
+    'ChromeDownloadDirTest.testFileDownloadWithGetHeadless',
+    'HeadlessChromeDriverTest.testNewTabDoesNotFocus',
+    'HeadlessChromeDriverTest.testNewWindowDoesNotFocus',
+    'HeadlessChromeDriverTest.testPrintHeadless',
+    'HeadlessChromeDriverTest.testPrintInvalidArgumentHeadless',
+    'HeadlessChromeDriverTest.testWindowFullScreen',
+    'HeadlessInvalidCertificateTest.testLoadsPage',
+    'HeadlessInvalidCertificateTest.testNavigateNewWindow',
+    'RemoteBrowserTest.testConnectToRemoteBrowserLiteralAddressHeadless',
 ]
 _OS_SPECIFIC_FILTER['linux'] = [
 ]
@@ -2555,7 +2567,9 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
   def testTakeElementScreenshot(self):
     self._driver.Load(self.GetHttpUrlForFile(
                       '/chromedriver/page_with_redbox.html'))
-    analysisResult = 'FAIL'
+    # Wait for page to stabilize in case of Chrome showing top bars.
+    # See https://crbug.com/chromedriver/2986
+    time.sleep(1)
     redElement = self._driver.FindElement('css selector', '#box')
     analysisResult = self.takeScreenshotAndVerifyCorrect(redElement)
     self.assertEquals('PASS', analysisResult)
@@ -2565,7 +2579,9 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
                       '/chromedriver/page_with_iframe_redbox.html'))
     frame = self._driver.FindElement('css selector', '#frm')
     self._driver.SwitchToFrame(frame)
-    analysisResult = 'FAIL'
+    # Wait for page to stabilize in case of Chrome showing top bars.
+    # See https://crbug.com/chromedriver/2986
+    time.sleep(1)
     redElement = self._driver.FindElement('css selector', '#box')
     analysisResult = self.takeScreenshotAndVerifyCorrect(redElement)
     self.assertEquals('PASS', analysisResult)

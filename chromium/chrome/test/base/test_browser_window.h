@@ -66,6 +66,7 @@ class TestBrowserWindow : public BrowserWindow {
                                 float ratio) override;
   bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* contents) const override;
+  ui::NativeTheme* GetNativeTheme() override;
   int GetTopControlsHeight() const override;
   void SetTopControlsGestureScrollInProgress(bool in_progress) override;
   StatusBubble* GetStatusBubble() override;
@@ -124,6 +125,7 @@ class TestBrowserWindow : public BrowserWindow {
   bool IsBookmarkBarVisible() const override;
   bool IsBookmarkBarAnimating() const override;
   bool IsTabStripEditable() const override;
+  void SetIsTabStripEditable(bool is_editable);
   bool IsToolbarVisible() const override;
   bool IsToolbarShowing() const override;
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
@@ -156,7 +158,7 @@ class TestBrowserWindow : public BrowserWindow {
       bool is_user_gesture) override;
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   void ShowOneClickSigninConfirmation(
-      const base::string16& email,
+      const std::u16string& email,
       base::OnceCallback<void(bool)> confirmed_callback) override {}
 #endif
   bool IsDownloadShelfVisible() const override;
@@ -174,12 +176,15 @@ class TestBrowserWindow : public BrowserWindow {
       AvatarBubbleMode mode,
       signin_metrics::AccessPoint access_point,
       bool is_source_keyboard) override {}
+  void MaybeShowProfileSwitchIPH() override {}
 
 #if defined(OS_CHROMEOS) || defined(OS_MAC) || defined(OS_WIN) || \
     defined(OS_LINUX)
-  void ShowHatsDialog(const std::string& site_id,
-                      base::OnceClosure success_callback,
-                      base::OnceClosure failure_callback) override {}
+  void ShowHatsDialog(
+      const std::string& site_id,
+      base::OnceClosure success_callback,
+      base::OnceClosure failure_callback,
+      const std::map<std::string, bool>& product_specific_data) override {}
 #endif
 
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
@@ -248,6 +253,7 @@ class TestBrowserWindow : public BrowserWindow {
 
   std::string workspace_;
   bool visible_on_all_workspaces_ = false;
+  bool is_tab_strip_editable_ = true;
 
   std::unique_ptr<FeaturePromoController> feature_promo_controller_;
 

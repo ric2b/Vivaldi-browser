@@ -129,8 +129,8 @@ void Provider::InitProfileState() {
 Provider::Provider(Profile* profile,
                    VisitorInterface* service,
                    scoped_refptr<extensions::ExternalLoader> loader,
-                   extensions::Manifest::Location crx_location,
-                   extensions::Manifest::Location download_location,
+                   extensions::mojom::ManifestLocation crx_location,
+                   extensions::mojom::ManifestLocation download_location,
                    int creation_flags)
     : extensions::ExternalProviderImpl(service,
                                        std::move(loader),
@@ -188,7 +188,8 @@ void Provider::SetPrefs(std::unique_ptr<base::DictionaryValue> prefs) {
           pref.FindStringPath(kWebAppMigrationFlag);
       if (!web_app_flag)
         return false;  // Isn't migrating.
-      if (web_app::IsExternalAppInstallFeatureEnabled(*web_app_flag)) {
+      if (web_app::IsExternalAppInstallFeatureEnabled(*web_app_flag,
+                                                      *profile)) {
         // The feature is still enabled; it's responsible for the behavior.
         return false;
       }

@@ -426,7 +426,7 @@ void RenderWidgetHostViewChildFrame::Destroy() {
 }
 
 void RenderWidgetHostViewChildFrame::SetTooltipText(
-    const base::string16& tooltip_text) {
+    const std::u16string& tooltip_text) {
   if (!frame_connector_)
     return;
 
@@ -829,6 +829,13 @@ void RenderWidgetHostViewChildFrame::SpeakSelection() {}
 
 void RenderWidgetHostViewChildFrame::SetWindowFrameInScreen(
     const gfx::Rect& rect) {}
+
+void RenderWidgetHostViewChildFrame::ShowSharePicker(
+    const std::string& title,
+    const std::string& text,
+    const std::string& url,
+    const std::vector<std::string>& file_paths,
+    blink::mojom::ShareService::ShareCallback callback) {}
 #endif  // defined(OS_MAC)
 
 void RenderWidgetHostViewChildFrame::CopyFromSurface(
@@ -846,7 +853,8 @@ void RenderWidgetHostViewChildFrame::CopyFromSurface(
           base::BindOnce(
               [](base::OnceCallback<void(const SkBitmap&)> callback,
                  std::unique_ptr<viz::CopyOutputResult> result) {
-                std::move(callback).Run(result->AsSkBitmap());
+                auto scoped_bitmap = result->ScopedAccessSkBitmap();
+                std::move(callback).Run(scoped_bitmap.GetOutScopedBitmap());
               },
               std::move(callback)));
 

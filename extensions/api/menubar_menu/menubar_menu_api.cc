@@ -283,7 +283,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
     if (child.item) {
       const Item& item = *child.item;
       int id = item.id + IDC_VIV_MENU_FIRST + 1;
-      const base::string16 label = base::UTF8ToUTF16(item.name);
+      const std::u16string label = base::UTF8ToUTF16(item.name);
       switch (item.type) {
         case menubar_menu::ITEM_TYPE_COMMAND:
           menu_model->AddItem(id, label);

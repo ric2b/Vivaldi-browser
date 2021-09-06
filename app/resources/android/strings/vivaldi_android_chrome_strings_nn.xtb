@@ -7,6 +7,7 @@
 <translation id="17513872634828108">Opne faner</translation>
 <translation id="1829244130665387512">Søk på sida</translation>
 <translation id="2038563949887743358">Slå på Syn skrivebordsversjon</translation>
+<translation id="2306442503286132111">Bokmerket vart lagra i mappa <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Utsjånad</translation>
 <translation id="2501278716633472235">Gå attende</translation>
 <translation id="2633278372998075009">Private faner</translation>
@@ -31,10 +32,12 @@
 <translation id="5840488417521835756">Lær om emne på nettstadar utan å forlata sida. Trykk-og-søk er ein eigenskap om berre er tilgjengeleg om du nyttar Google som standard søkjemotor i Vivaldi. Han sender eit ord og nærliggjande kontekst til Google-søk og kjem attende med definisjonar, bilde, søkjeresultat og andre detaljar.
 
 Du tilpassar søkjet ditt ved å trykkja lenge. Gjer søkjet ditt betre ved å skyva panelet heilt opp og trykk på søkjefeltet.</translation>
+<translation id="6150320133806434356">Bokmerket vart lagra</translation>
 <translation id="6336451774241870485">Ny privat fane</translation>
 <translation id="6593061639179217415">Skrivebordsversjon</translation>
 <translation id="6610147964972079463">Lukk private faner</translation>
 <translation id="706339621163631076">Nettlesaren sine personvernreglar</translation>
+<translation id="732145680195464316">Bokmerke vart lagra i <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
 <translation id="7465104139234185284">Lukk alle private faner</translation>
 <translation id="7519434535192513364">Trykk-og-søk er ein eigenskap som berre er tilgjengeleg om du nyttar Google som standard søkjemotor i Vivaldi. Han sender det valde ordet og den gjeldande sida til Google-søk. Du kan slå av dette i<ph name="BEGIN_LINK" />innstillingane<ph name="END_LINK" />.</translation>

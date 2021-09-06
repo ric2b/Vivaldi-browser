@@ -216,9 +216,11 @@ class ASH_EXPORT CaptureModeController
 
   // Called back when an image has been captured to trigger an attempt to save
   // the image as a file. |timestamp| is the time at which the capture was
-  // triggered, |png_bytes| is the buffer containing the captured image in a
-  // PNG format.
+  // triggered. |was_cursor_originally_blocked| is whether the cursor was
+  // blocked at the time the screenshot capture request was made. |png_bytes| is
+  // the buffer containing the captured image in a PNG format.
   void OnImageCaptured(const base::FilePath& path,
+                       bool was_cursor_originally_blocked,
                        scoped_refptr<base::RefCountedMemory> png_bytes);
 
   // Called back when an attempt to save the image file has been completed, with
@@ -340,7 +342,7 @@ class ASH_EXPORT CaptureModeController
 
   // Tracks the windows that currently have content protection enabled, so that
   // we prevent them from being video recorded. Each window is mapped to its
-  // cureently-set protection_mask. Windows in this map are only the ones that
+  // currently-set protection_mask. Windows in this map are only the ones that
   // have protection masks other than |display::CONTENT_PROTECTION_METHOD_NONE|.
   base::flat_map<aura::Window*, /*protection_mask*/ uint32_t>
       protected_windows_;

@@ -28,7 +28,6 @@ import java.util.ArrayList;
 
 import android.os.Build;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.BuildConfig;
 
 /**
  * The factory class that contains all dependencies for the download location dialog.
@@ -140,8 +139,7 @@ public class DownloadLocationDialogCoordinator implements ModalDialogProperties.
                 // problem of wrong download paths in android 10 we will just fix the issue here
                 // without touching the c++ site in order to prevent regressions. We're setting up
                 // the correct |mSuggestedPath| which needs to be in line with the |dir.location|.
-                if (BuildConfig.IS_VIVALDI
-                        && Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
                     final String packageName =
                             ContextUtils.getApplicationContext().getPackageName();
                     if (mSuggestedPath.contains(packageName) && !dir.location.contains(packageName))

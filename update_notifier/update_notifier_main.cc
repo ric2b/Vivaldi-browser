@@ -13,6 +13,7 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/process/launch.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/win_util.h"
@@ -46,7 +47,6 @@ constexpr base::TimeDelta kEnableDelay = base::TimeDelta::FromSeconds(10);
 enum class Subaction {
   kDisable,
   kEnable,
-  kEnableIfUpgrade,
   kIsEnabled,
   kLaunchIfEnabled,
   kUnregister,
@@ -58,8 +58,6 @@ base::Optional<Subaction> FindIfSubaction(
     return Subaction::kDisable;
   if (command_line.HasSwitch(kEnable))
     return Subaction::kEnable;
-  if (command_line.HasSwitch(kEnableIfUpgrade))
-    return Subaction::kEnableIfUpgrade;
   if (command_line.HasSwitch(kIsEnabled))
     return Subaction::kIsEnabled;
   if (command_line.HasSwitch(kLaunchIfEnabled))
@@ -106,15 +104,14 @@ bool GetSchedulerServiceAndRoot(
   return true;
 }
 
-std::wstring GetSchedulerTaskName(const base::FilePath& exe_dir) {
+std::wstring GetSchedulerTaskName() {
   std::wstring task_name(kVivaldiScheduleTaskNamePrefix);
   task_name += '-';
-  task_name += winsparkle::GetPathHash(exe_dir, false);
+  task_name += winsparkle::GetExeDirHash(false);
   return task_name;
 }
 
 bool GetSchedulerRegisteredTask(
-    const base::FilePath& exe_dir,
     Microsoft::WRL::ComPtr<IRegisteredTask>& pRegisteredTask,
     bool& enabled) {
   DCHECK(!pRegisteredTask);
@@ -124,7 +121,7 @@ bool GetSchedulerRegisteredTask(
   if (!GetSchedulerServiceAndRoot(pService, pRootFolder))
     return false;
 
-  std::wstring task_name = GetSchedulerTaskName(exe_dir);
+  std::wstring task_name = GetSchedulerTaskName();
   HRESULT hr = pRootFolder->GetTask(_bstr_t(task_name.c_str()),
                                     pRegisteredTask.GetAddressOf());
   if (FAILED(hr)) {
@@ -155,8 +152,7 @@ bool GetSchedulerRegisteredTask(
   return true;
 }
 
-bool EnableSchedulerTask(const base::FilePath& exe_dir,
-                         bool create_enabled = true) {
+bool EnableSchedulerTask(bool create_enabled = true) {
   Microsoft::WRL::ComPtr<ITaskService> pService;
   Microsoft::WRL::ComPtr<ITaskFolder> pRootFolder;
   if (!GetSchedulerServiceAndRoot(pService, pRootFolder))
@@ -263,7 +259,7 @@ bool EnableSchedulerTask(const base::FilePath& exe_dir,
   pAction.Reset();
 
   base::CommandLine task_command =
-      vivaldi::GetCommonUpdateNotifierCommand(&exe_dir);
+      vivaldi::GetCommonUpdateNotifierCommand(winsparkle::GetExeDir());
   task_command.AppendSwitch(kFromScheduler);
 
   hr =
@@ -282,7 +278,8 @@ bool EnableSchedulerTask(const base::FilePath& exe_dir,
     return false;
   }
 
-  hr = pExecAction->put_WorkingDirectory(_bstr_t(exe_dir.value().c_str()));
+  hr = pExecAction->put_WorkingDirectory(
+      _bstr_t(winsparkle::GetExeDir().value().c_str()));
   if (FAILED(hr)) {
     LOG(ERROR) << base::StringPrintf(
         "IExecAction::put_WorkingDirectory failed hr=0x%lx", hr);
@@ -314,7 +311,7 @@ bool EnableSchedulerTask(const base::FilePath& exe_dir,
     return false;
   }
 
-  std::wstring task_name = GetSchedulerTaskName(exe_dir);
+  std::wstring task_name = GetSchedulerTaskName();
 
   Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
   hr = pRootFolder->RegisterTaskDefinition(
@@ -344,10 +341,10 @@ bool EnableSchedulerTask(const base::FilePath& exe_dir,
   return true;
 }
 
-bool DisableSchedulerTask(const base::FilePath& exe_dir) {
+bool DisableSchedulerTask() {
   bool enabled = false;
   Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
-  if (!GetSchedulerRegisteredTask(exe_dir, pRegisteredTask, enabled))
+  if (!GetSchedulerRegisteredTask(pRegisteredTask, enabled))
     return false;
   if (enabled) {
     HRESULT hr = pRegisteredTask->put_Enabled(VARIANT_FALSE);
@@ -361,100 +358,39 @@ bool DisableSchedulerTask(const base::FilePath& exe_dir) {
   return true;
 }
 
-// Check for older autorun settings for the update notifier.
-bool IsUpdateNotifierEnabledAsAutorun(const base::FilePath& exe_dir,
-                                      bool& enabled_for_some_installations) {
-  DCHECK(!enabled_for_some_installations);
-  std::wstring command;
-  if (!base::win::ReadCommandFromAutoRun(
-          HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName, &command)) {
-    return false;
-  }
-  enabled_for_some_installations = true;
-  base::CommandLine cmdline = base::CommandLine::FromString(command);
-  base::FilePath registry_exe = cmdline.GetProgram().NormalizePathSeparators();
-
-  base::FilePath exe_path = vivaldi::GetUpdateNotifierPath(&exe_dir);
-  return base::FilePath::CompareEqualIgnoreCase(registry_exe.value(),
-                                                exe_path.value());
-}
-
-bool EnableSchedulerTaskIfUpgrade(const base::FilePath& exe_dir) {
-  bool enabled = false;
-  Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
-  if (!GetSchedulerRegisteredTask(exe_dir, pRegisteredTask, enabled))
-    return false;
-  if (pRegisteredTask) {
-    // The task already exists, leave it alone to keep enabled or disabled
-    // status.
-    DLOG(INFO) << "Task " << GetSchedulerTaskName(exe_dir) << " already exists";
-    return true;
-  }
-
-  bool enabled_for_some_installations = false;
-  if (IsUpdateNotifierEnabledAsAutorun(exe_dir,
-                                       enabled_for_some_installations)) {
-    // Upgrade Autorun-based notifier to the new Scheduler form.
-    if (!EnableSchedulerTask(exe_dir))
-      return false;
-    // The result is false when the autorun entry does not exist.
-    if (base::win::RemoveCommandFromAutoRun(
-            HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName)) {
-      LOG(INFO) << "Removed autorun entry for "
-                << vivaldi::kUpdateNotifierAutorunName;
-    }
-  } else {
-    // With older autorun-based update checks enabling them for one installation
-    // disabled them for others. So in this case enable the update checks as we
-    // do not know if the user really wanted to disable the checks. In other
-    // cases when the autorun is not set at all assume that the user really
-    // disabled the notifier. In this case just create disabled task.
-    bool create_enabled = enabled_for_some_installations;
-    if (!EnableSchedulerTask(exe_dir, create_enabled))
-      return false;
-  }
-
-  return true;
-}
-
-bool IsEnabledSchedulerTask(const base::FilePath& exe_dir, bool& enabled) {
+bool IsEnabledSchedulerTask(bool check_for_autorun, bool& enabled) {
   DCHECK(!enabled);
   Microsoft::WRL::ComPtr<IRegisteredTask> pRegisteredTask;
-  bool ok = GetSchedulerRegisteredTask(exe_dir, pRegisteredTask, enabled);
+  bool ok = GetSchedulerRegisteredTask(pRegisteredTask, enabled);
   if (!ok)
     return false;
-  if (pRegisteredTask)
-    return true;
-  DCHECK(!enabled);
-  if (winsparkle::g_install_type != vivaldi::InstallType::kForAllUsers)
+  if (pRegisteredTask || !check_for_autorun)
     return true;
 
-  // We may run as non-administrator. We should check for the older autorun
-  // settings. For single-user installs this is done during installation, see
-  // EnableSchedulerTaskIfUpgrade.
-  bool enabled_for_some_installations = false;
-  if (IsUpdateNotifierEnabledAsAutorun(exe_dir,
-                                       enabled_for_some_installations)) {
-    // Upgrade Autorun-based notifier to the new Scheduler form.
-    if (!EnableSchedulerTask(exe_dir))
+  // No task was created, check if we have an older autorun registry entry.
+  //
+  // With the autorun we supported an auto update only for single installation
+  // per user. With multiple installations enabling an update for one disabled
+  // updates for others. With the task scheduler we support independent updates.
+  // So always enable the task scheduler if any installation wants updates. The
+  // user may disable the individual notifications later.
+  if (!vivaldi::IsUpdateNotifierEnabledAsAutorunForAnyPath()) {
+    if (!EnableSchedulerTask())
       return false;
     enabled = true;
-    // The result is false when the autorun entry does not exist.
-    if (base::win::RemoveCommandFromAutoRun(
-            HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName)) {
-      LOG(INFO) << "Removed autorun entry for "
-                << vivaldi::kUpdateNotifierAutorunName;
-    }
   }
+
+  // Remove the no longer needed autorun entry.
+  vivaldi::DisableUpdateNotifierAsAutorun(winsparkle::GetExeDir());
   return true;
 }
 
-bool UnregisterSchedulerTask(const base::FilePath& exe_dir) {
+bool UnregisterSchedulerTask() {
   Microsoft::WRL::ComPtr<ITaskService> pService;
   Microsoft::WRL::ComPtr<ITaskFolder> pRootFolder;
   if (!GetSchedulerServiceAndRoot(pService, pRootFolder))
     return false;
-  std::wstring task_name = GetSchedulerTaskName(exe_dir);
+  std::wstring task_name = GetSchedulerTaskName();
   HRESULT hr = pRootFolder->DeleteTask(_bstr_t(task_name.c_str()), 0);
   if (FAILED(hr)) {
     if (hr == kNotFoundObjectError) {
@@ -469,7 +405,6 @@ bool UnregisterSchedulerTask(const base::FilePath& exe_dir) {
 }
 
 ExitCode RunTaskSchedulerSubAction(Subaction subaction,
-                                   const base::FilePath& exe_dir,
                                    bool& fallthrough_to_main_action) {
   DCHECK(!fallthrough_to_main_action);
   // This is based on
@@ -490,35 +425,36 @@ ExitCode RunTaskSchedulerSubAction(Subaction subaction,
 
   switch (subaction) {
     case Subaction::kEnable:
-      if (!EnableSchedulerTask(exe_dir))
-        return ExitCode::kError;
-      break;
-    case Subaction::kEnableIfUpgrade:
-      if (!EnableSchedulerTaskIfUpgrade(exe_dir))
+      if (!EnableSchedulerTask())
         return ExitCode::kError;
       break;
     case Subaction::kDisable:
-      if (!DisableSchedulerTask(exe_dir))
+      if (!DisableSchedulerTask())
         return ExitCode::kError;
-      vivaldi::QuitAllUpdateNotifiers(exe_dir, /*quit_old=*/false);
+      vivaldi::SendQuitUpdateNotifier(winsparkle::GetExeDir());
       break;
-    case Subaction::kIsEnabled:
-    case Subaction::kLaunchIfEnabled: {
+    case Subaction::kIsEnabled: {
       bool enabled = false;
-      if (!IsEnabledSchedulerTask(exe_dir, enabled))
+      if (!IsEnabledSchedulerTask(/*check_for_autorun=*/false, enabled))
         return ExitCode::kError;
       if (!enabled)
         return ExitCode::kDisabled;
-      if (subaction == Subaction::kLaunchIfEnabled) {
-        // Simulate invocation from the task scheduler.
-        base::CommandLine::ForCurrentProcess()->AppendSwitch(kFromScheduler);
-        fallthrough_to_main_action = true;
-      }
+      break;
+    }
+    case Subaction::kLaunchIfEnabled: {
+      bool enabled = false;
+      if (!IsEnabledSchedulerTask(/*check_for_autorun=*/true, enabled))
+        return ExitCode::kError;
+      if (!enabled)
+        return ExitCode::kDisabled;
+
+      // Simulate invocation from the task scheduler.
+      base::CommandLine::ForCurrentProcess()->AppendSwitch(kFromScheduler);
+      fallthrough_to_main_action = true;
       break;
     }
     case Subaction::kUnregister: {
-      bool ok = UnregisterSchedulerTask(exe_dir);
-      vivaldi::QuitAllUpdateNotifiers(exe_dir, /*quit_old=*/false);
+      bool ok = UnregisterSchedulerTask();
       if (!ok)
         return ExitCode::kError;
       break;
@@ -528,48 +464,33 @@ ExitCode RunTaskSchedulerSubAction(Subaction subaction,
   return ExitCode::kOk;
 }
 
-ExitCode RunSubAction(Subaction action,
-                      const base::FilePath& exe_dir,
-                      bool& fallthrough_to_main_action) {
+ExitCode RunSubAction(Subaction action, bool& fallthrough_to_main_action) {
   DCHECK(!fallthrough_to_main_action);
   DLOG(INFO) << "Task scheduler subaction " << static_cast<int>(action);
-  if (kUseTaskScheduler) {
-    return RunTaskSchedulerSubAction(action, exe_dir,
-                                     fallthrough_to_main_action);
+  if (winsparkle::IsUsingTaskScheduler()) {
+    return RunTaskSchedulerSubAction(action, fallthrough_to_main_action);
   }
+  base::FilePath exe_dir = winsparkle::GetExeDir();
   switch (action) {
-    case Subaction::kDisable: {
-      if (!vivaldi::DisableUpdateNotifier(&exe_dir))
+    case Subaction::kDisable:
+    case Subaction::kUnregister: {
+      if (!vivaldi::DisableUpdateNotifierAsAutorun(exe_dir))
         return ExitCode::kError;
       break;
     }
     case Subaction::kEnable: {
-      base::CommandLine cmdline =
-          vivaldi::GetCommonUpdateNotifierCommand(&exe_dir);
-      if (!vivaldi::EnableUpdateNotifier(cmdline))
-        return ExitCode::kError;
-      if (!vivaldi::LaunchNotifierProcess(cmdline))
+      if (!vivaldi::EnableUpdateNotifierWithAutorun(exe_dir))
         return ExitCode::kError;
       break;
     }
-    case Subaction::kEnableIfUpgrade:
-      LOG(ERROR) << "Unsupported switch --" << kEnableIfUpgrade;
-      return ExitCode::kError;
     case Subaction::kIsEnabled:
-      if (!vivaldi::IsUpdateNotifierEnabled(&exe_dir))
+      if (!vivaldi::IsUpdateNotifierEnabledAsAutorun(exe_dir))
         return ExitCode::kDisabled;
       break;
     case Subaction::kLaunchIfEnabled: {
-      if (!vivaldi::IsUpdateNotifierEnabled(&exe_dir))
+      if (!vivaldi::IsUpdateNotifierEnabledAsAutorun(exe_dir))
         return ExitCode::kDisabled;
       fallthrough_to_main_action = true;
-      break;
-    }
-    case Subaction::kUnregister: {
-      bool ok = vivaldi::DisableUpdateNotifier(&exe_dir);
-      vivaldi::QuitAllUpdateNotifiers(exe_dir, /*quit_old=*/false);
-      if (!ok)
-        return ExitCode::kError;
       break;
     }
   }
@@ -634,46 +555,65 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
             << "*** " << VIVALDI_VERSION << " ***";
   LOG(INFO) << command_line.GetCommandLineString();
 
+  base::FilePath current_exe_path = vivaldi::GetPathOfCurrentExe();
+  if (command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
+    winsparkle::g_install_dir =
+        command_line.GetSwitchValuePath(vivaldi::constants::kVivaldiInstallDir);
+  }
+
   // Check for switch combinations that should not be used together.
   int unique_switches = 0;
 
-  base::FilePath exe_dir;
   if (command_line.HasSwitch(kInstallMode)) {
     unique_switches++;
     winsparkle::g_install_mode = true;
-  } else {
-    base::FilePath exe_path = vivaldi::GetPathOfCurrentExe();
-    std::wstring exe_name = exe_path.BaseName().value();
-    if (_wcsicmp(exe_name.c_str(),
-                 vivaldi::constants::kVivaldiUpdateNotifierExe) != 0 &&
-        _wcsicmp(exe_name.c_str(),
-                 vivaldi::constants::kVivaldiUpdateNotifierOldExe) != 0) {
-      // We are not called update notifier, assume a network installation mode.
-      winsparkle::g_install_mode = true;
-    } else {
-      exe_dir = exe_path.DirName();
-#if !defined(OFFICIAL_BUILD)
-      std::wstring debug_exe_dir =
-          command_line.GetSwitchValueNative(kDebugExeDir);
-      if (!debug_exe_dir.empty()) {
-        exe_dir = vivaldi::NormalizeInstallExeDirectory(
-            base::FilePath(debug_exe_dir));
-      }
+  }
+  if (!winsparkle::g_install_mode) {
+    base::FilePath update_install_dir =
+        winsparkle::g_install_dir.empty() ? current_exe_path.DirName().DirName()
+                                          : winsparkle::g_install_dir;
+
+    base::Optional<vivaldi::InstallType> existing_install_type =
+        vivaldi::FindInstallType(update_install_dir);
+#if defined(COMPONENT_BUILD)
+    if (winsparkle::g_install_dir.empty()) {
+      // A development build defaults to use an update mode if the install
+      // directory is not given explicitly.
+      DCHECK(!existing_install_type)
+          << "Build directory should not have Application subfolder.";
+      winsparkle::g_build_dir = current_exe_path.DirName();
+      winsparkle::g_install_type = vivaldi::InstallType::kForCurrentUser;
+    } else
 #endif
-
-      // Make sure to use a working directory not pointing to the
-      // version-specific sub-directory of the installation. This way if the
-      // installer cannot kill the notifier for some reason during the update,
-      // at least it will still be possible to delete the old version-specific
-      // directory.
-      base::SetCurrentDirectory(exe_dir);
-
-      base::Optional<vivaldi::InstallType> existing_install_type =
-          vivaldi::FindInstallType(exe_dir.DirName());
-      if (existing_install_type) {
-        winsparkle::g_install_type = *existing_install_type;
-      }
+        if (existing_install_type) {
+      winsparkle::g_install_type = *existing_install_type;
+      winsparkle::g_install_dir = std::move(update_install_dir);
+    } else {
+      // Running update_notifier.exe not from the installation exe directory
+      // switches to the installation mode. If g_install_type is empty, we keep
+      // it empty to fallback to the default installation directory.
+      winsparkle::g_install_mode = true;
+      unique_switches++;
     }
+  }
+
+  if (winsparkle::g_install_mode && !winsparkle::g_install_dir.empty()) {
+    // If install mode points to an existing installation, default to the type
+    // of that installation.
+    base::Optional<vivaldi::InstallType> existing_install_type =
+        vivaldi::FindInstallType(winsparkle::g_install_dir);
+    if (existing_install_type) {
+      winsparkle::g_install_type = *existing_install_type;
+    }
+  }
+
+  if (!winsparkle::g_install_mode) {
+    // Make sure to use a working directory not pointing to the
+    // version-specific sub-directory of the installation. This way if the
+    // installer cannot kill the notifier for some reason during the update,
+    // at least it will still be possible to delete the old version-specific
+    // directory.
+    base::SetCurrentDirectory(winsparkle::GetExeDir());
   }
 
   if (winsparkle::g_install_mode) {
@@ -709,18 +649,29 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
 
   if (subaction) {
     bool fallthrough_to_main_action = false;
-    ExitCode exit_code =
-        RunSubAction(*subaction, exe_dir, fallthrough_to_main_action);
+    ExitCode exit_code = RunSubAction(*subaction, fallthrough_to_main_action);
     if (exit_code != ExitCode::kOk || !fallthrough_to_main_action)
       return exit_code;
   }
 
+  if (!winsparkle::g_install_mode) {
+    DCHECK(!winsparkle::GetExeDir().empty());
+    winsparkle::g_app_version =
+        vivaldi::GetInstallVersion(winsparkle::GetExeDir());
+    DLOG(INFO) << "Installed Vivaldi version: " << winsparkle::g_app_version;
+#if !defined(OFFICIAL_BUILD)
+    if (command_line.HasSwitch(kDebugVersion)) {
+      winsparkle::g_app_version =
+          base::Version(command_line.GetSwitchValueASCII(kDebugVersion));
+    }
+#endif
+  }
   base::AtExitManager at_exit;
   base::SingleThreadTaskExecutor executor(base::MessagePumpType::UI);
 
   install_static::InitializeProductDetailsForPrimaryModule();
 
-  return UpdateNotifierManager::GetInstance().RunNotifier(std::move(exe_dir));
+  return UpdateNotifierManager::GetInstance().RunNotifier();
 }
 
 }  // namespace vivaldi_update_notifier

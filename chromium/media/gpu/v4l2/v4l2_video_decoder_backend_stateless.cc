@@ -22,10 +22,12 @@
 #include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/v4l2_device.h"
+#include "media/gpu/v4l2/v4l2_h264_accelerator.h"
 #include "media/gpu/v4l2/v4l2_h264_accelerator_chromium.h"
 #include "media/gpu/v4l2/v4l2_h264_accelerator_legacy.h"
 #include "media/gpu/v4l2/v4l2_vp8_accelerator.h"
 #include "media/gpu/v4l2/v4l2_vp8_accelerator_legacy.h"
+#include "media/gpu/v4l2/v4l2_vp9_accelerator_chromium.h"
 #include "media/gpu/v4l2/v4l2_vp9_accelerator_legacy.h"
 
 namespace media {
@@ -478,6 +480,10 @@ void V4L2StatelessVideoDecoderBackend::PumpOutputSurfaces() {
   while (!output_request_queue_.empty()) {
     if (!output_request_queue_.front().IsReady()) {
       DVLOGF(3) << "The first surface is not ready yet.";
+      // It is possible that that V4L2 buffers for this output surface are not
+      // even queued yet. Make sure that avd_->Decode() is called to continue
+      // that work and prevent the decoding thread from starving.
+      resume_decode = true;
       break;
     }
 
@@ -489,6 +495,7 @@ void V4L2StatelessVideoDecoderBackend::PumpOutputSurfaces() {
         DVLOGF(2) << "Flush finished.";
         std::move(flush_cb_).Run(DecodeStatus::OK);
         resume_decode = true;
+        client_->CompleteFlush();
         break;
 
       case OutputRequest::kChangeResolutionFence:
@@ -507,7 +514,6 @@ void V4L2StatelessVideoDecoderBackend::PumpOutputSurfaces() {
   }
 
   if (resume_decode) {
-    client_->CompleteFlush();
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&V4L2StatelessVideoDecoderBackend::DoDecodeWork,
@@ -645,8 +651,14 @@ bool V4L2StatelessVideoDecoderBackend::CreateAvd() {
 
   if (profile_ >= H264PROFILE_MIN && profile_ <= H264PROFILE_MAX) {
     if (input_queue_->SupportsRequests()) {
-      avd_ = std::make_unique<H264Decoder>(
-          std::make_unique<V4L2ChromiumH264Accelerator>(this, device_.get()), profile_);
+      std::unique_ptr<H264Decoder::H264Accelerator> accelerator;
+      if (V4L2H264Accelerator::SupportsUpstreamABI(device_.get()))
+        accelerator =
+            std::make_unique<V4L2H264Accelerator>(this, device_.get());
+      else
+        accelerator =
+            std::make_unique<V4L2ChromiumH264Accelerator>(this, device_.get());
+      avd_ = std::make_unique<H264Decoder>(std::move(accelerator), profile_);
     } else {
       avd_ = std::make_unique<H264Decoder>(
           std::make_unique<V4L2LegacyH264Accelerator>(this, device_.get()),
@@ -661,9 +673,15 @@ bool V4L2StatelessVideoDecoderBackend::CreateAvd() {
           std::make_unique<V4L2LegacyVP8Accelerator>(this, device_.get()));
     }
   } else if (profile_ >= VP9PROFILE_MIN && profile_ <= VP9PROFILE_MAX) {
-    avd_ = std::make_unique<VP9Decoder>(
-        std::make_unique<V4L2LegacyVP9Accelerator>(this, device_.get()),
-        profile_);
+    if (input_queue_->SupportsRequests()) {
+      avd_ = std::make_unique<VP9Decoder>(
+          std::make_unique<V4L2ChromiumVP9Accelerator>(this, device_.get()),
+          profile_);
+    } else {
+      avd_ = std::make_unique<VP9Decoder>(
+          std::make_unique<V4L2LegacyVP9Accelerator>(this, device_.get()),
+          profile_);
+    }
   } else {
     VLOGF(1) << "Unsupported profile " << GetProfileName(profile_);
     return false;

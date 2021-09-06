@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ku">
+<translation id="1175364870820465910">&amp;Çapkirin...</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" /> navê bikarhêner û borînpeyv pêwist e.</translation>
+<translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
+<translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Venêrîna ji pêkhateyên dîwar û veyroskujan <ph name="END_LINK" /></translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Navnîşana proxy-ê kontrol dike<ph name="END_LINK" /></translation>
+<translation id="5115563688576182185">(64-bit)</translation>
+<translation id="7111012039238467737">(Rast)</translation>
+<translation id="7951415247503192394">(32-bit)</translation>
+<translation id="9025348182339809926">(Nerast)</translation>
 </translationbundle>

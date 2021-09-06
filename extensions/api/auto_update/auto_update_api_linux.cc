@@ -29,6 +29,11 @@ AutoUpdateDisableUpdateNotifierFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
+AutoUpdateInstallUpdateAndRestartFunction::Run() {
+  return RespondNow(Error("Not implemented"));
+}
+
+ExtensionFunction::ResponseAction
 AutoUpdateGetAutoInstallUpdatesFunction::Run() {
   return RespondNow(Error("Not implemented"));
 }

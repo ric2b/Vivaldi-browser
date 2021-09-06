@@ -19,7 +19,6 @@ import androidx.annotation.WorkerThread;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.PowerMonitor;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
@@ -31,13 +30,12 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AfterStartupTaskUtils;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeActivitySessionTracker;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeBackupAgentImpl;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.DevToolsServer;
 import org.chromium.chrome.browser.app.video_tutorials.VideoTutorialShareHelper;
-import org.chromium.chrome.browser.banners.AppBannerInProductHelpControllerProvider;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
 import org.chromium.chrome.browser.content_capture.ContentCaptureHistoryDeletionObserver;
@@ -47,7 +45,6 @@ import org.chromium.chrome.browser.crash.MinidumpUploadServiceImpl;
 import org.chromium.chrome.browser.download.DownloadController;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.OfflineContentAvailabilityStatusProvider;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.firstrun.ForcedSigninProcessor;
 import org.chromium.chrome.browser.firstrun.TosDialogBehaviorSharedPrefInvalidator;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
@@ -64,6 +61,7 @@ import org.chromium.chrome.browser.metrics.WebApkUma;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
 import org.chromium.chrome.browser.offline.measurements.OfflineMeasurementsBackgroundTask;
+import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.DecoderService;
 import org.chromium.chrome.browser.policy.EnterpriseInfo;
@@ -84,7 +82,7 @@ import org.chromium.components.browser_ui.photo_picker.DecoderServiceHost;
 import org.chromium.components.browser_ui.photo_picker.PhotoPickerDialog;
 import org.chromium.components.browser_ui.share.ShareImageFileUtils;
 import org.chromium.components.browser_ui.util.ConversionUtils;
-import org.chromium.components.content_capture.ContentCaptureController;
+import org.chromium.components.content_capture.PlatformContentCaptureController;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.signin.AccountManagerFacadeImpl;
@@ -213,8 +211,6 @@ public class ProcessInitializationHandler {
         ChromeActivitySessionTracker.getInstance().initializeWithNative();
         ProfileManagerUtils.removeSessionCookiesForAllProfiles();
         AppBannerManager.setAppDetailsDelegate(AppHooks.get().createAppDetailsDelegate());
-        AppBannerInProductHelpControllerProvider.setTrackerFromProfileFactory(
-                TrackerFactory::getTrackerForProfile);
         ChromeLifetimeController.initialize();
         Clipboard.getInstance().setImageFileProvider(new ClipboardImageFileProvider());
 
@@ -261,7 +257,7 @@ public class ProcessInitializationHandler {
 
         SearchWidgetProvider.initialize();
         HistoryDeletionBridge.getInstance().addObserver(new ContentCaptureHistoryDeletionObserver(
-                () -> ContentCaptureController.getInstance()));
+                () -> PlatformContentCaptureController.getInstance()));
     }
 
     /**
@@ -307,8 +303,6 @@ public class ProcessInitializationHandler {
                                         UrlUtilities.isNTPUrl(homepageUrl), homepageUrl);
                             }
                         });
-
-                PowerMonitor.create();
 
                 ShareImageFileUtils.clearSharedImages();
 
@@ -419,8 +413,8 @@ public class ProcessInitializationHandler {
                 () -> MediaViewerUtils.updateMediaLauncherActivityEnabled());
 
         deferredStartupHandler.addDeferredTask(
-                ChromeApplication.getComponent().resolveTwaClearDataDialogRecorder()
-                        ::makeDeferredRecordings);
+                ChromeApplicationImpl.getComponent()
+                        .resolveTwaClearDataDialogRecorder()::makeDeferredRecordings);
         deferredStartupHandler.addDeferredTask(WebApkUma::recordDeferredUma);
 
         deferredStartupHandler.addDeferredTask(
@@ -439,6 +433,10 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(
                 () -> OfflineMeasurementsBackgroundTask.maybeScheduleTaskAndReportMetrics());
         deferredStartupHandler.addDeferredTask(() -> QueryTileUtils.isQueryTilesEnabledOnNTP());
+        deferredStartupHandler.addDeferredTask(
+                ()
+                        -> AssistantVoiceSearchService.reportStartupUserEligibility(
+                                ContextUtils.getApplicationContext()));
     }
 
     private void initChannelsAsync() {

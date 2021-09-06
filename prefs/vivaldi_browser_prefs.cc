@@ -160,12 +160,33 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
                              base::Time());
   registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextMonthlyPing,
                              base::Time());
+  registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextTrimestrialPing,
+                             base::Time());
+  registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextSemestrialPing,
+                             base::Time());
+  registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsNextYearlyPing,
+                             base::Time());
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStatsExtraPing, 0);
   registry->RegisterTimePref(vivaldiprefs::kVivaldiStatsExtraPingTime,
                              base::Time());
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStatsPingsSinceLastMonth,
+                                0);
   registry->RegisterListPref(vivaldiprefs::kVivaldiProfileImagePath);
   registry->RegisterTimePref(
       vivaldiprefs::kVivaldiTranslateLanguageListLastUpdate, base::Time());
+  registry->RegisterStringPref(vivaldiprefs::kVivaldiAccountServerUrlIdentity,
+                               "https://login.vivaldi.net/oauth2/token");
+  registry->RegisterStringPref(vivaldiprefs::kVivaldiAccountServerUrlOpenId,
+                               "https://login.vivaldi.net/oauth2/userinfo");
+  if (version_info::IsOfficialBuild()) {
+    registry->RegisterStringPref(vivaldiprefs::kVivaldiSyncServerUrl,
+                                 "https://bifrost.vivaldi.com/vivid-sync");
+  } else {
+    registry->RegisterStringPref(vivaldiprefs::kVivaldiSyncServerUrl,
+                                 "https://bifrost.vivaldi.com:4433/vivid-sync");
+  }
+  registry->RegisterStringPref(vivaldiprefs::kVivaldiSyncNotificationsServerUrl,
+                               "wss://bifrost.vivaldi.com:15674/ws");
 
   std::vector<base::Value> args;
   for (int i = 0; i < kDefaultLanguageListSize; i++) {
@@ -194,7 +215,7 @@ base::Value GetComputedDefault(const std::string& path) {
     base::FilePath path;
     base::PathService::Get(chrome::DIR_USER_PICTURES, &path);
     path = path.AppendASCII("Vivaldi Captures");
-    return base::Value(path.value());
+    return base::Value(path.AsUTF16Unsafe());
   }
   return GetPlatformComputedDefault(path);
 }

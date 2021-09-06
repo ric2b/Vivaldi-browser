@@ -27,7 +27,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 // Vivaldi
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Coordinates the interactions with the UrlBar text component.
@@ -206,7 +206,7 @@ public class UrlBarCoordinator implements UrlBarEditingTextStateProvider, UrlFoc
         if (showKeyboard) {
             // Note (david@vivaldi.com): When the toolbar is at the bottom we don't apply the soft
             // input mode in oder to have the control container always visible.
-            if (!ChromeApplication.isVivaldi())
+            if (!ChromeApplicationImpl.isVivaldi())
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, /* delay */ false);
             mKeyboardVisibilityDelegate.showKeyboard(mUrlBar);
         } else {

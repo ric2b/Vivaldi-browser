@@ -228,9 +228,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   // Called when the database has been updated and schedules the next update.
   void DatabaseUpdated();
 
-  // Delete any *.store files from disk that are no longer used.
-  void DeleteUnusedStoreFiles();
-
   // Matches the full_hashes for a |check| with the hashes stored in
   // |artificially_marked_store_and_hash_prefixes_|. For each full hash match,
   // it populates |full_hash_to_store_and_hash_prefixes| with the matched hash

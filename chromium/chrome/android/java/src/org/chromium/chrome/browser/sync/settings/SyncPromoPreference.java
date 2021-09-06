@@ -13,7 +13,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -130,7 +130,7 @@ public class SyncPromoPreference
     private void setState(@State int state) {
         if (mState == state) return;
         mState = state;
-        if (!ChromeApplication.isVivaldi()) {
+        if (!ChromeApplicationImpl.isVivaldi()) {
         assert mStateChangedCallback != null;
         mStateChangedCallback.run();
         }
@@ -151,7 +151,7 @@ public class SyncPromoPreference
                 && SigninPromoController.hasNotReachedImpressionLimit(SigninAccessPoint.SETTINGS)) {
             IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
                     Profile.getLastUsedRegularProfile());
-            if (identityManager.getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED) == null) {
+            if (identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN) == null) {
                 setupPersonalizedPromo(State.PERSONALIZED_SIGNIN_PROMO);
                 return;
             } else if (identityManager.getPrimaryAccountInfo(ConsentLevel.SYNC) == null) {

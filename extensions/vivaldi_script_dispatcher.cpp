@@ -26,8 +26,6 @@ void VivaldiAddScriptResources(
                         IDR_WEB_VIEW_PRIVATE_ATTRIBUTES_JS});
   resources->push_back({"webViewConstantsPrivate",
                         IDR_WEB_VIEW_PRIVATE_CONSTANTS_JS});
-  resources->push_back(
-      {"windowPrivate", IDR_PRIVATE_WINDOW_CUSTOM_BINDINGS_JS});
 }
 
 // Called by Dispatcher::RequireGuestViewModules()

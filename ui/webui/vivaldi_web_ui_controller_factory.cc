@@ -61,9 +61,9 @@ bool NeedsExtensionWebUI(Profile* profile, const GURL& url) {
           ->enabled_extensions()
           .GetExtensionOrAppByURL(url);
   // Allow bindings for all packaged extensions and component hosted apps.
-  return extension &&
-         (!extension->is_hosted_app() ||
-          extension->location() == extensions::Manifest::COMPONENT);
+  return extension && (!extension->is_hosted_app() ||
+                       extension->location() ==
+                           extensions::mojom::ManifestLocation::kComponent);
 }
 #endif
 

@@ -8,7 +8,6 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
-#include "base/strings/string16.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
@@ -46,8 +45,7 @@ constexpr base::TimeDelta kStandaloneCheckPeriod = base::TimeDelta::FromDays(1);
 
 void StartUpdateNotifierIfEnabled(bool force_enable) {
   if (force_enable) {
-    base::CommandLine cmdline =
-        ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+    base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
     cmdline.AppendSwitch(vivaldi_update_notifier::kEnable);
     int exit_code = vivaldi::RunNotifierSubaction(cmdline);
     if (exit_code != 0) {
@@ -59,8 +57,7 @@ void StartUpdateNotifierIfEnabled(bool force_enable) {
   // We want to run the notifier with the current flags even if those are
   // different from the autostart registry. This way one can kill the notifier
   // and try with a new value of --vuu.
-  base::CommandLine cmdline =
-      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
   cmdline.AppendSwitch(vivaldi_update_notifier::kLaunchIfEnabled);
   LaunchNotifierProcess(cmdline);
 }
@@ -80,8 +77,7 @@ scoped_refptr<base::SingleThreadTaskRunner> GetStandaloneAutoUpdateSequence() {
 
 void LaunchStandaloneAutoUpdateCheck() {
   DLOG(INFO) << "Starting standalone update check";
-  base::CommandLine cmdline =
-      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
 
   // Pretend that we are called from a scheduler to run the background check.
   cmdline.AppendSwitch(vivaldi_update_notifier::kFromScheduler);
@@ -101,7 +97,7 @@ void DoStopStandaloneUpdateCheck() {
   timer.Stop();
 
   // Ask a running process if any to quit.
-  SendQuitUpdateNotifier(nullptr, /*global=*/false);
+  SendQuitUpdateNotifier(base::FilePath(), /*global=*/false);
 }
 
 void StartStandaloneAutoUpdateCheck(base::TimeDelta initial_delay) {

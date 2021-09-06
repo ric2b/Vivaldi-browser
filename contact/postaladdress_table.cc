@@ -22,7 +22,7 @@ void FillPostalAddressRow(sql::Statement& statement,
                           PostalAddressRow* postaladdress_row) {
   int postaladdress_id = statement.ColumnInt(0);
   int contact_id = statement.ColumnInt(1);
-  base::string16 postal_address = statement.ColumnString16(2);
+  std::u16string postal_address = statement.ColumnString16(2);
   std::string type = statement.ColumnString(3);
 
   postaladdress_row->set_postaladdress_id(postaladdress_id);

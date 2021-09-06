@@ -231,11 +231,6 @@ void VivVideoDecoder::DestroyAsync(std::unique_ptr<VivVideoDecoder> decoder) {
   decoder.release();
 }
 
-std::string VivVideoDecoder::GetDisplayName() const {
-  DCHECK(media_task_runner_->BelongsToCurrentThread());
-  return "VivVideoDecoder";
-}
-
 VideoDecoderType VivVideoDecoder::GetDecoderType() const {
   return VideoDecoderType::kDecrypting;
 }

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/history/history_api.h"
 #include "chrome/browser/profiles/profile.h"
 #include "db/vivaldi_history_database.h"

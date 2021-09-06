@@ -371,7 +371,7 @@ bool GoogleUpdateSettings::GetLanguage(std::wstring* language) {
   // Also written by the Vivaldi installer.
   if (vivaldi::IsVivaldiRunning()) {
     RegKey vivaldi_key;
-    base::string16 lang;
+    std::wstring lang;
     if (vivaldi_key.Open(HKEY_CURRENT_USER,
         vivaldi::constants::kVivaldiKey,
         KEY_QUERY_VALUE) == ERROR_SUCCESS &&

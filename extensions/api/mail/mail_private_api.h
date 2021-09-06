@@ -4,16 +4,31 @@
 #define EXTENSIONS_API_MAIL_MAIL_PRIVATE_API_H_
 
 #include "base/files/file_path.h"
+#include "components/db/mail_client/mail_client_service.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/mail_private.h"
 
+using mail_client::MailClientService;
+
 namespace extensions {
 
+class MailPrivateAsyncFunction : public ExtensionFunction {
+ public:
+  MailPrivateAsyncFunction() = default;
+
+ protected:
+  MailClientService* GetMailClientService();
+  Profile* GetProfile() const;
+  ~MailPrivateAsyncFunction() override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateAsyncFunction);
+};
+
 class MailPrivateGetFilePathsFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.getFilePaths",
-                             MAIL_GET_FILE_PATHS)
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.getFilePaths", MAIL_GET_FILE_PATHS)
  public:
   MailPrivateGetFilePathsFunction() = default;
 
@@ -26,6 +41,23 @@ class MailPrivateGetFilePathsFunction : public ExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MailPrivateGetFilePathsFunction);
+};
+
+class MailPrivateGetMailFilePathsFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.getMailFilePaths",
+                             MAIL_GET_MAIL_FILE_PATHS)
+ public:
+  MailPrivateGetMailFilePathsFunction() = default;
+
+ protected:
+  ~MailPrivateGetMailFilePathsFunction() override = default;
+  void OnFinished(const std::vector<base::FilePath::StringType>& string_paths);
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateGetMailFilePathsFunction);
 };
 
 class MailPrivateWriteBufferToMessageFileFunction : public ExtensionFunction {
@@ -165,6 +197,110 @@ class MailPrivateCreateFileDirectoryFunction : public ExtensionFunction {
  private:
   DISALLOW_COPY_AND_ASSIGN(MailPrivateCreateFileDirectoryFunction);
 };
+
+class MailPrivateCreateMessagesFunction : public MailPrivateAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.createMessages", MAIL_CREATE_MESSAGES)
+  MailPrivateCreateMessagesFunction() = default;
+
+ protected:
+  ~MailPrivateCreateMessagesFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the create message function to provide results.
+  void CreateMessagesComplete(std::shared_ptr<bool> result);
+
+ private:
+  // The task tracker for the MailClientService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateCreateMessagesFunction);
+};
+
+class MailPrivateDeleteMessagesFunction : public MailPrivateAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.deleteMessages", MAIL_DELETE_MESSAGES)
+  MailPrivateDeleteMessagesFunction() = default;
+
+ protected:
+  ~MailPrivateDeleteMessagesFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the DeleteMessages function to provide results.
+  void DeleteMessagesComplete(std::shared_ptr<bool> result);
+
+ private:
+  // The task tracker for the MailClientService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateDeleteMessagesFunction);
+};
+
+class MailPrivateAddMessageBodyFunction : public MailPrivateAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.addMessageBody",
+                             MAIL_ADD_MESSAGE_BODY)
+  MailPrivateAddMessageBodyFunction() = default;
+
+ protected:
+  ~MailPrivateAddMessageBodyFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the AddMessageBody function to provide results.
+  void AddMessageBodyComplete(
+      std::shared_ptr<mail_client::MessageResult> result);
+
+ private:
+  // The task tracker for the MailClientService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateAddMessageBodyFunction);
+};
+
+class MailPrivateSearchMessagesFunction : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.searchMessages", MAIL_SEARCH_MESSAGES)
+ public:
+  MailPrivateSearchMessagesFunction() = default;
+
+ protected:
+  ~MailPrivateSearchMessagesFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the MessageSearch function to provide results.
+  void MessagesSearchComplete(
+      std::shared_ptr<mail_client::SearchListIdRows> results);
+
+ private:
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateSearchMessagesFunction);
+};
+
+class MailPrivateMatchMessageFunction : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.matchMessage", MAIL_MATCH_MESSAGE)
+ public:
+  MailPrivateMatchMessageFunction() = default;
+
+ protected:
+  ~MailPrivateMatchMessageFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the MatchMessage function to provide results.
+  void MatchMessageComplete(std::shared_ptr<bool> results);
+
+ private:
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateMatchMessageFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_MAIL_MAIL_PRIVATE_API_H_

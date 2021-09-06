@@ -18,23 +18,23 @@ class VivaldiDialogDelegate {
  public:
   virtual ~VivaldiDialogDelegate() = default;
 
-  virtual base::string16 GetWindowTitle() = 0;
-  virtual base::string16 GetBodyText() = 0;
-  virtual base::string16 GetCheckboxText() = 0;
+  virtual std::u16string GetWindowTitle() = 0;
+  virtual std::u16string GetBodyText() = 0;
+  virtual std::u16string GetCheckboxText() = 0;
 };
 
 class VivaldiDialogQuitDelegate : public VivaldiDialogDelegate {
  public:
-  base::string16 GetWindowTitle() override;
-  base::string16 GetBodyText() override;
-  base::string16 GetCheckboxText() override;
+  std::u16string GetWindowTitle() override;
+  std::u16string GetBodyText() override;
+  std::u16string GetCheckboxText() override;
 };
 
 class VivaldiDialogCloseWindowDelegate : public VivaldiDialogDelegate {
  public:
-  base::string16 GetWindowTitle() override;
-  base::string16 GetBodyText() override;
-  base::string16 GetCheckboxText() override;
+  std::u16string GetWindowTitle() override;
+  std::u16string GetBodyText() override;
+  std::u16string GetCheckboxText() override;
 };
 
 // Dialog class for prompting users to quit
@@ -56,7 +56,7 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
 
   // views::WidgetDelegate:
   ui::ModalType GetModalType() const override;
-  base::string16 GetWindowTitle() const override;
+  std::u16string GetWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
 
   // views::View:

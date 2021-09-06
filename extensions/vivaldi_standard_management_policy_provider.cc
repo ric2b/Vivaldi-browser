@@ -5,7 +5,6 @@
 #include "extensions/vivaldi_standard_management_policy_provider.h"
 
 #include "app/vivaldi_apptools.h"
-#include "base/strings/string16.h"
 
 
 namespace extensions {
@@ -19,19 +18,19 @@ VivaldiStandardManagementPolicyProvider::
 
 bool VivaldiStandardManagementPolicyProvider::UserMayLoad(
     const Extension* extension,
-    base::string16* error) const {
+    std::u16string* error) const {
   return StandardManagementPolicyProvider::UserMayLoad(extension, error);
 }
 
 bool VivaldiStandardManagementPolicyProvider::UserMayInstall(
     const Extension* extension,
-    base::string16* error) const {
+    std::u16string* error) const {
   return StandardManagementPolicyProvider::UserMayInstall(extension, error);
 }
 
 bool VivaldiStandardManagementPolicyProvider::UserMayModifySettings(
     const Extension* extension,
-    base::string16* error) const {
+    std::u16string* error) const {
   if (vivaldi::IsVivaldiApp(extension->id())) {
     return false;
   }
@@ -42,7 +41,7 @@ bool VivaldiStandardManagementPolicyProvider::UserMayModifySettings(
 bool VivaldiStandardManagementPolicyProvider::ExtensionMayModifySettings(
     const Extension* source_extension,
     const Extension* extension,
-    base::string16* error) const {
+    std::u16string* error) const {
   if (vivaldi::IsVivaldiApp(extension->id())) {
     return false;
   }
@@ -52,7 +51,7 @@ bool VivaldiStandardManagementPolicyProvider::ExtensionMayModifySettings(
 
 bool VivaldiStandardManagementPolicyProvider::MustRemainEnabled(
     const Extension* extension,
-    base::string16* error) const {
+    std::u16string* error) const {
   if (vivaldi::IsVivaldiApp(extension->id())) {
     return true;
   }
@@ -62,14 +61,14 @@ bool VivaldiStandardManagementPolicyProvider::MustRemainEnabled(
 bool VivaldiStandardManagementPolicyProvider::MustRemainDisabled(
     const Extension* extension,
     disable_reason::DisableReason* reason,
-    base::string16* error) const {
+    std::u16string* error) const {
   return StandardManagementPolicyProvider::MustRemainDisabled(extension, reason,
                                                               error);
 }
 
 bool VivaldiStandardManagementPolicyProvider::MustRemainInstalled(
     const Extension* extension,
-    base::string16* error) const {
+    std::u16string* error) const {
   if (vivaldi::IsVivaldiApp(extension->id())) {
     return true;
   }
@@ -79,7 +78,7 @@ bool VivaldiStandardManagementPolicyProvider::MustRemainInstalled(
 
 bool VivaldiStandardManagementPolicyProvider::ShouldForceUninstall(
     const Extension* extension,
-    base::string16* error) const {
+    std::u16string* error) const {
   return StandardManagementPolicyProvider::ShouldForceUninstall(extension,
                                                                 error);
 }

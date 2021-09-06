@@ -53,7 +53,7 @@ bool SpeechMenuController::IsCommandIdEnabled(int command_id, bool* enabled) {
   };
 }
 
-void SpeechMenuController::SpeakText(const base::string16& text) {
+void SpeechMenuController::SpeakText(const std::u16string& text) {
   ui::TextServicesContextMenu::SpeakText(text);
 }
 

@@ -42,7 +42,8 @@ GenerateFeatureToEnabledPrefNameMap() {
       {mojom::Feature::kPhoneHubNotifications,
        kPhoneHubNotificationsEnabledPrefName},
       {mojom::Feature::kPhoneHubTaskContinuation,
-       kPhoneHubTaskContinuationEnabledPrefName}};
+       kPhoneHubTaskContinuationEnabledPrefName},
+      {mojom::Feature::kEche, kEcheEnabledPrefName}};
 }
 
 base::flat_map<mojom::Feature, std::string>
@@ -56,7 +57,8 @@ GenerateFeatureToAllowedPrefNameMap() {
        kPhoneHubNotificationsAllowedPrefName},
       {mojom::Feature::kPhoneHubTaskContinuation,
        kPhoneHubTaskContinuationAllowedPrefName},
-      {mojom::Feature::kWifiSync, kWifiSyncAllowedPrefName}};
+      {mojom::Feature::kWifiSync, kWifiSyncAllowedPrefName},
+      {mojom::Feature::kEche, kEcheAllowedPrefName}};
 }
 
 // Each feature's default value is kUnavailableNoVerifiedHost until proven
@@ -80,6 +82,7 @@ GenerateInitialDefaultCachedStateMap() {
        mojom::FeatureState::kUnavailableNoVerifiedHost},
       {mojom::Feature::kWifiSync,
        mojom::FeatureState::kUnavailableNoVerifiedHost},
+      {mojom::Feature::kEche, mojom::FeatureState::kUnavailableNoVerifiedHost},
   };
 }
 
@@ -245,6 +248,13 @@ void LogFeatureStates(
     base::UmaHistogramEnumeration(
         "WifiSync.MultiDeviceFeatureState",
         new_states.find(mojom::Feature::kWifiSync)->second);
+  }
+
+  if (HasFeatureStateChanged(previous_states, new_states,
+                             mojom::Feature::kEche)) {
+    base::UmaHistogramEnumeration(
+        "Eche.MultiDeviceFeatureState",
+        new_states.find(mojom::Feature::kEche)->second);
   }
 }
 
@@ -461,7 +471,16 @@ bool FeatureStateManagerImpl::IsSupportedByChromebook(mojom::Feature feature) {
           {mojom::Feature::kPhoneHubTaskContinuation,
            multidevice::SoftwareFeature::kPhoneHubClient},
           {mojom::Feature::kWifiSync,
-           multidevice::SoftwareFeature::kWifiSyncClient}};
+           multidevice::SoftwareFeature::kWifiSyncClient},
+          {mojom::Feature::kEche, multidevice::SoftwareFeature::kEcheClient}};
+
+  base::Optional<multidevice::RemoteDeviceRef> local_device =
+      device_sync_client_->GetLocalDeviceMetadata();
+  if (!local_device) {
+    PA_LOG(ERROR) << "FeatureStateManagerImpl::" << __func__
+                  << ": Local device unexpectedly null.";
+    return false;
+  }
 
   for (const auto& pair : kFeatureAndClientSoftwareFeaturePairs) {
     if (pair.first != feature)
@@ -472,8 +491,7 @@ bool FeatureStateManagerImpl::IsSupportedByChromebook(mojom::Feature feature) {
       return false;
     }
 
-    return device_sync_client_->GetLocalDeviceMetadata()
-               ->GetSoftwareFeatureState(pair.second) !=
+    return local_device->GetSoftwareFeatureState(pair.second) !=
            multidevice::SoftwareFeatureState::kNotSupported;
   }
 
@@ -516,7 +534,8 @@ bool FeatureStateManagerImpl::HasBeenActivatedByPhone(
           {mojom::Feature::kPhoneHubTaskContinuation,
            multidevice::SoftwareFeature::kPhoneHubHost},
           {mojom::Feature::kWifiSync,
-           multidevice::SoftwareFeature::kWifiSyncHost}};
+           multidevice::SoftwareFeature::kWifiSyncHost},
+          {mojom::Feature::kEche, multidevice::SoftwareFeature::kEcheHost}};
 
   for (const auto& pair : kFeatureAndHostSoftwareFeaturePairs) {
     if (pair.first != feature)

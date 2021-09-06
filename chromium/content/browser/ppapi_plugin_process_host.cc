@@ -128,6 +128,7 @@ class PpapiPluginSandboxedProcessLauncherDelegate
 
 #if defined(OS_MAC)
   bool DisclaimResponsibility() override { return true; }
+  bool EnableCpuSecurityMitigations() override { return true; }
 #endif
 
  private:
@@ -233,7 +234,7 @@ void PpapiPluginProcessHost::DidDeleteOutOfProcessInstance(
 
 // static
 void PpapiPluginProcessHost::FindByName(
-    const base::string16& name,
+    const std::u16string& name,
     std::vector<PpapiPluginProcessHost*>* hosts) {
   for (PpapiPluginProcessHostIterator iter; !iter.Done(); ++iter) {
     if (iter->process_.get() && iter->process_->GetData().name == name)
@@ -280,8 +281,6 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
       this, permissions_, info.name, info.path, profile_data_directory,
       false /* in_process */, false /* external_plugin */);
 
-  filter_ = new PepperMessageFilter();
-  process_->AddFilter(filter_.get());
   process_->GetHost()->AddFilter(host_impl_->message_filter().get());
 
   GetContentClient()->browser()->DidCreatePpapiPlugin(host_impl_.get());

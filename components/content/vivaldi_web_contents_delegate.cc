@@ -14,7 +14,7 @@ void WebContentsDelegate::SetDownloadInformation(
 DownloadInformation::DownloadInformation(
     int64_t size,
     const std::string& mimetype,
-    const base::string16& suggested_filename)
+    const std::u16string& suggested_filename)
     : size(size), mime_type(mimetype), suggested_filename(suggested_filename) {}
 
 DownloadInformation::DownloadInformation(const DownloadInformation& old)

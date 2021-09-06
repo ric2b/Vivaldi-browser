@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
 
+#include <memory>
+
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -27,6 +29,7 @@
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/page_navigator.h"
 #include "ui/base/accelerators/menu_label_accelerator_util.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
@@ -173,24 +176,18 @@ void BookmarkMenuDelegate::SetActiveMenu(const BookmarkNode* node,
   menu_ = node_to_menu_map_[node];
 }
 
-// Added by vivaldi
-void BookmarkMenuDelegate::VivaldiSelectionChanged(views::MenuItemView* menu) {
-  const BookmarkNode* node = menu_id_to_node_map_[menu->GetCommand()];
-  vivaldi::HandleHoverUrl(browser_, node ? node->url().spec() : std::string());
-}
-
-base::string16 BookmarkMenuDelegate::GetTooltipText(
+std::u16string BookmarkMenuDelegate::GetTooltipText(
     int id,
     const gfx::Point& screen_loc) const {
   if (vivaldi::IsVivaldiRunning() && vivaldi::IsVivaldiMenuItem(id)) {
-    return base::string16();
+    return std::u16string();
   }
 
   auto i = menu_id_to_node_map_.find(id);
   // When removing bookmarks it may be possible to end up here without a node.
   if (i == menu_id_to_node_map_.end()) {
     DCHECK(is_mutating_model_);
-    return base::string16();
+    return std::u16string();
   }
 
   const BookmarkNode* node = i->second;
@@ -200,7 +197,7 @@ base::string16 BookmarkMenuDelegate::GetTooltipText(
         tooltip_manager->GetMaxWidth(screen_loc),
         tooltip_manager->GetFontList(), node->url(), node->GetTitle());
   }
-  return base::string16();
+  return std::u16string();
 }
 
 bool BookmarkMenuDelegate::IsTriggerableEvent(views::MenuItemView* menu,
@@ -231,9 +228,8 @@ void BookmarkMenuDelegate::ExecuteCommand(int id, int mouse_event_flags) {
 bool BookmarkMenuDelegate::ShouldExecuteCommandWithoutClosingMenu(
     int id,
     const ui::Event& event) {
-  if ((event.flags() & ui::EF_LEFT_MOUSE_BUTTON) &&
-      ui::DispositionFromEventFlags(event.flags()) ==
-          WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+  if (ui::DispositionFromEventFlags(event.flags()) ==
+      WindowOpenDisposition::NEW_BACKGROUND_TAB) {
     DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
     const BookmarkNode* node = menu_id_to_node_map_[id];
     // Close the menu before opening a folder since this may pop up a dialog
@@ -385,10 +381,10 @@ bool BookmarkMenuDelegate::ShowContextMenu(MenuItemView* source,
   DCHECK(menu_id_to_node_map_.find(id) != menu_id_to_node_map_.end());
   const BookmarkNode* node = menu_id_to_node_map_[id];
   std::vector<const BookmarkNode*> nodes(1, node);
-  context_menu_.reset(
-      new BookmarkContextMenu(parent_, browser_, profile_, get_navigator_,
-                              BOOKMARK_LAUNCH_LOCATION_APP_MENU, node->parent(),
-                              nodes, ShouldCloseOnRemove(node)));
+  context_menu_ = std::make_unique<BookmarkContextMenu>(
+      parent_, browser_, profile_, get_navigator_,
+      BOOKMARK_LAUNCH_LOCATION_APP_MENU, node->parent(), nodes,
+      ShouldCloseOnRemove(node));
   context_menu_->set_observer(this);
   context_menu_->RunMenuAt(p, source_type);
   return true;
@@ -681,14 +677,21 @@ void BookmarkMenuDelegate::AddMenuToMaps(MenuItemView* menu,
   node_to_menu_map_[node] = menu;
 }
 
-base::string16 BookmarkMenuDelegate::MaybeEscapeLabel(
-    const base::string16& label) {
+std::u16string BookmarkMenuDelegate::MaybeEscapeLabel(
+    const std::u16string& label) {
   if (vivaldi::IsVivaldiRunning() && !menu_uses_mnemonics_) {
     // Special test to prevent underlining a space.
-    base::char16 c = ui::GetMnemonic(label);
+    char16_t c = ui::GetMnemonic(label);
     if (c == ' ') {
       return ui::EscapeMenuLabelAmpersands(label);
     }
   }
+
   return menu_uses_mnemonics_ ? ui::EscapeMenuLabelAmpersands(label) : label;
+}
+
+// Added by vivaldi
+void BookmarkMenuDelegate::VivaldiSelectionChanged(views::MenuItemView* menu) {
+  const BookmarkNode* node = menu_id_to_node_map_[menu->GetCommand()];
+  vivaldi::HandleHoverUrl(browser_, node ? node->url().spec() : std::string());
 }

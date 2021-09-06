@@ -1,3 +1,5 @@
+// Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved.
+//
 // Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -29,6 +31,8 @@
 #include "third_party/icu/source/common/unicode/uloc.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "browser/translate/vivaldi_translate_client.h"
+
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
@@ -44,6 +48,17 @@ PrefService* GetPrefService() {
 
 }  // namespace
 
+#if defined(VIVALDI_BUILD)
+static VivaldiTranslateClient* GetTranslateClient(
+    const base::android::JavaParamRef<jobject>& j_web_contents) {
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(j_web_contents);
+  VivaldiTranslateClient* client =
+      VivaldiTranslateClient::FromWebContents(web_contents);
+  DCHECK(client);
+  return client;
+}
+#else
 static ChromeTranslateClient* GetTranslateClient(
     const base::android::JavaParamRef<jobject>& j_web_contents) {
   content::WebContents* web_contents =
@@ -53,14 +68,20 @@ static ChromeTranslateClient* GetTranslateClient(
   DCHECK(client);
   return client;
 }
+#endif
 
 static void JNI_TranslateBridge_ManualTranslateWhenReady(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& j_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
+#if defined(VIVALDI_BUILD)
+  VivaldiTranslateClient* client =
+      VivaldiTranslateClient::FromWebContents(web_contents);
+#else
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
+#endif
   DCHECK(client);
   client->ManualTranslateWhenReady();
 }
@@ -71,8 +92,13 @@ static void JNI_TranslateBridge_TranslateToLanguage(
     const base::android::JavaParamRef<jstring>& j_target_language_code) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
+#if defined(VIVALDI_BUILD)
+  VivaldiTranslateClient* client =
+      VivaldiTranslateClient::FromWebContents(web_contents);
+#else
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
+#endif
   DCHECK(client);
   const std::string target_language_code(
       ConvertJavaStringToUTF8(env, j_target_language_code));
@@ -108,7 +134,11 @@ static jboolean JNI_TranslateBridge_CanManuallyTranslate(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& j_web_contents,
     jboolean menuLogging) {
+#if defined(VIVALDI_BUILD)
+  VivaldiTranslateClient* client = GetTranslateClient(j_web_contents);
+#else
   ChromeTranslateClient* client = GetTranslateClient(j_web_contents);
+#endif
   translate::TranslateManager* manager = client->GetTranslateManager();
   DCHECK(manager);
   return manager->CanManuallyTranslate(menuLogging);
@@ -117,7 +147,11 @@ static jboolean JNI_TranslateBridge_CanManuallyTranslate(
 static jboolean JNI_TranslateBridge_ShouldShowManualTranslateIPH(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& j_web_contents) {
+#if defined(VIVALDI_BUILD)
+  VivaldiTranslateClient* client = GetTranslateClient(j_web_contents);
+#else
   ChromeTranslateClient* client = GetTranslateClient(j_web_contents);
+#endif
   translate::TranslateManager* manager = client->GetTranslateManager();
   DCHECK(manager);
 
@@ -142,8 +176,13 @@ static void JNI_TranslateBridge_SetPredefinedTargetLanguage(
   const std::string translate_language(
       ConvertJavaStringToUTF8(env, j_translate_language));
 
+#if defined(VIVALDI_BUILD)
+  VivaldiTranslateClient* client =
+      VivaldiTranslateClient::FromWebContents(web_contents);
+#else
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
+#endif
   DCHECK(client);
   client->SetPredefinedTargetLanguage(translate_language);
 }
@@ -154,8 +193,13 @@ JNI_TranslateBridge_GetOriginalLanguage(
     const base::android::JavaParamRef<jobject>& j_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
+#if defined(VIVALDI_BUILD)
+  VivaldiTranslateClient* client =
+      VivaldiTranslateClient::FromWebContents(web_contents);
+#else
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
+#endif
   DCHECK(client);
   const std::string& original_language_code =
       client->GetLanguageState().original_language();
@@ -171,8 +215,13 @@ JNI_TranslateBridge_GetCurrentLanguage(
     const base::android::JavaParamRef<jobject>& j_web_contents) {
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(j_web_contents);
+#if defined(VIVALDI_BUILD)
+  VivaldiTranslateClient* client =
+      VivaldiTranslateClient::FromWebContents(web_contents);
+#else
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
+#endif
   DCHECK(client);
   const std::string& current_language_code =
       client->GetLanguageState().current_language();
@@ -203,8 +252,13 @@ JNI_TranslateBridge_GetTargetLanguage(JNIEnv* env) {
 static void JNI_TranslateBridge_SetDefaultTargetLanguage(
     JNIEnv* env,
     const JavaParamRef<jstring>& j_target_language) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
   std::string target_language(ConvertJavaStringToUTF8(env, j_target_language));
   translate_prefs->SetRecentTargetLanguage(target_language);
 }
@@ -214,8 +268,13 @@ static jboolean JNI_TranslateBridge_IsBlockedLanguage(
     JNIEnv* env,
     const base::android::JavaParamRef<jstring>& j_language_string) {
   std::string language_code(ConvertJavaStringToUTF8(env, j_language_string));
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
   DCHECK(translate_prefs);
   return translate_prefs->IsBlockedLanguage(language_code);
 }
@@ -245,13 +304,46 @@ static void JNI_TranslateBridge_GetModelLanguages(
 static void JNI_TranslateBridge_GetAlwaysTranslateLanguages(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& list) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
 
   Java_TranslateBridge_copyStringArrayToList(
       env, list,
       ToJavaArrayOfStrings(env,
                            translate_prefs->GetAlwaysTranslateLanguages()));
+}
+
+// Gets all languages for which translation should not be prompted.
+static void JNI_TranslateBridge_GetNeverTranslateLanguages(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& list) {
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+
+  Java_TranslateBridge_copyStringArrayToList(
+      env, list,
+      ToJavaArrayOfStrings(env, translate_prefs->GetNeverTranslateLanguages()));
+}
+
+// Sets the always translate state for a language.
+// The always translate language list is actually a dict mapping
+// source_language -> target_language.  We use the current target language when
+// adding |language| to the dict.
+static void JNI_TranslateBridge_SetLanguageAlwaysTranslateState(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& language,
+    jboolean alwaysTranslate) {
+  std::string language_code(ConvertJavaStringToUTF8(env, language));
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+
+  translate_prefs->SetLanguageAlwaysTranslateState(language_code,
+                                                   alwaysTranslate);
 }
 
 // static
@@ -337,43 +429,45 @@ static void JNI_TranslateBridge_ResetAcceptLanguages(
 
   TranslateBridge::PrependToAcceptLanguagesIfNecessary(locale_string,
                                                        &accept_languages);
-  GetPrefService()->SetString(language::prefs::kAcceptLanguages,
+  GetPrefService()->SetString(language::prefs::kSelectedLanguages,
                               accept_languages);
 }
 
 static void JNI_TranslateBridge_GetChromeAcceptLanguages(
     JNIEnv* env,
     const JavaParamRef<jobject>& list) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
 
   std::vector<translate::TranslateLanguageInfo> languages;
   std::string app_locale = g_browser_process->GetApplicationLocale();
   translate_prefs->GetLanguageInfoList(
       app_locale, translate_prefs->IsTranslateAllowedByPolicy(), &languages);
 
-  language::ToTranslateLanguageSynonym(&app_locale);
   for (const auto& info : languages) {
-    // If the language comes from the same language family as the app locale,
-    // translate for this language won't be supported on this device.
-    std::string lang_code = info.code;
-    language::ToTranslateLanguageSynonym(&lang_code);
-    bool supports_translate =
-        info.supports_translate && lang_code != app_locale;
-
     Java_TranslateBridge_addNewLanguageItemToList(
         env, list, ConvertUTF8ToJavaString(env, info.code),
         ConvertUTF8ToJavaString(env, info.display_name),
         ConvertUTF8ToJavaString(env, info.native_display_name),
-        supports_translate);
+        info.supports_translate);
   }
 }
 
 static void JNI_TranslateBridge_GetUserAcceptLanguages(
     JNIEnv* env,
     const JavaParamRef<jobject>& list) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
 
   std::vector<std::string> languages;
   translate_prefs->GetLanguageList(&languages);
@@ -384,8 +478,13 @@ static void JNI_TranslateBridge_GetUserAcceptLanguages(
 static void JNI_TranslateBridge_SetLanguageOrder(
     JNIEnv* env,
     const JavaParamRef<jobjectArray>& j_order) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
   std::vector<std::string> order;
   const int num_langs = (*env).GetArrayLength(j_order);
   for (int i = 0; i < num_langs; i++) {
@@ -399,8 +498,13 @@ static void JNI_TranslateBridge_UpdateUserAcceptLanguages(
     JNIEnv* env,
     const JavaParamRef<jstring>& language,
     jboolean is_add) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
   std::string language_code(ConvertJavaStringToUTF8(env, language));
 
   if (is_add) {
@@ -414,8 +518,13 @@ static void JNI_TranslateBridge_MoveAcceptLanguage(
     JNIEnv* env,
     const JavaParamRef<jstring>& language,
     jint offset) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
 
   std::vector<std::string> languages;
   translate_prefs->GetLanguageList(&languages);
@@ -439,8 +548,13 @@ static void JNI_TranslateBridge_SetLanguageBlockedState(
     JNIEnv* env,
     const JavaParamRef<jstring>& language,
     jboolean blocked) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
   std::string language_code(ConvertJavaStringToUTF8(env, language));
 
   if (blocked) {
@@ -452,16 +566,26 @@ static void JNI_TranslateBridge_SetLanguageBlockedState(
 
 static jboolean JNI_TranslateBridge_GetExplicitLanguageAskPromptShown(
     JNIEnv* env) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
   return translate_prefs->GetExplicitLanguageAskPromptShown();
 }
 
 static void JNI_TranslateBridge_SetExplicitLanguageAskPromptShown(
     JNIEnv* env,
     jboolean shown) {
+#if defined(VIVALDI_BUILD)
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      VivaldiTranslateClient::CreateTranslatePrefs(GetPrefService());
+#else
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService());
+#endif
   translate_prefs->SetExplicitLanguageAskPromptShown(shown);
 }
 

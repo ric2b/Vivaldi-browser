@@ -10,8 +10,6 @@
 #include "third_party/libjingle_xmpp/xmpp/constants.h"
 #include "third_party/libjingle_xmpp/xmpp/jid.h"
 
-#include "sync/vivaldi_sync_urls.h"
-
 namespace notifier {
 
 jingle_xmpp::XmppClientSettings MakeXmppClientSettings(
@@ -50,17 +48,19 @@ ServerList GetServerList(
         ServerInformation(notifier_options.xmpp_host_port,
                           DOES_NOT_SUPPORT_SSLTCP));
   } else {
+    /* Vivaldi: Code disabled to ensure we don't accidentally talk to Google
     // The default servers support SSLTCP.
     servers.push_back(
         ServerInformation(
-            net::HostPortPair(SYNC_NOTIFIER_SERVER1,
+            net::HostPortPair("talk.google.com",
                               notifier::kDefaultXmppPort),
-            SYNC_SECURE_NOTIFIER_SERVER));
+            SUPPORTS_SSLTCP));
     servers.push_back(
         ServerInformation(
-            net::HostPortPair(SYNC_NOTIFIER_SERVER2,
+            net::HostPortPair("talkx.l.google.com",
                               notifier::kDefaultXmppPort),
-            SYNC_SECURE_NOTIFIER_SERVER));
+            SUPPORTS_SSLTCP));
+    */
   }
   return servers;
 }

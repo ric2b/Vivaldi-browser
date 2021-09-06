@@ -26,7 +26,7 @@ import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -105,7 +105,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
         // Note(david@vivaldi.com): In Vivaldi we don't move the toolbar while swiping. It does
         // simply look better and is also in line with the bottom toolbar swiping behaviour.
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         mToolbarSwipeLayout.setMovesToolbar(true);
 
         // Initialize Layouts

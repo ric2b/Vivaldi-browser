@@ -39,7 +39,7 @@ import org.chromium.components.signin.metrics.SigninAccessPoint;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Class that manages all the logic and UI behind the signin promo header in the bookmark
@@ -228,8 +228,7 @@ class BookmarkPromoHeader implements ProfileSyncService.SyncStateChangedListener
                 return PromoState.PROMO_NONE;
             }
             CoreAccountInfo primaryAccount =
-                    mSignInManager.getIdentityManager().getPrimaryAccountInfo(
-                            ConsentLevel.NOT_REQUIRED);
+                    mSignInManager.getIdentityManager().getPrimaryAccountInfo(ConsentLevel.SIGNIN);
             return primaryAccount == null ? PromoState.PROMO_SIGNIN_PERSONALIZED
                                           : PromoState.PROMO_SYNC_PERSONALIZED;
         }
@@ -273,12 +272,12 @@ class BookmarkPromoHeader implements ProfileSyncService.SyncStateChangedListener
     // AccountsChangeObserver implementation.
     @Override
     public void onAccountsChanged() {
-        if (ChromeApplication.isVivaldi()) return;
+        if (ChromeApplicationImpl.isVivaldi()) return;
         triggerPromoUpdate();
     }
 
     private void triggerPromoUpdate() {
-        if (ChromeApplication.isVivaldi()) return;
+        if (ChromeApplicationImpl.isVivaldi()) return;
         detachPersonalizePromoView();
         mPromoHeaderChangeAction.run();
     }

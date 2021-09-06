@@ -30,7 +30,7 @@ import org.chromium.url.GURL;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Provides the communication channel for Android to fetch and manipulate the
@@ -296,7 +296,7 @@ public class BookmarkBridge {
                              String nickName, String description,
                              long created, String thumbnailPath, String guid) {
             this(id, title, url, isFolder, parentId, isEditable, isManaged, dateAdded, read);
-            assert ChromeApplication.isVivaldi();
+            assert ChromeApplicationImpl.isVivaldi();
             mIsSpeedDial = isSpeedDial;
             mNickName = nickName;
             mDescription = description;

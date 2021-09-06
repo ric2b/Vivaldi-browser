@@ -91,7 +91,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
 
 /**
@@ -984,7 +984,7 @@ class TabListMediator {
     private void onTabAdded(Tab tab, boolean onlyShowRelatedTabs) {
         // TODO (david@vivaldi.com): This is a bit of a hack and we should implement our own
         // TabListMediator.
-        if(ChromeApplication.isVivaldi())
+        if(ChromeApplicationImpl.isVivaldi())
         if ((mCurrentTabViewInstance
                     != (tab.isIncognito() ? TabSwitcherView.PAGE.PRIVATE
                                           : TabSwitcherView.PAGE.NORMAL))
@@ -1231,6 +1231,10 @@ class TabListMediator {
                         || MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext)
                 ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT
                 : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LANDSCAPE;
+
+        // Vivaldi
+        spanCount = calculateGridSpanCount(orientation);
+
         manager.setSpanCount(spanCount);
         manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override
@@ -1812,5 +1816,19 @@ class TabListMediator {
                 navigateToLastSearchQuery(originalTab);
             };
         }
+    }
+
+    /** Vivaldi: Calculates the tab switcher grid layout span depending on device size */
+    public int calculateGridSpanCount(int orientation) {
+        int spanCount = orientation == Configuration.ORIENTATION_PORTRAIT
+                ? TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_PORTRAIT
+                : TabListCoordinator.GRID_LAYOUT_SPAN_COUNT_LANDSCAPE;
+        if (MultiWindowUtils.getInstance().isInMultiWindowMode((Activity) mContext))
+            return spanCount;
+        // Add a column with large screens.
+        int screenSize = mContext.getResources().getConfiguration().screenLayout
+                & Configuration.SCREENLAYOUT_SIZE_MASK;
+        if (screenSize >= Configuration.SCREENLAYOUT_SIZE_LARGE) spanCount += 1;
+        return spanCount;
     }
 }

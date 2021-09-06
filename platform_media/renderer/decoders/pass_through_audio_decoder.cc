@@ -34,10 +34,6 @@ void PassThroughAudioDecoder::Reset(base::OnceClosure closure) {
   impl_.Reset(std::move(closure));
 }
 
-std::string PassThroughAudioDecoder::GetDisplayName() const {
-  return "PassThroughAudioDecoder";
-}
-
 AudioDecoderType PassThroughAudioDecoder::GetDecoderType() const {
   return AudioDecoderType::kDecrypting;
 }

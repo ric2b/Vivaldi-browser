@@ -130,6 +130,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://bookmarks/*",
+      "chrome://read-later.top-chrome/*",
       "chrome://welcome/*"
     ]
   }],
@@ -229,7 +230,6 @@
       "chrome://add-supervision/*",
       "chrome://chrome-signin/*",
       "chrome://discards/*",
-      "chrome://hats/*",
       "chrome://mobilesetup/*",
       "chrome://oobe/*",
       "chrome://os-settings/*",
@@ -251,11 +251,6 @@
   },
   "contextMenus": {
     "dependencies": ["permission:contextMenus"],
-    "contexts": ["blessed_extension"]
-  },
-  "contextMenusInternal": {
-    "internal": true,
-    "channel": "stable",
     "contexts": ["blessed_extension"]
   },
   "cookies": {
@@ -350,15 +345,30 @@
     "channel": "stable",
     "contexts": ["blessed_extension", "content_script"]
   },
-  "downloads": {
-    "dependencies": ["permission:downloads"],
-    "contexts": ["blessed_extension"]
-  },
-  "downloadsInternal": {
-    "internal": true,
-    "channel": "stable",
-    "contexts": ["blessed_extension"]
-  },
+  "downloads": [
+    {
+      "dependencies": ["permission:downloads"],
+      "contexts": ["blessed_extension"]
+    },
+    {
+      "channel": "stable",
+      "contexts": ["webui"],
+      "matches": ["chrome://download-shelf.top-chrome/*"]
+    }
+  ],
+  "downloadsInternal": [
+    {
+      "internal": true,
+      "channel": "stable",
+      "contexts": ["blessed_extension"]
+    },
+    {
+      "internal": true,
+      "channel": "stable",
+      "contexts": ["webui"],
+      "matches": ["chrome://download-shelf.top-chrome/*"]
+    }
+  ],
   "echoPrivate": {
     "dependencies": ["permission:echoPrivate"],
     "contexts": ["blessed_extension"]
@@ -752,10 +762,17 @@
     "dependencies": ["permission:safeBrowsingPrivate"],
     "contexts": ["blessed_extension"]
   },
-  "scripting": {
+  "scripting": [{
     "dependencies": ["permission:scripting"],
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "channel": "stable",
+    "contexts": ["blessed_extension"],
+    "extension_types": ["platform_app"],
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C"          // Vivaldi
+    ]
+  }],
   "search": {
     "dependencies": ["permission:search"],
     "contexts": ["blessed_extension"]
@@ -810,12 +827,14 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://bookmarks/*",
+      "chrome://read-later.top-chrome/*",
       "chrome://tab-strip/*"
     ]
   }, {
     "channel": "stable",
     "contexts": ["webui_untrusted"],
     "matches": [
+      "chrome-untrusted://crosh/*",
       "chrome-untrusted://terminal/*"
     ],
     "platforms": ["chromeos"]
@@ -837,6 +856,9 @@
     "max_manifest_version": 2
   },
   "tabs.insertCSS": {
+    "max_manifest_version": 2
+  },
+  "tabs.removeCSS": {
     "max_manifest_version": 2
   },
   "tabs.onActiveChanged": {
@@ -974,6 +996,7 @@
     "channel": "stable",
     "contexts": ["webui_untrusted"],
     "matches": [
+      "chrome-untrusted://crosh/*",
       "chrome-untrusted://terminal/*"
     ],
     "platforms": ["chromeos"]

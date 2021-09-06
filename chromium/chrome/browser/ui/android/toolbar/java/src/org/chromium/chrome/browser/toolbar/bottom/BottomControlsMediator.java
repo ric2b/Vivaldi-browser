@@ -17,7 +17,7 @@ import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 
 // Vivaldi
-import org.chromium.base.BuildConfig;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 
 /**

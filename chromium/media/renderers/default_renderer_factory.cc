@@ -26,6 +26,7 @@
 #include "platform_media/renderer/decoders/mac/viv_video_decoder.h"
 #endif
 #if defined(OS_WIN)
+#include "media/base/win/mf_helpers.h"
 #include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
 #include "platform_media/renderer/decoders/win/wmf_video_decoder.h"
 #endif
@@ -75,9 +76,8 @@ DefaultRendererFactory::CreateAudioDecoders(
     audio_decoders.push_back(
         std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
-    if (!mf_session_) {
-      mf_session_ = InitializeMediaFoundation();
-    }
+//    RETURN_ON_FAILURE(InitializeMediaFoundation(),
+//                      "Could not initialize Media Foundation", {});
     audio_decoders.push_back(
         std::make_unique<WMFAudioDecoder>(media_task_runner));
 #endif
@@ -120,9 +120,8 @@ DefaultRendererFactory::CreateVideoDecoders(
     VivVideoDecoder::Create(media_task_runner, media_log_));
 #endif // OS_MAC
 #if defined(OS_WIN)
-  if (!mf_session_) {
-    mf_session_ = InitializeMediaFoundation();
-  }
+//  RETURN_ON_FAILURE(InitializeMediaFoundation(),
+//                    "Could not initialize Media Foundation", {});
   video_decoders.push_back(
       std::make_unique<WMFVideoDecoder>(media_task_runner));
 #endif // OS_WIN

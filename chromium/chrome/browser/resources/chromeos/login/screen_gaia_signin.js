@@ -54,6 +54,12 @@ const DialogMode = {
   SAML_INTERSTITIAL: 'saml-interstitial',
 };
 
+/**
+ * Steps that could be the first one in the flow.
+ */
+const POSSIBLE_FIRST_SIGNIN_STEPS =
+    [DialogMode.GAIA, DialogMode.GAIA_LOADING, DialogMode.SAML_INTERSTITIAL];
+
 Polymer({
   is: 'gaia-signin-element',
 
@@ -223,7 +229,7 @@ Polymer({
     isShown_: {
       type: Boolean,
       value: false,
-    }
+    },
   },
 
   observers: [
@@ -359,8 +365,8 @@ Polymer({
    */
   isFirstSigninStep(uiStep, canGaiaGoBack, isSaml) {
     return !this.isClosable_() &&
-        (uiStep == DialogMode.GAIA || uiStep == DialogMode.GAIA_LOADING) &&
-        !canGaiaGoBack && !isSaml;
+        POSSIBLE_FIRST_SIGNIN_STEPS.includes(uiStep) && !canGaiaGoBack &&
+        !isSaml;
   },
 
   onIsFirstSigninStepChanged(isFirstSigninStep) {
@@ -514,7 +520,8 @@ Polymer({
 
   /** @private */
   focusActiveFrame_() {
-    this.getActiveFrame_().focus();
+    let activeFrame = this.getActiveFrame_();
+    Polymer.RenderStatus.afterNextRender(this, () => activeFrame.focus());
   },
 
   /** Event handler that is invoked after the screen is shown. */
@@ -1205,6 +1212,14 @@ Polymer({
   },
 
   /**
+   * Whether new OOBE layout is enabled.
+   */
+  newLayoutEnabled_() {
+    return loadTimeData.valueExists('newLayoutEnabled') &&
+        loadTimeData.getBoolean('newLayoutEnabled');
+  },
+
+  /**
    * Called when focus is returned.
    * @param {boolean} reverse Is focus returned in reverse order?
    */
@@ -1213,7 +1228,7 @@ Polymer({
     // returned from the system tray in regular order. Because the webview is
     // the first focusable element of the screen and we want to eliminate extra
     // tab. Reverse tab doesn't need any adjustments here.
-    if (!reverse)
+    if (!this.newLayoutEnabled_() && !reverse)
       this.focusActiveFrame_();
   },
 });

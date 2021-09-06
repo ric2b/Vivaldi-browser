@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Заборонити всім сайтам автоматично завантажувати декілька файлів</translation>
 <translation id="5039804452771397117">Дозволити</translation>
 <translation id="5057110919553308744">Коли ви натискаєте на розширення</translation>
+<translation id="5059526285558225588">Виберіть, чим поділитися</translation>
 <translation id="5063480226653192405">Використання</translation>
 <translation id="5116628073786783676">&amp;Зберегти аудіо як...</translation>
 <translation id="5143374789336132547">Розширення "<ph name="EXTENSION_NAME" />" змінило сторінку, яка відкривається під час натискання кнопки "Домашня сторінка".</translation>
@@ -459,7 +460,6 @@
 <translation id="8823704566850948458">Запропонувати пароль…</translation>
 <translation id="8859174528519900719">Додатковий фрейм: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Відкрити посилання у новому &amp;вікні</translation>
-<translation id="8910146161325739742">Поділіться своїм екраном</translation>
 <translation id="8915370057835397490">Завантаження пропозиції</translation>
 <translation id="8916476537757519021">Додатковий анонімний фрейм: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Пам'ять JavaScript</translation>

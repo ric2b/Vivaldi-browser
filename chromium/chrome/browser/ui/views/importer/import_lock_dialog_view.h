@@ -21,11 +21,11 @@ class ImportLockDialogView : public views::DialogDelegateView {
 
   static void Show(gfx::NativeWindow parent,
                    base::OnceCallback<void(bool)> callback,
-                   base::string16 importer_locktext = base::string16());
+                   std::u16string importer_locktext = std::u16string());
 
  private:
   explicit ImportLockDialogView(base::OnceCallback<void(bool)> callback,
-                                base::string16 importer_locktext);
+                                std::u16string importer_locktext);
   ~ImportLockDialogView() override;
 
  private:

@@ -15,7 +15,7 @@ void ExternalProcessImporterClient::OnImportItemFailed(
 }
 
 void ExternalProcessImporterClient::OnNotesImportStart(
-    const base::string16& first_folder_name,
+    const std::u16string& first_folder_name,
     uint32_t total_notes_count) {
   if (cancelled_)
     return;

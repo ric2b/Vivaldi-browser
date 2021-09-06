@@ -31,6 +31,7 @@
 <translation id="2486841023299517366">Dyr 4</translation>
 <translation id="2612127540243995147">Klar til å installera. Vivaldi vil verta lukka og starta om att.</translation>
 <translation id="2613387515621326337">Syn oppdateringsnettsida</translation>
+<translation id="2647368062414805334">Dessverre er dine Edge-innstillingar ikkje tilgjengelege medan den nettlesaren køyrer. For å importere desse innstillingane til Vivaldi, lagre arbeidet ditt og lukk alle Edge-vindauge. Klikk så fortsett.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
 <translation id="2873951654529031587">Bossbøtta</translation>
@@ -47,7 +48,7 @@
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(ingen tittel)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er den nyaste tilgjengelege versjonen.</translation>
-<translation id="3383198080133834965">Du har den siste utgåva.</translation>
+<translation id="3383198080133834965">Du har den siste utgåva!</translation>
 <translation id="3402602684546832928">Vel Opera-bokmerkefil</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Stadfest lukking</translation>
@@ -62,6 +63,8 @@
 <translation id="3732157130969736834">Lag bokmerke av lenkja</translation>
 <translation id="3732388226447288666">Dyr 2</translation>
 <translation id="3732439195215136813">Dyr 5</translation>
+<translation id="3795800845758778870">Dessverre er dine Brave-innstillingar ikkje tilgjengelege medan den nettlesaren køyrer. For å importere desse innstillingane til Vivaldi, lagre arbeidet ditt og lukk alle Brave-vindauge. Klikk så fortsett.</translation>
+<translation id="3822431842304177896">Nytt skilje</translation>
 <translation id="3832132597516774400">Landskap 5</translation>
 <translation id="3914946330804881301">Importert frå Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
@@ -116,6 +119,8 @@
 <translation id="6551219277044048123">Legg til som &amp;søkjemotor ...</translation>
 <translation id="6630781781151951863">Landskap 8</translation>
 <translation id="6635049669875534328">Utgjevingsmerknader:</translation>
+<translation id="6693585104974197539">Vel profilmappa for Edge for å importera</translation>
+<translation id="6726279523566323394">Vel profilmappa for Brave for å importera</translation>
 <translation id="6804831687363620480">Diverre er ikkje Opera 15+-innstillingane tilgjengelege medan den nettlesaren køyrer. For å importera innstillingane i Vivaldi må du lagra arbeidet ditt og lukka alle Opera 15+-vindauga. Vel Hald fram.</translation>
 <translation id="6892812721183419409">Opna lenkja som <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopier</translation>

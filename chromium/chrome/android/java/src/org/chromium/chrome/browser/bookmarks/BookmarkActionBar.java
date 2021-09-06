@@ -29,7 +29,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import java.util.HashSet;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 
@@ -72,7 +72,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         // SelectionDelegate is retrieved from the BookmarkDelegate.
         getMenu().setGroupEnabled(R.id.selection_mode_menu_group, false);
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             getMenu().findItem(R.id.sort_bookmarks_id).setVisible(
                     true);
         }
@@ -97,7 +97,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                     mCurrentFolder.getId());
             return true;
         } else if (menuItem.getItemId() == R.id.close_menu_id) {
-            if (ChromeApplication.isVivaldi()) {
+            if (ChromeApplicationImpl.isVivaldi()) {
                 VivaldiBookmarkUtils.finishActivity(getContext());
                 return true;
             }
@@ -151,7 +151,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         } else if (menuItem.getItemId() == R.id.select_all_menu_id) {
             toggleSelectAll();
             return true;
-        } else if (ChromeApplication.isVivaldi()) {
+        } else if (ChromeApplicationImpl.isVivaldi()) {
             if (menuItem.getItemId() == R.id.sort_bookmarks_id) {
                 BookmarkItemsAdapter.SortOrder order = mDelegate.getSortOrder();
                 if (order == BookmarkItemsAdapter.SortOrder.MANUAL) {
@@ -236,7 +236,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
     public void onBookmarkDelegateInitialized(BookmarkDelegate delegate) {
         mDelegate = delegate;
         mDelegate.addUIObserver(this);
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         if (!delegate.isDialogUi()) getMenu().removeItem(R.id.close_menu_id);
         getMenu().setGroupEnabled(R.id.selection_mode_menu_group, true);
         /** Vivaldi **/

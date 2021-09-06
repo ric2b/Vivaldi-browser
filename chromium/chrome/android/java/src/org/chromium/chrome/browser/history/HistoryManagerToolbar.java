@@ -21,7 +21,7 @@ import org.chromium.components.user_prefs.UserPrefs;
 
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The SelectionToolbar for the browsing history UI.
@@ -46,7 +46,7 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
     public void setManager(HistoryManager manager) {
         mManager = manager;
 
-        if (!mManager.isDisplayedInSeparateActivity() && !ChromeApplication.isVivaldi()) {
+        if (!mManager.isDisplayedInSeparateActivity() && !ChromeApplicationImpl.isVivaldi()) {
             getMenu().removeItem(R.id.close_menu_id);
         }
     }

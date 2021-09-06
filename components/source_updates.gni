@@ -94,7 +94,10 @@ if (vivaldi_build_tests) {
   }
 
   update_target("//chrome/test:unit_tests") {
-    sources += [ "//vivaldi/components/adverse_adblocking/adverse_ad_filter_list_unittests.cc" ]
+    sources += [
+      "//vivaldi/components/adverse_adblocking/adverse_ad_filter_list_unittests.cc",
+      "//vivaldi/components/adverse_adblocking/adverse_ad_filter_test_harness.cc"
+    ]
     deps += [ "//vivaldi/components:adverse_adblocking" ]
   }
 

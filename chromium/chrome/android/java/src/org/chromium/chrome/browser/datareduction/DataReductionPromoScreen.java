@@ -19,7 +19,7 @@ import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 import org.chromium.ui.widget.Toast;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The promo screen encouraging users to enable Data Saver.
@@ -34,7 +34,7 @@ public class DataReductionPromoScreen extends PromoDialog {
         // This switch is only used for testing so it is ok to override all the other checking.
         if (CommandLine.getInstance().hasSwitch(FORCE_PROMO_SWITCH)) return true;
 
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
 
         // The promo is displayed if Chrome is launched directly (i.e., not with the intent to
         // navigate to and view a URL on startup), the instance is part of the field trial,

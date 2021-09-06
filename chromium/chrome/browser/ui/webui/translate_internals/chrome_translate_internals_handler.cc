@@ -30,9 +30,7 @@
 #include "content/public/browser/web_ui.h"
 
 #include "app/vivaldi_apptools.h"
-#if !defined(OS_ANDROID)
 #include "browser/translate/vivaldi_translate_client.h"
-#endif
 
 ChromeTranslateInternalsHandler::ChromeTranslateInternalsHandler() {
   detection_subscription_ =
@@ -46,11 +44,9 @@ ChromeTranslateInternalsHandler::~ChromeTranslateInternalsHandler() {}
 
 translate::TranslateClient*
 ChromeTranslateInternalsHandler::GetTranslateClient() {
-#if !defined(OS_ANDROID)
   if (vivaldi::IsVivaldiRunning()) {
     return VivaldiTranslateClient::FromWebContents(web_ui()->GetWebContents());
   }
-#endif
   return ChromeTranslateClient::FromWebContents(web_ui()->GetWebContents());
 }
 

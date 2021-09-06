@@ -57,6 +57,12 @@ import org.chromium.ui.modelutil.PropertyModel;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.suggestions.SearchEngineSuggestionAdapter;
+import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
+
 /**
  * Coordinator that handles the interactions with the autocomplete system.
  */
@@ -65,6 +71,9 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     private OmniboxQueryTileCoordinator mQueryTileCoordinator;
     private AutocompleteMediator mMediator;
     private OmniboxSuggestionsDropdown mDropdown;
+
+    // Vivaldi
+    private ViewGroup mSearchEngineSuggestionView;
 
     public AutocompleteCoordinator(@NonNull ViewGroup parent,
             @NonNull AutocompleteDelegate delegate,
@@ -200,6 +209,19 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
                     mCallbacks.get(i).onResult(mHolder);
                 }
                 mCallbacks = null;
+
+                if (ChromeApplicationImpl.isVivaldi()) {
+                    // Inflate the search engine suggestion layout and pass the handle of
+                    // AutocompleteMediator
+                    mSearchEngineSuggestionView =
+                            (ViewGroup) ((ViewStub) mParent.getRootView().findViewById(
+                                                 R.id.search_engine_suggestion_stub))
+                                    .inflate();
+                    SearchEngineSuggestionAdapter searchEngineAdapter =
+                            ((SearchEngineSuggestionView) mSearchEngineSuggestionView).getAdapter();
+                    if (searchEngineAdapter != null)
+                        searchEngineAdapter.setMediator(mMediator);
+                }
             }
 
             @Override
@@ -216,6 +238,12 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     @Override
     public void onUrlFocusChange(boolean hasFocus) {
         mMediator.onUrlFocusChange(hasFocus);
+
+        // Vivaldi - Handle the visibility of search engine suggestion layout as per url focus
+        if (ChromeApplicationImpl.isVivaldi() && mSearchEngineSuggestionView != null)
+            mSearchEngineSuggestionView.setVisibility(
+                    hasFocus && VivaldiUtils.showSearchEngineSuggestionBar() ? View.VISIBLE
+                                                                             : View.GONE);
     }
 
     @Override

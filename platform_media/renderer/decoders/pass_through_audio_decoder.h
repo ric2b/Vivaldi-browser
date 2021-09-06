@@ -30,7 +30,6 @@ class MEDIA_EXPORT PassThroughAudioDecoder : public AudioDecoder {
   void Decode(scoped_refptr<DecoderBuffer> buffer,
               DecodeCB decode_cb) override;
   void Reset(base::OnceClosure closure) override;
-  std::string GetDisplayName() const override;
   AudioDecoderType GetDecoderType() const override;
 
  private:

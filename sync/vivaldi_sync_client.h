@@ -17,12 +17,8 @@ class VivaldiSyncClient : public browser_sync::ChromeSyncClient {
   ~VivaldiSyncClient() override;
 
   invalidation::InvalidationService* GetInvalidationService() override;
-  std::shared_ptr<VivaldiInvalidationService> GetVivaldiInvalidationService() {
-    return invalidation_service_;
-  }
 
  private:
-  std::shared_ptr<VivaldiInvalidationService> invalidation_service_;
   Profile* profile_;
 };
 }  // namespace vivaldi

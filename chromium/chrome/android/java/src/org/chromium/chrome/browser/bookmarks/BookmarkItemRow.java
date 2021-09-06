@@ -18,7 +18,7 @@ import org.chromium.components.favicon.IconType;
 import org.chromium.components.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.url.GURL;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * A row view that shows bookmark info in the bookmarks UI.
@@ -74,7 +74,7 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
     @Override
     public void onLargeIconAvailable(Bitmap icon, int fallbackColor, boolean isFallbackColorDefault,
             @IconType int iconType) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             largeIconAvailable(icon, fallbackColor, isFallbackColorDefault, iconType);
             return;
         }

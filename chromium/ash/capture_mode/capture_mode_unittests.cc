@@ -4,6 +4,9 @@
 
 #include <memory>
 
+#include "ash/accessibility/magnifier/docked_magnifier_controller_impl.h"
+#include "ash/accessibility/magnifier/magnifier_glass.h"
+#include "ash/app_list/app_list_controller_impl.h"
 #include "ash/capture_mode/capture_mode_bar_view.h"
 #include "ash/capture_mode/capture_mode_button.h"
 #include "ash/capture_mode/capture_mode_constants.h"
@@ -24,9 +27,6 @@
 #include "ash/display/output_protection_delegate.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/home_screen/home_screen_controller.h"
-#include "ash/magnifier/docked_magnifier_controller_impl.h"
-#include "ash/magnifier/magnifier_glass.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/capture_mode_test_api.h"
 #include "ash/root_window_controller.h"
@@ -130,6 +130,8 @@ void ClickNotification(base::Optional<int> button_index) {
 
 // Moves the mouse and updates the cursor's display manually to imitate what a
 // real mouse move event does in shell.
+// TODO(crbug.com/990589): Unit tests should be able to simulate mouse input
+// without having to call |CursorManager::SetDisplay|.
 void MoveMouseToAndUpdateCursorDisplay(
     const gfx::Point& point,
     ui::test::EventGenerator* event_generator) {
@@ -1002,6 +1004,56 @@ TEST_F(CaptureModeTest, CaptureRegionCaptureButtonLocation) {
   EXPECT_EQ(110, capture_button_window->bounds().CenterPoint().x());
   EXPECT_EQ(780 - distance_from_region,
             capture_button_window->bounds().bottom());
+}
+
+// Tests some edge cases to ensure the capture button does not intersect the
+// capture bar and end up unclickable since it is stacked below the capture bar.
+// Regression test for https://crbug.com/1186462.
+TEST_F(CaptureModeTest, CaptureRegionCaptureButtonDoesNotIntersectCaptureBar) {
+  UpdateDisplay("800x800");
+
+  StartImageRegionCapture();
+
+  // Create a region that would cover the capture mode bar. Add some insets to
+  // ensure that the capture button could fit inside. Verify that the two
+  // widgets do not overlap.
+  const gfx::Rect capture_bar_bounds =
+      GetCaptureModeBarWidget()->GetWindowBoundsInScreen();
+  gfx::Rect region_bounds = capture_bar_bounds;
+  region_bounds.Inset(-20, -20);
+  SelectRegion(region_bounds);
+  EXPECT_FALSE(capture_bar_bounds.Intersects(
+      GetCaptureModeLabelWidget()->GetWindowBoundsInScreen()));
+
+  // Create a thin region above the capture mode bar. The algorithm would
+  // normally place the capture label under the region, but should adjust to
+  // avoid intersecting.
+  auto* event_generator = GetEventGenerator();
+  event_generator->set_current_screen_location(gfx::Point());
+  event_generator->ClickLeftButton();
+  const int capture_bar_midpoint_x = capture_bar_bounds.CenterPoint().x();
+  SelectRegion(
+      gfx::Rect(capture_bar_midpoint_x, capture_bar_bounds.y() - 10, 20, 10));
+  EXPECT_FALSE(capture_bar_bounds.Intersects(
+      GetCaptureModeLabelWidget()->GetWindowBoundsInScreen()));
+
+  // Create a thin region below the capture mode bar which reaches the bottom of
+  // the display. The algorithm would  normally place the capture label above
+  // the region, but should adjust to avoid intersecting.
+  event_generator->set_current_screen_location(gfx::Point());
+  event_generator->ClickLeftButton();
+  SelectRegion(gfx::Rect(capture_bar_midpoint_x, capture_bar_bounds.bottom(),
+                         20, 800 - capture_bar_bounds.bottom()));
+  EXPECT_FALSE(capture_bar_bounds.Intersects(
+      GetCaptureModeLabelWidget()->GetWindowBoundsInScreen()));
+
+  // Create a thin region that is vertical as tall as the display, and at the
+  // left edge of the display. The capture label button should be right of the
+  // region.
+  event_generator->set_current_screen_location(gfx::Point());
+  event_generator->ClickLeftButton();
+  SelectRegion(gfx::Rect(20, 800));
+  EXPECT_GT(GetCaptureModeLabelWidget()->GetWindowBoundsInScreen().x(), 20);
 }
 
 TEST_F(CaptureModeTest, WindowCapture) {
@@ -1920,14 +1972,21 @@ class CaptureModeHdcpTest
   void SetUp() override {
     CaptureModeTest::SetUp();
     window_ = CreateTestWindow(gfx::Rect(200, 200));
-    protection_delegate_ =
-        std::make_unique<OutputProtectionDelegate>(window_.get());
+    // Create a child window with protected content. This simulates the real
+    // behavior of a browser window hosting a page with protected content, where
+    // the window that has a protection mask is the RenderWidgetHostViewAura,
+    // which is a descendant of the BrowserFrame window which can get recorded.
+    protected_content_window_ = CreateTestWindow(gfx::Rect(150, 150));
+    window_->AddChild(protected_content_window_.get());
+    protection_delegate_ = std::make_unique<OutputProtectionDelegate>(
+        protected_content_window_.get());
     CaptureModeController::Get()->SetUserCaptureRegion(gfx::Rect(20, 50),
                                                        /*by_user=*/true);
   }
 
   void TearDown() override {
     protection_delegate_.reset();
+    protected_content_window_.reset();
     window_.reset();
     CaptureModeTest::TearDown();
   }
@@ -1960,6 +2019,7 @@ class CaptureModeHdcpTest
 
  protected:
   std::unique_ptr<aura::Window> window_;
+  std::unique_ptr<aura::Window> protected_content_window_;
   std::unique_ptr<OutputProtectionDelegate> protection_delegate_;
 };
 
@@ -2058,6 +2118,7 @@ TEST_P(CaptureModeHdcpTest, ProtectedWindowInMultiDisplay) {
     window_util::MoveWindowToDisplay(window_.get(),
                                      roots[1]->GetHost()->GetDisplayId());
     ASSERT_EQ(window_->GetRootWindow(), roots[1]);
+    ASSERT_EQ(protected_content_window_->GetRootWindow(), roots[1]);
     EXPECT_FALSE(controller->is_recording_in_progress());
     histogram_tester.ExpectBucketCount(
         kEndRecordingReasonInClamshellHistogramName,
@@ -2551,7 +2612,7 @@ TEST_F(CaptureModeTest, TabletTouchCaptureLabelWidgetWindowMode) {
 
   // There are no windows and home screen window is excluded from window capture
   // mode, so capture mode will still remain active.
-  EXPECT_TRUE(Shell::Get()->home_screen_controller()->IsHomeScreenVisible());
+  EXPECT_TRUE(Shell::Get()->app_list_controller()->IsHomeScreenVisible());
   EXPECT_TRUE(controller->IsActive());
 }
 
@@ -3377,6 +3438,35 @@ class CaptureModeCursorOverlayTest : public CaptureModeTest {
     Shell::Get()->docked_magnifier_controller()->SetEnabled(enabled);
   }
 
+  // Checks that capturing a screenshot hides the cursor. After the capture is
+  // complete, checks that the cursor returns to the previous state, i.e.
+  // hidden for tablet mode but visible for clamshell mode.
+  void CaptureScreenshotAndCheckCursorVisibility(
+      CaptureModeController* controller) {
+    EXPECT_EQ(controller->type(), CaptureModeType::kImage);
+
+    auto* shell = Shell::Get();
+    auto* cursor_manager = shell->cursor_manager();
+    bool in_tablet_mode = shell->tablet_mode_controller()->InTabletMode();
+
+    // The capture mode session locks the cursor for the whole active session
+    // except in the tablet mode unless the cursor is visible.
+    EXPECT_EQ(!in_tablet_mode, cursor_manager->IsCursorLocked());
+    EXPECT_EQ(!in_tablet_mode, cursor_manager->IsCursorVisible());
+    EXPECT_TRUE(controller->IsActive());
+
+    // Make sure the cursor is hidden while capturing the screenshot.
+    CaptureNotificationWaiter waiter;
+    controller->PerformCapture();
+    EXPECT_FALSE(cursor_manager->IsCursorVisible());
+    EXPECT_FALSE(controller->IsActive());
+
+    // The cursor visibility should be restored after the capture is done.
+    waiter.Wait();
+    EXPECT_EQ(!in_tablet_mode, cursor_manager->IsCursorVisible());
+    EXPECT_FALSE(cursor_manager->IsCursorLocked());
+  }
+
  private:
   std::unique_ptr<aura::Window> window_;
   std::unique_ptr<TestVideoCaptureOverlay> fake_overlay_;
@@ -3401,6 +3491,90 @@ TEST_F(CaptureModeCursorOverlayTest, TabletModeHidesCursorOverlay) {
   EXPECT_FALSE(fake_overlay()->IsHidden());
 }
 
+// Tests that the cursor is hidden while taking a screenshot in tablet mode and
+// remains hidden afterward.
+TEST_F(CaptureModeCursorOverlayTest, TabletModeHidesCursor) {
+  // Enter tablet mode.
+  TabletModeControllerTestApi tablet_mode_controller_test_api;
+  tablet_mode_controller_test_api.DetachAllMice();
+  tablet_mode_controller_test_api.EnterTabletMode();
+
+  auto* cursor_manager = Shell::Get()->cursor_manager();
+  CaptureModeController* controller = StartCaptureSession(
+      CaptureModeSource::kFullscreen, CaptureModeType::kImage);
+
+  // Test the hardware cursor.
+  CaptureScreenshotAndCheckCursorVisibility(controller);
+
+  // Test the software cursor enabled by docked magnifier.
+  SetDockedMagnifierEnabled(true);
+  EXPECT_TRUE(IsCursorCompositingEnabled());
+  controller = StartCaptureSession(CaptureModeSource::kFullscreen,
+                                   CaptureModeType::kImage);
+  CaptureScreenshotAndCheckCursorVisibility(controller);
+
+  // Exiting tablet mode.
+  tablet_mode_controller_test_api.LeaveTabletMode();
+  EXPECT_TRUE(cursor_manager->IsCursorVisible());
+}
+
+// Tests that a cursor is hidden while taking a fullscreen screenshot
+// (crbug.com/1186652).
+TEST_F(CaptureModeCursorOverlayTest, CursorInFullscreenScreenshot) {
+  auto* cursor_manager = Shell::Get()->cursor_manager();
+  EXPECT_FALSE(cursor_manager->IsCursorLocked());
+  CaptureModeController* controller = StartCaptureSession(
+      CaptureModeSource::kFullscreen, CaptureModeType::kImage);
+  auto* event_generator = GetEventGenerator();
+  event_generator->MoveMouseTo(gfx::Point(175, 175));
+
+  // Test the hardware cursor.
+  CaptureScreenshotAndCheckCursorVisibility(controller);
+
+  // Test the software cursor enabled by docked magnifier.
+  SetDockedMagnifierEnabled(true);
+  EXPECT_TRUE(IsCursorCompositingEnabled());
+  controller = StartCaptureSession(CaptureModeSource::kFullscreen,
+                                   CaptureModeType::kImage);
+  CaptureScreenshotAndCheckCursorVisibility(controller);
+}
+
+// Tests that a cursor is hidden while taking a region screenshot
+// (crbug.com/1186652).
+TEST_F(CaptureModeCursorOverlayTest, CursorInPartialRegionScreenshot) {
+  // Use a set display size as we will be choosing points in this test.
+  UpdateDisplay("800x800");
+
+  auto* cursor_manager = Shell::Get()->cursor_manager();
+  EXPECT_FALSE(cursor_manager->IsCursorLocked());
+  auto* event_generator = GetEventGenerator();
+  auto* controller = StartImageRegionCapture();
+
+  // Create the initial capture region.
+  const gfx::Rect target_region(gfx::Rect(50, 50, 200, 200));
+  SelectRegion(target_region);
+  event_generator->MoveMouseTo(gfx::Point(175, 175));
+
+  // Test the hardware cursor.
+  CaptureScreenshotAndCheckCursorVisibility(controller);
+
+  // Test the software cursor enabled by docked magnifier.
+  SetDockedMagnifierEnabled(true);
+  EXPECT_TRUE(IsCursorCompositingEnabled());
+  controller = StartImageRegionCapture();
+  CaptureScreenshotAndCheckCursorVisibility(controller);
+}
+
+TEST_F(CaptureModeCursorOverlayTest, SoftwareCursorInitiallyEnabled) {
+  // The software cursor is enabled before recording starts.
+  SetDockedMagnifierEnabled(true);
+  EXPECT_TRUE(IsCursorCompositingEnabled());
+
+  // Hence the overlay will be hidden initially.
+  StartRecordingAndSetupFakeOverlay(CaptureModeSource::kFullscreen);
+  EXPECT_TRUE(fake_overlay()->IsHidden());
+}
+
 TEST_F(CaptureModeCursorOverlayTest, SoftwareCursorInFullscreenRecording) {
   StartRecordingAndSetupFakeOverlay(CaptureModeSource::kFullscreen);
   EXPECT_FALSE(fake_overlay()->IsHidden());
@@ -3418,17 +3592,7 @@ TEST_F(CaptureModeCursorOverlayTest, SoftwareCursorInFullscreenRecording) {
   EXPECT_FALSE(fake_overlay()->IsHidden());
 }
 
-TEST_F(CaptureModeCursorOverlayTest, SoftwareCursorInitiallyEnabled) {
-  // The software cursor is enabled before recording starts.
-  SetDockedMagnifierEnabled(true);
-  EXPECT_TRUE(IsCursorCompositingEnabled());
-
-  // Hence the overlay will be hidden initially.
-  StartRecordingAndSetupFakeOverlay(CaptureModeSource::kFullscreen);
-  EXPECT_TRUE(fake_overlay()->IsHidden());
-}
-
-TEST_F(CaptureModeCursorOverlayTest, SoftwareCursorInPartialRegion) {
+TEST_F(CaptureModeCursorOverlayTest, SoftwareCursorInPartialRegionRecording) {
   CaptureModeController::Get()->SetUserCaptureRegion(gfx::Rect(20, 20),
                                                      /*by_user=*/true);
   StartRecordingAndSetupFakeOverlay(CaptureModeSource::kRegion);

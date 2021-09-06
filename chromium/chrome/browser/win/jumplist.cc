@@ -192,9 +192,9 @@ bool UpdateTaskCategory(JumpListUpdater* jumplist_updater,
     scoped_refptr<ShellLinkItem> new_tab =
         CreateShellLink(cmd_line_profile_dir);
     new_tab->GetCommandLine()->AppendArg(vivaldi::kVivaldiNewTabURL);
-    base::string16 new_tab_title = l10n_util::GetStringUTF16(IDS_NEW_TAB);
+    std::u16string new_tab_title = l10n_util::GetStringUTF16(IDS_NEW_TAB);
     base::ReplaceSubstringsAfterOffset(
-        &new_tab_title, 0, L"&", base::StringPiece16());
+        &new_tab_title, 0, u"&", base::StringPiece16());
     new_tab->set_title(new_tab_title);
     new_tab->set_icon(chrome_path, icon_index);
     items.push_back(new_tab);
@@ -206,8 +206,8 @@ bool UpdateTaskCategory(JumpListUpdater* jumplist_updater,
   // system menu.
   if (incognito_availability != IncognitoModePrefs::FORCED) {
     scoped_refptr<ShellLinkItem> chrome = CreateShellLink(cmd_line_profile_dir);
-    base::string16 chrome_title = l10n_util::GetStringUTF16(IDS_NEW_WINDOW);
-    base::ReplaceSubstringsAfterOffset(&chrome_title, 0, STRING16_LITERAL("&"),
+    std::u16string chrome_title = l10n_util::GetStringUTF16(IDS_NEW_WINDOW);
+    base::ReplaceSubstringsAfterOffset(&chrome_title, 0, u"&",
                                        base::StringPiece16());
     chrome->set_title(chrome_title);
     chrome->set_icon(chrome_path, icon_index);
@@ -220,10 +220,10 @@ bool UpdateTaskCategory(JumpListUpdater* jumplist_updater,
     scoped_refptr<ShellLinkItem> incognito =
         CreateShellLink(cmd_line_profile_dir);
     incognito->GetCommandLine()->AppendSwitch(switches::kIncognito);
-    base::string16 incognito_title =
+    std::u16string incognito_title =
         l10n_util::GetStringUTF16(IDS_NEW_INCOGNITO_WINDOW);
-    base::ReplaceSubstringsAfterOffset(
-        &incognito_title, 0, STRING16_LITERAL("&"), base::StringPiece16());
+    base::ReplaceSubstringsAfterOffset(&incognito_title, 0, u"&",
+                                       base::StringPiece16());
     incognito->set_title(incognito_title);
     if (vivaldi::IsVivaldiRunning())
       incognito->set_icon(chrome_path, icon_index);
@@ -277,8 +277,9 @@ void JumpList::NotifyVivaldiSpeedDialsChanged(
     std::string url_string = speed_dials[i].url;
     std::wstring url_string_wide = base::UTF8ToWide(url_string);
     link->GetCommandLine()->AppendArgNative(url_string_wide);
-    std::wstring title_wide = base::UTF8ToWide(speed_dials[i].title);
-    link->set_title(!title_wide.empty() ? title_wide : url_string_wide);
+    std::u16string title_wide = base::UTF8ToUTF16(speed_dials[i].title);
+    link->set_title(!title_wide.empty() ? title_wide
+                                        : base::UTF8ToUTF16(url_string));
     link->set_url(url_string);
     vivaldi_speed_dials_.push_back(link);
     if (vivaldi_speed_dial_icons_.find(url_string) ==
@@ -507,6 +508,10 @@ void JumpList::ProcessTabRestoreServiceNotification() {
             static_cast<const sessions::TabRestoreService::Window&>(*entry),
             profile_dir, kRecentlyClosedItems);
         break;
+      case sessions::TabRestoreService::GROUP:
+        AddGroup(static_cast<const sessions::TabRestoreService::Group&>(*entry),
+                 profile_dir, kRecentlyClosedItems);
+        break;
     }
   }
 
@@ -582,6 +587,18 @@ void JumpList::AddWindow(const sessions::TabRestoreService::Window& window,
   DCHECK(!window.tabs.empty());
 
   for (const auto& tab : window.tabs) {
+    if (!AddTab(*tab, cmd_line_profile_dir, max_items))
+      return;
+  }
+}
+
+void JumpList::AddGroup(const sessions::TabRestoreService::Group& group,
+                        const base::FilePath& cmd_line_profile_dir,
+                        size_t max_items) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!group.tabs.empty());
+
+  for (const auto& tab : group.tabs) {
     if (!AddTab(*tab, cmd_line_profile_dir, max_items))
       return;
   }

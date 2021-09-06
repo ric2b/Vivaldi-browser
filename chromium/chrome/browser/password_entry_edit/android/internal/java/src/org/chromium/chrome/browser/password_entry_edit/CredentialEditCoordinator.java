@@ -9,19 +9,25 @@ import static org.chromium.chrome.browser.password_entry_edit.CredentialEditProp
 import static org.chromium.chrome.browser.password_entry_edit.CredentialEditProperties.UI_ACTION_HANDLER;
 import static org.chromium.chrome.browser.password_entry_edit.CredentialEditProperties.URL_OR_APP;
 
-import org.chromium.chrome.browser.password_entry_edit.CredentialEditFragmentView.ComponentStateDelegate;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.password_entry_edit.CredentialEntryFragmentViewBase.ComponentStateDelegate;
+import org.chromium.chrome.browser.password_manager.ConfirmationDialogHelper;
 import org.chromium.chrome.browser.password_manager.settings.PasswordAccessReauthenticationHelper;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+
+import java.lang.ref.WeakReference;
 
 /**
  * Creates the credential edit UI and is responsible for managing it.
  */
 class CredentialEditCoordinator implements ComponentStateDelegate {
-    private final CredentialEditFragmentView mFragmentView;
+    private final CredentialEntryFragmentViewBase mFragmentView;
     private final PasswordAccessReauthenticationHelper mReauthenticationHelper;
     private final CredentialEditMediator mMediator;
     private final UiDismissalHandler mDismissalHandler;
+    private final HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
 
     private PropertyModel mModel;
 
@@ -33,30 +39,41 @@ class CredentialEditCoordinator implements ComponentStateDelegate {
     }
 
     interface CredentialActionDelegate {
-        /** Called when the user has decided to save the changes to the credential.*/
+        /**
+         * Called when the user has decided to save the changes to the credential.
+         */
         void saveChanges(String username, String password);
+
+        /**
+         * Called when the user has confirmed the credential deletion.
+         */
+        void deleteCredential();
     }
 
-    CredentialEditCoordinator(CredentialEditFragmentView fragmentView,
-            UiDismissalHandler dismissalHandler,
-            CredentialActionDelegate credentialActionDelegate) {
+    CredentialEditCoordinator(CredentialEntryFragmentViewBase fragmentView,
+            UiDismissalHandler dismissalHandler, CredentialActionDelegate credentialActionDelegate,
+            HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
         mFragmentView = fragmentView;
         mReauthenticationHelper = new PasswordAccessReauthenticationHelper(
-                mFragmentView.getActivity(), mFragmentView.getParentFragmentManager());
-        mMediator = new CredentialEditMediator(mReauthenticationHelper, credentialActionDelegate);
+                fragmentView.getActivity(), fragmentView.getParentFragmentManager());
+        mMediator = new CredentialEditMediator(mReauthenticationHelper,
+                new ConfirmationDialogHelper(new WeakReference<>(mFragmentView.getContext())),
+                credentialActionDelegate, this::handleHelp,
+                fragmentView instanceof BlockedCredentialFragmentView);
         mDismissalHandler = dismissalHandler;
         mFragmentView.setComponentStateDelegate(this);
+        mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
     }
 
     void setCredential(String displayUrlOrAppName, String username, String password,
-            String displayFederationOrigin) {
+            String displayFederationOrigin, boolean isInsecureCredential) {
         mModel = new PropertyModel.Builder(ALL_KEYS)
                          .with(UI_ACTION_HANDLER, mMediator)
                          .with(URL_OR_APP, displayUrlOrAppName)
                          .with(FEDERATION_ORIGIN, displayFederationOrigin)
                          .build();
         mMediator.initialize(mModel);
-        mMediator.setCredential(username, password);
+        mMediator.setCredential(username, password, isInsecureCredential);
     }
 
     void setExistingUsernames(String[] existingUsernames) {
@@ -65,6 +82,12 @@ class CredentialEditCoordinator implements ComponentStateDelegate {
 
     void dismiss() {
         mMediator.dismiss();
+    }
+
+    void handleHelp() {
+        mHelpAndFeedbackLauncher.show(mFragmentView.getActivity(),
+                mFragmentView.getActivity().getString(R.string.help_context_passwords),
+                Profile.getLastUsedRegularProfile(), null);
     }
 
     @Override
@@ -82,8 +105,24 @@ class CredentialEditCoordinator implements ComponentStateDelegate {
         mDismissalHandler.onUiDismissed();
     }
 
-    static void setupModelChangeProcessor(PropertyModel model, CredentialEditFragmentView view) {
-        PropertyModelChangeProcessor.create(
-                model, view, CredentialEditViewBinder::bindCredentialEditView);
+    static void setupModelChangeProcessor(
+            PropertyModel model, CredentialEntryFragmentViewBase view) {
+        if (view instanceof CredentialEditFragmentView) {
+            PropertyModelChangeProcessor.create(model, (CredentialEditFragmentView) view,
+                    CredentialEditViewBinder::bindCredentialEditView);
+            return;
+        }
+
+        if (view instanceof BlockedCredentialFragmentView) {
+            PropertyModelChangeProcessor.create(model, (BlockedCredentialFragmentView) view,
+                    BlockedCredentialViewBinder::bindBlockedCredentialView);
+            return;
+        }
+
+        if (view instanceof FederatedCredentialFragmentView) {
+            PropertyModelChangeProcessor.create(model, (FederatedCredentialFragmentView) view,
+                    FederatedCredentialViewBinder::bindFederatedCredentialView);
+            return;
+        }
     }
 }

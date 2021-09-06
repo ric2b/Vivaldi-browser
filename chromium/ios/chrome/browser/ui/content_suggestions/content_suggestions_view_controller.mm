@@ -34,9 +34,11 @@
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/theme_change_delegate.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp_tile_views/ntp_tile_layout_util.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
+#import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/menu_util.h"
@@ -118,10 +120,13 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
                        offset:(CGFloat)offset
-                  feedVisible:(BOOL)visible {
+                  feedVisible:(BOOL)visible
+        refactoredFeedVisible:(BOOL)refactoredFeedVisible {
   _offset = offset;
-  _layout = [[ContentSuggestionsLayout alloc] initWithOffset:offset
-                                                 feedVisible:visible];
+  _feedVisible = visible;
+  _layout =
+      [[ContentSuggestionsLayout alloc] initWithOffset:offset
+                                           feedVisible:refactoredFeedVisible];
   self = [super initWithLayout:_layout style:style];
   if (self) {
     _collectionUpdater = [[ContentSuggestionsCollectionUpdater alloc] init];
@@ -341,6 +346,9 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
 - (void)viewDidDisappear:(BOOL)animated {
   [super viewDidDisappear:animated];
   self.headerSynchronizer.showing = NO;
+  if (ShouldShowReturnToMostRecentTabForStartSurface()) {
+    [self.audience viewDidDisappear];
+  }
 }
 
 - (void)didMoveToParentViewController:(UIViewController*)parent {
@@ -425,6 +433,9 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
     case ContentSuggestionTypeMostVisited:
       [self.suggestionCommandHandler openMostVisitedItem:item
                                                  atIndex:indexPath.item];
+      break;
+    case ContentSuggestionTypeReturnToRecentTab:
+      [self.suggestionCommandHandler openMostRecentTab:item];
       break;
     case ContentSuggestionTypePromo:
       [self dismissSection:indexPath.section];
@@ -583,6 +594,16 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
     parentInset.top = 0;
     parentInset.left = 0;
     parentInset.right = 0;
+  } else if ([self.collectionUpdater isReturnToRecentTabSection:section]) {
+    CGFloat collectionWidth = collectionView.bounds.size.width;
+    CGFloat maxCardWidth = content_suggestions::searchFieldWidth(
+        collectionWidth, self.traitCollection);
+    CGFloat margin =
+        MAX(0, (collectionView.frame.size.width - maxCardWidth) / 2);
+    parentInset.left = margin;
+    parentInset.right = margin;
+    parentInset.bottom =
+        content_suggestions::kReturnToRecentTabSectionBottomMargin;
   } else if ([self.collectionUpdater isMostVisitedSection:section] ||
              [self.collectionUpdater isPromoSection:section]) {
     CGFloat margin = CenteredTilesMarginForWidth(
@@ -724,6 +745,23 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
   [self dismissEntryAtIndexPath:indexPath];
 }
 
+#pragma mark - ThumbStripSupporting
+
+- (BOOL)isThumbStripEnabled {
+  return self.panGestureHandler != nil;
+}
+
+- (void)thumbStripEnabledWithPanHandler:
+    (ViewRevealingVerticalPanHandler*)panHandler {
+  DCHECK(!self.thumbStripEnabled);
+  self.panGestureHandler = panHandler;
+}
+
+- (void)thumbStripDisabled {
+  DCHECK(self.thumbStripEnabled);
+  self.panGestureHandler = nil;
+}
+
 #pragma mark - UIScrollViewDelegate Methods.
 
 - (void)scrollViewDidScroll:(UIScrollView*)scrollView {
@@ -768,11 +806,16 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
                                               willDecelerate:decelerate];
   [self.panGestureHandler scrollViewDidEndDragging:scrollView
                                     willDecelerate:decelerate];
-  if (IsDiscoverFeedEnabled()) {
+
+  // Track scrolling for the legacy NTP with visible Discover feed.
+  if (IsDiscoverFeedEnabled() && !IsRefactoredNTP() && [self isFeedVisible]) {
     [self.discoverFeedMetricsRecorder
         recordFeedScrolled:scrollView.contentOffset.y -
                            self.scrollStartPosition];
-  } else {
+  }
+
+  // Track scrolling for the visible Zine feed.
+  if (!IsDiscoverFeedEnabled() && [self isFeedVisible]) {
     [self.metricsRecorder recordFeedScrolled:scrollView.contentOffset.y -
                                              self.scrollStartPosition];
   }

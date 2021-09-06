@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Nie zezwalaj żadnym stronom na automatyczne pobieranie wielu plików</translation>
 <translation id="5039804452771397117">Zezwalaj</translation>
 <translation id="5057110919553308744">Gdy klikniesz w rozszerzenie</translation>
+<translation id="5059526285558225588">Wybierz, co chcesz udostępnić</translation>
 <translation id="5063480226653192405">Wykorzystanie</translation>
 <translation id="5116628073786783676">Za&amp;pisz dźwięk jako...</translation>
 <translation id="5143374789336132547">Rozszerzenie "<ph name="EXTENSION_NAME" />" zmieniło stronę wyświetlaną po kliknięciu przycisku strony głównej.</translation>
@@ -458,7 +459,6 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="8823704566850948458">Zaproponuj hasło…</translation>
 <translation id="8859174528519900719">Ramka iframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Otwórz link w nowym &amp;oknie</translation>
-<translation id="8910146161325739742">Udostępnianie ekranu</translation>
 <translation id="8915370057835397490">Ładowanie sugestii</translation>
 <translation id="8916476537757519021">Ramka iframe w trybie prywatnym: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Pamięć JavaScript</translation>

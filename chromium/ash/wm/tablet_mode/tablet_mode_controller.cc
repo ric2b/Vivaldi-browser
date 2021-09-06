@@ -129,15 +129,9 @@ bool IsAngleBetweenAccelerometerReadingsStable(
          kNoisyMagnitudeDeviation;
 }
 
-// Returns the UiMode given by the force-table-mode or
-// supports-clamshell-auto-rotation command line.
+// Returns the UiMode given by the force-table-mode command line.
 TabletModeController::UiMode GetUiMode() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  // TODO(minch): Remove this once crbug.com/1189420 is fixed. Since Dooly will
-  // stay in clamshell without |touchview| USE flag.
-  if (command_line->HasSwitch(switches::kSupportsClamshellAutoRotation))
-    return TabletModeController::UiMode::kClamshell;
-
   if (command_line->HasSwitch(switches::kAshUiMode)) {
     std::string switch_value =
         command_line->GetSwitchValueASCII(switches::kAshUiMode);
@@ -538,14 +532,14 @@ bool TabletModeController::InTabletMode() const {
   return tablet_state_.InTabletMode();
 }
 
-void TabletModeController::ForceUiTabletModeState(
+bool TabletModeController::ForceUiTabletModeState(
     base::Optional<bool> enabled) {
   if (!enabled.has_value()) {
     tablet_mode_behavior_ = kDefault;
     AccelerometerReader::GetInstance()->SetEnabled(true);
     if (!SetIsInTabletPhysicalState(CalculateIsInTabletPhysicalState()))
-      UpdateUiTabletState();
-    return;
+      return UpdateUiTabletState();
+    return true;
   }
   if (*enabled) {
     tablet_mode_behavior_ = kOnForAutotest;
@@ -557,7 +551,7 @@ void TabletModeController::ForceUiTabletModeState(
   // this should not block ScreenOrientationController as the screen may want
   // to be rotated for other factors.
   AccelerometerReader::GetInstance()->SetEnabled(false);
-  SetIsInTabletPhysicalState(CalculateIsInTabletPhysicalState());
+  return SetIsInTabletPhysicalState(CalculateIsInTabletPhysicalState());
 }
 
 void TabletModeController::SetEnabledForTest(bool enabled) {
@@ -1311,7 +1305,7 @@ bool TabletModeController::SetIsInTabletPhysicalState(bool new_state) {
     return true;
 
   UpdateInternalInputDevicesEventBlocker();
-  return true;
+  return false;
 }
 
 bool TabletModeController::UpdateUiTabletState() {

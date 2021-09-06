@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include "ash/accessibility/sticky_keys/sticky_keys_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
@@ -23,7 +24,6 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
-#include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/desks/close_desk_button.h"
@@ -337,7 +337,7 @@ class TestDeskObserver : public Desk::Observer {
   // Desk::Observer:
   void OnContentChanged() override { ++notify_counts_; }
   void OnDeskDestroyed(const Desk* desk) override {}
-  void OnDeskNameChanged(const base::string16& new_name) override {}
+  void OnDeskNameChanged(const std::u16string& new_name) override {}
 
  private:
   int notify_counts_ = 0;
@@ -351,6 +351,8 @@ class DesksTest : public AshTestBase,
                   public ::testing::WithParamInterface<bool> {
  public:
   DesksTest() = default;
+  explicit DesksTest(base::test::TaskEnvironment::TimeSource time)
+      : AshTestBase(time) {}
   ~DesksTest() override = default;
 
   views::LabelButton* GetNewDeskButton(const DesksBarView* bar_view) {
@@ -498,6 +500,80 @@ TEST_F(DesksTest, RemoveDeskWithEmptyName) {
   auto* mini_view = desks_bar_view->mini_views().back();
   CloseDeskFromMiniView(mini_view, event_generator);
   EXPECT_EQ(1u, controller->desks().size());
+}
+
+// Tests that removing a non-active desk updates the window workspaces for
+// desks restore correctly.
+TEST_F(DesksTest, RemovingNonActiveDeskUpdatesWindowWorkspaces) {
+  auto* controller = DesksController::Get();
+
+  // Create two new desks.
+  NewDesk();
+  NewDesk();
+  EXPECT_EQ(3u, controller->desks().size());
+
+  // Create one window in each desk.
+  std::vector<std::unique_ptr<aura::Window>> windows;
+  for (int i = 0; i < 3; i++) {
+    windows.push_back(CreateAppWindow());
+    controller->SendToDeskAtIndex(windows[i].get(), i);
+    EXPECT_EQ(i, windows[i]->GetProperty(aura::client::kWindowWorkspaceKey));
+  }
+
+  // Switch to the third desk.
+  ActivateDesk(controller->desks()[2].get());
+
+  // Close the second desk.
+  RemoveDesk(controller->desks()[1].get());
+  EXPECT_EQ(2u, controller->desks().size());
+
+  // The window in the first desk remain unaffected by the second desk removal.
+  EXPECT_EQ(0, windows[0]->GetProperty(aura::client::kWindowWorkspaceKey));
+  // The window in the removed second desk should move to the active desk, the
+  // third desk, which just becomes the second desk after the removal.
+  EXPECT_EQ(1, windows[1]->GetProperty(aura::client::kWindowWorkspaceKey));
+  // The window in the third desk update its workspace to index - 1.
+  EXPECT_EQ(1, windows[2]->GetProperty(aura::client::kWindowWorkspaceKey));
+}
+
+// Tests that removing an active desk updates the window workspaces for desks
+// restore correctly.
+TEST_F(DesksTest, RemovingActiveDeskUpdatesWindowWorkspaces) {
+  auto* controller = DesksController::Get();
+
+  // Create three new desks.
+  NewDesk();
+  NewDesk();
+  NewDesk();
+  EXPECT_EQ(4u, controller->desks().size());
+
+  // Create one window in each desk.
+  std::vector<std::unique_ptr<aura::Window>> windows;
+  for (int i = 0; i < 4; i++) {
+    windows.push_back(CreateAppWindow());
+    controller->SendToDeskAtIndex(windows[i].get(), i);
+    EXPECT_EQ(i, windows[i]->GetProperty(aura::client::kWindowWorkspaceKey));
+  }
+
+  // Switch to the second desk.
+  const Desk* desk_2 = controller->desks()[1].get();
+  ActivateDesk(desk_2);
+
+  // Close the second desk.
+  RemoveDesk(desk_2);
+  EXPECT_EQ(3u, controller->desks().size());
+
+  // The previous desk (first) becomes active after closing the second desk.
+  EXPECT_EQ(controller->desks()[0].get(), controller->active_desk());
+
+  // The window in the first desk remain unaffected by the second desk removal.
+  EXPECT_EQ(0, windows[0]->GetProperty(aura::client::kWindowWorkspaceKey));
+  // The window from the removed second desk moves to the active, first desk.
+  EXPECT_EQ(0, windows[1]->GetProperty(aura::client::kWindowWorkspaceKey));
+  // The desk indices of the third and forth desks are decreased by one, so
+  // the workspace values of windows in those desks are reduced by one.
+  EXPECT_EQ(1, windows[2]->GetProperty(aura::client::kWindowWorkspaceKey));
+  EXPECT_EQ(2, windows[3]->GetProperty(aura::client::kWindowWorkspaceKey));
 }
 
 // Test that gesture taps do not reset the button state to normal when the
@@ -1667,8 +1743,7 @@ TEST_F(DesksTest, ConsecutiveDailyVisitsMetric) {
   auto create_new_desk_with_mocked_time =
       [](DesksController* desks_controller, base::SimpleTestClock* test_clock) {
         NewDesk();
-        desks_controller->desks().back()->OverrideClockForTesting(  // IN-TEST
-            test_clock);
+        desks_controller->desks().back()->OverrideClockForTesting(test_clock);
       };
 
   // Set the time to 00:00:00 local time the next day, override the current
@@ -1676,9 +1751,8 @@ TEST_F(DesksTest, ConsecutiveDailyVisitsMetric) {
   test_clock.SetNow(base::Time::Now().LocalMidnight());
   test_clock.Advance(base::TimeDelta::FromHours(1));
   auto* active_desk = desks_controller->active_desk();
-  const_cast<Desk*>(active_desk)
-      ->OverrideClockForTesting(&test_clock);                       // IN-TEST
-  const_cast<Desk*>(active_desk)->ResetVisitedMetricsForTesting();  // IN-TEST
+  const_cast<Desk*>(active_desk)->OverrideClockForTesting(&test_clock);
+  const_cast<Desk*>(active_desk)->ResetVisitedMetricsForTesting();
   EXPECT_EQ(
       0u,
       histogram_tester.GetAllSamples(kConsecutiveDailyVisitsHistogram).size());
@@ -2005,8 +2079,8 @@ TEST_F(DesksEditableNamesTest, NamesSetByUsersAreNotOverwritten) {
   // Extra whitespace should be trimmed.
   auto* desk_1 = controller()->desks()[0].get();
   auto* desk_2 = controller()->desks()[1].get();
-  EXPECT_EQ(base::UTF8ToUTF16("code"), desk_1->name());
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 2"), desk_2->name());
+  EXPECT_EQ(u"code", desk_1->name());
+  EXPECT_EQ(u"Desk 2", desk_2->name());
   EXPECT_TRUE(desk_1->is_name_set_by_user());
   EXPECT_FALSE(desk_2->is_name_set_by_user());
 
@@ -2019,7 +2093,7 @@ TEST_F(DesksEditableNamesTest, NamesSetByUsersAreNotOverwritten) {
   // the user-modified desk names.
   NewDesk();
   auto* desk_3 = controller()->desks()[2].get();
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 3"), desk_3->name());
+  EXPECT_EQ(u"Desk 3", desk_3->name());
   EXPECT_TRUE(desk_1->is_name_set_by_user());
   EXPECT_FALSE(desk_2->is_name_set_by_user());
   EXPECT_FALSE(desk_3->is_name_set_by_user());
@@ -2032,7 +2106,7 @@ TEST_F(DesksEditableNamesTest, NamesSetByUsersAreNotOverwritten) {
   EXPECT_TRUE(desk_1->is_name_set_by_user());
   EXPECT_FALSE(desk_3->is_name_set_by_user());
   // Desk 3 will now be renamed to "Desk 2".
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 2"), desk_3->name());
+  EXPECT_EQ(u"Desk 2", desk_3->name());
   VerifyDesksRestoreData(GetPrimaryUserPrefService(),
                          {std::string("code"), std::string()});
 
@@ -2040,8 +2114,8 @@ TEST_F(DesksEditableNamesTest, NamesSetByUsersAreNotOverwritten) {
   overview_controller->StartOverview();
   EXPECT_TRUE(desk_1->is_name_set_by_user());
   EXPECT_FALSE(desk_3->is_name_set_by_user());
-  EXPECT_EQ(base::UTF8ToUTF16("code"), desk_1->name());
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 2"), desk_3->name());
+  EXPECT_EQ(u"code", desk_1->name());
+  EXPECT_EQ(u"Desk 2", desk_3->name());
 }
 
 TEST_F(DesksEditableNamesTest, DontAllowEmptyNames) {
@@ -2062,7 +2136,7 @@ TEST_F(DesksEditableNamesTest, DontAllowEmptyNames) {
   // The name should now revert back to the default value.
   EXPECT_FALSE(desk_1->name().empty());
   EXPECT_FALSE(desk_1->is_name_set_by_user());
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 1"), desk_1->name());
+  EXPECT_EQ(u"Desk 1", desk_1->name());
   VerifyDesksRestoreData(GetPrimaryUserPrefService(),
                          {std::string(), std::string()});
 }
@@ -2120,7 +2194,7 @@ TEST_F(DesksEditableNamesTest, MaxLength) {
   SendKey(ui::VKEY_BACK);
 
   // Simulate user is typing text beyond the max length.
-  base::string16 expected_desk_name(DeskNameView::kMaxLength, L'a');
+  std::u16string expected_desk_name(DeskNameView::kMaxLength, L'a');
   for (size_t i = 0; i < DeskNameView::kMaxLength + 10; ++i)
     SendKey(ui::VKEY_A);
   SendKey(ui::VKEY_RETURN);
@@ -2132,8 +2206,8 @@ TEST_F(DesksEditableNamesTest, MaxLength) {
   EXPECT_TRUE(desk_1->is_name_set_by_user());
 
   // Test that pasting a large amount of text is trimmed at the max length.
-  base::string16 clipboard_text(DeskNameView::kMaxLength + 10, L'b');
-  expected_desk_name = base::string16(DeskNameView::kMaxLength, L'b');
+  std::u16string clipboard_text(DeskNameView::kMaxLength + 10, L'b');
+  expected_desk_name = std::u16string(DeskNameView::kMaxLength, L'b');
   EXPECT_GT(clipboard_text.size(), DeskNameView::kMaxLength);
   ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
       .WriteText(clipboard_text);
@@ -3363,9 +3437,9 @@ TEST_P(DesksRestoreMultiUserTest, DesksRestoredFromPrimaryUserPrefsOnly) {
   auto verify_desks = [&](const std::string& trace_name) {
     SCOPED_TRACE(trace_name);
     EXPECT_EQ(3u, desks.size());
-    EXPECT_EQ(base::UTF8ToUTF16("Desk 1"), desks[0]->name());
-    EXPECT_EQ(base::UTF8ToUTF16("Desk 2"), desks[1]->name());
-    EXPECT_EQ(base::UTF8ToUTF16("code"), desks[2]->name());
+    EXPECT_EQ(u"Desk 1", desks[0]->name());
+    EXPECT_EQ(u"Desk 2", desks[1]->name());
+    EXPECT_EQ(u"code", desks[2]->name());
     // Restored non-default names should be marked as `set_by_user`.
     EXPECT_FALSE(desks[0]->is_name_set_by_user());
     EXPECT_FALSE(desks[1]->is_name_set_by_user());
@@ -3571,6 +3645,7 @@ class DesksAcceleratorsTest : public DesksTest,
   }
   bool IsSearchKeyAcceleratorReserved() const override { return true; }
   bool NotifyDeprecatedRightClickRewrite() override { return false; }
+  bool NotifyDeprecatedFKeyRewrite() override { return false; }
   bool NotifyDeprecatedAltBasedKeyRewrite(ui::KeyboardCode key_code) override {
     return false;
   }
@@ -4133,7 +4208,7 @@ TEST_F(DesksBentoTest, NameNudges) {
     ClickOnView(new_desk_button, event_generator);
     auto* desk_name_view = desks_bar_view->mini_views()[i]->desk_name_view();
     EXPECT_TRUE(desk_name_view->HasFocus());
-    EXPECT_EQ(base::string16(), controller->desks()[i]->name());
+    EXPECT_EQ(std::u16string(), controller->desks()[i]->name());
     EXPECT_EQ(DesksController::GetDeskDefaultName(i),
               desk_name_view->GetAccessibleName());
     EXPECT_EQ(DesksController::GetDeskDefaultName(i - 1),
@@ -4723,7 +4798,7 @@ TEST_F(DesksBentoTest, ZeroStateDeskButtonText) {
   ASSERT_TRUE(desks_bar_view->IsZeroState());
   // Show the default name "Desk 1" while initializing the desks bar at the
   // first time.
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 1"),
+  EXPECT_EQ(u"Desk 1",
             desks_bar_view->zero_state_default_desk_button()->GetText());
 
   auto* event_generator = GetEventGenerator();
@@ -4743,21 +4818,20 @@ TEST_F(DesksBentoTest, ZeroStateDeskButtonText) {
   desks_bar_view = GetOverviewGridForRoot(root_window)->desks_bar_view();
   EXPECT_TRUE(desks_bar_view->IsZeroState());
   // Should show the desk's current name "test" instead of the default name.
-  EXPECT_EQ(base::UTF8ToUTF16("test"),
+  EXPECT_EQ(u"test",
             desks_bar_view->zero_state_default_desk_button()->GetText());
 
   // Create 'Desk 2'.
   ClickOnView(desks_bar_view->zero_state_new_desk_button(), event_generator);
   EXPECT_FALSE(desks_bar_view->IsZeroState());
   SendKey(ui::VKEY_RETURN);
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 2"),
-            DesksController::Get()->desks()[1].get()->name());
+  EXPECT_EQ(u"Desk 2", DesksController::Get()->desks()[1].get()->name());
 
   // Close desk 'test' should return to zero state and the zero state default
   // desk button should show current desk's name, which is 'Desk 1'.
   CloseDeskFromMiniView(desks_bar_view->mini_views()[0], event_generator);
   EXPECT_TRUE(desks_bar_view->IsZeroState());
-  EXPECT_EQ(base::UTF8ToUTF16("Desk 1"),
+  EXPECT_EQ(u"Desk 1",
             desks_bar_view->zero_state_default_desk_button()->GetText());
 
   // Set a super long desk name.
@@ -4772,8 +4846,8 @@ TEST_F(DesksBentoTest, ZeroStateDeskButtonText) {
   desks_bar_view = GetOverviewGridForRoot(root_window)->desks_bar_view();
   auto* zero_state_default_desk_button =
       desks_bar_view->zero_state_default_desk_button();
-  base::string16 desk_button_text = zero_state_default_desk_button->GetText();
-  base::string16 expected_desk_name(DeskNameView::kMaxLength, L'a');
+  std::u16string desk_button_text = zero_state_default_desk_button->GetText();
+  std::u16string expected_desk_name(DeskNameView::kMaxLength, L'a');
   // Zero state desk button should show the elided name as the DeskNameView.
   EXPECT_EQ(expected_desk_name,
             DesksController::Get()->desks()[0].get()->name());
@@ -4812,9 +4886,9 @@ TEST_F(DesksBentoTest, ReorderDesksByMouse) {
 
   // Set desk names. Force update user prefs because `SetName()` does not
   // trigger it but `DeskMiniView::OnViewBlurred`.
-  desk_0->SetName(base::ASCIIToUTF16("0"), /*set_by_user=*/true);
-  desk_1->SetName(base::ASCIIToUTF16("1"), /*set_by_user=*/true);
-  desk_2->SetName(base::ASCIIToUTF16("2"), /*set_by_user=*/true);
+  desk_0->SetName(u"0", /*set_by_user=*/true);
+  desk_1->SetName(u"1", /*set_by_user=*/true);
+  desk_2->SetName(u"2", /*set_by_user=*/true);
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
 
   auto* prefs = Shell::Get()->session_controller()->GetPrimaryUserPrefService();
@@ -4882,9 +4956,9 @@ TEST_F(DesksBentoTest, ReorderDesksByGesture) {
   Desk* desk_2 = mini_view_2->desk();
 
   // Set desk names and save to user prefs.
-  desk_0->SetName(base::ASCIIToUTF16("0"), /*set_by_user=*/true);
-  desk_1->SetName(base::ASCIIToUTF16("1"), /*set_by_user=*/true);
-  desk_2->SetName(base::ASCIIToUTF16("2"), /*set_by_user=*/true);
+  desk_0->SetName(u"0", /*set_by_user=*/true);
+  desk_1->SetName(u"1", /*set_by_user=*/true);
+  desk_2->SetName(u"2", /*set_by_user=*/true);
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
 
   auto* prefs = Shell::Get()->session_controller()->GetPrimaryUserPrefService();
@@ -4955,9 +5029,9 @@ TEST_F(DesksBentoTest, ReorderDesksByKeyboard) {
   Desk* desk_2 = mini_view_2->desk();
 
   // Set desk names and save to user prefs.
-  desk_0->SetName(base::ASCIIToUTF16("0"), /*set_by_user=*/true);
-  desk_1->SetName(base::ASCIIToUTF16("1"), /*set_by_user=*/true);
-  desk_2->SetName(base::ASCIIToUTF16("2"), /*set_by_user=*/true);
+  desk_0->SetName(u"0", /*set_by_user=*/true);
+  desk_1->SetName(u"1", /*set_by_user=*/true);
+  desk_2->SetName(u"2", /*set_by_user=*/true);
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
 
   auto* prefs = Shell::Get()->session_controller()->GetPrimaryUserPrefService();
@@ -5041,9 +5115,9 @@ TEST_F(DesksBentoTest, ReorderDesksInRTLMode) {
 
   // Set desk names. Force update user prefs because `SetName()` does not
   // trigger it but `DeskMiniView::OnViewBlurred`.
-  desk_0->SetName(base::ASCIIToUTF16("0"), /*set_by_user=*/true);
-  desk_1->SetName(base::ASCIIToUTF16("1"), /*set_by_user=*/true);
-  desk_2->SetName(base::ASCIIToUTF16("2"), /*set_by_user=*/true);
+  desk_0->SetName(u"0", /*set_by_user=*/true);
+  desk_1->SetName(u"1", /*set_by_user=*/true);
+  desk_2->SetName(u"2", /*set_by_user=*/true);
   desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
 
   auto* prefs = Shell::Get()->session_controller()->GetPrimaryUserPrefService();
@@ -5254,6 +5328,109 @@ TEST_F(DesksBentoTest, DragNewDeskWhileSnappingBack) {
   EXPECT_EQ(desks_bar_view->GetDragDeskMiniViewForTesting(), mini_view_2);
   StartDragDeskPreview(mini_view_1, event_generator);
   EXPECT_EQ(desks_bar_view->GetDragDeskMiniViewForTesting(), mini_view_1);
+}
+
+// A test class that uses a mock time test environment.
+class DesksMockTimeTest : public DesksTest {
+ public:
+  DesksMockTimeTest()
+      : DesksTest(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+  DesksMockTimeTest(const DesksMockTimeTest&) = delete;
+  DesksMockTimeTest& operator=(const DesksMockTimeTest&) = delete;
+  ~DesksMockTimeTest() override = default;
+};
+
+// Tests that the weekly active desks metric is properly recorded.
+TEST_F(DesksMockTimeTest, WeeklyActiveDesks) {
+  constexpr char kWeeklyActiveDesksHistogram[] = "Ash.Desks.WeeklyActiveDesks";
+  base::HistogramTester histogram_tester;
+
+  // Create three new desks.
+  NewDesk();
+  NewDesk();
+  NewDesk();
+  auto* controller = DesksController::Get();
+  ASSERT_EQ(4u, controller->desks().size());
+  const Desk* desk_1 = controller->desks()[0].get();
+  const Desk* desk_2 = controller->desks()[1].get();
+  Desk* desk_3 = controller->desks()[2].get();
+  Desk* desk_4 = controller->desks()[3].get();
+
+  // Let a week elapse. There should be a new entry for four since there were
+  // three created desks and the initial active desk.
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(7));
+  task_environment()->RunUntilIdle();
+  histogram_tester.ExpectBucketCount(kWeeklyActiveDesksHistogram, 4, 1);
+  EXPECT_EQ(1u,
+            histogram_tester.GetAllSamples(kWeeklyActiveDesksHistogram).size());
+
+  // Activate the second desk and quickly activate the first desk. Let a week
+  // elapse. There should be a new entry for one since we shouldn't count a desk
+  // that was briefly visited.
+  EXPECT_EQ(1, Desk::GetWeeklyActiveDesks());
+  ActivateDesk(desk_2);
+  ActivateDesk(desk_1);
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(7));
+  task_environment()->RunUntilIdle();
+  histogram_tester.ExpectBucketCount(kWeeklyActiveDesksHistogram, 1, 1);
+  EXPECT_EQ(2u,
+            histogram_tester.GetAllSamples(kWeeklyActiveDesksHistogram).size());
+
+  // Activate the second desk and wait on it. Activate the first desk and wait
+  // on it. Activate the second desk again. Let a week elapse. There should be a
+  // new entry for two since we shouldn't count activating the second desk
+  // twice.
+  EXPECT_EQ(1, Desk::GetWeeklyActiveDesks());
+  ActivateDesk(desk_2);
+  task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(5));
+  ActivateDesk(desk_1);
+  task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(5));
+  ActivateDesk(desk_2);
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(7));
+  task_environment()->RunUntilIdle();
+  histogram_tester.ExpectBucketCount(kWeeklyActiveDesksHistogram, 2, 1);
+  EXPECT_EQ(3u,
+            histogram_tester.GetAllSamples(kWeeklyActiveDesksHistogram).size());
+
+  // Rename the third desk twice and move two windows to the fourth desk. Let a
+  // week elapse. There should be a new entry for three.
+  EXPECT_EQ(1, Desk::GetWeeklyActiveDesks());
+  desk_3->SetName(u"foo", /*set_by_user=*/true);
+  desk_3->SetName(u"bar", /*set_by_user=*/true);
+
+  auto win1 = CreateAppWindow();
+  auto win2 = CreateAppWindow();
+  controller->MoveWindowFromActiveDeskTo(
+      win1.get(), desk_4, win1->GetRootWindow(),
+      DesksMoveWindowFromActiveDeskSource::kSendToDesk);
+  controller->MoveWindowFromActiveDeskTo(
+      win2.get(), desk_4, win2->GetRootWindow(),
+      DesksMoveWindowFromActiveDeskSource::kSendToDesk);
+
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(7));
+  task_environment()->RunUntilIdle();
+  histogram_tester.ExpectBucketCount(kWeeklyActiveDesksHistogram, 3, 1);
+  EXPECT_EQ(4u,
+            histogram_tester.GetAllSamples(kWeeklyActiveDesksHistogram).size());
+
+  // Wait six days on the current desk. Since a week hasn't elapsed relative to
+  // the previous report, this should not report anything. Currently the weekly
+  // active desks count should be one, so check the "one-count" bucket to make
+  // sure it matches its previous number of entries.
+  EXPECT_EQ(1, Desk::GetWeeklyActiveDesks());
+  const int number_of_one_bucket_entries =
+      histogram_tester.GetBucketCount(kWeeklyActiveDesksHistogram, 1);
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(6));
+  task_environment()->RunUntilIdle();
+  histogram_tester.ExpectBucketCount(kWeeklyActiveDesksHistogram, 1,
+                                     number_of_one_bucket_entries);
+
+  // Wait one more day and it should now report an entry for one, accounting for
+  // the current active desk.
+  task_environment()->AdvanceClock(base::TimeDelta::FromDays(1));
+  task_environment()->RunUntilIdle();
+  histogram_tester.ExpectBucketCount(kWeeklyActiveDesksHistogram, 1,
+                                     number_of_one_bucket_entries + 1);
 }
 
 // TODO(afakhry): Add more tests:

@@ -39,6 +39,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 
+#include "app/vivaldi_apptools.h"
+
 using content::BrowserThread;
 using content::WebContents;
 using security_interstitials::BaseSafeBrowsingErrorUI;
@@ -58,7 +60,7 @@ SafeBrowsingMetricsCollector::EventType GetEventTypeFromThreatSource(
           DATABASE_INTERSTITIAL_BYPASS;
       break;
     case ThreatSource::CLIENT_SIDE_DETECTION:
-      return SafeBrowsingMetricsCollector::EventType::CSD_INTERSITITAL_BYPASS;
+      return SafeBrowsingMetricsCollector::EventType::CSD_INTERSTITIAL_BYPASS;
       break;
     case ThreatSource::REAL_TIME_CHECK:
       return SafeBrowsingMetricsCollector::EventType::
@@ -110,7 +112,7 @@ class SafeBrowsingBlockingPageFactoryImpl
         IsEnhancedProtectionEnabled(*prefs), is_proceed_anyway_disabled,
         true,  // should_open_links_in_new_tab
         true,  // always_show_back_to_safety
-        IsEnhancedProtectionMessageInInterstitialsEnabled(),
+        !vivaldi::IsVivaldiRunning(),  // is_enhanced_protection_message_enabled
         IsSafeBrowsingPolicyManaged(*prefs), kHelpCenterLink);
 
     return new SafeBrowsingBlockingPage(

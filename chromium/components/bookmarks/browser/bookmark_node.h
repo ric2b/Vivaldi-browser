@@ -69,7 +69,7 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   // Set the node's internal title. Note that this neither invokes observers
   // nor updates any bookmark model this node may be in. For that functionality,
   // BookmarkModel::SetTitle(..) should be used instead.
-  void SetTitle(const base::string16& title) override;
+  void SetTitle(const std::u16string& title) override;
 
   // Returns an unique id for this node.
   // For bookmark nodes that are managed by the bookmark model, the IDs are
@@ -131,14 +131,14 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   const MetaInfoMap* GetMetaInfoMap() const;
 
   // TitledUrlNode interface methods.
-  const base::string16& GetTitledUrlNodeTitle() const override;
+  const std::u16string& GetTitledUrlNodeTitle() const override;
   const GURL& GetTitledUrlNodeUrl() const override;
   std::vector<base::StringPiece16> GetTitledUrlNodeAncestorTitles()
       const override;
 
   // Vivaldi: TitledUrlNode interface methods.
-  const base::string16 GetTitledUrlNodeNickName() const override;
-  const base::string16 GetTitledUrlNodeDescription() const override;
+  const std::u16string GetTitledUrlNodeNickName() const override;
+  const std::u16string GetTitledUrlNodeDescription() const override;
 
   // TODO(sky): Consider adding last visit time here, it'll greatly simplify
   // HistoryContentsProvider.
@@ -260,7 +260,7 @@ class BookmarkPermanentNode : public BookmarkNode {
   BookmarkPermanentNode(int64_t id,
                         Type type,
                         const base::GUID& guid,
-                        const base::string16& title,
+                        const std::u16string& title,
                         bool visible_when_empty);
 
   const bool visible_when_empty_;

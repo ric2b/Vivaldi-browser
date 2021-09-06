@@ -17,7 +17,7 @@ using extensions::vivaldi::calendar::CreateNotificationRow;
 EventRow GetEventRow(const CreateDetails& event);
 EventExceptionType CreateEventException(
     const CreateDetails::EventExceptionsType& exception);
-bool GetIdAsInt64(const base::string16& id_string, int64_t* id);
+bool GetIdAsInt64(const std::u16string& id_string, int64_t* id);
 bool GetStdStringAsInt64(const std::string& id_string, int64_t* id);
 
 NotificationToCreate CreateNotificationRow(

@@ -607,14 +607,14 @@ TEST_F(PaletteTrayTestWithInternalStylus, ToolDeactivatesWhenOpeningBubble) {
 
   ASSERT_TRUE(palette_tray_->GetVisible());
 
-  palette_tray_->ShowBubble(false /* show_by_click */);
+  palette_tray_->ShowBubble();
   EXPECT_TRUE(test_api_->tray_bubble_wrapper());
   PaletteToolManager* manager = test_api_->palette_tool_manager();
   manager->ActivateTool(PaletteToolId::LASER_POINTER);
   EXPECT_TRUE(manager->IsToolActive(PaletteToolId::LASER_POINTER));
   EXPECT_FALSE(test_api_->tray_bubble_wrapper());
 
-  palette_tray_->ShowBubble(false /* show_by_click */);
+  palette_tray_->ShowBubble();
   EXPECT_TRUE(test_api_->tray_bubble_wrapper());
   EXPECT_FALSE(manager->IsToolActive(PaletteToolId::LASER_POINTER));
 }
@@ -796,6 +796,29 @@ TEST_F(PaletteTrayNoSessionTestWithInternalStylus,
   fake_stylus_event_on_all_trays(ui::StylusState::INSERTED);
   EXPECT_FALSE(main_tray->GetBubbleView());
   EXPECT_FALSE(external_tray->GetBubbleView());
+}
+
+class PaletteTrayTestWithOOBE : public PaletteTrayTest {
+ public:
+  PaletteTrayTestWithOOBE() = default;
+  ~PaletteTrayTestWithOOBE() override = default;
+
+  // PalatteTrayTest:
+  void SetUp() override {
+    set_start_session(false);
+    PaletteTrayTest::SetUp();
+  }
+};
+
+// Verify there are no crashes if the stylus is used during OOBE.
+TEST_F(PaletteTrayTestWithOOBE, StylusEventsSafeDuringOOBE) {
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::OOBE);
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->EnterPenPointerMode();
+  generator->PressTouch();
+  generator->ReleaseTouch();
 }
 
 }  // namespace ash

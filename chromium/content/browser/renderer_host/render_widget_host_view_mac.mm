@@ -7,6 +7,7 @@
 #import <Carbon/Carbon.h>
 
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -193,8 +194,8 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget)
 
   viz::FrameSinkId frame_sink_id = host()->GetFrameSinkId();
 
-  browser_compositor_.reset(new BrowserCompositorMac(
-      this, this, host()->is_hidden(), display_, frame_sink_id));
+  browser_compositor_ = std::make_unique<BrowserCompositorMac>(
+      this, this, host()->is_hidden(), display_, frame_sink_id);
   DCHECK(![GetInProcessNSView() window]);
 
   host()->SetView(this);
@@ -215,7 +216,7 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget)
     ignore_result(owner_delegate->GetWebkitPreferencesForWidget());
   }
 
-  cursor_manager_.reset(new CursorManager(this));
+  cursor_manager_ = std::make_unique<CursorManager>(this);
 
   if (GetTextInputManager())
     GetTextInputManager()->AddObserver(this);
@@ -428,6 +429,15 @@ void RenderWidgetHostViewMac::UpdateNSViewAndDisplayProperties() {
 
 void RenderWidgetHostViewMac::GetScreenInfo(blink::ScreenInfo* screen_info) {
   browser_compositor_->GetRendererScreenInfo(screen_info);
+}
+
+void RenderWidgetHostViewMac::OnSynchronizedDisplayPropertiesChanged(
+    bool rotation) {
+  // Update cached screen information when the current display changes.
+  const auto& display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow([NSApp keyWindow]);
+  if (display != display_)
+    OnDisplayChanged(display);
 }
 
 void RenderWidgetHostViewMac::Show() {
@@ -724,12 +734,12 @@ void RenderWidgetHostViewMac::Destroy() {
 }
 
 void RenderWidgetHostViewMac::SetTooltipText(
-    const base::string16& tooltip_text) {
+    const std::u16string& tooltip_text) {
   GetCursorManager()->SetTooltipTextForView(this, tooltip_text);
 }
 
 void RenderWidgetHostViewMac::DisplayTooltipText(
-    const base::string16& tooltip_text) {
+    const std::u16string& tooltip_text) {
   ns_view_->SetTooltipText(tooltip_text);
 }
 
@@ -759,7 +769,7 @@ namespace {
 // and needs to be recursive, and that's crazy difficult to do with a lambda.
 // TODO(avi): Move this to be a lambda when P0839R0 lands in C++.
 void AddTextNodesToVector(const ui::AXNode* node,
-                          std::vector<base::string16>* strings) {
+                          std::vector<std::u16string>* strings) {
   const ui::AXNodeData& node_data = node->data();
 
   if (node_data.role == ax::mojom::Role::kStaticText) {
@@ -774,18 +784,17 @@ void AddTextNodesToVector(const ui::AXNode* node,
     AddTextNodesToVector(child, strings);
 }
 
-using SpeechCallback = base::OnceCallback<void(const base::string16&)>;
+using SpeechCallback = base::OnceCallback<void(const std::u16string&)>;
 void CombineTextNodesAndMakeCallback(SpeechCallback callback,
                                      const ui::AXTreeUpdate& update) {
-  std::vector<base::string16> text_node_contents;
+  std::vector<std::u16string> text_node_contents;
   text_node_contents.reserve(update.nodes.size());
 
   ui::AXTree tree(update);
 
   AddTextNodesToVector(tree.root(), &text_node_contents);
 
-  std::move(callback).Run(
-      base::JoinString(text_node_contents, base::ASCIIToUTF16("\n")));
+  std::move(callback).Run(base::JoinString(text_node_contents, u"\n"));
 }
 
 }  // namespace
@@ -1111,7 +1120,7 @@ blink::mojom::PointerLockResult RenderWidgetHostViewMac::LockMouse(
   ns_view_->SetCursorLocked(true);
 
   // Clear the tooltip window.
-  ns_view_->SetTooltipText(base::string16());
+  ns_view_->SetTooltipText(std::u16string());
 
   return blink::mojom::PointerLockResult::kSuccess;
 }
@@ -1397,14 +1406,26 @@ RenderWidgetHostViewMac::AccessibilityGetNativeViewAccessibleForWindow() {
 void RenderWidgetHostViewMac::SetTextInputActive(bool active) {
   const bool should_enable_password_input =
       active && GetTextInputType() == ui::TEXT_INPUT_TYPE_PASSWORD;
-  if (should_enable_password_input)
-    password_input_enabler_.reset(new ui::ScopedPasswordInputEnabler());
-  else
+  if (should_enable_password_input) {
+    password_input_enabler_ =
+        std::make_unique<ui::ScopedPasswordInputEnabler>();
+  } else {
     password_input_enabler_.reset();
+  }
 }
 
 MouseWheelPhaseHandler* RenderWidgetHostViewMac::GetMouseWheelPhaseHandler() {
   return &mouse_wheel_phase_handler_;
+}
+
+void RenderWidgetHostViewMac::ShowSharePicker(
+    const std::string& title,
+    const std::string& text,
+    const std::string& url,
+    const std::vector<std::string>& file_paths,
+    blink::mojom::ShareService::ShareCallback callback) {
+  ns_view_->ShowSharingServicePicker(title, text, url, file_paths,
+                                     std::move(callback));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1605,7 +1626,7 @@ void RenderWidgetHostViewMac::ForwardMouseEvent(
     host()->ForwardMouseEvent(web_event);
 
   if (web_event.GetType() == WebInputEvent::Type::kMouseLeave)
-    ns_view_->SetTooltipText(base::string16());
+    ns_view_->SetTooltipText(std::u16string());
 }
 
 void RenderWidgetHostViewMac::ForwardWheelEvent(
@@ -1689,7 +1710,7 @@ void RenderWidgetHostViewMac::SmartMagnify(
 }
 
 void RenderWidgetHostViewMac::ImeSetComposition(
-    const base::string16& text,
+    const std::u16string& text,
     const std::vector<ui::ImeTextSpan>& ime_text_spans,
     const gfx::Range& replacement_range,
     int selection_start,
@@ -1701,7 +1722,7 @@ void RenderWidgetHostViewMac::ImeSetComposition(
 }
 
 void RenderWidgetHostViewMac::ImeCommitText(
-    const base::string16& text,
+    const std::u16string& text,
     const gfx::Range& replacement_range) {
   if (auto* widget_host = GetWidgetForIme()) {
     widget_host->ImeCommitText(text, std::vector<ui::ImeTextSpan>(),
@@ -2088,7 +2109,7 @@ void RenderWidgetHostViewMac::OnGotStringForDictionaryOverlay(
     // selected.
     // https://crbug.com/830906
     if (auto* selection = GetTextSelection()) {
-      const base::string16& selected_text = selection->selected_text();
+      const std::u16string& selected_text = selection->selected_text();
       NSString* ns_selected_text = base::SysUTF16ToNSString(selected_text);
       if ([ns_selected_text length] == 0)
         return;

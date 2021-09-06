@@ -171,7 +171,7 @@ constexpr int kDSTRoundingOffsetHours = 4;
 
 }  // namespace
 
-base::string16 FormatUrlForRedirectComparison(const GURL& url) {
+std::u16string FormatUrlForRedirectComparison(const GURL& url) {
   url::Replacements<char> remove_port;
   remove_port.ClearPort();
   return url_formatter::FormatUrl(
@@ -285,11 +285,6 @@ HistoryBackend::~HistoryBackend() {
 #if DCHECK_IS_ON()
   HistoryPathsTracker::GetInstance()->RemovePath(history_dir_);
 #endif
-
-#if defined(OS_ANDROID)
-  if (backend_client_ && !history_dir_.empty())
-    backend_client_->OnHistoryBackendDestroyed(this, history_dir_);
-#endif
 }
 
 void HistoryBackend::Init(
@@ -305,7 +300,7 @@ void HistoryBackend::Init(
   // HistoryBackend is created on the UI thread by HistoryService, then the
   // HistoryBackend::Init() method is called on the DB thread. Create the
   // base::SupportsUserData on the DB thread since it is not thread-safe.
-  supports_user_data_helper_.reset(new HistoryBackendHelper);
+  supports_user_data_helper_ = std::make_unique<HistoryBackendHelper>();
 
   if (!force_fail)
     InitImpl(history_database_params);
@@ -473,11 +468,44 @@ void HistoryBackend::SetFlocAllowed(ContextID context_id,
     return;
 
   VisitID visit_id = tracker_.GetLastVisit(context_id, nav_entry_id, url);
+  if (!visit_id)
+    return;
 
+  // Only add to the annotations table if the visit_id exists in the visits
+  // table.
+  VisitContentAnnotations annotations;
+  if (db_->GetContentAnnotationsForVisit(visit_id, &annotations)) {
+    annotations.annotation_flags |=
+        VisitContentAnnotationFlag::kFlocEligibleRelaxed;
+    db_->UpdateContentAnnotationsForVisit(visit_id, annotations);
+  } else {
+    annotations.annotation_flags |=
+        VisitContentAnnotationFlag::kFlocEligibleRelaxed;
+    db_->AddContentAnnotationsForVisit(visit_id, annotations);
+  }
+  ScheduleCommit();
+}
+
+void HistoryBackend::AddContentModelAnnotationsForVisit(
+    VisitID visit_id,
+    const VisitContentModelAnnotations& model_annotations) {
+  TRACE_EVENT0("browser", "HistoryBackend::AddContentAnnotationsForVisit");
+
+  if (!db_)
+    return;
+
+  // Only add to the annotations table if the visit_id exists in the visits
+  // table.
   VisitRow visit_row;
   if (db_->GetRowForVisit(visit_id, &visit_row)) {
-    visit_row.floc_allowed = true;
-    db_->UpdateVisitRow(visit_row);
+    VisitContentAnnotations annotations;
+    if (db_->GetContentAnnotationsForVisit(visit_id, &annotations)) {
+      annotations.model_annotations = model_annotations;
+      db_->UpdateContentAnnotationsForVisit(visit_id, annotations);
+    } else {
+      annotations.model_annotations = model_annotations;
+      db_->AddContentAnnotationsForVisit(visit_id, annotations);
+    }
     ScheduleCommit();
   }
 }
@@ -808,9 +836,9 @@ void HistoryBackend::InitImpl(
   DeleteFTSIndexDatabases();
 
   // History database.
-  db_.reset(new HistoryDatabase(
+  db_ = std::make_unique<HistoryDatabase>(
       history_database_params.download_interrupt_reason_none,
-      history_database_params.download_interrupt_reason_crash));
+      history_database_params.download_interrupt_reason_crash);
 
   // Unretained to avoid a ref loop with db_.
   db_->set_error_callback(base::BindRepeating(
@@ -884,13 +912,6 @@ void HistoryBackend::InitImpl(
   expirer_.StartExpiringOldStuff(TimeDelta::FromDays(
     history_database_params.number_of_days_to_keep_visits));
 
-#if defined(OS_ANDROID)
-  if (backend_client_) {
-    backend_client_->OnHistoryBackendInitialized(this, db_.get(),
-                                                 favicon_db_ptr, history_dir_);
-  }
-#endif
-
   LOCAL_HISTOGRAM_TIMES("History.InitTime", TimeTicks::Now() - beginning_time);
 }
 
@@ -928,7 +949,7 @@ std::pair<URLID, VisitID> HistoryBackend::AddPageVisit(
     VisitSource visit_source,
     bool should_increment_typed_count,
     bool floc_allowed,
-    base::Optional<base::string16> title) {
+    base::Optional<std::u16string> title) {
   // See if this URL is already in the DB.
   URLRow url_info(url);
   URLID url_id = db_->GetRowForURL(url, &url_info);
@@ -1057,7 +1078,7 @@ bool HistoryBackend::IsExpiredVisitTime(const base::Time& time) {
 }
 
 void HistoryBackend::SetPageTitle(const GURL& url,
-                                  const base::string16& title) {
+                                  const std::u16string& title) {
   TRACE_EVENT0("browser", "HistoryBackend::SetPageTitle");
 
   if (!db_)
@@ -1102,7 +1123,7 @@ void HistoryBackend::SetPageTitle(const GURL& url,
 }
 
 void HistoryBackend::AddPageNoVisitForBookmark(const GURL& url,
-                                               const base::string16& title) {
+                                               const std::u16string& title) {
   TRACE_EVENT0("browser", "HistoryBackend::AddPageNoVisitForBookmark");
 
   if (!db_)
@@ -1307,21 +1328,35 @@ DomainDiversityResults HistoryBackend::GetDomainDiversity(
   return result;
 }
 
-HistoryLastVisitToHostResult HistoryBackend::GetLastVisitToHost(
-    const GURL& host,
-    base::Time begin_time,
-    base::Time end_time) {
+HistoryLastVisitResult HistoryBackend::GetLastVisitToHost(const GURL& host,
+                                                          base::Time begin_time,
+                                                          base::Time end_time) {
   base::Time last_visit;
   return {
       db_ && db_->GetLastVisitToHost(host, begin_time, end_time, &last_visit),
       last_visit};
 }
 
+HistoryLastVisitResult HistoryBackend::GetLastVisitToURL(const GURL& url,
+                                                         base::Time end_time) {
+  base::Time last_visit;
+  return {
+      db_ && db_->GetLastVisitToURL(url, end_time, &last_visit),
+      last_visit,
+  };
+}
+
+DailyVisitsResult HistoryBackend::GetDailyVisitsToHost(const GURL& host,
+                                                       base::Time begin_time,
+                                                       base::Time end_time) {
+  return db_->GetDailyVisitsToHost(host, begin_time, end_time);
+}
+
 // Keyword visits --------------------------------------------------------------
 
 void HistoryBackend::SetKeywordSearchTermsForURL(const GURL& url,
                                                  KeywordID keyword_id,
-                                                 const base::string16& term) {
+                                                 const std::u16string& term) {
   TRACE_EVENT0("browser", "HistoryBackend::SetKeywordSearchTermsForURL");
 
   if (!db_)
@@ -1367,7 +1402,7 @@ void HistoryBackend::DeleteKeywordSearchTermForURL(const GURL& url) {
 }
 
 void HistoryBackend::DeleteMatchingURLsForKeyword(KeywordID keyword_id,
-                                                  const base::string16& term) {
+                                                  const std::u16string& term) {
   TRACE_EVENT0("browser", "HistoryBackend::DeleteMatchingURLsForKeyword");
 
   if (!db_)
@@ -1459,7 +1494,7 @@ void HistoryBackend::RemoveDownloads(const std::set<uint32_t>& ids) {
   DCHECK_GE(ids.size(), num_downloads_deleted);
 }
 
-QueryResults HistoryBackend::QueryHistory(const base::string16& text_query,
+QueryResults HistoryBackend::QueryHistory(const std::u16string& text_query,
                                           const QueryOptions& options) {
   QueryResults query_results;
   base::TimeTicks beginning_time = base::TimeTicks::Now();
@@ -1504,7 +1539,10 @@ void HistoryBackend::QueryHistoryBasic(const QueryOptions& options,
     }
 
     url_result.set_visit_time(visit.visit_time);
-    url_result.set_floc_allowed(visit.floc_allowed);
+
+    VisitContentAnnotations content_annotations;
+    db_->GetContentAnnotationsForVisit(visit.visit_id, &content_annotations);
+    url_result.set_content_annotations(content_annotations);
 
     // Set whether the visit was blocked for a managed user by looking at the
     // transition type.
@@ -1522,7 +1560,7 @@ void HistoryBackend::QueryHistoryBasic(const QueryOptions& options,
 }
 
 // Text-based querying of history.
-void HistoryBackend::QueryHistoryText(const base::string16& text_query,
+void HistoryBackend::QueryHistoryText(const std::u16string& text_query,
                                       const QueryOptions& options,
                                       QueryResults* result) {
   URLRows text_matches;
@@ -1538,7 +1576,12 @@ void HistoryBackend::QueryHistoryText(const base::string16& text_query,
     for (size_t j = 0; j < visits.size(); j++) {
       URLResult url_result(text_match);
       url_result.set_visit_time(visits[j].visit_time);
-      url_result.set_floc_allowed(visits[j].floc_allowed);
+
+      VisitContentAnnotations content_annotations;
+      db_->GetContentAnnotationsForVisit(visits[j].visit_id,
+                                         &content_annotations);
+      url_result.set_content_annotations(content_annotations);
+
       matching_visits.push_back(url_result);
     }
   }
@@ -1821,6 +1864,14 @@ bool HistoryBackend::SetOnDemandFavicons(const GURL& page_url,
 void HistoryBackend::SetFaviconsOutOfDateForPage(const GURL& page_url) {
   if (favicon_backend_ &&
       favicon_backend_->SetFaviconsOutOfDateForPage(page_url)) {
+    ScheduleCommit();
+  }
+}
+
+void HistoryBackend::SetFaviconsOutOfDateBetween(base::Time begin,
+                                                 base::Time end) {
+  if (favicon_backend_ &&
+      favicon_backend_->SetFaviconsOutOfDateBetween(begin, end)) {
     ScheduleCommit();
   }
 }

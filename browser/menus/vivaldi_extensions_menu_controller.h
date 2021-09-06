@@ -29,7 +29,7 @@ class ExtensionsMenuController {
       ui::SimpleMenuModel::Delegate* delegate,
       const extensions::Extension* extension,
       content::WebContents* source_web_contents,
-      base::string16 printable_selection_text,
+      std::u16string printable_selection_text,
       const base::Callback<bool(const extensions::MenuItem*)>& filter);
   extensions::ContextMenuMatcher* get_extension_items() const {
     return extension_items_.get();
@@ -38,10 +38,10 @@ private:
   VivaldiRenderViewContextMenu* rv_context_menu_;
   std::unique_ptr<extensions::ContextMenuMatcher> extension_items_;
 
-  void AppendAllExtensionItems(base::string16 printable_selection_text);
+  void AppendAllExtensionItems(std::u16string printable_selection_text);
   void AppendCurrentExtensionItems(const extensions::Extension* extension,
                                    content::WebContents* source_web_contents,
-                                   base::string16 printable_selection_text);
+                                   std::u16string printable_selection_text);
 };
 
 }  // namespace vivaldi

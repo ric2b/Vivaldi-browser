@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/ash/certificate_provider/security_token_pin_dialog_host.h"
-#include "chrome/browser/chromeos/login/login_client_cert_usage_observer.h"
+#include "chrome/browser/ash/login/login_client_cert_usage_observer.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/core_oobe_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
@@ -28,6 +28,7 @@ class AccountId;
 
 namespace base {
 class DictionaryValue;
+class ElapsedTimer;
 }  // namespace base
 
 namespace network {
@@ -398,6 +399,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
   GaiaPath gaia_path_ = GaiaPath::kDefault;
 
   bool hidden_ = true;
+
+  // Used to record amount of time user needed for successful online login.
+  std::unique_ptr<base::ElapsedTimer> elapsed_timer_;
 
   std::string signin_partition_name_;
 

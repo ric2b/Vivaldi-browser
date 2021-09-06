@@ -27,7 +27,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 
 /** Implementation of the {@link LocationBarLayout} that is displayed for widget searches. */
@@ -42,7 +42,7 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
         setBackground(ToolbarPhone.createModernLocationBarBackground(getResources()));
 
         // Vivaldi (VB-58674 / VB-77045)
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mCompositeTouchDelegate = new CompositeTouchDelegate(this);
             setTouchDelegate(mCompositeTouchDelegate);
         }
@@ -136,8 +136,6 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
     private void focusTextBox() {
         mUrlBarFocusRequested |= !mUrlBar.hasFocus();
         ensureUrlBarFocusedAndTriggerZeroSuggest();
-
-        mUrlCoordinator.setKeyboardVisibility(true, false);
     }
 
     @Override
@@ -156,10 +154,17 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
      * #onWindowFocusChanged(boolean)}, if call mUrlBar.requestFocus() before onWindowFocusChanged
      * is called, clipboard data will not been received since receive clipboard data needs focus
      * (https://developer.android.com/reference/android/content/ClipboardManager#getPrimaryClip()).
+     *
+     * Requesting focus ahead of window activation completion results with inability to call up
+     * soft keyboard on an early releases of Android S. The remedy is to defer the focus requests
+     * until after Window focus change completes. This is tracked by Android bug http://b/186331446.
      */
     private void ensureUrlBarFocusedAndTriggerZeroSuggest() {
         if (mUrlBarFocusRequested && mHasWindowFocus) {
-            mUrlBar.requestFocus();
+            mUrlBar.post(() -> {
+                mUrlBar.requestFocus();
+                mUrlCoordinator.setKeyboardVisibility(true, false);
+            });
             mUrlBarFocusRequested = false;
         }
         // Use cached suggestions only if native is not yet ready.

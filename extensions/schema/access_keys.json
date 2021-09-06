@@ -54,19 +54,18 @@
             "type": "integer",
             "name": "tabId",
             "minimum": 0
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters":  [
-              {
-                "name": "accessKeyList",
-                "type": "array",
-                "items": { "$ref": "AccessKeyDefinition" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters":  [
+            {
+              "name": "accessKeyList",
+              "type": "array",
+              "items": { "$ref": "AccessKeyDefinition" }
+            }
+          ]
+        }
       },
       {
         "name": "action",

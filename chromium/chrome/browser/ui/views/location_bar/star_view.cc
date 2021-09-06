@@ -13,16 +13,22 @@
 #include "base/strings/string_number_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/defaults.h"
+#include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_stats.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
+#include "chrome/browser/ui/views/chrome_view_class_properties.h"
 #include "chrome/browser/ui/views/location_bar/star_menu_model.h"
 #include "chrome/browser/ui/views/user_education/feature_promo_bubble_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/feature_engagement/public/event_constants.h"
+#include "components/feature_engagement/public/feature_constants.h"
+#include "components/feature_engagement/public/tracker.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/reading_list/features/reading_list_switches.h"
 #include "components/strings/grit/components_strings.h"
@@ -31,6 +37,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/metadata/metadata_impl_macros.h"
 
@@ -74,6 +81,18 @@ StarView::StarView(CommandUpdater* command_updater,
 
 StarView::~StarView() {}
 
+void StarView::AfterPropertyChange(const void* key, int64_t old_value) {
+  if (key == kHasInProductHelpPromoKey) {
+    views::InkDropState next_state;
+    if (GetProperty(kHasInProductHelpPromoKey) || GetVisible()) {
+      next_state = views::InkDropState::ACTIVATED;
+    } else {
+      next_state = views::InkDropState::DEACTIVATED;
+    }
+    GetInkDrop()->AnimateToState(next_state);
+  }
+}
+
 void StarView::UpdateImpl() {
   SetVisible(browser_defaults::bookmarks_enabled &&
              edit_bookmarks_enabled_.GetValue());
@@ -99,6 +118,15 @@ void StarView::OnExecuting(PageActionIconView::ExecuteSource execute_source) {
 void StarView::ExecuteCommand(ExecuteSource source) {
   OnExecuting(source);
   if (base::FeatureList::IsEnabled(reading_list::switches::kReadLater)) {
+    FeaturePromoController* feature_promo_controller =
+        browser_->window()->GetFeaturePromoController();
+    if (feature_promo_controller &&
+        feature_promo_controller->BubbleIsShowing(
+            feature_engagement::kIPHReadingListEntryPointFeature)) {
+      reading_list_entry_point_promo_handle_ =
+          feature_promo_controller->CloseBubbleAndContinuePromo(
+              feature_engagement::kIPHReadingListEntryPointFeature);
+    }
     menu_model_ = std::make_unique<StarMenuModel>(
         this, GetActive(), chrome::CanMoveActiveTabToReadLater(browser_),
         chrome::IsCurrentTabUnreadInReadLater(browser_));
@@ -108,6 +136,10 @@ void StarView::ExecuteCommand(ExecuteSource source) {
     menu_runner_->RunMenuAt(GetWidget(), nullptr, GetAnchorBoundsInScreen(),
                             views::MenuAnchorPosition::kTopRight,
                             ui::MENU_SOURCE_NONE);
+    feature_engagement::Tracker* tracker =
+        feature_engagement::TrackerFactory::GetForBrowserContext(
+            browser_->profile());
+    tracker->NotifyEvent(feature_engagement::events::kBookmarkStarMenuOpened);
   } else {
     chrome::BookmarkCurrentTab(browser_);
   }
@@ -121,7 +153,7 @@ const gfx::VectorIcon& StarView::GetVectorIcon() const {
   return GetActive() ? omnibox::kStarActiveIcon : omnibox::kStarIcon;
 }
 
-base::string16 StarView::GetTextForTooltipAndAccessibleName() const {
+std::u16string StarView::GetTextForTooltipAndAccessibleName() const {
   return l10n_util::GetStringUTF16(GetActive() ? IDS_TOOLTIP_STARRED
                                                : IDS_TOOLTIP_STAR);
 }
@@ -157,7 +189,13 @@ void StarView::MenuClosed(ui::SimpleMenuModel* source) {
       !GetBubble()->GetWidget()->IsVisible()) {
     SetHighlighted(false);
   }
+  reading_list_entry_point_promo_handle_.reset();
   menu_runner_.reset();
+}
+
+bool StarView::IsCommandIdAlerted(int command_id) const {
+  return command_id == StarMenuModel::CommandMoveToReadLater &&
+         reading_list_entry_point_promo_handle_;
 }
 
 BEGIN_METADATA(StarView, PageActionIconView)

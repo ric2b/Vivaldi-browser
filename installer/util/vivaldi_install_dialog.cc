@@ -29,88 +29,22 @@
 #include "chrome/installer/util/installer_util_strings.h"
 #include "chrome/installer/util/shell_util.h"
 
-using base::PathService;
+#include "installer/win/vivaldi_install_l10n.h"
+#include "vivaldi/installer/win/vivaldi_install_language_names.h"
 
 namespace installer {
 
 namespace {
 static const uint32_t kuint32max = 0xFFFFFFFFu;
 
-constexpr const wchar_t* kExtraLanguages[] = {L"en-AU", L"en-IN"};
-
-constexpr base::win::i18n::LanguageSelector::LangToOffset
-    kLanguageOffsetPairs[] = {
-#define HANDLE_LANGUAGE(l_, o_) {L## #l_, o_},
-        DO_LANGUAGES
-#undef HANDLE_LANGUAGE
+struct {
+  const wchar_t* code;
+  const wchar_t* name;
+} kLanguages[] = {
+#define HANDLE_VIVALDI_LANGUAGE_NAME(code, name) {L"" code, L"" name},
+    DO_VIVALDI_LANGUAGE_NAMES
+#undef HANDLE_VIVALDI_LANGUAGE_NAME
 };
-
-std::map<const std::wstring, const std::wstring> kLanguages = {
-    {L"af", L"Afrikaans"},
-    {L"be", L"Беларуская - Belarusian"},
-    {L"bg", L"български - Bulgarian"},
-    {L"cs", L"Čeština - Czech"},
-    {L"da", L"Dansk - Danish"},
-    {L"de", L"Deutsch - German"},
-    {L"de_CH", L"Schweizerdeutsch - Swiss German"},
-    {L"el", L"Ελληνικά - Greek"},
-    {L"en-us", L"English (US)"},
-    {L"en-GB", L"English (UK)"},
-    {L"en-AU", L"English (Australia)"},
-    {L"en-IN", L"English (India)"},
-    {L"es", L"Español - Spanish"},
-    {L"et", L"Eesti keel - Estonian"},
-    {L"fa", L"فارسی - Persian"},
-    {L"fi", L"Suomi - Finnish"},
-    {L"fr", L"Français - French"},
-    {L"fy", L"Frysk - Frisian"},
-    {L"gd", L"Gàidhlig - Scots Gaelic"},
-    {L"hu", L"Magyar - Hungarian"},
-    {L"hr", L"Hrvatski - Croatian"},
-    {L"hy", L"Հայերեն - Armenian"},
-    {L"id", L"Bahasa Indonesia - Indonesian"},
-    {L"is", L"Íslenska - Icelandic"},
-    {L"it", L"Italiano - Italian"},
-    {L"ja", L"日本語 - Japanese"},
-    {L"kab", L"Taqbaylit - Kabyle"},
-    {L"ko", L"한국어 - Korean"},
-    {L"lt", L"Lietuvių - Lithuanian"},
-    {L"no", L"Norsk (bokmål) - Norwegian (Bokmål))"},
-    {L"nn", L"Norsk (nynorsk) - Norwegian (Nynorsk)"},
-    {L"nl", L"Nederlands - Dutch"},
-    {L"pl", L"Polski - Polish"},
-    {L"pt_BR", L"Português (Brasil) - Portuguese (Brazil)"},
-    {L"pt_PT", L"Português (Europeu) - Portuguese (Portugal)"},
-    {L"ro", L"Română - Romanian"},
-    {L"ru", L"Русский - Russian"},
-    {L"sk", L"Slovenčina - Slovak"},
-    {L"sl", L"Slovenščina - Slovenian"},
-    {L"sq", L"Shqip- Albanian"},
-    {L"sr", L"Српски - Serbian"},
-    {L"sr_Latn", L"Srpski - Serbian (Latin)"},
-    {L"sv", L"Svenska - Swedish"},
-    {L"tr", L"Türkçe - Turkish"},
-    {L"uk", L"Українська - Ukrainian"},
-    {L"vi", L"Tiếng Việt - Vietnamese"},
-    {L"zh_CN", L"简体中文 - Chinese (Simplified)"},
-    {L"zh_TW", L"正體中文 - Chinese (Traditional)"}};
-
-// Special handling for locales not supported by the Chromium installer.
-std::wstring GetSystemDefaultLanguage() {
-  wchar_t buffer[LOCALE_NAME_MAX_LENGTH];
-  memset(buffer, 0, sizeof buffer);
-  ::GetUserDefaultLocaleName(buffer, LOCALE_NAME_MAX_LENGTH);
-  base::WStringPiece locale_name(buffer);
-  for (const wchar_t* val : kExtraLanguages) {
-    if (locale_name == val)
-      return val;
-  }
-
-  // Use an empty preferred language to use the system default.
-  base::win::i18n::LanguageSelector selector(base::WStringPiece(),
-                                             kLanguageOffsetPairs);
-  return selector.selected_translation();
-}
 
 base::Optional<vivaldi::InstallType> GetInstallTypeFromComboIndex(int i) {
   static const vivaldi::InstallType selection_type_map[] = {
@@ -182,10 +116,6 @@ VivaldiInstallDialog::VivaldiInstallDialog(HINSTANCE instance,
     options_.register_browser =
         (options_.install_type != vivaldi::InstallType::kStandalone);
   }
-
-  if (options_.language.empty()) {
-    options_.language = GetSystemDefaultLanguage();
-  }
 }
 
 VivaldiInstallDialog::~VivaldiInstallDialog() {
@@ -230,17 +160,19 @@ VivaldiInstallDialog::DlgResult VivaldiInstallDialog::ShowModal() {
 
   DoDialog();  // main message loop
 
-  installer::SetTranslationDelegate(nullptr);
-
-  if (dlg_result_ == INSTALL_DLG_INSTALL)
+  if (dlg_result_ == INSTALL_DLG_INSTALL) {
     SaveInstallValues();
+    if (changed_language_) {
+      vivaldi::WriteInstallerRegistryLanguage();
+    }
+  }
 
   return dlg_result_;
 }
 
 void VivaldiInstallDialog::ReadLastInstallValues() {
-  base::win::RegKey key(HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey,
-                        KEY_QUERY_VALUE);
+  base::win::RegKey key = vivaldi::OpenRegistryKeyToRead(
+      HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey);
   if (!key.Valid())
     return;
 
@@ -248,7 +180,7 @@ void VivaldiInstallDialog::ReadLastInstallValues() {
       vivaldi::constants::kVivaldiInstallerDestinationFolder, key));
 
   base::Optional<vivaldi::InstallType> registry_install_type;
-  if (base::Optional<DWORD> value = vivaldi::ReadRegistryDW(
+  if (base::Optional<uint32_t> value = vivaldi::ReadRegistryUint32(
           vivaldi::constants::kVivaldiInstallerInstallType, key)) {
     registry_install_type = GetInstallTypeFromComboIndex(*value);
     if (!registry_install_type) {
@@ -298,10 +230,6 @@ void VivaldiInstallDialog::ReadLastInstallValues() {
     advanced_mode_ = *bool_value;
   }
 
-  if (options_.language.empty()) {
-    options_.language = vivaldi::ReadRegistryString(google_update::kRegLangField, key);
-  }
-
   if (base::Optional<bool> bool_value = vivaldi::ReadRegistryBool(
           vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate,
           key)) {
@@ -310,36 +238,47 @@ void VivaldiInstallDialog::ReadLastInstallValues() {
 }
 
 void VivaldiInstallDialog::SaveInstallValues() {
-  base::win::RegKey key(HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey,
-                        KEY_ALL_ACCESS);
-  if (key.Valid()) {
-    key.WriteValue(vivaldi::constants::kVivaldiInstallerDestinationFolder,
-                   options_.install_dir.value().c_str());
-    key.WriteValue(vivaldi::constants::kVivaldiInstallerInstallType,
-                   ToComboIndex(options_.install_type));
-    key.WriteValue(vivaldi::constants::kVivaldiInstallerDefaultBrowser,
-                   options_.register_browser ? 1 : 0);
-    key.WriteValue(vivaldi::constants::kVivaldiInstallerAdvancedMode,
-                   advanced_mode_ ? 1 : 0);
-    key.WriteValue(google_update::kRegLangField, options_.language.c_str());
-    if (disable_standalone_autoupdates_) {
-      key.WriteValue(
-          vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate, 1);
-    } else {
-      // Remove the key not to advertise this option.
-      key.DeleteValue(
-          vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate);
-    }
+  base::win::RegKey key = vivaldi::OpenRegistryKeyToWrite(
+      HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey);
+  if (!key.Valid())
+    return;
+  vivaldi::WriteRegistryString(
+      vivaldi::constants::kVivaldiInstallerDestinationFolder,
+      options_.install_dir.value(), key);
+  vivaldi::WriteRegistryUint32(vivaldi::constants::kVivaldiInstallerInstallType,
+                               ToComboIndex(options_.install_type), key);
+  vivaldi::WriteRegistryBool(
+      vivaldi::constants::kVivaldiInstallerDefaultBrowser,
+      options_.register_browser, key);
+  vivaldi::WriteRegistryBool(vivaldi::constants::kVivaldiInstallerAdvancedMode,
+                             advanced_mode_, key);
+  if (disable_standalone_autoupdates_) {
+    vivaldi::WriteRegistryBool(
+        vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate, true,
+        key);
+  } else {
+    // Remove the key not to advertise this option.
+    key.DeleteValue(
+        vivaldi::constants::kVivaldiInstallerDisableStandaloneAutoupdate);
   }
 }
 
-bool VivaldiInstallDialog::InternalSelectLanguage(const std::wstring& code) {
+bool VivaldiInstallDialog::InternalSelectLanguage() {
+  if (DCHECK_IS_ON()) {
+    for (const auto& pair : kLanguages) {
+      std::wstring language_code = pair.code;
+      vivaldi::NormalizeLanguageCode(language_code);
+      DCHECK_EQ(language_code, pair.code) << "The language code " << pair.code
+                                          << " in kLanguages is not normalized";
+    }
+  }
+  std::wstring code = vivaldi::GetInstallerLanguage();
   bool found = false;
   std::map<const std::wstring, const std::wstring>::iterator it;
-  for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
-    if (it->first == code) {
+  for (const auto& pair : kLanguages) {
+    if (pair.code == code) {
       ComboBox_SelectString(GetDlgItem(hdlg_, IDC_COMBO_LANGUAGE), -1,
-                            it->second.c_str());
+                            pair.name);
       found = true;
       break;
     }
@@ -351,16 +290,14 @@ void VivaldiInstallDialog::InitDialog() {
   dialog_ended_ = false;
   is_upgrade_ = vivaldi::IsVivaldiInstalled(options_.install_dir);
 
-  installer::SetTranslationDelegate(&translation_delegate_);
-
   std::map<const std::wstring, const std::wstring>::iterator it;
-  for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
-    ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_LANGUAGE),
-                       it->second.c_str());
+  for (const auto& pair : kLanguages) {
+    ComboBox_AddString(GetDlgItem(hdlg_, IDC_COMBO_LANGUAGE), pair.name);
   }
-  if (!InternalSelectLanguage(options_.language)) {
-    options_.language = L"en-us";
-    InternalSelectLanguage(options_.language);
+  if (!InternalSelectLanguage()) {
+    ::vivaldi::SetInstallerLanguage(L"en-us");
+    changed_language_ = true;
+    InternalSelectLanguage();
   }
 
   TranslateDialog();
@@ -375,33 +312,7 @@ void VivaldiInstallDialog::InitDialog() {
               disable_standalone_autoupdates_ ? BST_CHECKED : BST_UNCHECKED, 0);
 }
 
-base::string16
-VivaldiInstallDialog::VivaldiTranslationDelegate::GetLocalizedString(
-    int installer_string_id) {
-  std::wstring localized_string;
-  int message_id = installer_string_id + offset_;
-
-  const ATLSTRINGRESOURCEIMAGE* image =
-      AtlGetStringResourceImage(_AtlBaseModule.GetModuleInstance(), message_id);
-  if (image)
-    localized_string = std::wstring(image->achString, image->nLength);
-  else
-    NOTREACHED() << __func__ << ": Unable to find resource id " << message_id;
-
-  return localized_string;
-}
-
-void VivaldiInstallDialog::VivaldiTranslationDelegate::SetLanguage(
-    const std::wstring& language_code) {
-  std::vector<std::wstring> candidates;
-  candidates.emplace_back(language_code);
-  base::win::i18n::LanguageSelector selector(candidates, kLanguageOffsetPairs);
-  offset_ = selector.offset();
-}
-
 void VivaldiInstallDialog::TranslateDialog() {
-  translation_delegate_.SetLanguage(options_.language);
-
   txt_tos_accept_update_str_ =
       GetLocalizedString(IDS_INSTALL_TXT_TOS_ACCEPT_AND_UPDATE_BASE);
   btn_tos_accept_update_str_ =
@@ -415,7 +326,7 @@ void VivaldiInstallDialog::TranslateDialog() {
 
   auto caption_string = GetLocalizedString(IDS_INSTALL_INSTALL_CAPTION_BASE);
 #if !defined(NDEBUG)
-  caption_string += L" [" + options_.language + L"]";
+  caption_string += L" [" + vivaldi::GetInstallerLanguage() + L"]";
 #endif  // NDEBUG
   SetWindowText(hdlg_, caption_string.c_str());
   SetDlgItemText(hdlg_, IDC_STATIC_LANGUAGE,
@@ -606,12 +517,14 @@ void VivaldiInstallDialog::OnLanguageSelection() {
     if (len <= 0)
       return;
 
-    std::unique_ptr<wchar_t[]> buf(new wchar_t[len + 1]);
-    ComboBox_GetLBText(GetDlgItem(hdlg_, IDC_COMBO_LANGUAGE), i, buf.get());
+    std::wstring buf;
+    buf.resize(len);
+    ComboBox_GetLBText(GetDlgItem(hdlg_, IDC_COMBO_LANGUAGE), i, &buf[0]);
     std::map<const std::wstring, const std::wstring>::iterator it;
-    for (it = kLanguages.begin(); it != kLanguages.end(); it++) {
-      if (it->second == buf.get()) {
-        options_.language = it->first;
+    for (const auto& pair : kLanguages) {
+      if (pair.name == buf) {
+        vivaldi::SetInstallerLanguage(pair.code);
+        changed_language_ = true;
         TranslateDialog();
         break;
       }
@@ -630,12 +543,12 @@ bool VivaldiInstallDialog::IsInstallPathValid(const base::FilePath& path) {
 
 InstallStatus VivaldiInstallDialog::ShowEULADialog() {
   VLOG(1) << "About to show EULA";
-  base::string16 eula_path = GetLocalizedEulaResource();
+  std::wstring eula_path = GetLocalizedEulaResource();
   if (eula_path.empty()) {
     LOG(ERROR) << "No EULA path available";
     return EULA_REJECTED;
   }
-  base::string16 inner_frame_path = GetInnerFrameEULAResource();
+  std::wstring inner_frame_path = GetInnerFrameEULAResource();
   if (inner_frame_path.empty()) {
     LOG(ERROR) << "No EULA inner frame path available";
     return EULA_REJECTED;

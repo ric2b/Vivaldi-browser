@@ -27,11 +27,15 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
@@ -52,6 +56,8 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
                                                     IdentityManager.Observer,
                                                     AccountsChangeObserver {
     @VisibleForTesting
+    static final String STARTUP_HISTOGRAM_SUFFIX = ".Startup";
+    @VisibleForTesting
     static final String USER_ELIGIBILITY_HISTOGRAM = "Assistant.VoiceSearch.UserEligibility";
     @VisibleForTesting
     static final String USER_ELIGIBILITY_FAILURE_REASON_HISTOGRAM =
@@ -69,7 +75,8 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
             EligibilityFailureReason.AGSA_NOT_GOOGLE_SIGNED,
             EligibilityFailureReason.NON_GOOGLE_SEARCH_ENGINE,
             EligibilityFailureReason.NO_CHROME_ACCOUNT, EligibilityFailureReason.LOW_END_DEVICE,
-            EligibilityFailureReason.MULTIPLE_ACCOUNTS_ON_DEVICE})
+            EligibilityFailureReason.MULTIPLE_ACCOUNTS_ON_DEVICE,
+            EligibilityFailureReason.AGSA_NOT_INSTALLED})
     @Retention(RetentionPolicy.SOURCE)
     @interface EligibilityFailureReason {
         int AGSA_CANT_HANDLE_INTENT = 0;
@@ -86,10 +93,11 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
         int NO_CHROME_ACCOUNT = 8;
         int LOW_END_DEVICE = 9;
         int MULTIPLE_ACCOUNTS_ON_DEVICE = 10;
+        int AGSA_NOT_INSTALLED = 11;
 
         // STOP: When updating this, also update values in enums.xml and make sure to update the
         // IntDef above.
-        int NUM_ENTRIES = 11;
+        int NUM_ENTRIES = 12;
     }
 
     /** Allows outside classes to listen for changes in this service. */
@@ -262,6 +270,11 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
             boolean returnImmediately, List<Integer> outList) {
         assert returnImmediately || outList != null;
 
+        if (!mGsaState.isGsaInstalled()) {
+            if (returnImmediately) return false;
+            outList.add(EligibilityFailureReason.AGSA_NOT_INSTALLED);
+        }
+
         if (!mGsaState.canAgsaHandleIntent(getAssistantVoiceSearchIntent())) {
             if (returnImmediately) return false;
             outList.add(EligibilityFailureReason.AGSA_CANT_HANDLE_INTENT);
@@ -322,20 +335,65 @@ public class AssistantVoiceSearchService implements TemplateUrlService.TemplateU
     }
 
     /**
-     * Reports user eligilibility,
-     * - If the user is eligible, then it only reports to USER_ELIGIBILITY_HISTOGRAM.
-     * - If the user is ineligible, then it reports to USER_ELIGIBILITY_HISTOGRAM and the reason
-     *   to USER_ELIGIBILITY_FAILURE_REASON_HISTOGRAM.
+     * Records user eligibility to histograms that are specific to voice search init.
+     *
+     * This should be called each time an Assistant voice search is started.
+     *
+     * See reportUserEligibility for details on which histograms are recorded.
      */
-    void reportUserEligibility() {
+    void reportMicPressUserEligibility() {
+        // The base histogram (no suffix) is used to record the per-mic-press eligibility.
+        reportUserEligibility("");
+    }
+
+    /**
+     * Records user eligibility to histograms that are specific to browser startup.
+     *
+     * This should be only be called once per browser startup.
+     *
+     * See reportUserEligibility for details on which histograms are recorded.
+     */
+    public static void reportStartupUserEligibility(Context context) {
+        AssistantVoiceSearchService service =
+                new AssistantVoiceSearchService(context, ExternalAuthUtils.getInstance(),
+                        TemplateUrlServiceFactory.get(), GSAState.getInstance(context),
+                        /*observer=*/null, SharedPreferencesManager.getInstance(),
+                        IdentityServicesProvider.get().getIdentityManager(
+                                Profile.getLastUsedRegularProfile()),
+                        AccountManagerFacadeProvider.getInstance());
+        service.reportUserEligibility(STARTUP_HISTOGRAM_SUFFIX);
+    }
+
+    /**
+     * Reports user eligilibility to a histogram determined by |timingSuffix|,
+     * - User eligibility is always reported to USER_ELIGIBILITY_HISTOGRAM + suffix.
+     * - If the user is ineligible, it also reports the reasons for ineligibility to
+     *   USER_ELIGIBILITY_FAILURE_REASON_HISTOGRAM + suffix.
+     * - If AGSA is available, the version number is reported to AGSA_VERSION_HISTOGRAM + suffix.
+     *
+     * @param timingSuffix The suffix to attach to the histograms to indicate the point at which
+     *        they are being recorded. For example, this can be used to specifically report
+     *        eligibility on browser startup.
+     */
+    private void reportUserEligibility(String timingSuffix) {
         List<Integer> failureReasons = new ArrayList<>();
         boolean eligible = isDeviceEligibleForAssistant(
                 /* returnImmediately= */ false, /* outList */ failureReasons);
-        RecordHistogram.recordBooleanHistogram(USER_ELIGIBILITY_HISTOGRAM, eligible);
+        RecordHistogram.recordBooleanHistogram(USER_ELIGIBILITY_HISTOGRAM + timingSuffix, eligible);
+
+        // See notes in {@link GSAState#parseAgsaMajorMinorVersionAsInteger} for details about this
+        // number.
+        Integer versionNumber =
+                mGsaState.parseAgsaMajorMinorVersionAsInteger(mGsaState.getAgsaVersionName());
+        if (versionNumber != null) {
+            RecordHistogram.recordSparseHistogram(
+                    AGSA_VERSION_HISTOGRAM + timingSuffix, (int) versionNumber);
+        }
 
         for (@EligibilityFailureReason int reason : failureReasons) {
-            RecordHistogram.recordEnumeratedHistogram(USER_ELIGIBILITY_FAILURE_REASON_HISTOGRAM,
-                    reason, EligibilityFailureReason.NUM_ENTRIES);
+            RecordHistogram.recordEnumeratedHistogram(
+                    USER_ELIGIBILITY_FAILURE_REASON_HISTOGRAM + timingSuffix, reason,
+                    EligibilityFailureReason.NUM_ENTRIES);
         }
     }
 

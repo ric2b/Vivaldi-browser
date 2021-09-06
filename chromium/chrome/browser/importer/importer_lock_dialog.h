@@ -5,10 +5,10 @@
 #ifndef CHROME_BROWSER_IMPORTER_IMPORTER_LOCK_DIALOG_H_
 #define CHROME_BROWSER_IMPORTER_IMPORTER_LOCK_DIALOG_H_
 
+#include <string>
+
 #include "base/callback_forward.h"
 #include "ui/gfx/native_widget_types.h"
-
-#include "base/strings/string16.h"
 
 namespace importer {
 
@@ -17,7 +17,7 @@ namespace importer {
 // with the message either to skip the import, or to continue the process.
 void ShowImportLockDialog(gfx::NativeWindow parent,
                           base::OnceCallback<void(bool)> callback,
-                          base::string16 importer_locktext);
+                          std::u16string importer_locktext);
 
 }  // namespace importer
 

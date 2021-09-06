@@ -25,7 +25,6 @@
     "channel": "stable",
     "extension_types": ["platform_app"],
     "allowlist": [
-      "A414F2F4543AC9C68DDF663D0A459E6053E3373C",   // Vivaldi
       // Keep this list in sync with extensions_misc::kHangoutsExtensionIds but
       // omit the Packaged App ids.
       "53041A2FA309EECED01FFC751E7399186E860B2C",  // Hangouts Production.
@@ -103,7 +102,7 @@
     "channel": "canary",
     "extension_types": ["extension"]
   }],
-  "content_security_policy": {
+  "content_security_policy": [{
     "channel": "stable",
     // Platform apps have a restricted content security policy that cannot be
     // overriden (except for a allowlist of exceptions, see the
@@ -111,7 +110,14 @@
     "extension_types": [
       "extension", "legacy_packaged_app", "login_screen_extension"
     ]
-  },
+  }, {
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "min_manifest_version": 3,
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C"   // Vivaldi
+    ]
+  }],
   "current_locale": {
     "channel": "stable",
     "extension_types": "all"
@@ -156,11 +162,17 @@
       ]
     }
   ],
-  "host_permissions": {
+  "host_permissions": [{
     "channel": "stable",
     "extension_types": ["extension"],
     "min_manifest_version": 3
-  },
+  }, {
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C"   // Vivaldi
+    ]
+  }],
   "icons": {
     "channel": "stable",
     "extension_types": "all"

@@ -38,7 +38,7 @@ import org.chromium.ui.text.SpanApplier;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Bridges the user's browsing history and the UI used to display it.
@@ -352,7 +352,7 @@ public class HistoryAdapter extends DateDividedAdapter implements BrowsingHistor
             }
         });
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             clearBrowsingDataButtonContainer.setVisibility(View.GONE);
         }
 

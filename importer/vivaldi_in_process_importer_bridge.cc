@@ -8,7 +8,7 @@
 
 void InProcessImporterBridge::AddNotes(
     const std::vector<ImportedNotesEntry>& notes,
-    const base::string16& first_folder_name) {
+    const std::u16string& first_folder_name) {
   writer_->AddNotes(notes, first_folder_name);
 }
 

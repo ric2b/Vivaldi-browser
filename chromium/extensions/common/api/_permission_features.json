@@ -196,7 +196,7 @@
   "clipboard": {
     "channel": "dev",
     "extension_types": ["platform_app"],
-    "platforms": ["chromeos"]
+    "platforms": ["chromeos", "lacros"]
   },
   "declarativeNetRequest": {
     "channel": "stable",
@@ -726,8 +726,8 @@
   },
   "webview": {
     "channel": "stable",
-    "extension_types": ["platform_app"],
-    "allowlist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"]  // Vivaldi
+    "allowlist": ["A414F2F4543AC9C68DDF663D0A459E6053E3373C"],  // Vivaldi
+    "extension_types": ["platform_app"]
   },
   "webRequest": [{
     "channel": "stable",

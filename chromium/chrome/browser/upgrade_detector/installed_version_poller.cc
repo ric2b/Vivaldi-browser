@@ -23,7 +23,16 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/version_info/version_info.h"
 
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_version_info.h"
+
 namespace {
+
+const base::Version& GetBrowserVersion() {
+  if (vivaldi::IsVivaldiRunning())
+    return vivaldi::GetVivaldiVersion();
+  return version_info::GetVersion();
+}
 
 bool g_disabled_for_testing = false;
 
@@ -54,7 +63,7 @@ InstalledAndCriticalVersion SimulateGetInstalledVersion(
     uint32_t testing_options) {
   DCHECK_NE(0U, testing_options);
 
-  std::vector<uint32_t> components = version_info::GetVersion().components();
+  std::vector<uint32_t> components = GetBrowserVersion().components();
   components[3] += 2;
 
   InstalledAndCriticalVersion result((base::Version(components)));
@@ -190,7 +199,7 @@ void InstalledVersionPoller::OnInstalledVersion(
   // Consider either an invalid version or a higher version a normal update.
   BuildState::UpdateType update_type = BuildState::UpdateType::kNormalUpdate;
   if (versions.installed_version.IsValid()) {
-    switch (versions.installed_version.CompareTo(version_info::GetVersion())) {
+    switch (versions.installed_version.CompareTo(GetBrowserVersion())) {
       case -1:
         update_type = BuildState::UpdateType::kEnterpriseRollback;
         break;

@@ -17,7 +17,7 @@ namespace bookmarks {
 class TitledUrlNode {
  public:
   // Returns the title for the node.
-  virtual const base::string16& GetTitledUrlNodeTitle() const = 0;
+  virtual const std::u16string& GetTitledUrlNodeTitle() const = 0;
 
   // Returns the URL for the node.
   virtual const GURL& GetTitledUrlNodeUrl() const = 0;
@@ -28,10 +28,10 @@ class TitledUrlNode {
       const = 0;
 
   // Vivaldi: Returns the nickname for the node.
-  virtual const base::string16 GetTitledUrlNodeNickName() const;
+  virtual const std::u16string GetTitledUrlNodeNickName() const;
 
   // Vivaldi: Returns the description for the node.
-  virtual const base::string16 GetTitledUrlNodeDescription() const;
+  virtual const std::u16string GetTitledUrlNodeDescription() const;
 
  protected:
   virtual ~TitledUrlNode() {}

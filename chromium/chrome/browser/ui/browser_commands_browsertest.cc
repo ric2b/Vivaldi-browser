@@ -168,6 +168,40 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandsTest, MoveActiveTabToNewWindow) {
             url2);
 }
 
+IN_PROC_BROWSER_TEST_F(BrowserCommandsTest,
+                       MoveActiveTabToNewWindowMultipleSelection) {
+  GURL url1("chrome://version");
+  GURL url2("chrome://about");
+  GURL url3("chrome://terms");
+  ui_test_utils::NavigateToURL(browser(), url1);
+  AddTabAtIndex(1, url2, ui::PAGE_TRANSITION_LINK);
+  AddTabAtIndex(2, url3, ui::PAGE_TRANSITION_LINK);
+  // Select the first tab.
+  browser()->tab_strip_model()->ToggleSelectionAt(0);
+  // First and third (since it's active) should be selected
+  EXPECT_TRUE(browser()->tab_strip_model()->IsTabSelected(0));
+  EXPECT_FALSE(browser()->tab_strip_model()->IsTabSelected(1));
+  EXPECT_TRUE(browser()->tab_strip_model()->IsTabSelected(2));
+
+  chrome::ExecuteCommand(browser(), IDC_MOVE_TAB_TO_NEW_WINDOW);
+  // Now we should have two browsers:
+  // The original, now with only a single tab: url2
+  // The new one with the two tabs we moved: url1 and url3. This one should
+  // be active.
+  BrowserList* browser_list = BrowserList::GetInstance();
+  Browser* active_browser = browser_list->GetLastActive();
+  EXPECT_EQ(browser_list->size(), 2u);
+  EXPECT_NE(active_browser, browser());
+  ASSERT_EQ(browser()->tab_strip_model()->count(), 1);
+  ASSERT_EQ(active_browser->tab_strip_model()->count(), 2);
+  EXPECT_EQ(browser()->tab_strip_model()->GetActiveWebContents()->GetURL(),
+            url2);
+  EXPECT_EQ(active_browser->tab_strip_model()->GetWebContentsAt(0)->GetURL(),
+            url1);
+  EXPECT_EQ(active_browser->tab_strip_model()->GetWebContentsAt(1)->GetURL(),
+            url3);
+}
+
 class ReadLaterBrowserCommandsTest : public BrowserCommandsTest {
  public:
   ReadLaterBrowserCommandsTest() {
@@ -192,13 +226,17 @@ IN_PROC_BROWSER_TEST_F(ReadLaterBrowserCommandsTest,
   base::HistogramTester histogram_tester;
   constexpr char kFirstAddHistogramName[] =
       "ReadingList.BookmarkBarState.OnFirstAddToReadingList";
+  constexpr char kEveryAddHistogramName[] =
+      "ReadingList.BookmarkBarState.OnEveryAddToReadingList";
 
   histogram_tester.ExpectTotalCount(kFirstAddHistogramName, 0);
+  histogram_tester.ExpectTotalCount(kEveryAddHistogramName, 0);
   EXPECT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());
   // Verify the bookmark bar is shown after saving to the reading list.
   MoveCurrentTabToReadLater(browser());
   EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
   histogram_tester.ExpectTotalCount(kFirstAddHistogramName, 1);
+  histogram_tester.ExpectTotalCount(kEveryAddHistogramName, 1);
   ToggleBookmarkBar(browser());
   EXPECT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());
   // Verify the bookmark bar isn't reshown on subsequent saves to the reading
@@ -206,6 +244,7 @@ IN_PROC_BROWSER_TEST_F(ReadLaterBrowserCommandsTest,
   MoveCurrentTabToReadLater(browser());
   EXPECT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());
   histogram_tester.ExpectTotalCount(kFirstAddHistogramName, 1);
+  histogram_tester.ExpectTotalCount(kEveryAddHistogramName, 2);
 }
 
 // Verify that the bookmark bar is not reshown after Chrome restarts.

@@ -14,7 +14,6 @@
 #include "calendar/calendar_typedefs.h"
 
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "base/time/time.h"
 
 namespace calendar {
@@ -32,7 +31,7 @@ enum UpdateNotificationFields {
 // Simplified notification. Used when notification has to be created during
 // event create
 struct NotificationToCreate {
-  base::string16 name;
+  std::u16string name;
   base::Time when;
 };
 
@@ -47,8 +46,8 @@ class NotificationRow {
 
   NotificationID id;
   EventID event_id;
-  base::string16 name;
-  base::string16 description;
+  std::u16string name;
+  std::u16string description;
   int period;
   int delay;
   base::Time when;

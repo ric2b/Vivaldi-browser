@@ -10,10 +10,10 @@
 <translation id="1411638389238344450">Envoyer le lien par mail</translation>
 <translation id="1454726940098520109">Ne plus afficher la boîte de confirmation</translation>
 <translation id="1462666970065907900">Voulez-vous vraiment fermer cette fenêtre ?</translation>
-<translation id="1526344461589023948">Une erreur est survenue lors de l’enregistrement de la mise à jour téléchargée. Merci de vérifier l’espace disque disponible sur votre ordinateur et d’essayer plus tard.</translation>
+<translation id="1526344461589023948">Une erreur est survenue lors de l’enregistrement de la mise à jour téléchargée. Veuillez vérifier l’espace disque disponible sur votre ordinateur et essayer plus tard.</translation>
 <translation id="1657174850639146440">Monstre 9</translation>
 <translation id="1676595396635191120">Nouvelle fenêtre privée</translation>
-<translation id="1702758681952953055">Si l’erreur persiste, merci de la rapporter en incluant les détails suivants :</translation>
+<translation id="1702758681952953055">Si l’erreur persiste, veuillez la rapporter en incluant les détails suivants :</translation>
 <translation id="1728549374069268714">Coller et aller</translation>
 <translation id="1756026472674246267">Ouvrir le lien dans un nouvel onglet</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -24,7 +24,7 @@
 <translation id="19598411548897379">Générique</translation>
 <translation id="1985669426322966465">Mise à jour du logiciel</translation>
 <translation id="2079036669923635404">Cliquer ici pour mettre à jour Vivaldi en version <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Une erreur est survenue lors du téléchargement des fichiers de mise à jour. Merci de vérifier votre connexion et d’essayer plus tard.</translation>
+<translation id="2141974047387702305">Une erreur est survenue lors du téléchargement des fichiers de mise à jour. Veuillez vérifier votre connexion et essayer plus tard.</translation>
 <translation id="2339641773402824483">Recherche des mises à jour…</translation>
 <translation id="2441056087170876076">Monstre 2</translation>
 <translation id="2444387452209867610">Insérer une note</translation>
@@ -64,6 +64,7 @@
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
 <translation id="3795800845758778870">Malheureusement, vos paramètres Brave ne sont pas disponibles lorsque celui-ci est lancé. Pour importer ces paramètres sur Vivaldi, enregistrez votre travail et fermez toutes les fenêtres de Brave. Cliquez ensuite sur Continuer.</translation>
+<translation id="3822431842304177896">Nouveau séparateur</translation>
 <translation id="3832132597516774400">Paysage 5</translation>
 <translation id="3914946330804881301">Importés d’Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
@@ -127,7 +128,7 @@
 <translation id="7111492742514999492">Paysage 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi est rendu possible grâce au projet Open Source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> et <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
-<translation id="7581266044164103589">Échec de lancement de l’installeur de la mise à jour. Merci de vérifier que l’ordinateur dispose d’assez de mémoire et d’espace disque et de réessayer plus tard.</translation>
+<translation id="7581266044164103589">Échec de lancement de l’installeur de la mise à jour. Veuillez vérifier que l’ordinateur dispose d’assez de mémoire et d’espace disque et réessayer plus tard.</translation>
 <translation id="7658239707568436148">Annuler</translation>
 <translation id="7715497554424665066">&amp;Ignorer la mise à jour</translation>
 <translation id="7724603315864178912">Couper</translation>
@@ -147,7 +148,7 @@
 <translation id="8439034818057146672">Une nouvelle version de Vivaldi est prête à être installée.</translation>
 <translation id="8446668873108041390">L’exécution de JavaScript via AppleScript est désactivée. Dans Paramètres &gt; Confidentialité &gt; Événements Apple, il y a un paramètre pour autoriser JavaScript à partir des événements Apple.</translation>
 <translation id="8539196077526389150">Paysage 13</translation>
-<translation id="8562339533180097902">Fermer VIvaldi et procéder à l’installation</translation>
+<translation id="8562339533180097902">Fermer Vivaldi et procéder à l’installation</translation>
 <translation id="8567452685425968223">Extraction de la mise à jour…</translation>
 <translation id="8624587806981488221">&amp;Recharger l’image</translation>
 <translation id="864444594187862076">Opera version 15+ (Dév.)</translation>

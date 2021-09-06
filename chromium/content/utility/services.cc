@@ -18,6 +18,8 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/utility/content_utility_client.h"
 #include "content/public/utility/utility_thread.h"
+#include "content/services/auction_worklet/auction_worklet_service_impl.h"
+#include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -39,6 +41,8 @@
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 #include "media/cdm/cdm_adapter_factory.h"          // nogncheck
+#include "media/mojo/mojom/cdm_service.mojom.h"     // nogncheck
+#include "media/mojo/mojom/frame_interface_factory.mojom.h"  // nogncheck
 #include "media/mojo/services/cdm_service.h"        // nogncheck
 #include "media/mojo/services/mojo_cdm_helper.h"    // nogncheck
 #include "media/mojo/services/mojo_media_client.h"  // nogncheck
@@ -54,7 +58,6 @@
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
 #include "sandbox/win/src/sandbox.h"
-
 extern sandbox::TargetServices* g_utility_target_services;
 #endif  // defined(OS_WIN)
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -67,7 +70,12 @@ extern sandbox::TargetServices* g_utility_target_services;
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING) && BUILDFLAG(IS_CHROMEOS_ASH)
 #include "services/shape_detection/public/mojom/shape_detection_service.mojom.h"  // nogncheck
 #include "services/shape_detection/shape_detection_service.h"  // nogncheck
-#endif
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if defined(OS_WIN)
+#include "media/mojo/mojom/media_foundation_service.mojom.h"  // nogncheck
+#include "media/mojo/services/media_foundation_service.h"     // nogncheck
+#endif  // defined(OS_WIN)
 
 namespace content {
 
@@ -132,6 +140,13 @@ auto RunNetworkService(
   return std::make_unique<network::NetworkService>(
       std::move(binders), std::move(receiver),
       /*delay_initialization_until_set_client=*/true);
+}
+
+auto RunAuctionWorkletService(
+    mojo::PendingReceiver<auction_worklet::mojom::AuctionWorkletService>
+        receiver) {
+  return std::make_unique<auction_worklet::AuctionWorkletServiceImpl>(
+      std::move(receiver));
 }
 
 auto RunAudio(mojo::PendingReceiver<audio::mojom::AudioService> receiver) {
@@ -208,6 +223,13 @@ auto RunDataDecoder(
       std::move(receiver));
 }
 
+#if defined(OS_WIN)
+auto RunMediaFoundationService(
+    mojo::PendingReceiver<media::mojom::MediaFoundationService> receiver) {
+  return std::make_unique<media::MediaFoundationService>(std::move(receiver));
+}
+#endif  // defined(OS_WIN)
+
 auto RunStorageService(
     mojo::PendingReceiver<storage::mojom::StorageService> receiver) {
   return std::make_unique<storage::StorageServiceImpl>(
@@ -245,6 +267,7 @@ void RegisterIOThreadServices(mojo::ServiceFactory& services) {
 }
 
 void RegisterMainThreadServices(mojo::ServiceFactory& services) {
+  services.Add(RunAuctionWorkletService);
   services.Add(RunAudio);
 
   services.Add(RunDataDecoder);
@@ -259,6 +282,10 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   services.Add(RunCdmService);
 #endif
+
+#if defined(OS_WIN)
+  services.Add(RunMediaFoundationService);
+#endif  // defined(OS_WIN)
 
 #if BUILDFLAG(ENABLE_VR) && !defined(OS_ANDROID)
   services.Add(RunXrDeviceService);

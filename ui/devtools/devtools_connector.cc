@@ -286,17 +286,6 @@ DevtoolsConnectorItem::PreHandleKeyboardEvent(
   content::KeyboardEventProcessingResult handled =
       content::KeyboardEventProcessingResult::NOT_HANDLED;
 
-  // NOTE(daniel@vivaldi.com): For Ctrl+R and F5 we send the event immediately
-  // to the webpage to be handled by the shortcut system (see VB-56590).
-  if (guest_delegate_ &&
-          (((event.GetModifiers() & blink::WebInputEvent::kControlKey ||
-            event.GetModifiers() & blink::WebInputEvent::kMetaKey) &&
-           event.windows_key_code == ui::VKEY_R) ||
-      (event.dom_code == (int)ui::DomCode::F5))) {
-    guest_delegate_->HandleKeyboardEvent(source, event);
-    return content::KeyboardEventProcessingResult::HANDLED;
-  }
-
   if (devtools_delegate_) {
     handled = devtools_delegate_->PreHandleKeyboardEvent(source, event);
   }
@@ -416,6 +405,10 @@ UIBindingsDelegate::~UIBindingsDelegate() {
 }
 
 void UIBindingsDelegate::ActivateWindow() {
+  ::vivaldi::BroadcastEvent(
+    vivaldi::devtools_private::OnActivateWindow::kEventName,
+    vivaldi::devtools_private::OnActivateWindow::Create(tab_id()),
+    browser_context_);
 }
 
 void UIBindingsDelegate::NotifyUpdateBounds() {

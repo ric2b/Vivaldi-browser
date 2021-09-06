@@ -34,3 +34,26 @@ action("vivaldi_release") {
     vivaldi_release_target,
   ], root_build_dir)
 }
+
+generated_file("language_names_include") {
+  languages_json = read_file(
+      "//vivaldi/vivapp/src/constants/language-list.json", "json"
+  )
+  languages = languages_json.languages
+  lines = ["#define DO_VIVALDI_LANGUAGE_NAMES \\"]
+  foreach(tuple, languages.list) {
+    code = tuple[0]
+    english_name = tuple[1]
+    native_name = tuple[2]
+    if (english_name == native_name) {
+      name = english_name
+    } else {
+      name = native_name + " - " + english_name
+    }
+    lines += [ "  HANDLE_VIVALDI_LANGUAGE_NAME(\"$code\", \"$name\") \\" ]
+  }
+  lines += [""]
+  contents = lines
+  outputs = [ "$target_gen_dir/vivaldi_install_language_names.h" ]
+  output_conversion = "list lines"
+}

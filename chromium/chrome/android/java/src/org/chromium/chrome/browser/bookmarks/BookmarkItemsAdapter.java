@@ -31,6 +31,8 @@ import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableListAdapter;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightShape;
 import org.chromium.components.feature_engagement.EventConstants;
 
 import java.util.ArrayList;
@@ -39,7 +41,7 @@ import java.util.List;
 import java.util.Collections;
 import java.util.Comparator;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
@@ -87,7 +89,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
                     && TextUtils.equals(mSearchText, EMPTY_QUERY)) {
                 mDelegate.closeSearchUI();
             }
-            if (ChromeApplication.isVivaldi() &&
+            if (ChromeApplicationImpl.isVivaldi() &&
                     mDelegate.getCurrentState() == BookmarkUIState.STATE_SEARCHING) {
                 mDelegate.closeSearchUI();
             }
@@ -146,7 +148,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         if (hasPromoHeader()) {
             mElements.add(BookmarkListEntry.createSyncPromoHeader(mPromoHeaderType));
         }
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         updateHeader(false);
         for (BookmarkId bId : bookmarks) {
             BookmarkItem item = mDelegate.getModel().getBookmarkById(bId);
@@ -238,7 +240,9 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
             });
             // Turn on the highlight for the currently highlighted bookmark.
             if (id.equals(mHighlightedBookmark)) {
-                ViewHighlighter.pulseHighlight(holder.itemView, false, 1);
+                HighlightParams params = new HighlightParams(HighlightShape.RECTANGLE);
+                params.setNumPulses(1);
+                ViewHighlighter.turnOnHighlight(holder.itemView, params);
                 clearHighlight();
             } else {
                 // We need this in case we are change state during a pulse.
@@ -293,7 +297,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         mDelegate.getModel().addObserver(mBookmarkModelObserver);
         mDelegate.getSelectionDelegate().addObserver(this);
 
-        if (!ChromeApplication.isVivaldi()) {
+        if (!ChromeApplicationImpl.isVivaldi()) {
         Runnable promoHeaderChangeAction = () -> {
             // If top level folders are not showing, update the header and notify.
             // Otherwise, update header without notifying; we are going to update the bookmarks
@@ -318,7 +322,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         mDelegate.getModel().removeObserver(mBookmarkModelObserver);
         mDelegate.getSelectionDelegate().removeObserver(this);
         mDelegate = null;
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         mPromoHeaderManager.destroy();
         mProfileSyncService.removeSyncStateChangedListener(this);
     }
@@ -335,7 +339,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         if (topLevelFoldersShowing()) {
             setBookmarks(mTopLevelFolders);
         } else {
-            if (ChromeApplication.isVivaldi()) {
+            if (ChromeApplicationImpl.isVivaldi()) {
                 setBookmarksWithSortOrder(folder);
             }
             else
@@ -560,7 +564,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
     }
 
     private boolean hasPromoHeader() {
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         return mPromoHeaderType != ViewType.INVALID;
     }
 

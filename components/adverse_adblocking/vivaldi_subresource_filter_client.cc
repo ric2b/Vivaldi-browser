@@ -55,8 +55,9 @@ void VivaldiSubresourceFilterClient::
 
   subresource_filter::ContentSubresourceFilterThrottleManager::
       CreateForWebContents(
-          web_contents,
-          std::move(client),
+          web_contents, std::move(client),
+          SubresourceFilterProfileContextFactory::GetForProfile(
+              Profile::FromBrowserContext(web_contents->GetBrowserContext())),
           dealer);
 }
 
@@ -124,9 +125,4 @@ VivaldiSubresourceFilterClient::GetSafeBrowsingDatabaseManager() {
       g_browser_process->safe_browsing_service();
   return safe_browsing_service ? safe_browsing_service->database_manager()
                                : nullptr;
-}
-
-subresource_filter::ProfileInteractionManager*
-VivaldiSubresourceFilterClient::GetProfileInteractionManager() {
-  return chrome_subresource_filter_client_->GetProfileInteractionManager();
 }

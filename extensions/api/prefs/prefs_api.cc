@@ -6,8 +6,10 @@
 #include "base/memory/ptr_util.h"
 #include "browser/translate/vivaldi_translate_client.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profile_resetter/profile_resetter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/language/core/browser/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_manager.h"
@@ -104,8 +106,8 @@ VivaldiPrefsApiNotification::VivaldiPrefsApiNotification(Profile* profile)
       ::vivaldi::NativeSettingsObserver::Create(profile));
 }
 
-const ::vivaldi::PrefProperties*
-VivaldiPrefsApiNotification::GetPrefProperties(const std::string& path) {
+const ::vivaldi::PrefProperties* VivaldiPrefsApiNotification::GetPrefProperties(
+    const std::string& path) {
   const auto& item = prefs_properties_.find(path);
   if (item == prefs_properties_.end())
     return nullptr;
@@ -297,7 +299,8 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
     if (!prefs)
       continue;
 
-    if (!prefs->FindPreference(path)) {
+    const PrefService::Preference* pref = prefs->FindPreference(path);
+    if (!pref) {
       // This is a Chromium property that was not registered on a particular
       // platform.
       DCHECK(!base::StartsWith(path, "vivaldi."));
@@ -309,6 +312,7 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
         GetPrefDefaultValueForJS(prefs, path, properties));
     result.value = std::make_unique<base::Value>(
         GetPrefValueForJS(prefs, path, properties));
+    result.uses_default = pref->IsDefaultValue();
     VivaldiPrefsApiNotification::FromBrowserContext(browser_context())
         ->RegisterPref(path, properties->is_local());
     results.push_back(std::move(result));
@@ -325,13 +329,15 @@ std::unique_ptr<translate::TranslateUIDelegate> GetTranslateUIDelegate(
     std::string& target_language) {
   content::WebContents* web_contents =
       ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, context, nullptr);
-
-  return std::make_unique<translate::TranslateUIDelegate>(
-          VivaldiTranslateClient::GetManagerFromWebContents(web_contents)
-              ->GetWeakPtr(),
-          original_language, target_language);
+  if (web_contents) {
+    return std::make_unique<translate::TranslateUIDelegate>(
+        VivaldiTranslateClient::GetManagerFromWebContents(web_contents)
+            ->GetWeakPtr(),
+        original_language, target_language);
+  }
+  return nullptr;
 }
-}
+}  // namespace
 
 ExtensionFunction::ResponseAction
 PrefsSetLanguagePairToAlwaysTranslateFunction::Run() {
@@ -345,6 +351,9 @@ PrefsSetLanguagePairToAlwaysTranslateFunction::Run() {
       GetTranslateUIDelegate(params->tab_id, browser_context(),
                              params->original_language,
                              params->target_language));
+  if (!ui_delegate) {
+    return RespondNow(ArgumentList(Results::Create(false)));
+  }
 
   // Setting it when it's already set is a soft failure.
   bool success = ui_delegate->ShouldAlwaysTranslate() != params->enable;
@@ -375,6 +384,9 @@ PrefsSetLanguageToNeverTranslateFunction::Run() {
                              params->original_language,
                              params->target_language));
 
+  if (!ui_delegate) {
+    return RespondNow(ArgumentList(Results::Create(false)));
+  }
   // Setting it when it's already set is a soft failure.
   bool success = params->block != ui_delegate->IsLanguageBlocked();
 
@@ -401,6 +413,9 @@ ExtensionFunction::ResponseAction PrefsGetTranslateSettingsFunction::Run() {
                              params->target_language));
 
   extensions::vivaldi::prefs::TranslateLanguageSettings settings;
+  if (!ui_delegate) {
+    return RespondNow(ArgumentList(Results::Create(settings)));
+  }
 
   settings.is_language_pair_on_always_translate_list =
       ui_delegate->ShouldAlwaysTranslate();
@@ -408,6 +423,10 @@ ExtensionFunction::ResponseAction PrefsGetTranslateSettingsFunction::Run() {
       ui_delegate->IsLanguageBlocked();
   settings.is_site_on_never_translate_list =
       ui_delegate->IsSiteOnNeverPromptList();
+  settings.should_show_always_translate_shortcut =
+      ui_delegate->ShouldShowAlwaysTranslateShortcut();
+  settings.should_show_never_translate_shortcut =
+      ui_delegate->ShouldShowNeverTranslateShortcut();
 
   return RespondNow(ArgumentList(Results::Create(std::move(settings))));
 }
@@ -424,6 +443,9 @@ ExtensionFunction::ResponseAction PrefsSetSiteToNeverTranslateFunction::Run() {
                              params->original_language,
                              params->target_language));
 
+  if (!ui_delegate) {
+    return RespondNow(ArgumentList(Results::Create(false)));
+  }
   // Setting it when it's already set is a soft failure.
   bool success = params->block != ui_delegate->IsSiteOnNeverPromptList();
 
@@ -447,10 +469,27 @@ ExtensionFunction::ResponseAction PrefsSetTranslationDeclinedFunction::Run() {
                              params->original_language,
                              params->target_language));
 
+  if (!ui_delegate) {
+    return RespondNow(ArgumentList(Results::Create(false)));
+  }
   ui_delegate->TranslationDeclined(params->explicitly_closed);
 
   // We don't really have a fail condition...
   return RespondNow(ArgumentList(Results::Create(true)));
+}
+
+ExtensionFunction::ResponseAction PrefsResetTranslationPrefsFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  PrefService* prefs = profile->GetPrefs();
+  DCHECK(prefs);
+
+  auto translate_prefs = VivaldiTranslateClient::CreateTranslatePrefs(prefs);
+  translate_prefs->ResetToDefaults();
+
+  prefs->ClearPref(language::prefs::kSelectedLanguages);
+  prefs->ClearPref(language::prefs::kFluentLanguages);
+
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

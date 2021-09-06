@@ -7,6 +7,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "menus/menu_node.h"
 #include "menus/menu_storage.h"
 
@@ -228,7 +229,7 @@ Menu_Node* Menu_Model::Add(std::unique_ptr<Menu_Node> node, Menu_Node* parent,
   return node_ptr;
 }
 
-bool Menu_Model::SetTitle(Menu_Node* node, const base::string16& title) {
+bool Menu_Model::SetTitle(Menu_Node* node, const std::u16string& title) {
   if (node->GetTitle() == title) {
     return true;
   }

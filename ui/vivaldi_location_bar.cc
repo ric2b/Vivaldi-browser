@@ -10,11 +10,12 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "ui/vivaldi_browser_window.h"
 
 using content_settings::PageSpecificContentSettings;
 
-VivaldiLocationBar::VivaldiLocationBar() {
-}
+VivaldiLocationBar::VivaldiLocationBar(const VivaldiBrowserWindow& window)
+    : window_(window) {}
 
 VivaldiLocationBar::~VivaldiLocationBar() = default;
 
@@ -55,7 +56,7 @@ void VivaldiLocationBar::UpdateContentSettingsIcons() {
   // on that to display to the user.
 
   content::WebContents* active_contents =
-      browser_->tab_strip_model()->GetActiveWebContents();
+      window_.browser()->tab_strip_model()->GetActiveWebContents();
   if (active_contents) {
     auto* content_settings =
         content_settings::PageSpecificContentSettings::GetForFrame(

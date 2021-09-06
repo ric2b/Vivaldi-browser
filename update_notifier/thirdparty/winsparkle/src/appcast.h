@@ -28,6 +28,7 @@
 
 #include "error.h"
 
+#include "base/version.h"
 #include "url/gurl.h"
 
 #include <memory>
@@ -46,7 +47,7 @@ struct Delta {
   // URL of the delta update
   GURL DownloadURL;
   // Delta from version
-  std::string DeltaFrom;
+  base::Version DeltaFrom;
 };
 
 /**
@@ -69,14 +70,14 @@ struct Appcast {
   static std::unique_ptr<Appcast> Load(const std::string& xml, Error& error);
 
   /// Returns true if the struct constains valid data.
-  bool IsValid() const { return !Version.empty(); }
+  bool IsValid() const { return Version.IsValid(); }
 
   /// If true, then download and install the update ourselves.
   /// If false, launch a web browser to WebBrowserURL.
   bool HasDownload() const { return DownloadURL.is_valid(); }
 
   /// App version fields
-  std::string Version;
+  base::Version Version;
 
   /// URL of the update
   GURL DownloadURL;

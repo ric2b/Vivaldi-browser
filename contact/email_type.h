@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "contact/contact_typedefs.h"
@@ -45,8 +44,8 @@ class EmailAddressRow {
   ContactID contact_id() const { return contact_id_; }
   void set_contact_id(ContactID contact_id) { contact_id_ = contact_id; }
 
-  base::string16 email_address() const { return email_address_; }
-  void set_email_address(base::string16 email_address) {
+  std::u16string email_address() const { return email_address_; }
+  void set_email_address(std::u16string email_address) {
     email_address_ = email_address;
   }
 
@@ -61,7 +60,7 @@ class EmailAddressRow {
 
   EmailAddressID email_address_id_;
   ContactID contact_id_;
-  base::string16 email_address_;
+  std::u16string email_address_;
   std::string type_;
   bool favorite_;
   bool obsolete_;

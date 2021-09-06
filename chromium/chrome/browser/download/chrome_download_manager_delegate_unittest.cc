@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -79,6 +80,7 @@
 using download::DownloadItem;
 using download::DownloadPathReservationTracker;
 using download::PathValidationResult;
+using ConnectionType = net::NetworkChangeNotifier::ConnectionType;
 using safe_browsing::DownloadFileType;
 using ::testing::_;
 using ::testing::AnyNumber;
@@ -460,6 +462,8 @@ ChromeDownloadManagerDelegateTest::PrepareDownloadItemForMixedContent(
   std::vector<GURL> url_chain;
   if (redirect_url.has_value())
     url_chain.push_back(redirect_url.value());
+  // The redirect chain always contains the final destination at the end.
+  url_chain.push_back(download_url);
   std::unique_ptr<download::MockDownloadItem> download_item =
       CreateActiveDownloadItem(0);
   ON_CALL(*download_item, GetURL())
@@ -506,7 +510,7 @@ void ExpectExtensionOnlyIn(const InsecureDownloadExtensions& ext,
 }
 
 // Determine download target for |download_item| after enabling active content
-// download blocking with the |parameers| enabled. Verify |extension|,
+// download blocking with the |parameters| enabled. Verify |extension|,
 // |interrupt_reason| and |mixed_content_status|. Used by
 // BlockedAsActiveContent_ tests.
 void ChromeDownloadManagerDelegateTest::VerifyMixedContentExtensionOverride(
@@ -928,6 +932,42 @@ TEST_F(ChromeDownloadManagerDelegateTest,
       InsecureDownloadExtensions::kUnknown,
       download::DOWNLOAD_INTERRUPT_REASON_NONE,
       download::DownloadItem::MixedContentStatus::SAFE);
+}
+
+// Verify that downloads ending in a blob URL are considered secure.
+TEST_F(ChromeDownloadManagerDelegateTest,
+       BlockedAsActiveContent_BlobConsideredSecure) {
+  // Verifies blob URLs are not blocked for active content blocking.
+  const GURL kRedirectUrl("https://example.org/");
+  const GURL kFinalUrl("blob:null/xyz.foo");
+  const auto kSecureOrigin = Origin::Create(GURL("https://example.org"));
+
+  DetermineDownloadTargetResult result;
+  base::test::ScopedFeatureList feature_list;
+  base::HistogramTester histograms;
+
+  std::unique_ptr<download::MockDownloadItem> download_item =
+      PrepareDownloadItemForMixedContent(kFinalUrl, kSecureOrigin,
+                                         kRedirectUrl);
+
+  feature_list.InitAndEnableFeature(features::kTreatUnsafeDownloadsAsActive);
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+  // DownloadTargetDeterminer looks for plugin handlers if there's an
+  // extension.
+  content::PluginService::GetInstance()->Init();
+#endif
+
+  DetermineDownloadTarget(download_item.get(), &result);
+  EXPECT_EQ(download::DOWNLOAD_INTERRUPT_REASON_NONE, result.interrupt_reason);
+  EXPECT_EQ(download::DownloadItem::MixedContentStatus::SAFE,
+            result.mixed_content_status);
+  histograms.ExpectUniqueSample(
+      kInsecureDownloadHistogramName,
+      InsecureDownloadSecurityStatus::kInitiatorSecureFileSecure, 1);
+  ExpectExtensionOnlyIn(InsecureDownloadExtensions::kUnknown,
+                        kInsecureDownloadExtensionInitiatorSecure,
+                        kInsecureDownloadHistogramTargetSecure, histograms);
 }
 
 TEST_F(ChromeDownloadManagerDelegateTest, BlockedAsActiveContent_SilentBlock) {
@@ -1359,8 +1399,8 @@ class ChromeDownloadManagerDelegateTestWithSafeBrowsing
 
 void ChromeDownloadManagerDelegateTestWithSafeBrowsing::SetUp() {
   ChromeDownloadManagerDelegateTest::SetUp();
-  test_download_protection_service_.reset(
-      new ::testing::StrictMock<TestDownloadProtectionService>);
+  test_download_protection_service_ =
+      std::make_unique<::testing::StrictMock<TestDownloadProtectionService>>();
   ON_CALL(*delegate(), GetDownloadProtectionService())
       .WillByDefault(Return(test_download_protection_service_.get()));
 }
@@ -1706,9 +1746,11 @@ class TestDownloadDialogBridge : public DownloadDialogBridge {
   // DownloadDialogBridge implementation.
   void ShowDialog(gfx::NativeWindow native_window,
                   int64_t total_bytes,
+                  ConnectionType connection_type,
                   DownloadLocationDialogType dialog_type,
                   const base::FilePath& suggested_path,
                   bool supports_later_dialog,
+                  bool show_date_time_picker,
                   DownloadDialogBridge::DialogCallback callback) override {
     dialog_shown_count_++;
     dialog_type_ = dialog_type;
@@ -1867,5 +1909,74 @@ TEST_F(ChromeDownloadManagerDelegateTest, RequestConfirmation_Android) {
         .WillRepeatedly(Return(DownloadItem::COMPLETE));
     download_item->NotifyObserversDownloadUpdated();
   }
+}
+
+class MockNetworkChangeNotifier : public net::NetworkChangeNotifier {
+ public:
+  explicit MockNetworkChangeNotifier(ConnectionType type)
+      : connection_type_(type) {}
+
+  // net::NetworkChangeNotifier implementation.
+  ConnectionType GetCurrentConnectionType() const override {
+    return connection_type_;
+  }
+
+ private:
+  ConnectionType connection_type_;
+};
+
+class DownloadLaterTriggerTest : public ChromeDownloadManagerDelegateTest {
+ public:
+  void SetUp() override {
+    // Enable the download later feature first to ensure download pref loads
+    // correctly.
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        download::features::kDownloadLater,
+        {{download::features::kDownloadLaterMinFileSizeKb, "204800"}});
+    ChromeDownloadManagerDelegateTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(DownloadLaterTriggerTest, DownloadLaterTrigger) {
+  net::NetworkChangeNotifier::DisableForTest disable_for_test;
+  std::unique_ptr<net::NetworkChangeNotifier> mock_network_notifier =
+      std::make_unique<MockNetworkChangeNotifier>(
+          ConnectionType::CONNECTION_2G);
+
+  std::unique_ptr<download::MockDownloadItem> download_item =
+      CreateActiveDownloadItem(1);
+  ON_CALL(*download_item, GetTotalBytes()).WillByDefault(Return(0));
+
+  // Slow connection.
+  pref_service()->SetInteger(
+      prefs::kDownloadLaterPromptStatus,
+      static_cast<int>(DownloadLaterPromptStatus::kShowInitial));
+  EXPECT_EQ(ConnectionType::CONNECTION_2G,
+            net::NetworkChangeNotifier::GetConnectionType());
+  EXPECT_TRUE(delegate()->ShouldShowDownloadLaterDialog(download_item.get()));
+
+  mock_network_notifier.reset();
+  mock_network_notifier = std::make_unique<MockNetworkChangeNotifier>(
+      ConnectionType::CONNECTION_4G);
+  EXPECT_FALSE(delegate()->ShouldShowDownloadLaterDialog(download_item.get()));
+
+  // Large file.
+  ON_CALL(*download_item, GetTotalBytes())
+      .WillByDefault(Return(400 * 1024 * 1024));
+  EXPECT_TRUE(delegate()->ShouldShowDownloadLaterDialog(download_item.get()));
+
+  // Small file.
+  ON_CALL(*download_item, GetTotalBytes())
+      .WillByDefault(Return(190 * 1024 * 1024));
+  EXPECT_FALSE(delegate()->ShouldShowDownloadLaterDialog(download_item.get()));
+
+  // Pref turn off.
+  pref_service()->SetInteger(
+      prefs::kDownloadLaterPromptStatus,
+      static_cast<int>(DownloadLaterPromptStatus::kDontShow));
+  EXPECT_FALSE(delegate()->ShouldShowDownloadLaterDialog(download_item.get()));
 }
 #endif  // OS_ANDROID

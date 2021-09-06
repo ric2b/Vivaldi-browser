@@ -11,6 +11,7 @@
 #include "base/base64.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h" // nogncheck
@@ -216,7 +217,7 @@ ExtensionFunction::ResponseAction WebViewPrivateGetPageHistoryFunction::Run() {
   std::vector<Results::PageHistoryType> history(controller.GetEntryCount());
   for (int i = 0; i < controller.GetEntryCount(); i++) {
     content::NavigationEntry* entry = controller.GetEntryAtIndex(i);
-    base::string16 name = entry->GetTitleForDisplay();
+    std::u16string name = entry->GetTitleForDisplay();
     Results::PageHistoryType* history_entry = &history[i];
     history_entry->name = base::UTF16ToUTF8(name);
     std::string urlstr = entry->GetVirtualURL().spec();

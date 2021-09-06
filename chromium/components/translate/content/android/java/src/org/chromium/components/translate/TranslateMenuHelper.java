@@ -308,6 +308,10 @@ public class TranslateMenuHelper implements AdapterView.OnItemClickListener {
                     case TranslateMenu.ID_OVERFLOW_NOT_THIS_LANGUAGE:
                         return mContextWrapper.getString(
                                 R.string.translate_option_not_source_language, source);
+                    // Vivaldi
+                    case TranslateMenu.ID_OVERFLOW_VIVALDI_INFO:
+                        return mContextWrapper.getString(
+                                R.string.translate_vivaldi_info, source);
                     default:
                         assert false : "Unexpected Overflow Item Id";
                 }
@@ -388,6 +392,12 @@ public class TranslateMenuHelper implements AdapterView.OnItemClickListener {
                 case TranslateMenu.ITEM_LANGUAGE:
                     menuItemView = getItemView(
                             menuItemView, position, parent, R.layout.translate_menu_item);
+                    break;
+                // Vivaldi
+                case TranslateMenu.ITEM_VIVALDI_INFO:
+                    menuItemView = getItemView(
+                            menuItemView, position, parent,
+                            R.layout.translate_menu_vivaldi_info_item);
                     break;
                 default:
                     assert false : "Unexpected MenuItem type";

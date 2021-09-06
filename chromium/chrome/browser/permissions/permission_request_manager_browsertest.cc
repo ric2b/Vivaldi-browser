@@ -26,6 +26,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/permissions/permission_request_manager_test_api.h"
+#include "components/back_forward_cache/back_forward_cache_disable.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/features.h"
 #include "components/permissions/notification_permission_ui_selector.h"
@@ -94,8 +95,8 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
   void SetUpOnMainThread() override {
     permissions::PermissionRequestManager* manager =
         GetPermissionRequestManager();
-    mock_permission_prompt_factory_.reset(
-        new permissions::MockPermissionPromptFactory(manager));
+    mock_permission_prompt_factory_ =
+        std::make_unique<permissions::MockPermissionPromptFactory>(manager);
 
     host_resolver()->AddRule("*", "127.0.0.1");
   }
@@ -604,7 +605,8 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
       browser(), embedded_test_server()->GetURL("b.com", "/title1.html"), 1);
   EXPECT_TRUE(back_forward_cache_tester.IsDisabledForFrameWithReason(
       main_frame_process_id, main_frame_routing_id,
-      "PermissionRequestManager"));
+      back_forward_cache::DisabledReason(
+          back_forward_cache::DisabledReasonId::kPermissionRequestManager)));
 }
 
 class PermissionRequestManagerQuietUiBrowserTest
@@ -663,6 +665,66 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
   GetPermissionRequestManager()->Closing();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0u, GetPermissionRequestManager()->Requests().size());
+}
+
+IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
+                       PermissionPromptDisposition) {
+  SetCannedUiDecision(QuietUiReason::kTriggeredDueToAbusiveContent,
+                      WarningReason::kAbusiveContent);
+
+  auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+  permissions::MockPermissionRequest request_quiet(
+      "quiet", permissions::RequestType::kNotifications,
+      permissions::PermissionRequestGestureType::UNKNOWN);
+  GetPermissionRequestManager()->AddRequest(web_contents->GetMainFrame(),
+                                            &request_quiet);
+
+  bubble_factory()->WaitForPermissionBubble();
+  auto* manager = GetPermissionRequestManager();
+
+  base::Optional<permissions::PermissionPromptDisposition> disposition =
+      manager->current_request_prompt_disposition_for_testing();
+  auto disposition_from_prompt_bubble =
+      manager->view_for_testing()->GetPromptDisposition();
+
+  manager->Closing();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(disposition.has_value());
+  EXPECT_EQ(disposition.value(), disposition_from_prompt_bubble);
+}
+
+IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
+                       PermissionPromptDispositionHidden) {
+  SetCannedUiDecision(QuietUiReason::kTriggeredDueToAbusiveContent,
+                      WarningReason::kAbusiveContent);
+
+  auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+  permissions::MockPermissionRequest request_quiet(
+      "quiet", permissions::RequestType::kNotifications,
+      permissions::PermissionRequestGestureType::UNKNOWN);
+  GetPermissionRequestManager()->AddRequest(web_contents->GetMainFrame(),
+                                            &request_quiet);
+
+  bubble_factory()->WaitForPermissionBubble();
+  auto* manager = GetPermissionRequestManager();
+  auto disposition_from_prompt_bubble =
+      manager->view_for_testing()->GetPromptDisposition();
+
+  // There will be no instance of PermissionPromptImpl after a tab marked as
+  // HIDDEN.
+  manager->OnVisibilityChanged(content::Visibility::HIDDEN);
+
+  base::Optional<permissions::PermissionPromptDisposition> disposition =
+      manager->current_request_prompt_disposition_for_testing();
+
+  EXPECT_TRUE(disposition.has_value());
+  EXPECT_EQ(disposition.value(), disposition_from_prompt_bubble);
+
+  //  DCHECK failure if Closing executed on HIDDEN PermissionRequestManager.
+  manager->OnVisibilityChanged(content::Visibility::VISIBLE);
+  manager->Closing();
+  base::RunLoop().RunUntilIdle();
 }
 
 IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,

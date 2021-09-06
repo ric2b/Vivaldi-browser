@@ -20,7 +20,8 @@ namespace {
 
 // Returns true if and only if |client_entity| is a notes.
 bool IsNotes(const sync_pb::SyncEntity& client_entity) {
-  return syncer::GetModelType(client_entity) == syncer::NOTES;
+  return syncer::GetModelTypeFromSpecifics(client_entity.specifics()) ==
+         syncer::NOTES;
 }
 
 }  // namespace

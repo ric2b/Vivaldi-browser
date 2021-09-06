@@ -74,6 +74,37 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
         ManagedStateList* tether_networks) const = 0;
   };
 
+  // Cellular networks may not have an associated Shill Service (e.g. when the
+  // SIM is locked, a mobile network is not available or Shill is not able to
+  // see eSIM profiles through MM). StubCellularNetworksProvider adds stub
+  // cellular networks if necessary and removes previously created stub networks
+  // that are no longer required. If a StubCellularNetworksProvider instance is
+  // set, then |AddOrRemoveStubCellularNetworks| is called before sorting
+  // networks list.
+  class StubCellularNetworksProvider {
+   public:
+    virtual ~StubCellularNetworksProvider() = default;
+
+    // Checks |network_list| to add or remove stub cellular networks. New
+    // stub networks will be addeded to |new_stub_networks| list. Stub networks
+    // that are not required anymore are removed from |network_list|. Returns
+    // true if networks were removed from |network_list| or |new_stub_networks|
+    // is non empty.
+    virtual bool AddOrRemoveStubCellularNetworks(
+        ManagedStateList& network_list,
+        ManagedStateList& new_stub_networks,
+        const DeviceState* device) = 0;
+
+    // Provides metadata associated with a stub network with the given ICCID.
+    // If |iccid| corresponds to an installed eSIM profile or SIM card, true is
+    // returned and the "out" parameters are set. Otherwise, false is returned
+    // and the values are not set.
+    virtual bool GetStubNetworkMetadata(const std::string& iccid,
+                                        const DeviceState* cellular_device,
+                                        std::string* service_path_out,
+                                        std::string* guid_out) = 0;
+  };
+
   enum TechnologyState {
     TECHNOLOGY_UNAVAILABLE,
     TECHNOLOGY_AVAILABLE,
@@ -411,8 +442,17 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // there is a managed wifi network available.
   bool OnlyManagedWifiNetworksAllowed() const;
 
+  // Calls AddOrRemoveStubCellularNetworks on CellularStubServiceProvider if
+  // set, sorts network list and notifies network list change if required.
+  void SyncStubCellularNetworks();
+
   bool default_network_is_metered() const {
     return default_network_is_metered_;
+  }
+
+  void set_stub_cellular_networks_provider(
+      StubCellularNetworksProvider* stub_cellular_networks_provider) {
+    stub_cellular_networks_provider_ = stub_cellular_networks_provider;
   }
 
   // Constructs and initializes an instance for testing.
@@ -486,6 +526,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest, BlockedByPolicyOnlyManaged);
   FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest,
                            BlockedByPolicyOnlyManagedIfAvailable);
+  FRIEND_TEST_ALL_PREFIXES(NetworkStateHandlerTest, SyncStubCellularNetworks);
 
   // Implementation for GetNetworkListByType and GetActiveNetworkListByType.
   void GetNetworkListByTypeImpl(const NetworkTypePattern& type,
@@ -502,9 +543,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // * Visible non-wifi networks
   // * Visible wifi networks
   // * Hidden (wifi) networks
-  // If |ensure_cellular| is true, call EnsureCellularNetwork (which may
-  // remove a network from the list).
-  void SortNetworkList(bool ensure_cellular);
+  void SortNetworkList();
 
   // Updates UMA stats. Called once after all requested networks are updated.
   void UpdateNetworkStats();
@@ -517,17 +556,16 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // Ensure a valid GUID for NetworkState.
   void UpdateGuid(NetworkState* network);
 
-  // Update networkState properties from the associated DeviceState.
-  void UpdateCellularStateFromDevice(NetworkState* network);
+  // Handles cellular network updates by providing some NetworkState properties
+  // from the Cellular DeviceState and alerting receivers if a network has
+  // transitioned from a stub to a Shill-backed network.
+  void HandleCellularNetworkUpdateReceived(NetworkState* network,
+                                           bool had_icccid_before_update);
 
-  // Cellular networks may not have an associated Shill Service (e.g. when the
-  // SIM is locked or a mobile network is not available). This returns a new
-  // default cellular network if necessary.
-  std::unique_ptr<NetworkState> MaybeCreateDefaultCellularNetwork();
-
-  // Removes the default Cellular network if it exists. Called when there is
-  // more than one Cellular network in the list.
-  void RemoveDefaultCellularNetwork();
+  // Calls AddOrRemoveStubCellularNetworks on StubCellularNetworksProvider if
+  // set and updates GUID for newly added networks as needed. Returns true if
+  // network_list was modified.
+  bool AddOrRemoveStubCellularNetworks();
 
   // Sends NetworkListChanged() to observers and logs an event.
   void NotifyNetworkListChanged();
@@ -585,6 +623,12 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
 
   // Called whenever Device.Scanning state transitions to false.
   void NotifyScanCompleted(const DeviceState* device);
+
+  // Called when a stub network is replaced by a Shill-backed network.
+  void NotifyNetworkIdentifierTransitioned(const std::string& old_service_path,
+                                           const std::string& new_service_path,
+                                           const std::string& old_guid,
+                                           const std::string& new_guid);
 
   // Helper function to log property updated events.
   void LogPropertyUpdated(const ManagedState* network,
@@ -694,6 +738,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // the Tether component.
   TechnologyState tether_technology_state_ =
       TechnologyState::TECHNOLOGY_UNAVAILABLE;
+
+  // Provides stub cellular networks. Not owned by this instance.
+  StubCellularNetworksProvider* stub_cellular_networks_provider_ = nullptr;
 
   // Not owned by this instance.
   const TetherSortDelegate* tether_sort_delegate_ = nullptr;

@@ -51,7 +51,7 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
 
 /**
@@ -164,7 +164,7 @@ public class TabSwitcherCoordinator
         // Note(david@vivaldi.com): We always apply the grid mode. This could fix the crash
         // when opening the tab switcher (VAB-2659) as it might happen that the
         // |TabSwitcherCoordinator| is initialized with a wrong TabListMode.
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mMode = TabListCoordinator.TabListMode.GRID;
         else
         mMode = mode;
@@ -192,7 +192,7 @@ public class TabSwitcherCoordinator
 
         // TODO (david@vivaldi.com) We should rather make our own class once the android tab_ui
         // feature is public and can be accessed from outside.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mContainerViewChangeProcessor = null;
             mTabGridCoordinators = new ArrayList<>();
             mContainerViewChangeProcessors = new ArrayList<>();
@@ -453,7 +453,7 @@ public class TabSwitcherCoordinator
 
     @Override
     public void postHiding() {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mTabListCoordinator.postHiding();
             return;
         }
@@ -514,7 +514,7 @@ public class TabSwitcherCoordinator
     // ResetHandler implementation.
     @Override
     public boolean resetWithTabList(@Nullable TabList tabList, boolean quickMode, boolean mruMode) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             if (tabList != null)
                 mTabListCoordinator = mTabGridCoordinators.get(tabList.isIncognito()
                         ? TabSwitcherView.PAGE.PRIVATE
@@ -667,7 +667,7 @@ public class TabSwitcherCoordinator
     public void destroy() {
         mMenuOrKeyboardActionController.unregisterMenuOrKeyboardActionHandler(
                 mTabSwitcherMenuActionHandler);
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mTabListCoordinator.destroy();
             for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {
                 mTabGridCoordinators.get(i).destroy();

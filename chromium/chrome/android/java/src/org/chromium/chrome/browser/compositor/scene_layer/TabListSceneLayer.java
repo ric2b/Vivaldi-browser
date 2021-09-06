@@ -25,7 +25,7 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.util.ColorUtils;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * A SceneLayer to render a tab stack.
@@ -111,7 +111,7 @@ public class TabListSceneLayer extends SceneLayer {
             int urlBarBackgroundId = R.drawable.modern_location_bar;
             boolean useIncognitoColors = t.isIncognito();
 
-            if (ChromeApplication.isVivaldi()) urlBarBackgroundId = R.drawable.vivaldi_location_bar;
+            if (ChromeApplicationImpl.isVivaldi()) urlBarBackgroundId = R.drawable.vivaldi_location_bar;
 
             int defaultThemeColor = ChromeColors.getDefaultThemeColor(res, useIncognitoColors);
 

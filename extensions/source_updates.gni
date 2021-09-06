@@ -7,6 +7,7 @@ if (vivaldi_build_tests) {
     ]
     sources += [
       "//vivaldi/extensions/api/webview/chrome_web_view_mediastate_apitest.cc",
+      "//vivaldi/extensions/api/tabs/tests/tabs_mediastate_apitest.cc",
     ]
   }
 }

@@ -16,9 +16,7 @@
 #include "extraparts/media_renderer_host_message_filter.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
-#if !defined(OS_ANDROID)
 #include "browser/translate/vivaldi_translate_frame_binder.h"
-#endif
 
 VivaldiContentBrowserClient::VivaldiContentBrowserClient()
     : ChromeContentBrowserClient() {}
@@ -31,7 +29,7 @@ VivaldiContentBrowserClient::CreateBrowserMainParts(
   std::unique_ptr<content::BrowserMainParts> main_parts =
       ChromeContentBrowserClient::CreateBrowserMainParts(parameters);
 
-  if (vivaldi::IsVivaldiRunning()) {
+  if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     ChromeBrowserMainParts* main_parts_actual =
       static_cast<ChromeBrowserMainParts*>(main_parts.get());
 
@@ -90,20 +88,6 @@ void VivaldiContentBrowserClient::RenderProcessWillLaunch(
 
 #endif  // !OS_ANDROID
 
-std::string VivaldiContentBrowserClient::GetStoragePartitionIdForSite(
-    content::BrowserContext* browser_context,
-    const GURL& site) {
-  if (site.SchemeIs("chrome-extension")) {
-    std::string partition_id = site.spec();
-
-    DCHECK(IsValidStoragePartitionId(browser_context, partition_id));
-    return partition_id;
-  }
-
-  return ChromeContentBrowserClient::GetStoragePartitionIdForSite(
-      browser_context, site);
-}
-
 void VivaldiContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
     mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
@@ -111,10 +95,8 @@ void VivaldiContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
   ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
       render_frame_host, map);
 
-#if !defined(OS_ANDROID)
   // Register Vivaldi bindings after Chromium bindings, so we can
   // replace them with our own, if needed.
   map->Add<translate::mojom::ContentTranslateDriver>(
       base::BindRepeating(&vivaldi::BindVivaldiContentTranslateDriver));
-#endif
 }

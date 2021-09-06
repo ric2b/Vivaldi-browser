@@ -151,8 +151,8 @@ VivaldiDataSourcesAPI::VivaldiDataSourcesAPI(Profile* profile)
       user_data_dir_(profile->GetPath()),
       ui_thread_runner_(content::GetUIThreadTaskRunner(
           {base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
-      sequence_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::TaskPriority::USER_VISIBLE,
+      sequence_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::TaskPriority::USER_VISIBLE,
            base::MayBlock()})) {}
 
 VivaldiDataSourcesAPI::~VivaldiDataSourcesAPI() {}
@@ -250,7 +250,7 @@ std::string VivaldiDataSourcesAPI::GetMappingJSONOnFileThread() {
   for (const auto& it : path_id_map_) {
     const base::FilePath& path = it.second;
     base::Value item(base::Value::Type::DICTIONARY);
-    item.SetStringKey("local_path", path.value());
+    item.SetStringKey("local_path", path.AsUTF16Unsafe());
     items.emplace_back(it.first, std::move(item));
   }
 
@@ -311,7 +311,7 @@ base::FilePath VivaldiDataSourcesAPI::GetThumbnailPath(
 #if defined(OS_POSIX)
   path = path.Append(thumbnail_id);
 #elif defined(OS_WIN)
-  path = path.Append(base::UTF8ToUTF16(thumbnail_id));
+  path = path.Append(base::UTF8ToWide(thumbnail_id));
 #endif
   return path;
 }

@@ -135,18 +135,16 @@
         "name": "getState",
         "type": "function",
         "description": "Retrieve the current state of the account manager.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "state",
-                "$ref": "State"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "state",
+              "$ref": "State"
+            }
+          ]
+        }
       }
     ],
     "events": [

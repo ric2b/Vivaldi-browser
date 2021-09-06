@@ -43,9 +43,10 @@
 #include "sandbox/policy/linux/bpf_gpu_policy_linux.h"
 #include "sandbox/policy/linux/bpf_network_policy_linux.h"
 #include "sandbox/policy/linux/bpf_ppapi_policy_linux.h"
+#include "sandbox/policy/linux/bpf_print_backend_policy_linux.h"
 #include "sandbox/policy/linux/bpf_print_compositor_policy_linux.h"
 #include "sandbox/policy/linux/bpf_renderer_policy_linux.h"
-#include "sandbox/policy/linux/bpf_sharing_service_policy_linux.h"
+#include "sandbox/policy/linux/bpf_service_policy_linux.h"
 #include "sandbox/policy/linux/bpf_speech_recognition_policy_linux.h"
 #include "sandbox/policy/linux/bpf_utility_policy_linux.h"
 
@@ -175,12 +176,14 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
       return std::make_unique<CdmProcessPolicy>();
     case SandboxType::kPrintCompositor:
       return std::make_unique<PrintCompositorProcessPolicy>();
+    case SandboxType::kPrintBackend:
+      return std::make_unique<PrintBackendProcessPolicy>();
     case SandboxType::kNetwork:
       return std::make_unique<NetworkProcessPolicy>();
     case SandboxType::kAudio:
       return std::make_unique<AudioProcessPolicy>();
-    case SandboxType::kSharingService:
-      return std::make_unique<SharingServiceProcessPolicy>();
+    case SandboxType::kService:
+      return std::make_unique<ServiceProcessPolicy>();
     case SandboxType::kSpeechRecognition:
       return std::make_unique<SpeechRecognitionProcessPolicy>();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -234,9 +237,10 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
     case SandboxType::kTts:
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     case SandboxType::kAudio:
-    case SandboxType::kSharingService:
+    case SandboxType::kService:
     case SandboxType::kSpeechRecognition:
     case SandboxType::kNetwork:
+    case SandboxType::kPrintBackend:
     case SandboxType::kUtility:
     case SandboxType::kNoSandbox:
     case SandboxType::kVideoCapture:

@@ -308,6 +308,7 @@ GuestViewBase* WebViewGuest::Create(WebContents* owner_web_contents) {
 
 // static
 bool WebViewGuest::GetGuestPartitionConfigForSite(
+    content::BrowserContext* browser_context,
     const GURL& site,
     content::StoragePartitionConfig* storage_partition_config) {
   if (!site.SchemeIs(content::kGuestScheme))
@@ -332,7 +333,7 @@ bool WebViewGuest::GetGuestPartitionConfigForSite(
   bool in_memory = (site.path() != "/persist");
 
   *storage_partition_config = content::StoragePartitionConfig::Create(
-      site.host(), partition_name, in_memory);
+      browser_context, site.host(), partition_name, in_memory);
   // A <webview> inside a chrome app needs to be able to resolve Blob URLs that
   // were created by the chrome app. The chrome app has the same
   // partition_domain but empty partition_name. Setting this flag on the
@@ -427,6 +428,8 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
                                      WebContentsCreatedCallback callback) {
   RenderProcessHost* owner_render_process_host =
       owner_web_contents()->GetMainFrame()->GetProcess();
+  DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
+
   std::string storage_partition_id;
   bool persist_storage = false;
   ParsePartitionParam(create_params, &storage_partition_id, &persist_storage);
@@ -442,15 +445,15 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
   }
   std::string partition_domain = GetOwnerSiteURL().host();
   auto partition_config = content::StoragePartitionConfig::Create(
-      partition_domain, storage_partition_id, !persist_storage /* in_memory */);
+      browser_context(), partition_domain, storage_partition_id,
+      !persist_storage /* in_memory */);
 
   if (GetOwnerSiteURL().SchemeIs(extensions::kExtensionScheme)) {
     auto owner_config =
         extensions::util::GetStoragePartitionConfigForExtensionId(
-            GetOwnerSiteURL().host(),
-            owner_render_process_host->GetBrowserContext());
-    if (owner_render_process_host->GetBrowserContext()->IsOffTheRecord()) {
-      owner_config = owner_config.CopyWithInMemorySet();
+            GetOwnerSiteURL().host(), browser_context());
+    if (browser_context()->IsOffTheRecord()) {
+      DCHECK(owner_config.in_memory());
     }
     if (!owner_config.is_default()) {
       partition_config.set_fallback_to_partition_domain_for_blob_urls(
@@ -480,9 +483,9 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
     }
   } else {
     guest_site =
-      GetSiteForGuestPartitionConfig(content::StoragePartitionConfig::Create(
-          partition_domain, storage_partition_id,
-          !persist_storage /* in_memory */));
+        GetSiteForGuestPartitionConfig(content::StoragePartitionConfig::Create(
+            browser_context(), partition_domain, storage_partition_id,
+            !persist_storage /* in_memory */));
   }
   content::BrowserContext* context = owner_web_contents()->GetBrowserContext();
 
@@ -679,7 +682,7 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
           // 1. Create an ExtensionFrameHelper for the viewtype.
           // 2. take a WebContents as parameter.
           extension_host_.reset(new ::vivaldi::VivaldiExtensionHost(
-            context, VIEW_TYPE_EXTENSION_POPUP, new_contents));
+            context, mojom::ViewType::kExtensionPopup, new_contents));
         }
       }
       task_manager::WebContentsTags::CreateForTabContents(new_contents);
@@ -1079,7 +1082,7 @@ void WebViewGuest::RendererUnresponsive(
 }
 
 void WebViewGuest::StartFind(
-    const base::string16& search_text,
+    const std::u16string& search_text,
     blink::mojom::FindOptionsPtr options,
     scoped_refptr<WebViewInternalFindFunction> find_function) {
   find_helper_.Find(web_contents(), search_text, std::move(options),
@@ -1290,7 +1293,8 @@ void WebViewGuest::LoadProgressChanged(double progress) {
       webview::kEventLoadProgress, std::move(args)));
 }
 
-void WebViewGuest::DocumentOnLoadCompletedInMainFrame() {
+void WebViewGuest::DocumentOnLoadCompletedInMainFrame(
+    content::RenderFrameHost* render_frame_host) {
   auto args = std::make_unique<base::DictionaryValue>();
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventContentLoad, std::move(args)));
@@ -1374,10 +1378,10 @@ void WebViewGuest::OnAudioStateChanged(bool audible) {
 void WebViewGuest::OnDidAddMessageToConsole(
     content::RenderFrameHost* source_frame,
     blink::mojom::ConsoleMessageLevel log_level,
-    const base::string16& message,
+    const std::u16string& message,
     int32_t line_no,
-    const base::string16& source_id,
-    const base::Optional<base::string16>& untrusted_stack_trace) {
+    const std::u16string& source_id,
+    const base::Optional<std::u16string>& untrusted_stack_trace) {
   auto args = std::make_unique<base::DictionaryValue>();
   // Log levels are from base/logging.h: LogSeverity.
   args->SetInteger(webview::kLevel,
@@ -1412,9 +1416,9 @@ void WebViewGuest::ReportFrameNameChange(const std::string& name) {
 void WebViewGuest::PushWebViewStateToIOThread() {
   const GURL& site_url = web_contents()->GetSiteInstance()->GetSiteURL();
   content::StoragePartitionConfig storage_partition_config =
-      content::StoragePartitionConfig::CreateDefault();
-  if (!GetGuestPartitionConfigForSite(site_url, &storage_partition_config)) {
-
+      content::StoragePartitionConfig::CreateDefault(browser_context());
+  if (!GetGuestPartitionConfigForSite(browser_context(), site_url,
+                                      &storage_partition_config)) {
     // Vivaldi - geir: This check started kicking in when we started swithcing
     // instances for the guest view (VB-2455) - see VB-2539 for a TODO
     //NOTREACHED();
@@ -1472,7 +1476,7 @@ void WebViewGuest::CanDownload(const GURL& url,
 
 void WebViewGuest::SignalWhenReady(base::OnceClosure callback) {
   auto* manager = WebViewContentScriptManager::Get(browser_context());
-  manager->SignalOnScriptsLoaded(std::move(callback));
+  manager->SignalOnScriptsUpdated(std::move(callback));
 }
 
 void WebViewGuest::WillAttachToEmbedder() {
@@ -1672,6 +1676,10 @@ void WebViewGuest::SetName(const std::string& name) {
     return;
   name_ = name;
 
+  // Return early if this method is called before RenderFrameCreated().
+  // In that case, we still have a chance to update the name at GuestReady().
+  if (!web_contents()->GetMainFrame()->IsRenderFrameLive())
+    return;
   ExtensionWebContentsObserver::GetForWebContents(web_contents())
       ->GetLocalFrame(web_contents()->GetMainFrame())
       ->SetFrameName(name_);

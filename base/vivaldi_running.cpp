@@ -3,6 +3,7 @@
 #include "app/vivaldi_apptools.h"
 
 #include "base/command_line.h"
+#include "base/no_destructor.h"
 #include "base/vivaldi_switches.h"
 
 namespace vivaldi {
@@ -83,6 +84,21 @@ void CommandLineAppendSwitchNoDup(base::CommandLine* const cmd_line,
   if (!cmd_line->HasSwitch(switch_string))
     cmd_line->AppendSwitchNative(switch_string,
                                  base::CommandLine::StringType());
+}
+
+base::RepeatingCallbackList<void(content::WebContents*)>&
+GetExtDataUpdatedCallbackList() {
+  static base::NoDestructor<
+      base::RepeatingCallbackList<void(content::WebContents*)>>
+      callback_list;
+  return *callback_list;
+}
+
+base::CallbackListSubscription AddExtDataUpdatedCallback(
+    base::RepeatingCallback<void(content::WebContents*)>
+        tab_updated_extdata_callback) {
+  return GetExtDataUpdatedCallbackList().Add(
+      std::move(tab_updated_extdata_callback));
 }
 
 }  // namespace vivaldi

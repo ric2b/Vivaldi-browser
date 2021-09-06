@@ -5,8 +5,6 @@
 
 namespace vivaldi_update_notifier {
 
-constexpr bool kUseTaskScheduler = false;
-
 enum class ExitCode {
   kOk = 0,
 
@@ -33,15 +31,11 @@ extern const char kInstallMode[];
 // Switches for subactions
 extern const char kDisable[];
 extern const char kEnable[];
-extern const char kEnableIfUpgrade[];
 extern const char kIsEnabled[];
 extern const char kLaunchIfEnabled[];
 extern const char kUnregister[];
 
 // Command line switches for debugging not supported in the official build.
-extern const char kDebugExeDir[];
-extern const char kDebugKeepRunning[];
-extern const char kDebugLanguage[];
 extern const char kDebugSetupExe[];
 extern const char kDebugVersion[];
 

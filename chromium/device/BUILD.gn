@@ -391,7 +391,7 @@ test("device_unittests") {
     deps += [
       "//services/device:test_support",
       "//services/device/hid",
-      "//services/device/hid:mocks",
+      "//services/device/hid:test_support",
     ]
   }
 
@@ -426,7 +426,10 @@ if (is_android) {
   }
 
   junit_binary("device_junit_tests") {
-    sources = [ "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java" ]
+    sources = [
+      "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadDeviceTest.java",
+      "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java",
+    ]
     deps = [
       "$google_play_services_package:google_play_services_base_java",
       "$google_play_services_package:google_play_services_basement_java",

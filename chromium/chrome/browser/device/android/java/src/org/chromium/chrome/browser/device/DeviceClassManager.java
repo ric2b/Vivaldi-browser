@@ -17,7 +17,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.ui.base.DeviceFormFactor;
 
-import org.chromium.base.BuildConfig;
+import org.chromium.build.BuildConfig;
 
 /**
  * This class is used to turn on and off certain features for different types of
@@ -66,6 +66,7 @@ public class DeviceClassManager {
             mEnableAccessibilityLayout = false;
         }
 
+        // Vivaldi
         if (BuildConfig.IS_VIVALDI) {
             mEnableAccessibilityLayout = false;
         }
@@ -93,6 +94,7 @@ public class DeviceClassManager {
      * @return Whether or not should use the accessibility tab switcher.
      */
     public static boolean enableAccessibilityLayout() {
+        // Vivaldi
         if (BuildConfig.IS_VIVALDI) return false;
         // TODO(crbug.com/1007598): Support TabGrid and TabGroup in Accessibility mode.
         if (isPhone()

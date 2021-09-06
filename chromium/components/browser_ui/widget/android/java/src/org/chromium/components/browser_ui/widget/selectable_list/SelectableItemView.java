@@ -23,7 +23,8 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.components.browser_ui.widget.R;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Default implementation of SelectableItemViewBase. Contains a start icon, title, description, and
@@ -93,12 +94,12 @@ public abstract class SelectableItemView<E> extends SelectableItemViewBase<E> {
         mTitleView = findViewById(R.id.title);
         mDescriptionView = findViewById(R.id.description);
 
-        if (!BuildConfig.IS_VIVALDI)
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi
         if (mStartIconView != null) {
             mStartIconView.setBackgroundResource(R.drawable.list_item_icon_modern_bg);
             ApiCompatibilityUtils.setImageTintList(mStartIconView, getDefaultStartIconTint());
         }
-        if (BuildConfig.IS_VIVALDI && mStartIconView != null) {
+        if (BuildConfig.IS_VIVALDI && mStartIconView != null) { // Vivaldi
             mStartIconView.setBackgroundColor(getResources().getColor(android.R.color.transparent));
         }
     }
@@ -130,9 +131,9 @@ public abstract class SelectableItemView<E> extends SelectableItemViewBase<E> {
         if (isChecked()) {
             mStartIconView.getBackground().setLevel(mSelectedLevel);
             mStartIconView.setImageDrawable(mCheckDrawable);
-            if (!BuildConfig.IS_VIVALDI)
+            if (!true) // Vivaldi
             ApiCompatibilityUtils.setImageTintList(mStartIconView, mStartIconSelectedColorList);
-            if (!BuildConfig.IS_VIVALDI || mCheckDrawable != null)
+            if (!true || mCheckDrawable != null) // Vivaldi
             if (animate) mCheckDrawable.start();
         } else {
             mStartIconView.getBackground().setLevel(mDefaultLevel);

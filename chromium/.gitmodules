@@ -112,9 +112,9 @@
 [submodule "third_party/libgifcodec"]
 	path = third_party/libgifcodec
 	url = ../../skia/libgifcodec.git
-[submodule "third_party/libgav1/src"]
-	path = third_party/libgav1/src
-	url = ../../codecs/libgav1.git
+[submodule "third_party/openh264/src"]
+	path = third_party/openh264/src
+	url = ../../external/github.com/cisco/openh264.git
 [submodule "third_party/pefile"]
 	path = third_party/pefile
 	url = ../../external/pefile.git
@@ -124,6 +124,9 @@
 [submodule "third_party/libyuv"]
 	path = third_party/libyuv
 	url = ../../libyuv/libyuv.git
+[submodule "third_party/libjxl/src"]
+	path = third_party/libjxl/src
+	url = ../../external/gitlab.com/wg1/jpeg-xl.git
 [submodule "third_party/gemmlowp/src"]
 	path = third_party/gemmlowp/src
 	url = ../../external/github.com/google/gemmlowp.git
@@ -271,9 +274,12 @@
 [submodule "third_party/minizip/src"]
 	path = third_party/minizip/src
 	url = ../../external/github.com/nmoinvaz/minizip.git
-[submodule "third_party/openh264/src"]
-	path = third_party/openh264/src
-	url = ../../external/github.com/cisco/openh264.git
+[submodule "third_party/highway/src"]
+	path = third_party/highway/src
+	url = ../../external/github.com/google/highway.git
+[submodule "third_party/libgav1/src"]
+	path = third_party/libgav1/src
+	url = ../../codecs/libgav1.git
 [submodule "third_party/jsoncpp/source"]
 	path = third_party/jsoncpp/source
 	url = ../../external/github.com/open-source-parsers/jsoncpp.git

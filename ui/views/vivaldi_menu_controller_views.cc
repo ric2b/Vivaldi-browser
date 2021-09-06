@@ -33,6 +33,42 @@ void MenuController::VivaldiOpenMenu(MenuItemView* item) {
       views::MenuController::SELECTION_UPDATE_IMMEDIATELY);
 }
 
+bool MenuController::VivaldiHandleKeyPressed(ui::KeyboardCode key_code) {
+  MenuItemView* item = pending_state_.item;
+  DCHECK(item);
+  if (!item) {
+    return false;
+  };
+
+  if ((key_code == ui::VKEY_RIGHT && base::i18n::IsRTL()) ||
+      (key_code == ui::VKEY_LEFT && !base::i18n::IsRTL())) {
+    // Focus is sometimes missing in a newly open submenu and in that case
+    // the parent handles it. Note that we test for GetParentMenuItem() as
+    // this function is used for a menubar as well.
+    if (item->HasSubmenu() && item->SubmenuIsShowing() &&
+        item->GetParentMenuItem()) {
+      CloseSubmenu();
+      return true;
+    }
+    // Menubar navigation
+    if (!item->GetParentMenuItem() ||
+        item->GetParentMenuItem() == item->GetRootMenuItem()) {
+      StepSiblingMenu(false);
+      return true;
+    }
+  } else if ((key_code == ui::VKEY_RIGHT && !base::i18n::IsRTL()) ||
+             (key_code == ui::VKEY_LEFT && base::i18n::IsRTL())) {
+    // Menubar navigation
+    if ((!item->HasSubmenu() || item == item->GetRootMenuItem()) &&
+        (!item->GetParentMenuItem() ||
+          item->GetParentMenuItem() == item->GetRootMenuItem())) {
+      StepSiblingMenu(true);
+      return true;
+    }
+  }
+  return false;
+}
+
 // To be used for navigating a menu bar using the keyboard
 bool MenuController::StepSiblingMenu(bool next) {
   if (!menu_stack_.empty()) {

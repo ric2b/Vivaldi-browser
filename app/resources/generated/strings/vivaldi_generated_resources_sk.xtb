@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Nepovoliť žiadnym stránkam automaticky sťahovať viacero súborov súčasne</translation>
 <translation id="5039804452771397117">Povoliť</translation>
 <translation id="5057110919553308744">Keď kliknete na rozšírenie</translation>
+<translation id="5059526285558225588">Vyberte, čo sa má zdieľať</translation>
 <translation id="5063480226653192405">Využitie</translation>
 <translation id="5116628073786783676">Uložiť &amp;zvuk ako...</translation>
 <translation id="5143374789336132547">Rozšírenie „<ph name="EXTENSION_NAME" />“ zmenilo stránku, ktorá sa zobrazí po kliknutí na tlačidlo Domovská stránka.</translation>
@@ -458,7 +459,6 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8823704566850948458">Navrhnúť heslo…</translation>
 <translation id="8859174528519900719">Podrámec: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Otvoriť odkaz v novom &amp;okne</translation>
-<translation id="8910146161325739742">Zdieľanie obrazovky</translation>
 <translation id="8915370057835397490">Načítavajú sa návrhy</translation>
 <translation id="8916476537757519021">Súkromný podrámec: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Pamäť JavaScript</translation>

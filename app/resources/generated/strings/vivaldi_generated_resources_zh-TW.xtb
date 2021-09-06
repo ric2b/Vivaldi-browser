@@ -102,6 +102,7 @@
 <translation id="2662876636500006917">Chrome 線上應用程式商店</translation>
 <translation id="2678063897982469759">重新啟用</translation>
 <translation id="2721037002783622288">透過 <ph name="SEARCH_ENGINE" /> 搜尋圖片(&amp;S)</translation>
+<translation id="2783321960289401138">建立捷徑...</translation>
 <translation id="2785873697295365461">檔案描述符</translation>
 <translation id="2809586584051668049">和另外 <ph name="NUMBER_ADDITIONAL_DISABLED" /> 個</translation>
 <translation id="2812989263793994277">不顯示任何圖片</translation>
@@ -136,6 +137,7 @@
 <translation id="3222066309010235055">預先轉譯：<ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">麥克風</translation>
 <translation id="3241680850019875542">請選取要封裝的延伸套件根目錄。如要更新延伸套件，請一併選取要重複使用的私鑰。</translation>
+<translation id="3266179261140759675">禁止已關閉的網站傳送和接收資料</translation>
 <translation id="3280237271814976245">另存新檔(&amp;A)...</translation>
 <translation id="3285322247471302225">新增分頁(&amp;T)</translation>
 <translation id="3288047731229977326">在開發者模式中執行延伸套件可能會損害您的電腦。如果您不是開發者，最好在開發者模式中停用這些延伸套件，以策安全。</translation>
@@ -161,6 +163,7 @@
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; 想要與您的群組 (&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;) 共用印表機 &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;。您接受之後，所有群組成員即可使用這台印表機進行列印工作。</translation>
 <translation id="3587482841069643663">全部</translation>
 <translation id="3627588569887975815">在無痕視窗開啟連結(&amp;G)</translation>
+<translation id="3627879631695760395">安裝「<ph name="APP" />」...</translation>
 <translation id="3668823961463113931">處理常式</translation>
 <translation id="3678156199662914018">延伸套件：<ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> 要求共用畫面</translation>
@@ -239,6 +242,7 @@
 <translation id="5036662165765606524">禁止任何網站自動下載多個檔案</translation>
 <translation id="5039804452771397117">允許</translation>
 <translation id="5057110919553308744">點一下延伸套件時</translation>
+<translation id="5059526285558225588">選擇要分享的內容</translation>
 <translation id="5063480226653192405">用量</translation>
 <translation id="5116628073786783676">另存音訊(&amp;V)...</translation>
 <translation id="5143374789336132547">延伸套件「<ph name="EXTENSION_NAME" />」已變更您點選首頁按鈕時所顯示的網頁。</translation>
@@ -456,7 +460,6 @@
 <translation id="8823704566850948458">建議密碼...</translation>
 <translation id="8859174528519900719">子頁框：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">在新視窗開啟連結(&amp;W)</translation>
-<translation id="8910146161325739742">分享螢幕畫面</translation>
 <translation id="8915370057835397490">正在載入建議</translation>
 <translation id="8916476537757519021">無痕模式子頁框：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript 記憶體</translation>
@@ -468,6 +471,7 @@
 <translation id="9027459031423301635">在新分頁開啟連結(T)</translation>
 <translation id="9056810968620647706">找不到相符項目。</translation>
 <translation id="9137916601698928395">以 <ph name="USER" /> 身分開啟連結</translation>
+<translation id="91568222606626347">建立捷徑...</translation>
 <translation id="916607977885256133">畫中畫</translation>
 <translation id="9170848237812810038">復原(&amp;U)</translation>
 <translation id="9215293857209265904">已新增「<ph name="EXTENSION_NAME" />」</translation>

@@ -26,6 +26,9 @@
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/vivaldi_browser_window.h"
 
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "ui/devtools/devtools_connector.h"
+
 namespace vivaldi {
 
 // These symbols do not not exist in chrome or the definition differs
@@ -256,7 +259,7 @@ gfx::PointF ToUICoordinates(content::WebContents* web_contents,
 
 #if defined(OS_MAC)
 
-base::string16 KeyCodeToName(ui::KeyboardCode key_code) {
+std::u16string KeyCodeToName(ui::KeyboardCode key_code) {
   int string_id = 0;
   switch (key_code) {
     case ui::VKEY_TAB:
@@ -331,7 +334,7 @@ base::string16 KeyCodeToName(ui::KeyboardCode key_code) {
     default:
       break;
   }
-  return string_id ? l10n_util::GetStringUTF16(string_id) : base::string16();
+  return string_id ? l10n_util::GetStringUTF16(string_id) : std::u16string();
 }
 
 #endif  // OS_MACOS
@@ -412,7 +415,7 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
       // With chrome 67 accelerator.GetShortcutText() will return Mac specific
       // symbols (like '⎋' for escape). All is private so we bypass that by
       // testing with KeyCodeToName first.
-      base::string16 shortcut = KeyCodeToName(key_code);
+      std::u16string shortcut = KeyCodeToName(key_code);
       if (shortcut.empty())
         shortcut = accelerator.GetShortcutText();
       shortcutText += base::UTF16ToUTF8(shortcut);
@@ -494,6 +497,14 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
     dict.SetKey(kImagePathKey, base::Value(avatar_path));
     update_pref_data->Append(std::move(dict));
   }
+}
+
+void RestartBrowser() {
+  // Free any open devtools if the user selects Exit from the menu.
+  extensions::DevtoolsConnectorAPI::CloseAllDevtools();
+
+  LOG(INFO) << "Restarting Vivaldi";
+  chrome::AttemptRestart();
 }
 
 }  // namespace vivaldi

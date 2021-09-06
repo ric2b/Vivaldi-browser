@@ -27,7 +27,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Handles the drag touch events on AppMenu that start from the menu button.
@@ -314,7 +315,6 @@ class AppMenuDragHelper {
                 && getScreenVisibleRect(firstRow).bottom <= mMenuButtonScreenCenterY) {
             return false;
         }
-
         return true;
     }
 }

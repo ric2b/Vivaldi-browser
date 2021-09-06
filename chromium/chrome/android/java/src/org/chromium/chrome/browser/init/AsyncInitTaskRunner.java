@@ -23,7 +23,8 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.concurrent.Executor;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Runs asynchronous startup task that need to be run before the native side is

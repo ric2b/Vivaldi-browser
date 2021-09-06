@@ -53,7 +53,7 @@ import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ViewUtils;
 
 import android.widget.ImageButton;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Layout class that contains the base shared logic for manipulating the toolbar component. For
@@ -674,12 +674,6 @@ public abstract class ToolbarLayout
      */
     void onUrlFocusChange(boolean hasFocus) {
         mUrlHasFocus = hasFocus;
-        // For Vivaldi, hide menu (V) button so it doesn't mix with the location bar buttons.
-        if (ChromeApplication.isVivaldi()) {
-            ImageButton menuButton = mMenuButtonCoordinator.getMenuImageButton();
-            if (menuButton != null)
-                menuButton.setVisibility(hasFocus ? View.GONE : View.VISIBLE);
-        }
     }
 
     /**
@@ -799,8 +793,8 @@ public abstract class ToolbarLayout
     }
 
     private void maybeUnfocusUrlBar() {
-        if (getLocationBar() != null && getLocationBar().getFakeboxDelegate() != null) {
-            getLocationBar().getFakeboxDelegate().setUrlBarFocus(
+        if (getLocationBar() != null && getLocationBar().getOmniboxStub() != null) {
+            getLocationBar().getOmniboxStub().setUrlBarFocus(
                     false, null, OmniboxFocusReason.UNFOCUS);
         }
     }

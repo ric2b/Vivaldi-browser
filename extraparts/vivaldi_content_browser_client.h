@@ -28,10 +28,6 @@ class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
 #endif
 
-  std::string GetStoragePartitionIdForSite(
-      content::BrowserContext* browser_context,
-      const GURL& site) override;
-
   void RegisterBrowserInterfaceBindersForFrame(
       content::RenderFrameHost* render_frame_host,
       mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;

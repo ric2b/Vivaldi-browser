@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 // Vivaldi
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Entry point to manage all data reduction proxy configuration details.
@@ -96,7 +96,7 @@ public class DataReductionProxySettings {
     private static void reconcileDataReductionProxyEnabledState() {
         ThreadUtils.assertOnUiThread();
         boolean enabled = getInstance().isDataReductionProxyEnabled();
-        if (ChromeApplication.isVivaldi()) assert !enabled;
+        if (ChromeApplicationImpl.isVivaldi()) assert !enabled;
         SharedPreferencesManager.getInstance().writeBoolean(
                 ChromePreferenceKeys.DATA_REDUCTION_ENABLED, enabled);
     }
@@ -134,14 +134,14 @@ public class DataReductionProxySettings {
 
     /** Returns true if the SPDY proxy promo is allowed to be shown. */
     public boolean isDataReductionProxyPromoAllowed() {
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         return DataReductionProxySettingsJni.get().isDataReductionProxyPromoAllowed(
                 mNativeDataReductionProxySettings, DataReductionProxySettings.this);
     }
 
     /** Returns true if the data saver proxy promo is allowed to be shown as part of FRE. */
     public boolean isDataReductionProxyFREPromoAllowed() {
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         return DataReductionProxySettingsJni.get().isDataReductionProxyFREPromoAllowed(
                 mNativeDataReductionProxySettings, DataReductionProxySettings.this);
     }
@@ -156,7 +156,7 @@ public class DataReductionProxySettings {
      * data reduction statistics if this is the first time the SPDY proxy has been enabled.
      */
     public void setDataReductionProxyEnabled(Context context, boolean enabled) {
-        if (ChromeApplication.isVivaldi()) assert !enabled;
+        if (ChromeApplicationImpl.isVivaldi()) assert !enabled;
         if (enabled
                 && SharedPreferencesManager.getInstance().readLong(
                            ChromePreferenceKeys.DATA_REDUCTION_FIRST_ENABLED_TIME, 0)
@@ -319,7 +319,7 @@ public class DataReductionProxySettings {
     }
 
     @NativeMethods
-    interface Natives {
+    public interface Natives {
         long init(DataReductionProxySettings caller);
         boolean isDataReductionProxyPromoAllowed(
                 long nativeDataReductionProxySettingsAndroid, DataReductionProxySettings caller);

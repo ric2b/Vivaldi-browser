@@ -1,0 +1,12 @@
+; Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved.
+
+; NOTE(tomas@vivaldi.com): Needed for platform media AudioToolbox decoder.
+(allow mach-lookup
+  (global-name "com.apple.audio.AudioComponentRegistrar")
+)
+
+; NOTE(tomas@vivaldi.com): Needed for platform media AudioToolbox decoder.
+(allow file-read-data
+  (subpath "/System/Library/Components/AudioCodecs.component/")
+  (subpath "/System/Library/Components/CoreAudio.component/")
+)

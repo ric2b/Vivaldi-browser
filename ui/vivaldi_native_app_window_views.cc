@@ -42,8 +42,8 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 #include "ui/vivaldi_browser_window.h"
-#include "ui/vivaldi_ui_utils.h"
 #include "ui/vivaldi_quit_confirmation_dialog.h"
+#include "ui/vivaldi_ui_utils.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -84,9 +84,8 @@ const int kSmallIconSizeViv = 16;
 
 // This is based on GetInitialWindowBounds() from
 // chromium/extensions/browser/app_window/app_window.cc
-gfx::Rect GetInitialWindowBounds(
-    const VivaldiBrowserWindowParams& params,
-    const gfx::Insets& frame_insets) {
+gfx::Rect GetInitialWindowBounds(const VivaldiBrowserWindowParams& params,
+                                 const gfx::Insets& frame_insets) {
   // Combine into a single window bounds.
   gfx::Rect combined_bounds(VivaldiBrowserWindowParams::kUnspecifiedPosition,
                             VivaldiBrowserWindowParams::kUnspecifiedPosition, 0,
@@ -102,8 +101,8 @@ gfx::Rect GetInitialWindowBounds(
                               frame_insets.width());
   }
   if (params.content_bounds.height() > 0) {
-    combined_bounds.set_height(
-        params.content_bounds.height() + frame_insets.height());
+    combined_bounds.set_height(params.content_bounds.height() +
+                               frame_insets.height());
   }
 
   // Constrain the bounds.
@@ -126,22 +125,22 @@ bool VivaldiNativeAppWindowViews::IsOnCurrentWorkspace() const {
 }
 
 void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
-  const VivaldiBrowserWindowParams& create_params) {
+    const VivaldiBrowserWindowParams& create_params) {
   views::Widget::InitParams init_params(views::Widget::InitParams::TYPE_WINDOW);
 
   init_params.delegate = this;
   init_params.remove_standard_frame = frameless_;
   init_params.use_system_default_icon = false;
   if (create_params.alpha_enabled) {
-    init_params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
+    init_params.opacity =
+        views::Widget::InitParams::WindowOpacity::kTranslucent;
 
     // The given window is most likely not rectangular since it uses
     // transparency and has no standard frame, don't show a shadow for it.
     // TODO(skuhne): If we run into an application which should have a shadow
     // but does not have, a new attribute has to be added.
     if (frameless_)
-      init_params.shadow_type =
-          views::Widget::InitParams::ShadowType::kNone;
+      init_params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
   }
   init_params.visible_on_all_workspaces =
       create_params.visible_on_all_workspaces;
@@ -163,8 +162,8 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   gfx::Rect window_bounds = GetInitialWindowBounds(create_params, frame_insets);
   if (!window_bounds.IsEmpty()) {
     bool position_specified =
-      window_bounds.x() != VivaldiBrowserWindowParams::kUnspecifiedPosition &&
-      window_bounds.y() != VivaldiBrowserWindowParams::kUnspecifiedPosition;
+        window_bounds.x() != VivaldiBrowserWindowParams::kUnspecifiedPosition &&
+        window_bounds.y() != VivaldiBrowserWindowParams::kUnspecifiedPosition;
     if (!position_specified)
       widget()->CenterWindow(window_bounds.size());
     else
@@ -198,12 +197,11 @@ void VivaldiNativeAppWindowViews::UpdateEventTargeterWithInset() {
   // root window does not have a delegate, which is needed to handle the event
   // in Linux.
   std::unique_ptr<ui::EventTargeter> old_eventtarget =
-    window->SetEventTargeter(std::unique_ptr<aura::WindowTargeter>(
-      new wm::EasyResizeWindowTargeter(inset, inset)));
+      window->SetEventTargeter(std::unique_ptr<aura::WindowTargeter>(
+          new wm::EasyResizeWindowTargeter(inset, inset)));
   delete old_eventtarget.release();
 #endif
 }
-
 
 void VivaldiNativeAppWindowViews::OnCanHaveAlphaEnabledChanged() {
   window_->OnNativeWindowChanged();
@@ -330,18 +328,22 @@ gfx::ImageSkia VivaldiNativeAppWindowViews::GetWindowIcon() {
   if (icon_family_.empty()) {
     return gfx::ImageSkia();
   }
-  const gfx::Image* img = icon_family_.GetBest(kSmallIconSizeViv,
-                                               kSmallIconSizeViv);
+  const gfx::Image* img =
+      icon_family_.GetBest(kSmallIconSizeViv, kSmallIconSizeViv);
   return img ? *img->ToImageSkia() : gfx::ImageSkia();
 }
 
 void VivaldiNativeAppWindowViews::SetIconFamily(gfx::ImageFamily images) {
   icon_family_ = std::move(images);
-  widget_->UpdateWindowIcon();
+  // NOTE (andre@vivaldi.com) : VivaldiBrowserWindow::OnIconImagesLoaded can
+  // call this before VivaldiNativeAppWindowViews::Init.
+  if (widget_) {
+    widget_->UpdateWindowIcon();
+  }
 }
 
-views::ClientView*
-VivaldiNativeAppWindowViews::CreateClientView(views::Widget* widget) {
+views::ClientView* VivaldiNativeAppWindowViews::CreateClientView(
+    views::Widget* widget) {
   return new VivaldiWindowClientView(widget, GetContentsView(), window());
 }
 
@@ -377,7 +379,7 @@ bool VivaldiNativeAppWindowViews::CanMinimize() const {
   return true;
 }
 
-base::string16 VivaldiNativeAppWindowViews::GetWindowTitle() const {
+std::u16string VivaldiNativeAppWindowViews::GetWindowTitle() const {
   return window_->GetTitle();
 }
 
@@ -407,7 +409,8 @@ bool VivaldiNativeAppWindowViews::GetSavedWindowPlacement(
     const views::Widget* widget,
     gfx::Rect* bounds,
     ui::WindowShowState* show_state) const {
-  chrome::GetSavedWindowBoundsAndShowState(window_->browser(), bounds, show_state);
+  chrome::GetSavedWindowBoundsAndShowState(window_->browser(), bounds,
+                                           show_state);
 
   if (chrome::SavedBoundsAreContentBounds(window_->browser())) {
     // This is normal non-app popup window. The value passed in |bounds|
@@ -416,8 +419,8 @@ bool VivaldiNativeAppWindowViews::GetSavedWindowPlacement(
     // - the size of the content area (inner size).
     // We need to use these values to determine the appropriate size and
     // position of the resulting window.
-    gfx::Rect window_rect = GetWidget()->non_client_view()->
-      GetWindowBoundsForClientBounds(*bounds);
+    gfx::Rect window_rect =
+        GetWidget()->non_client_view()->GetWindowBoundsForClientBounds(*bounds);
     window_rect.set_origin(bounds->origin());
 
     // When we are given x/y coordinates of 0 on a created popup window,
@@ -479,16 +482,15 @@ void VivaldiNativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
   Browser* browser = window()->browser();
   if (!browser)
     return;
-  extensions::WebViewGuest *current_webviewguest =
+  extensions::WebViewGuest* current_webviewguest =
       vivaldi::ui_tools::GetActiveWebGuestFromBrowser(browser);
   if (current_webviewguest) {
     content::NativeWebKeyboardEvent synth_event(
         blink::WebInputEvent::Type::kRawKeyDown,
-        blink::WebInputEvent::kNoModifiers,
-        ui::EventTimeForNow());
+        blink::WebInputEvent::kNoModifiers, ui::EventTimeForNow());
     synth_event.windows_key_code = code;
-    current_webviewguest->web_contents()->GetDelegate()
-        ->HandleKeyboardEvent(web_view_->GetWebContents(), synth_event);
+    current_webviewguest->web_contents()->GetDelegate()->HandleKeyboardEvent(
+        web_view_->GetWebContents(), synth_event);
   }
 }
 
@@ -507,7 +509,8 @@ void VivaldiNativeAppWindowViews::OnWidgetVisibilityChanged(
 }
 
 void VivaldiNativeAppWindowViews::OnWidgetActivationChanged(
-    views::Widget* widget, bool active) {
+    views::Widget* widget,
+    bool active) {
   window_->OnNativeWindowChanged();
   window_->OnNativeWindowActivationChanged(active);
   Browser* browser = window_->browser();
@@ -555,19 +558,27 @@ void VivaldiNativeAppWindowViews::OnFocus() {
 // NativeAppWindow implementation.
 
 void VivaldiNativeAppWindowViews::SetFullscreen(bool is_fullscreen) {
-  widget()->SetFullscreen(is_fullscreen);
+  if (widget_) {
+    widget_->SetFullscreen(is_fullscreen);
+  }
 }
 
 bool VivaldiNativeAppWindowViews::IsFullscreenOrPending() const {
+  if (!widget_)
+    return false;
   return widget()->IsFullscreen();
 }
 
 void VivaldiNativeAppWindowViews::UpdateWindowIcon() {
-  widget_->UpdateWindowIcon();
+  if (widget_) {
+    widget_->UpdateWindowIcon();
+  }
 }
 
 void VivaldiNativeAppWindowViews::UpdateWindowTitle() {
-  widget_->UpdateWindowTitle();
+  if (widget_) {
+    widget_->UpdateWindowTitle();
+  }
 }
 
 void VivaldiNativeAppWindowViews::UpdateDraggableRegions(
@@ -591,7 +602,7 @@ void VivaldiNativeAppWindowViews::UpdateDraggableRegions(
 }
 
 gfx::Insets VivaldiNativeAppWindowViews::GetFrameInsets() const {
-  if (frameless_ || !widget_ )
+  if (frameless_ || !widget_)
     return gfx::Insets();
 
   // The pretend client_bounds passed in need to be large enough to ensure that
@@ -606,12 +617,16 @@ gfx::Insets VivaldiNativeAppWindowViews::GetFrameInsets() const {
 }
 
 bool VivaldiNativeAppWindowViews::CanHaveAlphaEnabled() const {
+  if (!widget_)
+    return false;
   return widget_->IsTranslucentWindowOpacitySupported();
 }
 
 void VivaldiNativeAppWindowViews::SetVisibleOnAllWorkspaces(
     bool always_visible) {
-  widget_->SetVisibleOnAllWorkspaces(always_visible);
+  if (widget_) {
+    widget_->SetVisibleOnAllWorkspaces(always_visible);
+  }
 }
 
 void VivaldiNativeAppWindowViews::SetActivateOnPointer(
@@ -624,8 +639,8 @@ void VivaldiNativeAppWindowViews::Close() {
 #if defined(OS_WIN)
   // This must be as early as possible.
   bool should_quit_if_last_browser =
-    browser_shutdown::IsTryingToQuit() ||
-    KeepAliveRegistry::GetInstance()->IsKeepingAliveOnlyByBrowserOrigin();
+      browser_shutdown::IsTryingToQuit() ||
+      KeepAliveRegistry::GetInstance()->IsKeepingAliveOnlyByBrowserOrigin();
   if (should_quit_if_last_browser) {
     vivaldi::OnShutdownStarted();
   }

@@ -1,0 +1,40 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+static_library("mail_client") {
+  sources = [
+    "mail_client_backend.cc",
+    "mail_client_backend.h",
+    "mail_client_database_params.cc",
+    "mail_client_database_params.h",
+    "mail_client_database.cc",
+    "mail_client_database.h",
+
+    "mail_client_model_observer.h",
+    "mail_client_service_factory.cc",
+    "mail_client_service_factory.h",
+    "mail_client_service.h",
+    "mail_client_service.cc",
+    "message_table.cc",
+    "message_table.h",
+    "message_type.cc",
+    "message_type.h",
+  ]
+
+  deps = [
+    "//base:base",
+    "//chrome:strings",
+    "//chrome/common:constants",
+    "//components/keyed_service/core:core",
+    "//components/keyed_service/content:content",
+    "//components/prefs",
+    "//components/variations",
+    "//content/public/browser",
+    "//sql",
+    "//vivaldi/app:resources",
+    "//vivaldi/prefs:prefs_strings",
+  ]
+  public_deps = [
+    #"//components/sync/protocol",
+    #"//vivaldi/sync",
+  ]
+}

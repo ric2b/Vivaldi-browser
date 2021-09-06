@@ -28,7 +28,7 @@ class GURL;
 class SkRegion;
 
 namespace base {
-class DictionaryValue;
+class Value;
 }
 
 namespace content {
@@ -257,7 +257,7 @@ class AppWindow : public content::WebContentsDelegate,
 
   // NativeAppWindows should call this to determine what the window's title
   // is on startup and from within UpdateWindowTitle().
-  base::string16 GetTitle() const;
+  std::u16string GetTitle() const;
 
   // |callback| will be called when the first navigation was completed or window
   // is closed before that. |did_finish| argument of the |callback| is set to
@@ -364,7 +364,7 @@ class AppWindow : public content::WebContentsDelegate,
 
   // Retrieve the current state of the app window as a dictionary, to pass to
   // the renderer.
-  void GetSerializedState(base::DictionaryValue* properties) const;
+  void GetSerializedState(base::Value* properties) const;
 
   // Whether the app window wants to be alpha enabled.
   bool requested_alpha_enabled() const { return requested_alpha_enabled_; }

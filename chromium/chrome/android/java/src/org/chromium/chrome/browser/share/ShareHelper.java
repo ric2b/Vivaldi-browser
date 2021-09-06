@@ -27,7 +27,7 @@ import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.lens.LensController;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
 import org.chromium.chrome.browser.lens.LensIntentParams;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -135,11 +135,12 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
     public static void shareImageWithGoogleLens(final WindowAndroid window, Uri imageUri,
             boolean isIncognito, GURL srcUrl, String titleOrAltText, GURL pageUrl,
             @LensEntryPoint int lensEntryPoint, boolean requiresConfirmation) {
-        if (LensUtils.useDirectIntentSdkIntegration(ContextUtils.getApplicationContext())) {
+        if (LensUtils.useDirectIntentSdkIntegration(ContextUtils.getApplicationContext())
+                || LensUtils.useLensIntentApi()) {
             LensIntentParams intentParams = LensUtils.buildLensIntentParams(imageUri, isIncognito,
                     srcUrl.getValidSpecOrEmpty(), titleOrAltText, pageUrl.getValidSpecOrEmpty(),
                     lensEntryPoint, requiresConfirmation);
-            LensController.getInstance().startLens(window, intentParams);
+            AppHooks.get().getLensController().startLens(window, intentParams);
         } else {
             Intent shareIntent =
                     LensUtils.getShareWithGoogleLensIntent(ContextUtils.getApplicationContext(),

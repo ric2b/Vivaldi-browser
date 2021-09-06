@@ -203,6 +203,14 @@ bool MenuUpgrade::RemoveFromProfile(const base::Value& profile_value,
                                     base::Value* profile_root) {
   if (profile_value.is_list()) {
     for (int i = profile_value.GetList().size() - 1; i >= 0; i--) {
+      // Remove() in the recursive call to RemoveFromProfile() can remove more
+      // than one item in case the item to be removed has a guid that is
+      // (wrongly) duplicated in the installed file. That was the case when we
+      // upgraded to 3.8. For simplicity, instead of returning the delete count,
+      // we check the list size.
+      if (static_cast<unsigned long>(i) >= profile_value.GetList().size()) {
+        i = profile_value.GetList().size() - 1;
+      }
       const auto& item = profile_value.GetList()[i];
       if (!RemoveFromProfile(item, parent_guid, bundle_root, profile_root)) {
         return false;

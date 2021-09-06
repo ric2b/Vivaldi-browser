@@ -13,6 +13,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/devtools/devtools_connector.h"
@@ -83,8 +84,7 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
 
       case IDC_CONTENT_CONTEXT_RESTART_PACKAGED_APP:
         if (platform_app && platform_app->is_platform_app()) {
-          extensions::DevtoolsConnectorAPI::CloseAllDevtools();
-          chrome::AttemptRestart();
+          vivaldi::RestartBrowser();
         }
         return true;
 

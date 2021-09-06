@@ -73,7 +73,7 @@ DevToolsPageHandler::DevToolsPageHandler() {
 DevToolsPageHandler::~DevToolsPageHandler() {
 }
 
-bool DevToolsPageHandler::Parse(Extension* extension, base::string16* error) {
+bool DevToolsPageHandler::Parse(Extension* extension, std::u16string* error) {
   std::unique_ptr<ManifestURL> manifest_url(new ManifestURL);
   std::string devtools_str;
   if (!extension->manifest()->GetString(keys::kDevToolsPage, &devtools_str)) {
@@ -90,7 +90,8 @@ bool DevToolsPageHandler::Parse(Extension* extension, base::string16* error) {
   }
   manifest_url->url_ = std::move(url);
   extension->SetManifestData(keys::kDevToolsPage, std::move(manifest_url));
-  PermissionsParser::AddAPIPermission(extension, APIPermission::kDevtools);
+  PermissionsParser::AddAPIPermission(extension,
+                                      mojom::APIPermissionID::kDevtools);
   return true;
 }
 
@@ -105,7 +106,7 @@ URLOverridesHandler::URLOverridesHandler() {
 URLOverridesHandler::~URLOverridesHandler() {
 }
 
-bool URLOverridesHandler::Parse(Extension* extension, base::string16* error) {
+bool URLOverridesHandler::Parse(Extension* extension, std::u16string* error) {
   const base::DictionaryValue* overrides = NULL;
   if (!extension->manifest()->GetDictionary(keys::kChromeURLOverrides,
                                             &overrides)) {
@@ -138,7 +139,7 @@ bool URLOverridesHandler::Parse(Extension* extension, base::string16* error) {
 
     // For component extensions, add override URL to extent patterns.
     if (extension->is_legacy_packaged_app() &&
-        extension->location() == Manifest::COMPONENT) {
+        extension->location() == mojom::ManifestLocation::kComponent) {
       URLPattern pattern(URLPattern::SCHEME_CHROMEUI);
       std::string url =
           base::StringPrintf(kOverrideExtentUrlPatternFormat, page.c_str());
@@ -160,8 +161,8 @@ bool URLOverridesHandler::Parse(Extension* extension, base::string16* error) {
 
   // If this is an NTP override extension, add the NTP override permission.
   if (url_overrides->chrome_url_overrides_.count(chrome::kChromeUINewTabHost)) {
-    PermissionsParser::AddAPIPermission(extension,
-                                        APIPermission::kNewTabPageOverride);
+    PermissionsParser::AddAPIPermission(
+        extension, mojom::APIPermissionID::kNewTabPageOverride);
   }
 
   extension->SetManifestData(keys::kChromeURLOverrides,

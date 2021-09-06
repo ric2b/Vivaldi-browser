@@ -16,7 +16,7 @@ import org.chromium.ui.util.ColorUtils;
 import android.app.Activity;
 
 // Vivaldi
-import org.chromium.base.BuildConfig;
+import org.chromium.build.BuildConfig;
 
 /**
  * An abstract class that provides the current theme color.

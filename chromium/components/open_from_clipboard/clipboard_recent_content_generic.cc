@@ -8,9 +8,14 @@
 
 #include "base/bind.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
+
+#if defined(OS_ANDROID)
+#include "ui/base/clipboard/clipboard_android.h"
+#endif
 
 namespace {
 // Schemes appropriate for suggestion by ClipboardRecentContent.
@@ -33,6 +38,24 @@ void OnGetRecentImageFromClipboard(
   std::move(callback).Run(gfx::Image::CreateFrom1xBitmap(sk_bitmap));
 }
 
+bool HasRecentURLFromClipboard() {
+  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+  ui::DataTransferEndpoint data_dst = ui::DataTransferEndpoint(
+      ui::EndpointType::kDefault, /*notify_if_restricted=*/false);
+  return clipboard->IsFormatAvailable(ui::ClipboardFormatType::GetUrlType(),
+                                      ui::ClipboardBuffer::kCopyPaste,
+                                      &data_dst);
+}
+
+bool HasRecentTextFromClipboard() {
+  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+  ui::DataTransferEndpoint data_dst = ui::DataTransferEndpoint(
+      ui::EndpointType::kDefault, /*notify_if_restricted=*/false);
+  return clipboard->IsFormatAvailable(
+      ui::ClipboardFormatType::GetPlainTextType(),
+      ui::ClipboardBuffer::kCopyPaste, &data_dst);
+}
+
 }  // namespace
 
 ClipboardRecentContentGeneric::ClipboardRecentContentGeneric() = default;
@@ -48,8 +71,12 @@ ClipboardRecentContentGeneric::GetRecentURLFromClipboard() {
   ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
   ui::DataTransferEndpoint data_dst = ui::DataTransferEndpoint(
       ui::EndpointType::kDefault, /*notify_if_restricted=*/false);
+#if defined(OS_ANDROID)
+  clipboard->ReadBookmark(&data_dst, nullptr, &gurl_string);
+#else
   clipboard->ReadAsciiText(ui::ClipboardBuffer::kCopyPaste, &data_dst,
                            &gurl_string);
+#endif  // #if defined(OS_ANDROID)
   base::TrimWhitespaceASCII(gurl_string, base::TrimPositions::TRIM_ALL,
                             &gurl_string);
 
@@ -66,7 +93,7 @@ ClipboardRecentContentGeneric::GetRecentURLFromClipboard() {
   } else {
     // Fall back to unicode / UTF16, as some URLs may use international domain
     // names, not punycode.
-    base::string16 gurl_string16;
+    std::u16string gurl_string16;
     clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, &data_dst,
                         &gurl_string16);
     base::TrimWhitespace(gurl_string16, base::TrimPositions::TRIM_ALL,
@@ -83,12 +110,12 @@ ClipboardRecentContentGeneric::GetRecentURLFromClipboard() {
   return url;
 }
 
-base::Optional<base::string16>
+base::Optional<std::u16string>
 ClipboardRecentContentGeneric::GetRecentTextFromClipboard() {
   if (GetClipboardContentAge() > MaximumAgeOfClipboard())
     return base::nullopt;
 
-  base::string16 text_from_clipboard;
+  std::u16string text_from_clipboard;
   ui::DataTransferEndpoint data_dst = ui::DataTransferEndpoint(
       ui::EndpointType::kDefault, /*notify_if_restricted=*/false);
   ui::Clipboard::GetForCurrentThread()->ReadText(
@@ -129,15 +156,20 @@ void ClipboardRecentContentGeneric::HasRecentContentFromClipboard(
     std::set<ClipboardContentType> types,
     HasDataCallback callback) {
   std::set<ClipboardContentType> matching_types;
+  if (GetClipboardContentAge() > MaximumAgeOfClipboard()) {
+    std::move(callback).Run(matching_types);
+    return;
+  }
+
   for (ClipboardContentType type : types) {
     switch (type) {
       case ClipboardContentType::URL:
-        if (GetRecentURLFromClipboard()) {
+        if (HasRecentURLFromClipboard()) {
           matching_types.insert(ClipboardContentType::URL);
         }
         break;
       case ClipboardContentType::Text:
-        if (GetRecentTextFromClipboard()) {
+        if (HasRecentTextFromClipboard()) {
           matching_types.insert(ClipboardContentType::Text);
         }
         break;

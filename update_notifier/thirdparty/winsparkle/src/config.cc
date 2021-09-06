@@ -3,7 +3,11 @@
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
 
 #include "base/check.h"
-#include "base/no_destructor.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/win/registry.h"
+#include "chrome/installer/util/util_constants.h"
+
+#include "installer/util/vivaldi_install_util.h"
 
 namespace winsparkle {
 
@@ -11,58 +15,67 @@ vivaldi::InstallType g_install_type = vivaldi::InstallType::kForCurrentUser;
 bool g_install_mode = false;
 bool g_manual_check = false;
 bool g_silent_update = false;
+base::FilePath g_install_dir;
+#if defined(COMPONENT_BUILD)
+base::FilePath g_build_dir;
+#endif
+std::string g_language_code;
+base::Version g_app_version;
 
 namespace {
 
-const wchar_t kInstaller[] = L"Installer";
-const wchar_t kSetupExe[] = L"setup.exe";
-
-Config& GetMutableConfig() {
-  static base::NoDestructor<Config> config;
-  return *config;
+const wchar_t* GetRegistryItemName(RegistryItem key) {
+  switch (key) {
+    case RegistryItem::kDeltaPatchFailed:
+      return vivaldi::constants::kVivaldiDeltaPatchFailed;
+    case RegistryItem::kSkipThisVersion:
+      return L"SkipThisVersion";
+  }
 }
 
 }  // namespace
 
-Config::Config() = default;
-Config::~Config() = default;
-Config::Config(Config&& config) = default;
+std::string ReadRegistryIem(RegistryItem item) {
+  base::win::RegKey key = vivaldi::OpenRegistryKeyToRead(
+      HKEY_CURRENT_USER, vivaldi::constants::kVivaldiAutoUpdateKey);
+  std::wstring value =
+      vivaldi::ReadRegistryString(GetRegistryItemName(item), key);
+  return base::WideToUTF8(value);
+}
 
-base::FilePath Config::GetSetupExe(const std::string& version) const {
-  base::FilePath path = exe_dir;
-  if (version.empty()) {
-    path = path.Append(app_version);
-  } else {
-    base::FilePath version_subdir = base::FilePath::FromUTF8Unsafe(version);
+void WriteRegistryItem(RegistryItem item, const std::string& value) {
+  base::win::RegKey key = vivaldi::OpenRegistryKeyToWrite(
+      HKEY_CURRENT_USER, vivaldi::constants::kVivaldiAutoUpdateKey);
+  std::wstring wide_value = base::UTF8ToWide(value);
+  vivaldi::WriteRegistryString(GetRegistryItemName(item), wide_value, key);
+}
 
-    // Just in case version_subdir contains things like ../
-    if (version_subdir.ReferencesParent()) {
-      path = path.Append(L"unknown");
-    } else {
-      path = path.Append(version_subdir);
-    }
-  }
-  path = path.Append(kInstaller);
-  path = path.Append(kSetupExe);
+base::FilePath GetSetupExePath() {
+  base::FilePath path = GetExeDir()
+                            .AppendASCII(g_app_version.GetString())
+                            .Append(installer::kInstallerDir)
+                            .Append(installer::kSetupExe);
   return path;
 }
 
-const Config& GetConfig() {
-  return GetMutableConfig();
+base::FilePath GetExeDir() {
+#if defined(COMPONENT_BUILD)
+  if (!g_build_dir.empty())
+    return g_build_dir;
+#endif
+  if (g_install_dir.empty())
+    return base::FilePath();
+  return g_install_dir.Append(installer::kInstallBinaryDir);
 }
 
-void InitConfig(Config config) {
-  DCHECK(!config.language.empty());
-  DCHECK(config.appcast_url.is_valid());
-  DCHECK(!config.registry_path.empty());
-  DCHECK(!config.app_name.empty());
-  DCHECK(!config.app_version.empty());
-
-  Config& global_config = GetMutableConfig();
-
-  // InitConfig() can only be called once.
-  DCHECK(global_config.appcast_url.is_empty());
-  GetMutableConfig() = std::move(config);
+bool IsUsingTaskScheduler() {
+  // Windows Task Scheduler entries are shared among all users. Although we use
+  // a suffix based on the installation hash for task names, it is not enough
+  // for system installs if multiple users want to receive update notifications.
+  // Ultimately for system installs we should use a system account and silent
+  // update shared by all users, but for now we keep the old auto-start based
+  // system for system installs.
+  return g_install_type == vivaldi::InstallType::kForCurrentUser;
 }
 
 }  // namespace winsparkle

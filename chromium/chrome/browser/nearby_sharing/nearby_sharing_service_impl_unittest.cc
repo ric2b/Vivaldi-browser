@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/test/bind.h"
@@ -281,9 +282,9 @@ sharing::mojom::FramePtr GetValidIntroductionFrame() {
 
   std::vector<sharing::mojom::FileMetadataPtr> mojo_file_metadatas;
   mojo_file_metadatas.push_back(sharing::mojom::FileMetadata::New(
-      "unit_test_nearby_share_name", sharing::mojom::FileMetadata::Type::kVideo,
-      kFilePayloadId, kPayloadSize, "mime type",
-      /*id=*/100));
+      "unit_test_nearby_share_name_\x80",  // Filename contains non-ascii char.
+      sharing::mojom::FileMetadata::Type::kVideo, kFilePayloadId, kPayloadSize,
+      "mime type", /*id=*/100));
 
   sharing::mojom::V1FramePtr mojo_v1frame = sharing::mojom::V1Frame::New();
   mojo_v1frame->set_introduction(sharing::mojom::IntroductionFrame::New(
@@ -481,11 +482,19 @@ class NearbySharingServiceImplTest : public testing::Test {
   void SetVisibility(nearby_share::mojom::Visibility visibility) {
     NearbyShareSettings settings(&prefs_, local_device_data_manager());
     settings.SetVisibility(visibility);
+
+    // This ensures that the change propagates through mojo and the observers
+    // are called.
+    base::RunLoop().RunUntilIdle();
   }
 
   void SetIsEnabled(bool is_enabled) {
     NearbyShareSettings settings(&prefs_, local_device_data_manager());
     settings.SetEnabled(is_enabled);
+
+    // This ensures that the change propagates through mojo and the observers
+    // are called.
+    base::RunLoop().RunUntilIdle();
   }
 
   void SetFakeFastInitiationManagerFactory(bool should_succeed_on_start) {
@@ -867,7 +876,7 @@ class NearbySharingServiceImplTest : public testing::Test {
 
   struct PayloadInfo {
     int64_t payload_id;
-    NearbyConnectionsManager::PayloadStatusListener* listener;
+    base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener> listener;
   };
 
   PayloadInfo AcceptAndSendPayload(
@@ -878,7 +887,8 @@ class NearbySharingServiceImplTest : public testing::Test {
     fake_nearby_connections_manager_->set_send_payload_callback(
         base::BindLambdaForTesting(
             [&](NearbyConnectionsManager::PayloadPtr payload,
-                NearbyConnectionsManager::PayloadStatusListener* listener) {
+                base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener>
+                    listener) {
               ASSERT_TRUE(payload->content->is_bytes());
               std::vector<uint8_t> bytes = payload->content->get_bytes()->bytes;
               EXPECT_EQ(kTextPayload, std::string(bytes.begin(), bytes.end()));
@@ -962,7 +972,7 @@ class NearbySharingServiceImplTest : public testing::Test {
   base::FilePath CreateTestFile(const std::string& name,
                                 const std::vector<uint8_t>& content) {
     base::ScopedAllowBlockingForTesting allow_blocking;
-    base::FilePath path = temp_dir_.GetPath().AppendASCII(name);
+    base::FilePath path = temp_dir_.GetPath().Append(name);
     base::File file(path, base::File::Flags::FLAG_CREATE_ALWAYS |
                               base::File::Flags::FLAG_READ |
                               base::File::Flags::FLAG_WRITE);
@@ -1109,8 +1119,8 @@ class TestObserver : public NearbySharingService::Observer {
 
   void OnNearbyProcessStopped() override { process_stopped_called_ = true; }
 
-  void OnStartAdvertisingResult(bool success) override {
-    start_advertising_result_ = success;
+  void OnStartAdvertisingFailure() override {
+    on_start_advertising_failure_called_ = true;
   }
 
   void OnShutdown() override {
@@ -1121,7 +1131,7 @@ class TestObserver : public NearbySharingService::Observer {
   bool in_high_visibility_ = false;
   bool shutdown_called_ = false;
   bool process_stopped_called_ = false;
-  base::Optional<bool> start_advertising_result_ = base::nullopt;
+  bool on_start_advertising_failure_called_ = false;
   NearbySharingService* service_;
 };
 
@@ -1814,6 +1824,52 @@ TEST_F(NearbySharingServiceImplTest,
             fake_nearby_connections_manager_->advertising_data_usage());
 }
 
+TEST_F(
+    NearbySharingServiceImplTest,
+    UnregisterForegroundReceiveSurfaceVisibilityAllContactsRestartsAdvertising) {
+  SetConnectionType(net::NetworkChangeNotifier::CONNECTION_WIFI);
+  prefs_.SetInteger(prefs::kNearbySharingBackgroundVisibilityName,
+                    static_cast<int>(Visibility::kAllContacts));
+  service_->FlushMojoForTesting();
+
+  // Register both foreground and background receive surfaces
+  MockTransferUpdateCallback background_transfer_callback;
+  NearbySharingService::StatusCodes result = service_->RegisterReceiveSurface(
+      &background_transfer_callback,
+      NearbySharingService::ReceiveSurfaceState::kBackground);
+  EXPECT_EQ(result, NearbySharingService::StatusCodes::kOk);
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
+
+  MockTransferUpdateCallback foreground_transfer_callback;
+  result = service_->RegisterReceiveSurface(
+      &foreground_transfer_callback,
+      NearbySharingService::ReceiveSurfaceState::kForeground);
+  EXPECT_EQ(result, NearbySharingService::StatusCodes::kOk);
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
+
+  // Unregister the foreground surface. Advertising is stopped and restarted
+  // with low power. The service reports InHighVisibility until the
+  // StopAdvertising callback is called.
+  FakeNearbyConnectionsManager::ConnectionsCallback stop_advertising_callback =
+      fake_nearby_connections_manager_->GetStopAdvertisingCallback();
+  FakeNearbyConnectionsManager::ConnectionsCallback start_advertising_callback =
+      fake_nearby_connections_manager_->GetStartAdvertisingCallback();
+  result = service_->UnregisterReceiveSurface(&foreground_transfer_callback);
+  EXPECT_EQ(result, NearbySharingService::StatusCodes::kOk);
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
+  EXPECT_TRUE(service_->IsInHighVisibility());
+
+  std::move(stop_advertising_callback)
+      .Run(NearbyConnectionsManager::ConnectionsStatus::kSuccess);
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
+  EXPECT_FALSE(service_->IsInHighVisibility());
+
+  std::move(start_advertising_callback)
+      .Run(NearbyConnectionsManager::ConnectionsStatus::kSuccess);
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsAdvertising());
+  EXPECT_FALSE(service_->IsInHighVisibility());
+}
+
 TEST_F(NearbySharingServiceImplTest,
        NoNetworkRegisterReceiveSurfaceIsAdvertising) {
   MockTransferUpdateCallback callback;
@@ -2264,7 +2320,8 @@ TEST_F(NearbySharingServiceImplTest,
       .WillOnce(testing::Invoke([&run_loop_2](const ShareTarget& share_target,
                                               TransferMetadata metadata) {
         EXPECT_TRUE(metadata.is_final_status());
-        EXPECT_EQ(TransferMetadata::Status::kFailed, metadata.status());
+        EXPECT_EQ(TransferMetadata::Status::kUnexpectedDisconnection,
+                  metadata.status());
         run_loop_2.Quit();
       }));
 
@@ -2622,7 +2679,7 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadSuccessful) {
     fake_nearby_connections_manager_->SetIncomingPayload(
         id, GetTextPayloadPtr(id, kTextPayload));
 
-    auto* listener =
+    base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener> listener =
         fake_nearby_connections_manager_->GetRegisteredPayloadStatusListener(
             id);
     ASSERT_TRUE(listener);
@@ -2670,7 +2727,7 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadSuccessful) {
             run_loop_success.Quit();
           }));
 
-  auto* listener =
+  base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener> listener =
       fake_nearby_connections_manager_->GetRegisteredPayloadStatusListener(
           kFilePayloadId);
   ASSERT_TRUE(listener);
@@ -2742,7 +2799,7 @@ TEST_F(NearbySharingServiceImplTest,
     // Deliberately not calling SetIncomingPayload() for text payloads to check
     // for failure condition.
 
-    auto* listener =
+    base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener> listener =
         fake_nearby_connections_manager_->GetRegisteredPayloadStatusListener(
             id);
     ASSERT_TRUE(listener);
@@ -2773,7 +2830,8 @@ TEST_F(NearbySharingServiceImplTest,
       .WillOnce(testing::Invoke(
           [&](const ShareTarget& share_target, TransferMetadata metadata) {
             EXPECT_TRUE(metadata.is_final_status());
-            EXPECT_EQ(TransferMetadata::Status::kFailed, metadata.status());
+            EXPECT_EQ(TransferMetadata::Status::kIncompletePayloads,
+                      metadata.status());
 
             ASSERT_TRUE(share_target.has_attachments());
             EXPECT_EQ(1u, share_target.file_attachments.size());
@@ -2782,7 +2840,7 @@ TEST_F(NearbySharingServiceImplTest,
             run_loop_success.Quit();
           }));
 
-  auto* listener =
+  base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener> listener =
       fake_nearby_connections_manager_->GetRegisteredPayloadStatusListener(
           kFilePayloadId);
   ASSERT_TRUE(listener);
@@ -2842,7 +2900,7 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadFailed) {
 
   run_loop_accept.Run();
 
-  auto* listener =
+  base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener> listener =
       fake_nearby_connections_manager_->GetRegisteredPayloadStatusListener(
           kFilePayloadId);
   ASSERT_TRUE(listener);
@@ -2916,7 +2974,7 @@ TEST_F(NearbySharingServiceImplTest, AcceptValidShareTarget_PayloadCancelled) {
 
   run_loop_accept.Run();
 
-  auto* listener =
+  base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener> listener =
       fake_nearby_connections_manager_->GetRegisteredPayloadStatusListener(
           kFilePayloadId);
   ASSERT_TRUE(listener);
@@ -3217,6 +3275,22 @@ TEST_F(NearbySharingServiceImplTest, RegisterReceiveSurfaceWhileSending) {
   service_->UnregisterSendSurface(&transfer_callback, &discovery_callback);
 }
 
+TEST_F(NearbySharingServiceImplTest, RegisterReceiveSurfaceWhileDiscovering) {
+  MockTransferUpdateCallback transfer_callback;
+  MockShareTargetDiscoveredCallback discovery_callback;
+  EXPECT_EQ(
+      NearbySharingService::StatusCodes::kOk,
+      service_->RegisterSendSurface(&transfer_callback, &discovery_callback,
+                                    SendSurfaceState::kForeground));
+  EXPECT_TRUE(fake_nearby_connections_manager_->IsDiscovering());
+
+  NearbySharingService::StatusCodes result = service_->RegisterReceiveSurface(
+      &transfer_callback,
+      NearbySharingService::ReceiveSurfaceState::kForeground);
+  EXPECT_EQ(result,
+            NearbySharingService::StatusCodes::kTransferAlreadyInProgress);
+}
+
 TEST_F(NearbySharingServiceImplTest, SendAttachments_WithoutAttachments) {
   MockTransferUpdateCallback transfer_callback;
   MockShareTargetDiscoveredCallback discovery_callback;
@@ -3297,10 +3371,11 @@ TEST_F(NearbySharingServiceImplTest, SendText_FailedToConnect) {
       DiscoverShareTarget(transfer_callback, discovery_callback);
 
   base::RunLoop run_loop;
-  ExpectTransferUpdates(transfer_callback, target,
-                        {TransferMetadata::Status::kConnecting,
-                         TransferMetadata::Status::kFailed},
-                        run_loop.QuitClosure());
+  ExpectTransferUpdates(
+      transfer_callback, target,
+      {TransferMetadata::Status::kConnecting,
+       TransferMetadata::Status::kFailedToInitiateOutgoingConnection},
+      run_loop.QuitClosure());
 
   EXPECT_EQ(
       NearbySharingServiceImpl::StatusCodes::kOk,
@@ -3317,10 +3392,11 @@ TEST_F(NearbySharingServiceImplTest, SendText_FailedKeyVerification) {
       DiscoverShareTarget(transfer_callback, discovery_callback);
 
   base::RunLoop run_loop;
-  ExpectTransferUpdates(transfer_callback, target,
-                        {TransferMetadata::Status::kConnecting,
-                         TransferMetadata::Status::kFailed},
-                        run_loop.QuitClosure());
+  ExpectTransferUpdates(
+      transfer_callback, target,
+      {TransferMetadata::Status::kConnecting,
+       TransferMetadata::Status::kPairedKeyVerificationFailed},
+      run_loop.QuitClosure());
 
   SetUpKeyVerification(/*is_incoming=*/false,
                        sharing::mojom::PairedKeyResultFrame_Status::kFail);
@@ -3573,7 +3649,8 @@ TEST_F(NearbySharingServiceImplTest, SendFiles_Success) {
   fake_nearby_connections_manager_->set_send_payload_callback(
       base::BindLambdaForTesting(
           [&](NearbyConnectionsManager::PayloadPtr payload,
-              NearbyConnectionsManager::PayloadStatusListener* listener) {
+              base::WeakPtr<NearbyConnectionsManager::PayloadStatusListener>
+                  listener) {
             base::ScopedAllowBlockingForTesting allow_blocking;
 
             ASSERT_TRUE(payload->content->is_file());
@@ -3761,7 +3838,7 @@ TEST_F(NearbySharingServiceImplTest,
 
   // To start, we should not be in high visibility state.
   EXPECT_FALSE(service_->IsInHighVisibility());
-  EXPECT_FALSE(observer.start_advertising_result_.has_value());
+  EXPECT_FALSE(observer.on_start_advertising_failure_called_);
 
   // If we register a foreground surface we should end up in high visibility
   // state.
@@ -3771,8 +3848,7 @@ TEST_F(NearbySharingServiceImplTest,
   // should have been called as well.
   EXPECT_TRUE(service_->IsInHighVisibility());
   EXPECT_TRUE(observer.in_high_visibility_);
-  EXPECT_TRUE(observer.start_advertising_result_.has_value() &&
-              observer.start_advertising_result_.value());
+  EXPECT_FALSE(observer.on_start_advertising_failure_called_);
 
   // If we unregister the foreground receive surface we should no longer be in
   // high visibility and the observer should be notified.
@@ -3800,6 +3876,7 @@ TEST_F(NearbySharingServiceImplTest, ProcessStoppedCallsObservers) {
 
   // Signal a process crash, check that the observer is called and high
   // visibility is stopped.
+  fake_nearby_connections_manager_->CleanupForProcessStopped();
   std::move(process_stopped_callback_)
       .Run(chromeos::nearby::NearbyProcessManager::NearbyProcessShutdownReason::
                kCrash);
@@ -4145,6 +4222,27 @@ TEST_F(NearbySharingServiceImplTest, RetryDiscoveredEndpoints_DownloadLimit) {
   service_.reset();
 }
 
+TEST_F(NearbySharingServiceImplTest, NotBoundToProcessIfDisabled) {
+  SetIsEnabled(false);
+  EXPECT_FALSE(IsBoundToProcess());
+}
+
+TEST_F(NearbySharingServiceImplTest, UnbindsFromProcessWhenDisabled) {
+  SetIsEnabled(true);
+  EXPECT_TRUE(IsBoundToProcess());
+  SetIsEnabled(false);
+  EXPECT_FALSE(IsBoundToProcess());
+}
+
+TEST_F(NearbySharingServiceImplTest, BindsProcessWhenReenabled) {
+  SetIsEnabled(true);
+  EXPECT_TRUE(IsBoundToProcess());
+  SetIsEnabled(false);
+  EXPECT_FALSE(IsBoundToProcess());
+  SetIsEnabled(true);
+  EXPECT_TRUE(IsBoundToProcess());
+}
+
 using ServiceRestartTestParams =
     std::tuple<bool, NearbyProcessShutdownReason, int>;
 
@@ -4181,7 +4279,11 @@ TEST_P(NearbySharingServiceRestartTest, RestartsServiceWhenAppropriate) {
   EXPECT_CALL(mock_nearby_process_manager(), GetNearbyProcessReference)
       .Times(expected_to_restart ? 1 : 0);
 
-  std::move(process_stopped_callback_).Run(shutdown_reason);
+  // If the feature is disabled, the saved process_stopped_callback_ is invalid
+  // and shouldn't be called.
+  if (is_enabled) {
+    std::move(process_stopped_callback_).Run(shutdown_reason);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

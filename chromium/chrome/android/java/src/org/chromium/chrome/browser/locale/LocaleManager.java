@@ -45,7 +45,7 @@ import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.Callable;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Manager for some locale specific logics.
@@ -381,7 +381,7 @@ public class LocaleManager {
      */
     @SearchEnginePromoType
     public int getSearchEnginePromoShowType() {
-        if (ChromeApplication.isVivaldi()) return SearchEnginePromoType.DONT_SHOW;
+        if (ChromeApplicationImpl.isVivaldi()) return SearchEnginePromoType.DONT_SHOW;
         if (!isSpecialLocaleEnabled()) return SearchEnginePromoType.DONT_SHOW;
         SharedPreferencesManager preferences = SharedPreferencesManager.getInstance();
         if (preferences.readBoolean(ChromePreferenceKeys.LOCALE_MANAGER_PROMO_SHOWN, false)) {
@@ -476,7 +476,7 @@ public class LocaleManager {
      * @return Whether we still have to check for whether search engine dialog is necessary.
      */
     public boolean needToCheckForSearchEnginePromo() {
-        if (ChromeApplication.isVivaldi()) return false; // Vivaldi should never check.
+        if (ChromeApplicationImpl.isVivaldi()) return false; // Vivaldi should never check.
         if (ChromeFeatureList.isInitialized()
                 && !ChromeFeatureList.isEnabled(
                            ChromeFeatureList.SEARCH_ENGINE_PROMO_EXISTING_DEVICE)) {

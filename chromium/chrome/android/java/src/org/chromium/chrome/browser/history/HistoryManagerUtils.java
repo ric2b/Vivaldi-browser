@@ -17,7 +17,7 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import org.vivaldi.browser.panels.PanelUtils;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Utility methods for the browsing history manager.
@@ -32,7 +32,7 @@ public class HistoryManagerUtils {
      * @param isIncognitoSelected Whether the incognito {@TabModelSelector} is selected.
      */
     public static void showHistoryManager(Activity activity, Tab tab, boolean isIncognitoSelected) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             showHistoryManagerForVivaldi((ChromeActivity) activity, isIncognitoSelected);
             return;
         }

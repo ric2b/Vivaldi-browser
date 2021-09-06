@@ -91,6 +91,11 @@ public class Snackbar {
     public static final int UMA_PAINT_PREVIEW_UPGRADE_NOTIFICATION = 36;
     public static final int UMA_READING_LIST_BOOKMARK_ADDED = 37;
     public static final int UMA_PRIVACY_SANDBOX_PAGE_OPEN = 38;
+    public static final int UMA_WEB_FEED_FOLLOW_SUCCESS = 39;
+    public static final int UMA_WEB_FEED_FOLLOW_FAILURE = 40;
+    public static final int UMA_WEB_FEED_UNFOLLOW_SUCCESS = 41;
+    public static final int UMA_WEB_FEED_UNFOLLOW_FAILURE = 42;
+    public static final int UMA_LANGUAGE_SPLIT_RESTART = 43;
 
     private SnackbarController mController;
     private CharSequence mText;
@@ -323,5 +328,10 @@ public class Snackbar {
     @VisibleForTesting
     public int getIdentifierForTesting() {
         return mIdentifier;
+    }
+
+    @VisibleForTesting
+    public CharSequence getTextForTesting() {
+        return mText;
     }
 }

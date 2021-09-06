@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">사이트에서 여러 파일을 자동으로 다운로드하도록 허용하지 않음</translation>
 <translation id="5039804452771397117">허용</translation>
 <translation id="5057110919553308744">확장 프로그램을 클릭할 경우</translation>
+<translation id="5059526285558225588">공유할 정보 선택</translation>
 <translation id="5063480226653192405">사용</translation>
 <translation id="5116628073786783676">오디오를 다른 이름으로 저장(&amp;V)...</translation>
 <translation id="5143374789336132547">홈 버튼을 클릭하면 표시되는 페이지가 '<ph name="EXTENSION_NAME" />' 확장 프로그램으로 인해 변경되었습니다.</translation>
@@ -459,7 +460,6 @@
 <translation id="8823704566850948458">비밀번호 추천...</translation>
 <translation id="8859174528519900719">서브프레임: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">새 창에서 링크 열기(&amp;W)</translation>
-<translation id="8910146161325739742">화면 공유하기</translation>
 <translation id="8915370057835397490">추천 단어 불러오는 중</translation>
 <translation id="8916476537757519021">시크릿 모드 서브프레임: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript 메모리</translation>

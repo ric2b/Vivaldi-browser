@@ -27,11 +27,10 @@
 
 #include "base/vivaldi_switches.h"
 #include "installer/util/vivaldi_install_constants.h"
+#include "installer/win/vivaldi_install_l10n.h"
 #include "update_notifier/thirdparty/winsparkle/src/appcast.h"
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
 #include "update_notifier/thirdparty/winsparkle/src/download.h"
-#include "update_notifier/thirdparty/winsparkle/src/settings.h"
-#include "update_notifier/thirdparty/winsparkle/src/updatechecker.h"
 #include "update_notifier/update_notifier_switches.h"
 
 #include "base/base64.h"
@@ -43,6 +42,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/scoped_handle.h"
 #include "chrome/installer/util/util_constants.h"
 #include "crypto/sha2.h"
 
@@ -100,7 +100,7 @@ base::FilePath GetTempDirHolder(Error& error) {
   } else {
     // Generate a stable name using a hash of the installation directory.
     base::FilePath temp_dir_holder;
-    std::wstring hash = GetPathHash(GetConfig().exe_dir, true);
+    std::wstring hash = GetExeDirHash(true);
     temp_subdir = L"VivaldiUpdate-" + hash;
   }
   return os_tmp_dir.Append(temp_subdir);
@@ -189,12 +189,10 @@ GURL FindDeltaURL(const Appcast& appcast) {
   GURL delta_url;
   if (!appcast.Deltas.empty()) {
     // Download the delta update file if there is a valid download URL
-    const std::string currentVersion =
-        base::WideToUTF8(GetConfig().app_version);
     for (auto& delta : appcast.Deltas) {
       if (!delta.DownloadURL.is_valid())
         continue;
-      if (CompareVersions(currentVersion, delta.DeltaFrom) != 0)
+      if (g_app_version != delta.DeltaFrom)
         continue;
       // Check that URL path ends with ".cab".
       if (!base::EndsWith(delta.DownloadURL.PathForRequestPiece(), ".cab"))
@@ -444,7 +442,7 @@ bool CheckCanApplyDelta(const base::FilePath& setup_exe) {
   }
 
   std::string delta_version_failed =
-      Settings::ReadConfigValue(ConfigKey::kDeltaPatchFailed);
+      ReadRegistryIem(RegistryItem::kDeltaPatchFailed);
   if (delta_version_failed == "1") {
     LOG(WARNING) << "Refusing delta as the installer failed to run the delta "
                     "update the last time";
@@ -547,11 +545,16 @@ void ExpandDeltaArchive(const base::FilePath& file_path,
 }
 
 void AddInstallArguments(base::CommandLine& cmdline) {
-  if (!g_install_mode) {
-    const base::FilePath& exe_dir = GetConfig().exe_dir;
+  if (!g_install_dir.empty()) {
     cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
-                             exe_dir.DirName());
+                             g_install_dir);
+  }
 
+  const std::wstring& language = vivaldi::GetInstallerLanguage();
+  if (!language.empty()) {
+    cmdline.AppendSwitchNative(vivaldi::constants::kVivaldiLanguage, language);
+  }
+  if (!g_install_mode) {
     cmdline.AppendSwitch(vivaldi::constants::kVivaldiUpdate);
     if (g_silent_update) {
       cmdline.AppendSwitch(switches::kVivaldiSilentUpdate);
@@ -577,7 +580,7 @@ std::unique_ptr<InstallerLaunchData> TryDeltaDownload(
   if (!delta_url.is_valid())
     return nullptr;
 
-  base::FilePath setup_exe = GetConfig().GetSetupExe();
+  base::FilePath setup_exe = GetSetupExePath();
   if (!CheckCanApplyDelta(setup_exe))
     return nullptr;
 
@@ -607,8 +610,8 @@ std::unique_ptr<InstallerLaunchData> TryDeltaDownload(
   LOG(INFO) << "Delta was downloaded and successfully extracted.";
   base::CommandLine cmdline(setup_exe);
   AddInstallArguments(cmdline);
-  cmdline.AppendSwitchNative(installer::switches::kPreviousVersion,
-                             GetConfig().app_version);
+  cmdline.AppendSwitchASCII(installer::switches::kPreviousVersion,
+                            g_app_version.GetString());
   cmdline.AppendSwitchPath(installer::switches::kInstallArchive, vivaldi_delta);
 #if !defined(OFFICIAL_BUILD)
   base::FilePath debug_setup_exe =
@@ -643,6 +646,45 @@ std::unique_ptr<InstallerLaunchData> DownloadFullInstaller(
 
   base::CommandLine cmdline(full_update_path);
   AddInstallArguments(cmdline);
+#if !defined(OFFICIAL_BUILD)
+  base::FilePath debug_setup_exe =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
+          vivaldi_update_notifier::kDebugSetupExe);
+  if (!debug_setup_exe.empty()) {
+    // We need to extract files from the installer to pass them to the debug
+    // setup.exe. First use tar to get setup.exe to copy to the installation
+    // folder.
+    base::LaunchOptions launch_options;
+    launch_options.current_directory = tmpdir;
+    launch_options.start_hidden = true;
+    base::Time timeout_time = base::Time::Now() + kDeltaExtractionLimit;
+    std::wstring installer_exe = full_update_path.BaseName().value();
+    RunHelperProcess(base::CommandLine({L"tar.exe", L"xf", installer_exe}),
+                     launch_options, timeout_time, report, delegate, error);
+    // Now get the main vivaldi archive using 7zip. Redirect to nul to avoid a
+    // lot of printouts from 7z.exe as it does not have a silent mode.
+    base::win::ScopedHandle nul_handle(
+        ::CreateFile(L"NUL", GENERIC_READ | GENERIC_WRITE,
+                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                     nullptr, OPEN_EXISTING, 0, nullptr));
+    if (nul_handle.IsValid()) {
+      launch_options.handles_to_inherit.push_back(nul_handle.Get());
+      launch_options.stdin_handle = nul_handle.Get();
+      launch_options.stdout_handle = nul_handle.Get();
+      launch_options.stderr_handle = nul_handle.Get();
+    }
+    RunHelperProcess(base::CommandLine({L"7z.exe", L"e", L"-y", installer_exe}),
+                     launch_options, timeout_time, report, delegate, error);
+
+    cmdline.AppendSwitchPath(vivaldi::constants::kVivaldiDebugTargetExe,
+                             tmpdir.Append(kSetupExe));
+    // Simulate the call to the mini installer.
+    cmdline.AppendSwitch(vivaldi::constants::kVivaldiMini);
+    cmdline.SetProgram(debug_setup_exe);
+    if (error)
+      return nullptr;
+  }
+#endif
   return std::make_unique<InstallerLaunchData>(false, appcast.Version,
                                                std::move(cmdline));
 }
@@ -681,7 +723,7 @@ base::Process RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
     // Pre-mark the delta as failed. The installer will clear the status on a
     // successfull delta installation, or if that failed, after successfully
     // running a full installer.
-    Settings::WriteConfigValue(ConfigKey::kDeltaPatchFailed, "1");
+    WriteRegistryItem(RegistryItem::kDeltaPatchFailed, "1");
   }
 
   LOG(INFO) << "Launching installer:\n"
@@ -713,8 +755,9 @@ void CleanDownloadLeftovers() {
   base::DeletePathRecursively(temp_dir_holder);
 }
 
-std::wstring GetPathHash(const base::FilePath& path, bool base64) {
-  std::string exe_dir_sha256 = crypto::SHA256HashString(path.AsUTF8Unsafe());
+std::wstring GetExeDirHash(bool base64) {
+  std::string exe_dir_sha256 =
+      crypto::SHA256HashString(GetExeDir().AsUTF8Unsafe());
   DCHECK_EQ(exe_dir_sha256.length(), 32U);
 
   // We do not need cryptographically strong hash here, we just need to ensure
@@ -742,7 +785,7 @@ std::wstring GetPathHash(const base::FilePath& path, bool base64) {
 }
 
 InstallerLaunchData::InstallerLaunchData(bool delta,
-                                         const std::string& version,
+                                         const base::Version& version,
                                          base::CommandLine cmdline)
     : delta(delta), version(version), cmdline(std::move(cmdline)) {}
 

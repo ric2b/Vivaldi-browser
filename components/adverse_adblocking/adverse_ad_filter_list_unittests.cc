@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2019-2021 Vivaldi Technologies AS. All rights reserved
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -7,28 +7,41 @@
 
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
-#include "chrome/browser/subresource_filter/subresource_filter_test_harness.h"
+#include "chrome/test/base/testing_browser_process.h"
+
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
+#include "components/adverse_adblocking/adverse_ad_filter_test_harness.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
+
 #include "content/public/common/content_client.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extraparts/vivaldi_content_browser_client.h"
+#include "prefs/vivaldi_browser_prefs.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-class VivaldiSubresourceFilterTest : public SubresourceFilterTestHarness {
+class PrefRegistrySimple;
+
+class VivaldiSubresourceFilterTest
+    : public AdverseAdFilterTestHarness {
  public:
   void SetUp() override {
     vivaldi::ForceVivaldiRunning(true);
-    SubresourceFilterTestHarness::SetUp();
+    ChromeContentBrowserClient::RegisterLocalStatePrefs(local_state_.registry());
+    safe_browsing::RegisterLocalStatePrefs(local_state_.registry());
+    vivaldi::RegisterLocalState(local_state_.registry());
+    TestingBrowserProcess::GetGlobal()->SetLocalState(&local_state_);
+    AdverseAdFilterTestHarness::SetUp();
     VivaldiSubresourceFilterClient::
         CreateThrottleManagerWithClientForWebContents(web_contents());
+
     browser_content_client_.reset(new VivaldiContentBrowserClient);
     content::SetBrowserClientForTesting(browser_content_client_.get());
   }
   void TearDown() override {
-    SubresourceFilterTestHarness::TearDown();
+    TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
+    AdverseAdFilterTestHarness::TearDown();
     browser_content_client_.reset();
     content::SetContentClient(NULL);
     vivaldi::ForceVivaldiRunning(false);
@@ -47,6 +60,8 @@ class VivaldiSubresourceFilterTest : public SubresourceFilterTestHarness {
  private:
   std::unique_ptr<VivaldiContentBrowserClient> browser_content_client_;
   AdverseAdFilterListService* adblock_;
+  // local_state_ should be destructed after TestingProfile.
+  TestingPrefServiceSimple local_state_;
 };
 
 TEST_F(VivaldiSubresourceFilterTest, SimpleAllowedLoad) {

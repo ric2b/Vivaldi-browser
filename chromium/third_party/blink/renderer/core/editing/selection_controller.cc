@@ -58,6 +58,8 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/scrolling/text_fragment_handler.h"
+#include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 
 namespace blink {
@@ -133,6 +135,22 @@ DocumentMarker* SpellCheckMarkerAtPosition(
     const PositionInFlatTree& position) {
   return document_marker_controller.FirstMarkerAroundPosition(
       position, DocumentMarker::MarkerTypes::Misspelling());
+}
+
+void MarkSelectionEndpointsForRepaint(const SelectionInFlatTree& selection) {
+  LayoutObject* anchor_layout_object =
+      selection.Base().AnchorNode()->GetLayoutObject();
+  if (anchor_layout_object) {
+    if (auto* layer = anchor_layout_object->PaintingLayer())
+      layer->SetNeedsRepaint();
+  }
+
+  LayoutObject* extent_layout_object =
+      selection.Extent().AnchorNode()->GetLayoutObject();
+  if (extent_layout_object) {
+    if (auto* layer = extent_layout_object->PaintingLayer())
+      layer->SetNeedsRepaint();
+  }
 }
 
 }  // namespace
@@ -442,6 +460,13 @@ bool SelectionController::HandleTapInsideSelection(
 
   if (Selection().IsHandleVisible())
     return false;
+
+  // In CAP, we need to trigger a repaint on the selection endpoints if the
+  // selection is tapped when the selection handle was previously not visible.
+  // Repainting will record the painted selection bounds and send it through
+  // the pipeline so the handles show up in the next frame after the tap.
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    MarkSelectionEndpointsForRepaint(selection);
 
   const bool did_select = UpdateSelectionForMouseDownDispatchingSelectStart(
       event.InnerNode(), selection,
@@ -1234,6 +1259,11 @@ void SelectionController::UpdateSelectionForContextMenuEvent(
   }
 
   if (!frame_->GetEditor().Behavior().ShouldSelectOnContextualMenuClick())
+    return;
+
+  // Opening a context menu from an existing text fragment/highlight should not
+  // select additional text.
+  if (TextFragmentHandler::IsOverTextFragment(hit_test_result))
     return;
 
   if (mouse_event->GetMenuSourceType() == kMenuSourceLongPress)

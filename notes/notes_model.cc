@@ -199,9 +199,9 @@ NoteNode* NotesModel::AddNode(NoteNode* parent,
 
 NoteNode* NotesModel::AddNote(const NoteNode* parent,
                               size_t index,
-                              const base::string16& title,
+                              const std::u16string& title,
                               const GURL& url,
-                              const base::string16& content,
+                              const std::u16string& content,
                               base::Optional<base::Time> creation_time,
                               base::Optional<base::GUID> guid) {
   DCHECK(loaded_);
@@ -250,7 +250,7 @@ NoteNode* NotesModel::ImportNote(const NoteNode* parent,
 
 NoteNode* NotesModel::AddFolder(const NoteNode* parent,
                                 size_t index,
-                                const base::string16& name,
+                                const std::u16string& name,
                                 base::Optional<base::GUID> guid) {
   DCHECK(loaded_);
   DCHECK(!guid || guid->is_valid());
@@ -267,7 +267,7 @@ NoteNode* NotesModel::AddFolder(const NoteNode* parent,
 
 NoteNode* NotesModel::AddSeparator(const NoteNode* parent,
                                    size_t index,
-                                   base::Optional<base::string16> name,
+                                   base::Optional<std::u16string> name,
                                    base::Optional<base::Time> creation_time,
                                    base::Optional<base::GUID> guid) {
   DCHECK(loaded_);
@@ -286,7 +286,7 @@ NoteNode* NotesModel::AddSeparator(const NoteNode* parent,
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-void NotesModel::SetTitle(const NoteNode* node, const base::string16& title) {
+void NotesModel::SetTitle(const NoteNode* node, const std::u16string& title) {
   if (!node) {
     NOTREACHED();
     return;
@@ -312,7 +312,7 @@ void NotesModel::SetTitle(const NoteNode* node, const base::string16& title) {
 }
 
 void NotesModel::SetContent(const NoteNode* node,
-                            const base::string16& content) {
+                            const std::u16string& content) {
   if (!node) {
     NOTREACHED();
     return;
@@ -714,7 +714,7 @@ void NotesModel::ReorderChildren(
 }
 
 void NotesModel::GetNotesMatching(
-    const base::string16& text,
+    const std::u16string& text,
     size_t max_count,
     std::vector<std::pair<int, NoteNode::Type>>* matches) {
   if (!loaded_)

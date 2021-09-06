@@ -40,24 +40,34 @@ class ServiceConnectionTest : public testing::Test {
 
  protected:
   static void SetUpTestCase() {
+    task_environment_ = new base::test::TaskEnvironment();
     static base::Thread ipc_thread("ipc");
     ipc_thread.StartWithOptions(
         base::Thread::Options(base::MessagePumpType::IO, 0));
     static mojo::core::ScopedIPCSupport ipc_support(
         ipc_thread.task_runner(),
         mojo::core::ScopedIPCSupport::ShutdownPolicy::CLEAN);
+    ServiceConnection::GetInstance()->Initialize();
+  }
+
+  static void TearDownTestCase() {
+    if (task_environment_) {
+      delete task_environment_;
+      task_environment_ = nullptr;
+    }
   }
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  static base::test::TaskEnvironment* task_environment_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceConnectionTest);
 };
 
+base::test::TaskEnvironment* ServiceConnectionTest::task_environment_;
+
 // Tests that LoadBuiltinModel runs OK (no crash) in a basic Mojo
 // environment.
 TEST_F(ServiceConnectionTest, LoadBuiltinModel) {
-  ServiceConnection::GetInstance()->Initialize();
   mojo::Remote<mojom::Model> model;
 
   mojo::Remote<mojom::MachineLearningService> ml_service;
@@ -82,8 +92,6 @@ TEST_F(ServiceConnectionTest, LoadBuiltinModel) {
 // Tests that LoadFlatBufferModel runs OK (no crash) in a basic Mojo
 // environment.
 TEST_F(ServiceConnectionTest, LoadFlatBufferModel) {
-  ServiceConnection::GetInstance()->Initialize();
-
   mojo::Remote<mojom::MachineLearningService> ml_service;
   ServiceConnection::GetInstance()->BindMachineLearningService(
       ml_service.BindNewPipeAndPassReceiver());
@@ -104,8 +112,6 @@ TEST_F(ServiceConnectionTest, LoadFlatBufferModel) {
 // Tests that LoadTextClassifier runs OK (no crash) in a basic Mojo
 // environment.
 TEST_F(ServiceConnectionTest, LoadTextClassifier) {
-  ServiceConnection::GetInstance()->Initialize();
-
   mojo::Remote<mojom::MachineLearningService> ml_service;
   ServiceConnection::GetInstance()->BindMachineLearningService(
       ml_service.BindNewPipeAndPassReceiver());
@@ -125,8 +131,6 @@ TEST_F(ServiceConnectionTest, LoadTextClassifier) {
 // Tests that LoadHandwritingModelWithSpec runs OK (no crash) in a basic Mojo
 // environment.
 TEST_F(ServiceConnectionTest, LoadHandwritingModelWithSpec) {
-  ServiceConnection::GetInstance()->Initialize();
-
   mojo::Remote<mojom::MachineLearningService> ml_service;
   ServiceConnection::GetInstance()->BindMachineLearningService(
       ml_service.BindNewPipeAndPassReceiver());
@@ -148,8 +152,6 @@ TEST_F(ServiceConnectionTest, LoadHandwritingModelWithSpec) {
 
 // Tests that LoadGrammarChecker runs OK (no crash) in a basic Mojo environment.
 TEST_F(ServiceConnectionTest, LoadGrammarModel) {
-  ServiceConnection::GetInstance()->Initialize();
-
   mojo::Remote<mojom::MachineLearningService> ml_service;
   ServiceConnection::GetInstance()->BindMachineLearningService(
       ml_service.BindNewPipeAndPassReceiver());
@@ -618,6 +620,57 @@ TEST_F(ServiceConnectionTest, FakeHandWritingRecognizerWithSpec) {
                       mojom::HandwritingRecognizerResult::Status::OK);
             EXPECT_EQ(result->candidates.at(0)->text, "cat");
             EXPECT_EQ(result->candidates.at(0)->score, 0.5f);
+          },
+          &infer_callback_done));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(infer_callback_done);
+}
+
+// Tests the fake ML service for web platform handwriting recognizer.
+TEST_F(ServiceConnectionTest, FakeWebPlatformHandWritingRecognizer) {
+  mojo::Remote<web_platform::mojom::HandwritingRecognizer> recognizer;
+  bool callback_done = false;
+  FakeServiceConnectionImpl fake_service_connection;
+  ServiceConnection::UseFakeServiceConnectionForTesting(
+      &fake_service_connection);
+  ServiceConnection::GetInstance()->Initialize();
+  auto constraint = web_platform::mojom::HandwritingModelConstraint::New();
+  constraint->languages.emplace_back("en");
+  ServiceConnection::GetInstance()
+      ->GetMachineLearningService()
+      .LoadWebPlatformHandwritingModel(
+          std::move(constraint), recognizer.BindNewPipeAndPassReceiver(),
+          base::BindOnce(
+              [](bool* callback_done,
+                 mojom::LoadHandwritingModelResult result) {
+                EXPECT_EQ(result, mojom::LoadHandwritingModelResult::OK);
+                *callback_done = true;
+              },
+              &callback_done));
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(callback_done);
+  ASSERT_TRUE(recognizer.is_bound());
+
+  // Construct fake output.
+  std::vector<web_platform::mojom::HandwritingPredictionPtr> predictions;
+  auto prediction1 = web_platform::mojom::HandwritingPrediction::New();
+  prediction1->text = "recognition1";
+  predictions.emplace_back(std::move(prediction1));
+  fake_service_connection.SetOutputWebPlatformHandwritingRecognizerResult(
+      predictions);
+
+  std::vector<web_platform::mojom::HandwritingStrokePtr> strokes;
+  auto hints = web_platform::mojom::HandwritingHints::New();
+  bool infer_callback_done = false;
+  recognizer->GetPrediction(
+      std::move(strokes), std::move(hints),
+      base::BindOnce(
+          [](bool* infer_callback_done,
+             base::Optional<std::vector<
+                 web_platform::mojom::HandwritingPredictionPtr>> predictions) {
+            *infer_callback_done = true;
+            ASSERT_TRUE(predictions.has_value());
+            ASSERT_EQ(predictions.value().size(), 1u);
           },
           &infer_callback_done));
   base::RunLoop().RunUntilIdle();

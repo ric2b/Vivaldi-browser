@@ -26,11 +26,9 @@ namespace vivaldi {
 VivaldiProfileSyncService::VivaldiProfileSyncService(
     ProfileSyncService::InitParams* init_params,
     Profile* profile,
-    std::shared_ptr<VivaldiInvalidationService> invalidation_service,
     VivaldiAccountManager* account_manager)
     : ProfileSyncService(std::move(*init_params)),
       profile_(profile),
-      invalidation_service_(invalidation_service),
       ui_helper_(profile, this),
       weak_factory_(this) {
   if (!vivaldi::ForcedVivaldiRunning()) {

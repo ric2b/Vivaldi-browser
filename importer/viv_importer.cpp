@@ -30,6 +30,18 @@ bool ReadOperaIniFile(const base::FilePath &profile_dir,
   return true;
 }
 
+base::FilePath::StringType StringToPath(const std::string* str) {
+  if (!str)
+    return base::FilePath::StringType();
+
+#if OS_WIN
+  return base::UTF8ToWide(*str);
+#else
+  return *str;
+#endif
+ }
+
+
 OperaImporter::OperaImporter()
     : wand_version_(0), master_password_required_(false) {}
 
@@ -57,15 +69,17 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
     if (ReadOperaIniFile(profile_dir_, &inifile_parser)) {
       const base::DictionaryValue& inifile = inifile_parser.root();
 
-      inifile.GetString("User Prefs.Hot List File Ver2", &bookmarkfilename_);
-      inifile.GetString("MailBox.NotesFile", &notesfilename_);
+      bookmarkfilename_ =
+          StringToPath(inifile.FindStringPath("User Prefs.Hot List File Ver2"));
+      notesfilename_ = StringToPath(inifile.FindStringPath("MailBox.NotesFile"));
       std::string temp_val;
       master_password_required_ =
           (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
                              &temp_val) &&
            !temp_val.empty() && atoi(temp_val.c_str()) != 0);
 
-      inifile.GetString("User Prefs.WandStorageFile", &wandfilename_);
+      wandfilename_ =
+          StringToPath(inifile.FindStringPath("User Prefs.WandStorageFile"));
       masterpassword_filename_ =
           profile_dir_.AppendASCII("opcert6.dat").value();
     } else {

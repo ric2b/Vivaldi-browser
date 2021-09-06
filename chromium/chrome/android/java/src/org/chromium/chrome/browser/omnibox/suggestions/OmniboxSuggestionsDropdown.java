@@ -36,9 +36,16 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.ViewUtils;
 
+// Vivaldi
+import android.app.Activity;
+import org.chromium.base.ApplicationStatus;
+import org.chromium.base.Callback;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
+
 import org.vivaldi.browser.common.VivaldiUtils;
+
 
 /** A widget for showing a list of omnibox suggestions. */
 public class OmniboxSuggestionsDropdown extends RecyclerView {
@@ -61,7 +68,9 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     private int mLastBroadcastedListViewMaxHeight;
 
     // Vivaldi
-    private ChromeActivity mActivity;
+    private int mTopControlsHeight;
+    private int mBottomControlsHeight;
+    private static Callback mSearchEngineSuggestionCallback;
 
     /** Interface that will receive notifications and callbacks from OmniboxSuggestionsDropdown. */
     public interface Observer {
@@ -147,7 +156,9 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
         mScrollListener = new SuggestionScrollListener();
         setOnScrollListener(mScrollListener);
-        setLayoutManager(new LinearLayoutManager(context) {
+
+        // Vivaldi
+        LinearLayoutManager layoutManager = new LinearLayoutManager(context) {
             @Override
             public int scrollVerticallyBy(
                     int deltaY, RecyclerView.Recycler recycler, RecyclerView.State state) {
@@ -157,7 +168,14 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
                 }
                 return scrollY;
             }
-        });
+        };
+        // Note(nagamani@vivaldi.com): Reverse the list when the address bar is at bottom for better
+        // reachability of suggestions UI
+        if (shouldAnchorToBottom()) {
+            layoutManager.setReverseLayout(true);
+            layoutManager.setStackFromEnd(true);
+        }
+        setLayoutManager(layoutManager);
 
         final Resources resources = context.getResources();
         int paddingBottom =
@@ -168,8 +186,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         mIncognitoBgColor = ChromeColors.getDefaultThemeColor(resources, true);
 
         // Vivaldi
-        assert context instanceof ChromeActivity;
-        mActivity = (ChromeActivity) context;
+        mTopControlsHeight = 0;
     }
 
     /** Get the Android View implementing suggestion list. */
@@ -219,6 +236,8 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         if (getVisibility() != VISIBLE) return;
         setVisibility(GONE);
         getRecycledViewPool().clear();
+        // Vivaldi
+        mSearchEngineSuggestionCallback = null;
     }
 
     /** Update the suggestion popup background to reflect the current state. */
@@ -268,6 +287,16 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         try (TraceEvent tracing = TraceEvent.scoped("OmniboxSuggestionsList.Measure");
                 SuggestionsMetrics.TimingMetric metric =
                         SuggestionsMetrics.recordSuggestionListMeasureTime()) {
+            // Note(david@vivaldi.com): Get the current controls min height which will be part
+            // of the calculation.
+            if (mAnchorView.getContext() instanceof ChromeActivity) {
+                BrowserControlsManager browserControlsManager =
+                        ((ChromeActivity) mAnchorView.getContext()).getBrowserControlsManager();
+                mTopControlsHeight = browserControlsManager.getTopControlsHeight();
+                // Bottom controls height when address bar is at the bottom
+                mBottomControlsHeight = browserControlsManager.getBottomControlsHeight();
+            }
+
             int anchorBottomRelativeToContent = calculateAnchorBottomRelativeToContent();
             maybeUpdateLayoutParams(anchorBottomRelativeToContent);
 
@@ -277,9 +306,19 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
             int newWidthMeasureSpec = MeasureSpec.makeMeasureSpec(
                     mAnchorView.getMeasuredWidth(), MeasureSpec.EXACTLY);
+            // Note(nagamani@vivaldi.com): Use MeasureSpec.AT_MOST when the address bar is at
+            // bottom to anchor the suggestion drop down to the bottom
+            int heightParam = shouldAnchorToBottom() ? MeasureSpec.AT_MOST : MeasureSpec.EXACTLY;
             int newHeightMeasureSpec = MeasureSpec.makeMeasureSpec(availableViewportHeight,
-                    mEmbedder.isTablet() ? MeasureSpec.AT_MOST : MeasureSpec.EXACTLY);
+                    mEmbedder.isTablet() ? MeasureSpec.AT_MOST : heightParam);
             super.onMeasure(newWidthMeasureSpec, newHeightMeasureSpec);
+
+            // Note(nagamani@vivaldi.com):  Return the calculated margin value to properly anchor
+            // the search engine suggestion layout
+            if (mSearchEngineSuggestionCallback != null)
+                mSearchEngineSuggestionCallback.onResult(shouldAnchorToBottom()
+                                ? mBottomControlsHeight
+                                : anchorBottomRelativeToContent);
         }
     }
 
@@ -299,23 +338,24 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
             // Note(david@vivaldi.com): We consider the bottomMargin when we can anchor to the
             // bottom.
             if (shouldAnchorToBottom()) {
-                ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin = topMargin;
-                ((ViewGroup.MarginLayoutParams) layoutParams).topMargin =
-                        mActivity.getBrowserControlsManager().getTopControlsMinHeight();
+                ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin = getOmniboxAnchorHeight();
+                ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = mTopControlsHeight;
             } else
-            ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = topMargin;
+            ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = topMargin
+                + getSearchEngineSuggestionLayoutHeight();
         }
     }
 
     private int calculateAvailableViewportHeight(int anchorBottomRelativeToContent) {
         // Note(david@vivaldi.com): We don't take the visible display frame into account when we
         // can anchor to the bottom.
+        // Subtract the total vivaldi occupied height from the available viewport
         if (shouldAnchorToBottom())
-            return anchorBottomRelativeToContent
-                    - mActivity.getBrowserControlsManager().getTopControlsMinHeight();
+            return anchorBottomRelativeToContent - getTotalOccupiedHeight() ;
 
         mEmbedder.getWindowDelegate().getWindowVisibleDisplayFrame(mTempRect);
-        return mTempRect.height() - anchorBottomRelativeToContent;
+        return mTempRect.height() - anchorBottomRelativeToContent
+                - getSearchEngineSuggestionLayoutHeight();
     }
 
     private void notifyObserversIfViewportHeightChanged(int availableViewportHeight) {
@@ -335,6 +375,10 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
                 mObserver.onSuggestionDropdownHeightChanged(availableViewportHeight);
                 mLastBroadcastedListViewMaxHeight = availableViewportHeight;
+                // Vivaldi - Note(nagamani@vivaldi.com): Scroll to the first element for the
+                // suggestions to be clearly visible after viewport height changes when address bar
+                // is at bottom
+                if (shouldAnchorToBottom()) scrollToPosition(0);
             });
         }
     }
@@ -476,7 +520,40 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
 
     /** Vivaldi: Whether we should anchor the suggestion drop down to the bottom or not */
     private boolean shouldAnchorToBottom() {
+        Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
         return !VivaldiUtils.isTopToolbarOn()
-                && !(mAnchorView.getContext() instanceof SearchActivity);
+                && !(activity instanceof SearchActivity);
+    }
+
+    /** Vivaldi: Callback returns the anchor height for our search engine suggestion layout */
+    public static void getAnchorMarginValue(Callback<Integer> callback) {
+        mSearchEngineSuggestionCallback = callback;
+    }
+
+    /** Vivaldi: Returns the height of Search Engine suggestion layout if the option is
+     * enabled or 0 otherwise */
+    private int getSearchEngineSuggestionLayoutHeight() {
+        if (VivaldiUtils.showSearchEngineSuggestionBar())
+            return (int) getResources().getDimension(R.dimen.search_engine_suggestion_view_height);
+        // Note(nagamani@vivaldi.com): Search Engine suggestion layout shouldn't occupy any space if
+        // the option is not enabled
+        return 0;
+    }
+
+    /** Vivaldi: Returns the anchor height for omnibox suggestions drop down */
+    private int getOmniboxAnchorHeight() {
+        return mBottomControlsHeight + getSearchEngineSuggestionLayoutHeight();
+    }
+
+    /** Vivaldi: Returns the total occupied height on the screen (Like Address bar, Bottom toolbar,
+     * Search engine suggestion bar) */
+    private int getTotalOccupiedHeight() {
+        int totalOccupiedHeight = mTopControlsHeight + mBottomControlsHeight;
+        // Note(nagamani@vivaldi.com): Search Engine suggestion layout height should be available
+        // for the viewport when the option is not enabled
+        if (!VivaldiUtils.showSearchEngineSuggestionBar())
+            totalOccupiedHeight -=
+                    (int) getResources().getDimension(R.dimen.search_engine_suggestion_view_height);
+        return totalOccupiedHeight;
     }
 }

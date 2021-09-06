@@ -28,9 +28,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/sys_string_conversions.h"
@@ -114,6 +114,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/device_event_log/device_event_log.h"
+#include "components/embedder_support/origin_trials/pref_names.h"
 #include "components/embedder_support/switches.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/google/core/common/google_util.h"
@@ -174,7 +175,6 @@
 #include "printing/buildflags/buildflags.h"
 #include "rlz/buildflags/buildflags.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
-#include "third_party/blink/public/common/experiments/memory_ablation_experiment.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -185,6 +185,7 @@
 #include "chrome/browser/ui/page_info/chrome_page_info_client.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #else
+#include "chrome/browser/accessibility/soda_installer.h"
 #include "chrome/browser/resource_coordinator/tab_activity_watcher.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -319,8 +320,13 @@
 namespace {
 
 #if !defined(OS_ANDROID)
-// Holds the RunLoop for the non-Android MainMessageLoopRun() to Run().
-base::RunLoop* g_run_loop = nullptr;
+// Initialized in PreMainMessageLoopRun() and handed off to content:: in
+// WillRunMainMessageLoop() (or in TakeRunLoopForTest() in tests)
+std::unique_ptr<base::RunLoop>& GetMainRunLoopInstance() {
+  static base::NoDestructor<std::unique_ptr<base::RunLoop>>
+      main_run_loop_instance;
+  return *main_run_loop_instance;
+}
 #endif
 
 // This function provides some ways to test crash and assertion handling
@@ -481,18 +487,6 @@ bool ProcessSingletonNotificationCallback(
 }
 #endif  // !defined(OS_ANDROID)
 
-class ScopedMainMessageLoopRunEvent {
- public:
-  ScopedMainMessageLoopRunEvent() {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-        "toplevel", "ChromeBrowserMainParts::MainMessageLoopRun", this);
-  }
-  ~ScopedMainMessageLoopRunEvent() {
-    TRACE_EVENT_NESTABLE_ASYNC_END0(
-        "toplevel", "ChromeBrowserMainParts::MainMessageLoopRun", this);
-  }
-};
-
 }  // namespace
 
 // BrowserMainParts ------------------------------------------------------------
@@ -593,20 +587,34 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
 
 void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
     PrefService* local_state) {
+  // TODO(crbug.com/1211739): Temporary workaround to prevent an overly large
+  // config from crashing by exceeding command-line length limits. Set the limit
+  // to 1KB, which is far less than the known limits:
+  //  - Linux: kZygoteMaxMessageLength = 12288;
+  // This will still allow for critical updates to the public key or disabled
+  // features, but the disabled token list will be ignored.
+  const size_t kMaxAppendLength = 1024;
+  size_t appended_length = 0;
+
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(embedder_support::kOriginTrialPublicKey)) {
     std::string new_public_key =
-        local_state->GetString(prefs::kOriginTrialPublicKey);
+        local_state->GetString(embedder_support::prefs::kOriginTrialPublicKey);
     if (!new_public_key.empty()) {
       command_line->AppendSwitchASCII(
           embedder_support::kOriginTrialPublicKey,
-          local_state->GetString(prefs::kOriginTrialPublicKey));
+          local_state->GetString(
+              embedder_support::prefs::kOriginTrialPublicKey));
+
+      // Public key is 32 bytes
+      appended_length += 32;
     }
   }
   if (!command_line->HasSwitch(
           embedder_support::kOriginTrialDisabledFeatures)) {
     const base::ListValue* override_disabled_feature_list =
-        local_state->GetList(prefs::kOriginTrialDisabledFeatures);
+        local_state->GetList(
+            embedder_support::prefs::kOriginTrialDisabledFeatures);
     if (override_disabled_feature_list) {
       std::vector<base::StringPiece> disabled_features;
       base::StringPiece disabled_feature;
@@ -621,12 +629,13 @@ void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
         command_line->AppendSwitchASCII(
             embedder_support::kOriginTrialDisabledFeatures,
             override_disabled_features);
+        appended_length += override_disabled_features.length();
       }
     }
   }
   if (!command_line->HasSwitch(embedder_support::kOriginTrialDisabledTokens)) {
-    const base::ListValue* disabled_token_list =
-        local_state->GetList(prefs::kOriginTrialDisabledTokens);
+    const base::ListValue* disabled_token_list = local_state->GetList(
+        embedder_support::prefs::kOriginTrialDisabledTokens);
     if (disabled_token_list) {
       std::vector<base::StringPiece> disabled_tokens;
       base::StringPiece disabled_token;
@@ -638,9 +647,14 @@ void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
       if (!disabled_tokens.empty()) {
         const std::string disabled_token_switch =
             base::JoinString(disabled_tokens, "|");
-        command_line->AppendSwitchASCII(
-            embedder_support::kOriginTrialDisabledTokens,
-            disabled_token_switch);
+        // Do not append the disabled token list if will exceed a reasonable
+        // length. See above.
+        if (appended_length + disabled_token_switch.length() <=
+            kMaxAppendLength) {
+          command_line->AppendSwitchASCII(
+              embedder_support::kOriginTrialDisabledTokens,
+              disabled_token_switch);
+        }
       }
     }
   }
@@ -887,8 +901,8 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   PrefService* local_state = browser_process_->local_state();
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::CrosSettings::Initialize(local_state);
-  chromeos::StatsReportingController::Initialize(local_state);
+  ash::CrosSettings::Initialize(local_state);
+  ash::StatsReportingController::Initialize(local_state);
   arc::StabilityMetricsManager::Initialize(local_state);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -902,12 +916,12 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
 #if !defined(OS_ANDROID)
   // Create the RunLoop for MainMessageLoopRun() to use, and pass a copy of
   // its QuitClosure to the BrowserProcessImpl to call when it is time to exit.
-  DCHECK(!g_run_loop);
-  g_run_loop = new base::RunLoop;
+  DCHECK(!GetMainRunLoopInstance());
+  GetMainRunLoopInstance() = std::make_unique<base::RunLoop>();
 
   // These members must be initialized before returning from this function.
   // Android doesn't use StartupBrowserCreator.
-  browser_creator_.reset(new StartupBrowserCreator);
+  browser_creator_ = std::make_unique<StartupBrowserCreator>();
   // TODO(yfriedman): Refactor Android to re-use UMABrowsingActivityObserver
   chrome::UMABrowsingActivityObserver::Init();
 #endif  // !defined(OS_ANDROID)
@@ -950,7 +964,8 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
   // Set the product channel for crash reports.
   if (!crash_reporter::IsCrashpadEnabled()) {
-    breakpad::SetChannelCrashKey(chrome::GetChannelName());
+    breakpad::SetChannelCrashKey(
+        chrome::GetChannelName(chrome::WithExtendedStable(true)));
   }
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
 
@@ -1038,13 +1053,15 @@ void ChromeBrowserMainParts::PostCreateThreads() {
     chrome_extra_parts_[i]->PostCreateThreads();
 }
 
-void ChromeBrowserMainParts::PreMainMessageLoopRun() {
+int ChromeBrowserMainParts::PreMainMessageLoopRun() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreMainMessageLoopRun");
 
   result_code_ = PreMainMessageLoopRunImpl();
 
   for (size_t i = 0; i < chrome_extra_parts_.size(); ++i)
     chrome_extra_parts_[i]->PreMainMessageLoopRun();
+
+  return result_code_;
 }
 
 // PreMainMessageLoopRun calls these extra stages in the following order:
@@ -1128,7 +1145,7 @@ void ChromeBrowserMainParts::PostBrowserStart() {
 
 #if !defined(OS_ANDROID)
   if (base::FeatureList::IsEnabled(features::kWebUsb)) {
-    web_usb_detector_.reset(new WebUsbDetector());
+    web_usb_detector_ = std::make_unique<WebUsbDetector>();
     content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
         ->PostTask(FROM_HERE,
                    base::BindOnce(&WebUsbDetector::Initialize,
@@ -1152,10 +1169,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreMainMessageLoopRunImpl");
 
   SCOPED_UMA_HISTOGRAM_LONG_TIMER("Startup.PreMainMessageLoopRunImplLongTime");
-
-  // Can't be in SetupFieldTrials() because it needs a task runner.
-  blink::MemoryAblationExperiment::MaybeStart(
-      content::GetIOThreadTaskRunner({}));
 
 #if defined(OS_WIN)
   // Windows parental controls calls can be slow, so we do an early init here
@@ -1361,6 +1374,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     return content::RESULT_CODE_NORMAL_EXIT;
 
   if (!vivaldi::IsVivaldiRunning()) {
+    // clang-format off
   // Check if there is any machine level Chrome installed on the current
   // machine. If yes and the current Chrome process is user level, we do not
   // allow the user level Chrome to run. So we notify the user and uninstall
@@ -1369,6 +1383,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // obtained but before potentially creating the first run sentinel).
   if (ChromeBrowserMainPartsWin::CheckMachineLevelInstall())
     return chrome::RESULT_CODE_MACHINE_LEVEL_INSTALL_EXISTS;
+    // clang-format on
   }
 #endif  // defined(OS_WIN)
 
@@ -1455,6 +1470,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     if (vivaldi::IsVivaldiRunning()) {
       first_run::SetShouldShowWelcomePage();
     } else {
+      // clang-format off
     first_run::AutoImport(profile_, master_prefs_->import_bookmarks_path);
 
     // Note: This can pop-up the first run consent dialog on Linux & Mac.
@@ -1465,6 +1481,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     // a SIGTERM, and call chrome::AttemptExit(). Exit cleanly in that case.
     if (browser_shutdown::IsTryingToQuit())
       return content::RESULT_CODE_NORMAL_EXIT;
+      // clang-format on
     }
   }
 #endif  // !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1611,7 +1628,18 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   if (!parsed_command_line().HasSwitch(switches::kDisableComponentUpdate)) {
     component_updater::RegisterComponentsForUpdate(
         profile_->IsOffTheRecord(), profile_->GetPrefs(), profile_->GetPath());
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+    // Exclude Android: SODA is not supported.
+    // Exclude ChromeOS: SODA is independent of Component Updater.
+    speech::SodaInstaller::GetInstance()->Init(profile_->GetPrefs(),
+                                               browser_process_->local_state());
+#endif  // !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  speech::SodaInstaller::GetInstance()->Init(profile_->GetPrefs(),
+                                             browser_process_->local_state());
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   variations::VariationsService* variations_service =
       browser_process_->variations_service();
@@ -1679,7 +1707,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 #endif  // defined(OS_MAC)
 
     // Transfer ownership of the browser's lifetime to the BrowserProcess.
-    browser_process_->SetQuitClosure(g_run_loop->QuitWhenIdleClosure());
+    browser_process_->SetQuitClosure(
+        GetMainRunLoopInstance()->QuitWhenIdleClosure());
     DCHECK(!run_message_loop_);
     run_message_loop_ = true;
   }
@@ -1714,21 +1743,17 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   return result_code_;
 }
 
-bool ChromeBrowserMainParts::MainMessageLoopRun(int* result_code) {
-  // Trace the entry and exit of this method. We don't use the TRACE_EVENT0
-  // macro because the tracing infrastructure doesn't expect a synchronous event
-  // around the main loop of a thread.
-  ScopedMainMessageLoopRunEvent scoped_main_message_loop_run_event;
+void ChromeBrowserMainParts::WillRunMainMessageLoop(
+    std::unique_ptr<base::RunLoop>& run_loop) {
 #if defined(OS_ANDROID)
   // Chrome on Android does not use default MessageLoop. It has its own
   // Android specific MessageLoop
   NOTREACHED();
-  return true;
 #else
-  // Set the result code set in PreMainMessageLoopRun or set above.
-  *result_code = result_code_;
-  if (!run_message_loop_)
-    return true;  // Don't run the default message loop.
+  if (!run_message_loop_) {
+    run_loop.reset();
+    return;
+  }
 
   // These should be invoked as close to the start of the browser's
   // UI thread message loop as possible to get a stable measurement
@@ -1737,13 +1762,20 @@ bool ChromeBrowserMainParts::MainMessageLoopRun(int* result_code) {
 
   DCHECK(base::CurrentUIThread::IsSet());
 
-  g_run_loop->Run();
+  DCHECK(GetMainRunLoopInstance());
+  run_loop = std::move(GetMainRunLoopInstance());
 
-  return true;
+  // Trace the entry and exit of this main message loop. We don't use the
+  // TRACE_EVENT_BEGIN0 macro because the tracing infrastructure doesn't expect
+  // a synchronous event around the main loop of a thread.
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+      "toplevel", "ChromeBrowserMainParts::MainMessageLoopRun", this);
 #endif  // defined(OS_ANDROID)
 }
 
 void ChromeBrowserMainParts::PostMainMessageLoopRun() {
+  TRACE_EVENT_NESTABLE_ASYNC_END0(
+      "toplevel", "ChromeBrowserMainParts::MainMessageLoopRun", this);
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostMainMessageLoopRun");
 #if defined(OS_ANDROID)
   // Chrome on Android does not use default MessageLoop. It has its own
@@ -1834,8 +1866,8 @@ void ChromeBrowserMainParts::PostDestroyThreads() {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   arc::StabilityMetricsManager::Shutdown();
-  chromeos::StatsReportingController::Shutdown();
-  chromeos::CrosSettings::Shutdown();
+  ash::StatsReportingController::Shutdown();
+  ash::CrosSettings::Shutdown();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #endif  // defined(OS_ANDROID)
 }
@@ -1850,8 +1882,7 @@ void ChromeBrowserMainParts::AddParts(
 #if !defined(OS_ANDROID)
 // static
 std::unique_ptr<base::RunLoop> ChromeBrowserMainParts::TakeRunLoopForTest() {
-  auto run_loop = base::WrapUnique<base::RunLoop>(g_run_loop);
-  g_run_loop = nullptr;
-  return run_loop;
+  DCHECK(GetMainRunLoopInstance());
+  return std::move(GetMainRunLoopInstance());
 }
 #endif

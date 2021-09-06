@@ -15,11 +15,9 @@ namespace vivaldi {
 struct FilteredRequestInfo {
   explicit FilteredRequestInfo(
       uint64_t request_id,
-      int initiator_render_process_id,
-      int initiator_frame_id,
-      int32_t routing_id,
       int render_process_id,
       int render_frame_id,
+      int32_t view_routing_id,
       const network::ResourceRequest& request,
       content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type,
       bool is_async,
@@ -36,16 +34,8 @@ struct FilteredRequestInfo {
   const network::ResourceRequest request;
   network::mojom::URLResponseHeadPtr response;
 
-  // The ID of the render process which initiated the request, or -1 of not
-  // applicable (i.e. if initiated by the browser).
-  const int initiator_render_process_id;
-
-  // The render frame ID of the frame which initiated this request, or -1 if
-  // the request was not initiated by a frame.
-  const int initiator_render_frame_id;
-
   // The routing ID of the object which initiated the request, if applicable.
-  const int routing_id = MSG_ROUTING_NONE;
+  const int view_routing_id = MSG_ROUTING_NONE;
 
   // The ID of the render process which runs the frame where the request
   // happens.

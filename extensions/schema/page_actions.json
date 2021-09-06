@@ -33,21 +33,19 @@
         "name": "getScripts",
         "type": "function",
         "description": "Returns the full path to all known page action scripts.",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name" : "scripts",
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name" : "scripts",
+              "type": "array",
+              "items": {
+                "type": "string"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "setScriptOverrideForTab",
@@ -65,18 +63,17 @@
           {
             "name": "override",
             "$ref": "ScriptOverride"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name" : "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name" : "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "getScriptOverridesForTab",
@@ -86,21 +83,20 @@
           {
             "name": "tab_id",
             "type": "integer"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name" : "result",
-                "type": "array",
-                "items": {
-                  "$ref": "OverridenScript"
-                }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name" : "result",
+              "type": "array",
+              "items": {
+                "$ref": "OverridenScript"
+              }
+            }
+          ]
+        }
       }
     ],
     "events": [

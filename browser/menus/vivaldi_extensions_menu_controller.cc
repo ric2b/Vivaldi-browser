@@ -27,7 +27,7 @@ void ExtensionsMenuController::Populate(ui::SimpleMenuModel* menu_model,
     ui::SimpleMenuModel::Delegate* delegate,
     const extensions::Extension* extension,
     content::WebContents* source_web_contents,
-    base::string16 printable_selection_text,
+    std::u16string printable_selection_text,
     const base::Callback<bool(const extensions::MenuItem*)>& filter ) {
   extension_items_.reset(new extensions::ContextMenuMatcher(
       rv_context_menu_->GetBrowserContext(), delegate, menu_model, filter));
@@ -37,7 +37,7 @@ void ExtensionsMenuController::Populate(ui::SimpleMenuModel* menu_model,
 }
 
 void ExtensionsMenuController::AppendAllExtensionItems(
-    base::string16 printable_selection_text) {
+    std::u16string printable_selection_text) {
 
   extensions::ExtensionRegistry* registry = extensions::ExtensionRegistry::Get(
       rv_context_menu_->GetBrowserContext());
@@ -49,8 +49,8 @@ void ExtensionsMenuController::AppendAllExtensionItems(
 
   // Get a list of extension id's that have context menu items, and sort by the
   // top level context menu title of the extension.
-  std::vector<base::string16> sorted_menu_titles;
-  std::map<base::string16, std::vector<const extensions::Extension*>>
+  std::vector<std::u16string> sorted_menu_titles;
+  std::map<std::u16string, std::vector<const extensions::Extension*>>
       title_to_extensions_map;
   for (const auto& id : menu_manager->ExtensionIds()) {
     const extensions::Extension* extension = registry->GetExtensionById(
@@ -58,7 +58,7 @@ void ExtensionsMenuController::AppendAllExtensionItems(
     // Platform apps have their context menus created directly in
     // AppendPlatformAppItems.
     // andre@vivaldi.com, that is not true as of now so lets use this.
-    base::string16 menu_title = extension_items_->GetTopLevelContextMenuTitle(
+    std::u16string menu_title = extension_items_->GetTopLevelContextMenuTitle(
         id, printable_selection_text);
     title_to_extensions_map[menu_title].push_back(extension);
     sorted_menu_titles.push_back(menu_title);
@@ -96,7 +96,7 @@ void ExtensionsMenuController::AppendAllExtensionItems(
 void ExtensionsMenuController::AppendCurrentExtensionItems(
     const extensions::Extension* extension,
     content::WebContents* source_web_contents,
-    base::string16 printable_selection_text) {
+    std::u16string printable_selection_text) {
   // Avoid appending extension related items when |extension| is null.
   // For Panel, this happens when the panel is navigated to a url outside of the
   // extension's package.

@@ -943,61 +943,55 @@
         "name": "getAllEvents",
         "type": "function",
         "description": "Retrieves all events in calendar.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "CalendarEvent"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "CalendarEvent"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "getAllEventTypes",
         "type": "function",
         "description": "Retrieves all event types.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "EventType"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "EventType"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "getAllNotifications",
         "type": "function",
         "description": "Retrieves all notifications.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "Notification"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "Notification"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "eventCreate",
@@ -1007,19 +1001,18 @@
           {
             "$ref": "CreateDetails",
             "name": "event"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "CalendarEvent"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "CalendarEvent"
+            }
+          ]
+        }
       },
       {
         "name": "eventsCreate",
@@ -1033,20 +1026,19 @@
               "$ref": "CreateDetails"
             },
             "minItems": 1
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "description": "Object stating how many creation attempt succeeded and how many failed.",
-                "$ref": "CreateEventsResults"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "description": "Object stating how many creation attempt succeeded and how many failed.",
+              "$ref": "CreateEventsResults"
+            }
+          ]
+        }
       },
       {
         "name": "deleteEvent",
@@ -1056,19 +1048,18 @@
           {
             "type": "string",
             "name": "id"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "updateEvent",
@@ -1244,19 +1235,18 @@
                 "description": "The date and time that a todo was actually completed."
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "CalendarEvent"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "CalendarEvent"
+            }
+          ]
+        }
       },
       {
         "name": "create",
@@ -1266,39 +1256,36 @@
           {
             "$ref": "CreateCalendarDetails",
             "name": "calendar"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "Calendar"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "Calendar"
+            }
+          ]
+        }
       },
       {
         "name": "getAll",
         "type": "function",
         "description": "Returns all calendars.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "Calendar"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "Calendar"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "delete",
@@ -1309,19 +1296,18 @@
             "type": "string",
             "name": "id",
             "description": "The id of the calendar to be deleted."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "update",
@@ -1335,20 +1321,19 @@
           {
             "name": "changes",
             "$ref": "updateCalendar"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "description": "Was the calendar updated successfully?",
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "description": "Was the calendar updated successfully?",
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "eventTypeCreate",
@@ -1358,19 +1343,18 @@
           {
             "$ref": "CreateEventType",
             "name": "event_type"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "EventType"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "EventType"
+            }
+          ]
+        }
       },
       {
         "name": "eventTypeUpdate",
@@ -1412,19 +1396,18 @@
           {
             "type": "string",
             "name": "id"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "createEventException",
@@ -1452,19 +1435,18 @@
             "type": "number",
             "optional": true,
             "description": "When the exception should happen. In milliseconds since the epoch."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "CalendarEvent"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "CalendarEvent"
+            }
+          ]
+        }
       },
       {
         "name": "createNotification",
@@ -1504,19 +1486,18 @@
                 "description": "The notification will fire after delay minutes from now. Can not be used together with when."
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "notification",
-                "$ref": "Notification"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "notification",
+              "$ref": "Notification"
+            }
+          ]
+        }
       },
       {
         "name": "updateNotification",
@@ -1558,19 +1539,18 @@
                 "description": "The notification will fire after delay minutes from now. Can not be used together with when."
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "notification",
-                "$ref": "Notification"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "notification",
+              "$ref": "Notification"
+            }
+          ]
+        }
       },
       {
         "name": "deleteNotification",
@@ -1580,19 +1560,18 @@
           {
             "type": "string",
             "name": "id"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "createInvite",
@@ -1626,19 +1605,18 @@
                 "description": "Has the invite been sent."
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "invite",
-                "$ref": "Invite"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "invite",
+              "$ref": "Invite"
+            }
+          ]
+        }
       },
       {
         "name": "deleteInvite",
@@ -1649,19 +1627,18 @@
             "type": "string",
             "name": "id",
             "description": "The invite id to delete."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "updateInvite",
@@ -1697,39 +1674,36 @@
                 "description": "Has the invite been sent."
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "invite",
-                "$ref": "Invite"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "invite",
+              "$ref": "Invite"
+            }
+          ]
+        }
       },
       {
         "name": "getAllAccounts",
         "type": "function",
         "description": "Retrieves all calendar accounts.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "Account"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "Account"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "createAccount",
@@ -1798,39 +1772,36 @@
             "type": "string",
             "name": "id",
             "description": "The account id to be deleted"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "getAllEventTemplates",
         "type": "function",
         "description": "Retrieves all event templates.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {
-                  "$ref": "CalendarEvent"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {
+                "$ref": "CalendarEvent"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       }
     ],
     "events": [

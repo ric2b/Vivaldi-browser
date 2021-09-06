@@ -26,7 +26,7 @@ import org.chromium.ui.base.ViewUtils;
 
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Provider for processed favicons in Tab list.
@@ -77,7 +77,7 @@ public class TabListFaviconProvider {
             //  resizing vector drawable.
             Drawable globeDrawable =
                     AppCompatResources.getDrawable(context, R.drawable.ic_globe_24dp);
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 globeDrawable = AppCompatResources.getDrawable(context, R.drawable.vivaldilogo16);
             sRoundedGlobeDrawable = processBitmap(
                     getResizedBitmapFromDrawable(globeDrawable, mDefaultFaviconSize), false);
@@ -91,7 +91,7 @@ public class TabListFaviconProvider {
         if (sRoundedChromeDrawable == null) {
             Bitmap chromeBitmap =
                     BitmapFactory.decodeResource(mContext.getResources(), R.drawable.chromelogo16);
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 chromeBitmap = BitmapFactory.decodeResource(
                         context.getResources(), R.drawable.vivaldilogo16);
             sRoundedChromeDrawable = processBitmap(chromeBitmap, false);

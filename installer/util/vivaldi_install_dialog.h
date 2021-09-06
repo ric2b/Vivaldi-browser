@@ -26,7 +26,6 @@ struct VivaldiInstallUIOptions {
   VivaldiInstallUIOptions(VivaldiInstallUIOptions&&);
   VivaldiInstallUIOptions& operator=(VivaldiInstallUIOptions&&);
 
-  std::wstring language;
   base::FilePath install_dir;
   vivaldi::InstallType install_type = vivaldi::InstallType::kForCurrentUser;
 
@@ -48,15 +47,6 @@ struct VivaldiInstallUIOptions {
 VivaldiInstallUIOptions ReadRegistryPreferences();
 
 class VivaldiInstallDialog {
-  class VivaldiTranslationDelegate : public installer::TranslationDelegate {
-   public:
-    base::string16 GetLocalizedString(int installer_string_id) override;
-    void SetLanguage(const std::wstring& language_code);
-
-   private:
-    int offset_ = 0;
-  };
-
  public:
   enum DlgResult {
     INSTALL_DLG_ERROR = -1,   // Dialog could not be shown.
@@ -87,7 +77,7 @@ class VivaldiInstallDialog {
   void DoDialog();
   void ReadLastInstallValues();
   void SaveInstallValues();
-  bool InternalSelectLanguage(const std::wstring& code);
+  bool InternalSelectLanguage();
 
   void OnInstallTypeSelection();
   void OnLanguageSelection();
@@ -118,7 +108,6 @@ class VivaldiInstallDialog {
                                   LPARAM lparam);
 
  private:
-  VivaldiTranslationDelegate translation_delegate_;
   VivaldiInstallUIOptions options_;
   bool disable_standalone_autoupdates_ = false;
 
@@ -144,6 +133,7 @@ class VivaldiInstallDialog {
   LONG back_bmp_height_ = 0;
   std::vector<std::pair<int, HBRUSH>> brushes_;
   std::vector<HGLOBAL> dibs_;
+  bool changed_language_ = false;
 
   static VivaldiInstallDialog* this_;
 

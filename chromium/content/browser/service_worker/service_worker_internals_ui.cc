@@ -15,7 +15,6 @@
 #include "base/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
@@ -427,7 +426,12 @@ void ServiceWorkerInternalsHandler::OnJavascriptDisallowed() {
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
-ServiceWorkerInternalsHandler::~ServiceWorkerInternalsHandler() = default;
+ServiceWorkerInternalsHandler::~ServiceWorkerInternalsHandler() {
+  // ServiceWorkerInternalsHandler can be destroyed without
+  // OnJavascriptDisallowed() ever being called (https://crbug.com/1199198).
+  // Call it to ensure that `this` is removed as an observer.
+  OnJavascriptDisallowed();
+}
 
 void ServiceWorkerInternalsHandler::OnRunningStateChanged() {
   FireWebUIListener("running-state-changed");
@@ -679,11 +683,13 @@ void ServiceWorkerInternalsHandler::StopWorkerWithId(
     int64_t version_id,
     StatusCallback callback) {
   if (!BrowserThread::CurrentlyOn(ServiceWorkerContext::GetCoreThreadId())) {
-    base::PostTask(
-        FROM_HERE, {ServiceWorkerContext::GetCoreThreadId()},
-        base::BindOnce(&ServiceWorkerInternalsHandler::StopWorkerWithId,
-                       base::Unretained(this), context, version_id,
-                       std::move(callback)));
+    BrowserThread::GetTaskRunnerForThread(
+        ServiceWorkerContext::GetCoreThreadId())
+        ->PostTask(
+            FROM_HERE,
+            base::BindOnce(&ServiceWorkerInternalsHandler::StopWorkerWithId,
+                           base::Unretained(this), context, version_id,
+                           std::move(callback)));
     return;
   }
 
@@ -705,11 +711,13 @@ void ServiceWorkerInternalsHandler::UnregisterWithScope(
     const GURL& scope,
     ServiceWorkerInternalsHandler::StatusCallback callback) const {
   if (!BrowserThread::CurrentlyOn(ServiceWorkerContext::GetCoreThreadId())) {
-    base::PostTask(
-        FROM_HERE, {ServiceWorkerContext::GetCoreThreadId()},
-        base::BindOnce(&ServiceWorkerInternalsHandler::UnregisterWithScope,
-                       base::Unretained(this), context, scope,
-                       std::move(callback)));
+    BrowserThread::GetTaskRunnerForThread(
+        ServiceWorkerContext::GetCoreThreadId())
+        ->PostTask(
+            FROM_HERE,
+            base::BindOnce(&ServiceWorkerInternalsHandler::UnregisterWithScope,
+                           base::Unretained(this), context, scope,
+                           std::move(callback)));
     return;
   }
 

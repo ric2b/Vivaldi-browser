@@ -5,7 +5,6 @@
 
 #include <vector>
 
-#include "base/strings/string16.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 
@@ -63,7 +62,7 @@ bool AddIfSeparator(const bookmarks::BookmarkNode* node,
 views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
                                  unsigned int* menu_index,
                                  int id,
-                                 const base::string16& label,
+                                 const std::u16string& label,
                                  const gfx::ImageSkia& icon,
                                  views::MenuItemView::Type type);
 

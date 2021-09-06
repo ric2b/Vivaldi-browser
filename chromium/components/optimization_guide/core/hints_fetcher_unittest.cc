@@ -113,7 +113,7 @@ class HintsFetcherTest : public testing::Test,
                   const std::vector<GURL>& urls) {
     bool status = hints_fetcher_->FetchOptimizationGuideServiceHints(
         hosts, urls, {optimization_guide::proto::NOSCRIPT},
-        optimization_guide::proto::CONTEXT_BATCH_UPDATE,
+        optimization_guide::proto::CONTEXT_BATCH_UPDATE, "en-US",
         base::BindOnce(&HintsFetcherTest::OnHintsFetched,
                        base::Unretained(this)));
     RunUntilIdle();
@@ -275,7 +275,7 @@ TEST_P(HintsFetcherTest, FetchInProgress_HostsHintsRefreshed) {
   // Advancing the clock so that it's still one hour before the hints need to be
   // refreshed.
   test_clock.Advance(features::StoredFetchedHintsFreshnessDuration() -
-                     features::GetHintsFetchRefreshDuration() -
+                     features::GetHostHintsFetchRefreshDuration() -
                      base::TimeDelta().FromHours(1));
 
   EXPECT_FALSE(FetchHints({"foo.com"}, {} /* urls */));

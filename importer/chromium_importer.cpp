@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
@@ -19,12 +20,16 @@
 #include "base/values.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/shell_integration.h"
+#include "chrome/common/chrome_paths_internal.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
-#include "components/password_manager/core/browser/password_form.h"
+#include "chrome/grit/chromium_strings.h"
+#include "components/os_crypt/key_storage_config_linux.h"
 #include "components/os_crypt/os_crypt.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "importer/chrome_importer_utils.h"
 #include "sql/statement.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -119,7 +124,7 @@ bool ChromiumImporter::ReadAndParseSignons(
     form.username_value = base::UTF8ToUTF16(s2.ColumnString(3));
     form.password_element = base::UTF8ToUTF16(s2.ColumnString(4));
     const std::string& cipher_text = s2.ColumnString(5);
-    base::string16 plain_text;
+    std::u16string plain_text;
 
 #if defined(OS_MAC)
     std::string service_name = "Chrome Safe Storage";
@@ -151,6 +156,19 @@ bool ChromiumImporter::ReadAndParseSignons(
     OSCrypt::DecryptImportedString16(cipher_text, &plain_text, service_name,
                                      account_name);
 #else
+#if defined(OS_LINUX)
+    // Set up crypt config.
+    const base::CommandLine& command_line =
+        *base::CommandLine::ForCurrentProcess();
+    std::unique_ptr<os_crypt::Config> config(new os_crypt::Config());
+    config->store = command_line.GetSwitchValueASCII(switches::kPasswordStore);
+    config->product_name = l10n_util::GetStringUTF8(IDS_PRODUCT_NAME);
+    config->should_use_preference =
+        command_line.HasSwitch(switches::kEnableEncryptionSelection);
+    chrome::GetDefaultUserDataDirectory(&config->user_data_path);
+    OSCrypt::SetConfig(std::move(config));
+#endif
+
     OSCrypt::DecryptString16(cipher_text, &plain_text);
 #endif
 

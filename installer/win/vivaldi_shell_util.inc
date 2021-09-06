@@ -11,12 +11,12 @@ const wchar_t kRegShellOpenNewWindow[] = L"\\shell\\opennewwindow\\command";
 
 // Cleans up DelegateExecute registry values from old Vivaldi installs.
 void RemoveDelegateExecuteForVivaldi(const base::FilePath& chrome_exe,
-                                     const base::string16& suffix) {
+                                     const std::wstring& suffix) {
   bool is_per_user_install = InstallUtil::IsPerUserInstall();
   HKEY root_key = DetermineRegistrationRoot(is_per_user_install);
 
   // <root>\Software\Classes\Vivaldi<.suffix>\.exe\shell\open\command
-  base::string16 delegate_exe_key(ShellUtil::kRegClasses);
+  std::wstring delegate_exe_key(ShellUtil::kRegClasses);
   delegate_exe_key.push_back(base::FilePath::kSeparators[0]);
   delegate_exe_key.append(install_static::GetBaseAppId() + suffix);
   delegate_exe_key.append(ShellUtil::kRegExePath);
@@ -46,11 +46,11 @@ void RemoveDelegateExecuteForVivaldi(const base::FilePath& chrome_exe,
 }
 
 // Constructs a suffix based on path.
-void GetPathSpecificSuffix(const base::FilePath& path, base::string16* suffix) {
+void GetPathSpecificSuffix(const base::FilePath& path, std::wstring* suffix) {
   DCHECK(!path.empty());
   DCHECK(suffix);
   base::MD5Digest md5_digest;
-  std::string path_utf8(base::UTF16ToUTF8(path.value()));
+  std::string path_utf8(base::WideToUTF8(path.value()));
   base::MD5Sum(path_utf8.c_str(), strlen(path_utf8.c_str()), &md5_digest);
   const std::string base32_md5(base32::Base32Encode(
       base::StringPiece(reinterpret_cast<char*>(md5_digest.a),
@@ -59,17 +59,17 @@ void GetPathSpecificSuffix(const base::FilePath& path, base::string16* suffix) {
   DCHECK_EQ(base32_md5.length(), 26U);
   suffix->reserve(base32_md5.length() + 1);
   suffix->assign(1, L'.');
-  suffix->append(base::ASCIIToUTF16(base32_md5));
+  suffix->append(base::ASCIIToWide(base32_md5));
 }
 
 // Returns the application name, "Vivaldi" or "Vivaldi S [<folder>]".
-base::string16 GetAppName(const base::string16& install_path) {
-  base::string16 app_name(L"Vivaldi");
+std::wstring GetAppName(const std::wstring& install_path) {
+  std::wstring app_name(L"Vivaldi");
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
     // extract the install folder name for the standalone install
-    base::string16::size_type pos = install_path.rfind(L"\\Application");
-    if (pos != base::string16::npos) {
+    std::wstring::size_type pos = install_path.rfind(L"\\Application");
+    if (pos != std::wstring::npos) {
       app_name.append(L" S [");
       app_name.append(install_path.substr(0, pos));
       app_name.append(1, L']');
@@ -82,9 +82,9 @@ namespace install_static {
 
 // Vivaldi customization. For standalone installs,
 // add the --user-data-dir argument.
-base::string16 GetArguments()
+std::wstring GetArguments()
 {
-  base::string16 arguments;
+  std::wstring arguments;
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone) &&

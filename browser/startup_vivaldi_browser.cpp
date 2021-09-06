@@ -9,22 +9,22 @@
 #include "base/command_line.h"
 #include "browser/launch_update_notifier.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/extensions/extension_metrics.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/buildflags/buildflags.h"
 #include "prefs/vivaldi_pref_names.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/ui/extensions/application_launch.h"
+#include "chrome/common/extensions/extension_metrics.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
+
+using extensions::Extension;
 #endif
 
 #if defined(OS_MAC)
 #include "browser/init_sparkle.h"
 #endif
-
-using extensions::Extension;
 
 namespace vivaldi {
 
@@ -39,23 +39,21 @@ namespace {
 
 // Utility functions ----------------------------------------------------------
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // TODO(koz): Consolidate this function and remove the special casing.
 const Extension* GetPlatformApp(Profile* profile,
                                 const std::string& extension_id) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
   const Extension* extension =
       extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
           extension_id, extensions::ExtensionRegistry::EVERYTHING);
   return extension && extension->is_platform_app() ? extension : NULL;
-#else
-  return NULL;
-#endif
 }
 
 void RecordCmdLineAppHistogram(extensions::Manifest::Type app_type) {
   extensions::RecordAppLaunchType(extension_misc::APP_LAUNCH_CMD_LINE_APP,
                                   app_type);
 }
+#endif
 // End copied
 }  // anonymous namespace
 
@@ -68,6 +66,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
                    Profile* profile) {
   if (!(IsVivaldiRunning(command_line) && !IsDebuggingVivaldi(command_line)))
     return false;
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Default is now launching the Vivaldi App.
   // TODO(sverrir@vivaldi.com): Remove
   const Extension* extension = GetPlatformApp(profile, vivaldi::kVivaldiAppId);
@@ -76,9 +75,10 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   if (extension) {
     RecordCmdLineAppHistogram(extensions::Manifest::TYPE_PLATFORM_APP);
 #if defined(OS_MAC)
-    init_sparkle::Initialize(command_line);
+    init_sparkle::Initialize();
 #endif
   }
+#endif
   // Never launch the update notifier process from guest windows
   if (!profile->IsGuestSession()) {
     LaunchUpdateNotifier(profile);

@@ -34,9 +34,13 @@
             "optional": "true",
             "description": "Preference value."
           },
-          "default_value": {
+          "defaultValue": {
             "type": "any",
             "description": "Preference default value."
+          },
+          "usesDefault": {
+            "type": "boolean",
+            "description": "True if the current value comes from the default and has not been overriden by the user."
           }
         }
       },
@@ -56,6 +60,14 @@
           "isSiteOnNeverTranslateList": {
             "type": "boolean",
             "description": "Is the given site on the never translate list."
+          },
+          "shouldShowAlwaysTranslateShortcut": {
+            "type": "boolean",
+            "description": "Should show always translate shortcut for this language."
+          },
+          "shouldShowNeverTranslateShortcut": {
+            "type": "boolean",
+            "description": "Should show never translate shortcut for this language."
           }
         }
       }
@@ -70,20 +82,19 @@
             "name": "path",
             "type": "string",
             "description": "The preference path"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Returns the value of the preference.",
-            "parameters": [
-              {
-                "optional": "true",
-                "name": "value",
-                "type": "any"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Returns the value of the preference.",
+          "parameters": [
+            {
+              "optional": "true",
+              "name": "value",
+              "type": "any"
+            }
+          ]
+        }
       },
       {
         "name": "set",
@@ -117,20 +128,19 @@
             "type": "array",
             "description": "Which preferences are needed",
             "items": { "type": "string" }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "PreferenceValueAndDefault" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "PreferenceValueAndDefault" }
+            }
+          ]
+        }
       },
       {
         "name": "setLanguagePairToAlwaysTranslate",
@@ -324,6 +334,12 @@
             }
           ]
         }
+      },
+      {
+        "name": "resetTranslationPrefs",
+        "type": "function",
+        "description": "Translate: Resets the translation preferences to defaults.",
+        "parameters": []
       }
     ],
     "events": [

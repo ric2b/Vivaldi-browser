@@ -641,12 +641,7 @@ void Navigate(NavigateParams* params) {
   // tab.
   bool made_new_contents = false;
   if (!contents_to_navigate_or_insert) {
-// TODO(crbug.com/1171737): Revert https://crrev.com/c/2676315 to re-enable this
-// DCHECK on CrOS. See go/chrome-dcheck-on-cros or http://crbug.com/1113456 for
-// more details.
-#if !(defined(OS_CHROMEOS) && DCHECK_IS_ON())
     DCHECK(!params->url.is_empty());
-#endif
     if (params->disposition != WindowOpenDisposition::CURRENT_TAB) {
       contents_to_insert = CreateTargetContents(*params, params->url);
       contents_to_navigate_or_insert = contents_to_insert.get();
@@ -754,8 +749,6 @@ void Navigate(NavigateParams* params) {
             (params->source_contents->GetLastCommittedURL().spec() !=
                  chrome::kChromeUINewTabURL &&
              params->source_contents->GetLastCommittedURL().spec() !=
-                 chrome::kChromeSearchLocalNtpUrl &&
-             params->source_contents->GetLastCommittedURL().spec() !=
                  url::kAboutBlankURL)) {
           // Blur location bar before state save in ActivateTabAt() below.
           params->source_contents->Focus();
@@ -793,7 +786,7 @@ bool IsHostAllowedInIncognito(const GURL& url) {
     // option is only available on Windows for use with Google Credential
     // Provider for Windows.
     return signin::GetSigninReasonForEmbeddedPromoURL(url) ==
-           signin_metrics::Reason::REASON_FETCH_LST_ONLY;
+           signin_metrics::Reason::kFetchLstOnly;
 #else
     return false;
 #endif  // defined(OS_WIN)

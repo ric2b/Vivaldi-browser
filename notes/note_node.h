@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/guid.h"
-#include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "content/public/browser/notification_observer.h"
@@ -68,7 +67,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   // Get the creation time for the node.
   base::Time GetCreationTime() const { return creation_time_; }
 
-  const base::string16& GetContent() const { return content_; }
+  const std::u16string& GetContent() const { return content_; }
 
   const GURL& GetURL() const { return url_; }
 
@@ -77,7 +76,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
     return (attachment != attachments_.end()) ? &(attachment->second) : nullptr;
   }
   const NoteAttachments& GetAttachments() const { return attachments_; }
-  void SetContent(const base::string16& content) { content_ = content; }
+  void SetContent(const std::u16string& content) { content_ = content; }
   void SetURL(const GURL& url) { url_ = url; }
   void SetCreationTime(const base::Time creation_time) {
     creation_time_ = creation_time;
@@ -111,7 +110,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   // Time of creation.
   base::Time creation_time_;
   // Actual note text.
-  base::string16 content_;
+  std::u16string content_;
   // Attached URL.
   GURL url_;
   // List of attached data.
@@ -148,7 +147,7 @@ class PermanentNoteNode : public NoteNode {
   PermanentNoteNode(int64_t id,
                     Type type,
                     const base::GUID& guid,
-                    const base::string16& title);
+                    const std::u16string& title);
   DISALLOW_COPY_AND_ASSIGN(PermanentNoteNode);
 };
 

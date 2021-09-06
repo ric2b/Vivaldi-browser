@@ -28,10 +28,12 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightShape;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.OptimizedFrameLayout;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /** The tab switcher mode top toolbar shown on phones. */
 public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
@@ -265,7 +267,8 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
     void setNewTabButtonHighlight(boolean highlight) {
         if (mNewTabImageButton == null) return;
         if (highlight) {
-            ViewHighlighter.turnOnCircularHighlight(mNewTabImageButton);
+            ViewHighlighter.turnOnHighlight(
+                    mNewTabImageButton, new HighlightParams(HighlightShape.CIRCLE));
         } else {
             ViewHighlighter.turnOffHighlight(mNewTabImageButton);
         }
@@ -282,7 +285,7 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
 
     private void updatePrimaryColorAndTint() {
         // NOTE(david@vivaldi.com) In Vivaldi we don't update the appearance.
-        if (ChromeApplication.isVivaldi()) return;
+        if (ChromeApplicationImpl.isVivaldi()) return;
 
         int primaryColor = getToolbarColorForCurrentState();
         if (mPrimaryColor != primaryColor) {

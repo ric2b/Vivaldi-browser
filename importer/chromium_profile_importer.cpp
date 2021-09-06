@@ -173,7 +173,7 @@ void ChromiumProfileImporter::ReadProfiles(std::vector<ChromeProfileInfo>* cp,
       ChromeProfileInfo prof;
       const base::Value* namVal;
       if (roots_sd_value->Get("name", &namVal)) {
-        base::string16 displayName;
+        std::u16string displayName;
         namVal->GetAsString(&displayName);
         prof.profileDisplayName = displayName;
       } else {

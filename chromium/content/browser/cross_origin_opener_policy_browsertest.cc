@@ -162,6 +162,7 @@ class NoSharedArrayBufferByDefault : public CrossOriginOpenerPolicyBrowserTest {
         // Disabled:
         {
             features::kSharedArrayBuffer,
+            features::kSharedArrayBufferOnDesktop,
             features::kWebAssemblyThreads,
         });
   }
@@ -2763,7 +2764,8 @@ IN_PROC_BROWSER_TEST_P(NoSharedArrayBufferByDefault,
     g_sab_size = new Promise(resolve => {
       addEventListener("message", event => resolve(event.data.byteLength));
     });
-  )"));
+  )",
+                     EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
 
   EXPECT_TRUE(ExecJs(main_document, R"(
     let sab = new SharedArrayBuffer(1234);
@@ -2774,8 +2776,8 @@ IN_PROC_BROWSER_TEST_P(NoSharedArrayBufferByDefault,
 }
 
 // Transfer a SharedArrayBuffer in between two COOP+COEP document with a
-// parent/child relationship. The child has set Feature-Policy:
-// cross-origin-isolated 'none'. As a result, it can't receive the object.
+// parent/child relationship. The child has set Permissions-Policy:
+// cross-origin-isolated=(). As a result, it can't receive the object.
 IN_PROC_BROWSER_TEST_P(
     NoSharedArrayBufferByDefault,
     CoopCoepTransferSharedArrayBufferToNoCrossOriginIsolatedIframe) {
@@ -2790,7 +2792,7 @@ IN_PROC_BROWSER_TEST_P(
                              "/set-header?"
                              "Cross-Origin-Embedder-Policy: require-corp&"
                              "Cross-Origin-Resource-Policy: cross-origin&"
-                             "Feature-Policy: cross-origin-isolated 'none'");
+                             "Permissions-Policy: cross-origin-isolated=()");
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
   EXPECT_TRUE(ExecJs(current_frame_host(),
                      JsReplace("g_iframe = document.createElement('iframe');"
@@ -2811,16 +2813,13 @@ IN_PROC_BROWSER_TEST_P(
     g_iframe.contentWindow.postMessage(sab,"*");
   )");
 
-  EXPECT_THAT(
-      postSharedArrayBuffer.error,
-      HasSubstr(
-          "Failed to execute 'postMessage' on 'Window': SharedArrayBuffer "
-          "transfer requires self.crossOriginIsolated"));
+  EXPECT_THAT(postSharedArrayBuffer.error,
+              HasSubstr("Failed to execute 'postMessage' on 'Window':"));
 }
 
 // Transfer a SharedArrayBuffer in between two COOP+COEP document with a
-// parent/child relationship. The child has set Feature-Policy:
-// cross-origin-isolated 'none'. This non-cross-origin-isolated document can
+// parent/child relationship. The child has set Permissions-Policy:
+// cross-origin-isolated=(). This non-cross-origin-isolated document can
 // transfer a SharedArrayBuffer toward the cross-origin-isolated one.
 // See https://crbug.com/1144838 for discussions about this behavior.
 IN_PROC_BROWSER_TEST_P(
@@ -2837,7 +2836,7 @@ IN_PROC_BROWSER_TEST_P(
                              "/set-header?"
                              "Cross-Origin-Embedder-Policy: require-corp&"
                              "Cross-Origin-Resource-Policy: cross-origin&"
-                             "Feature-Policy: cross-origin-isolated 'none'");
+                             "Permissions-Policy: cross-origin-isolated=()");
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
   EXPECT_TRUE(ExecJs(current_frame_host(),
                      JsReplace("g_iframe = document.createElement('iframe');"
@@ -2857,7 +2856,8 @@ IN_PROC_BROWSER_TEST_P(
     g_sab_size = new Promise(resolve => {
       addEventListener("message", event => resolve(event.data.byteLength));
     });
-  )"));
+  )",
+                     EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
 
   // TODO(https://crbug.com/1144838): Being able to share SharedArrayBuffer from
   // a document with self.crossOriginIsolated == false sounds wrong.
@@ -2882,6 +2882,7 @@ class UnrestrictedSharedArrayBufferOriginTrialBrowserTest
         {
             // Disabled
             features::kSharedArrayBuffer,
+            features::kSharedArrayBufferOnDesktop,
             features::kWebAssemblyThreads,
         });
   }
@@ -2992,7 +2993,8 @@ IN_PROC_BROWSER_TEST_F(UnrestrictedSharedArrayBufferOriginTrialBrowserTest,
     g_sab_size = new Promise(resolve => {
       addEventListener("message", event => resolve(event.data.byteLength));
     });
-  )"));
+  )",
+                     EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
 
   EXPECT_TRUE(ExecJs(main_document, R"(
     let sab = new SharedArrayBuffer(1234);
@@ -3008,12 +3010,90 @@ IN_PROC_BROWSER_TEST_F(UnrestrictedSharedArrayBufferOriginTrialBrowserTest,
     g_iframe.contentWindow.postMessage(sab,"*");
   )");
 
-  EXPECT_THAT(
-      postSharedArrayBuffer.error,
-      HasSubstr(
-          "Failed to execute 'postMessage' on 'Window': ArrayBuffer is not "
-          "detachable and could not be cloned."));
+  EXPECT_THAT(postSharedArrayBuffer.error,
+              HasSubstr("Failed to execute 'postMessage' on 'Window'"));
 #endif  // defined(OS_ANDROID)
 }
 
+// Ensure the SharedArrayBufferOnDesktop kill switch is correctly implemented.
+class SharedArrayBufferOnDesktopBrowserTest
+    : public CrossOriginOpenerPolicyBrowserTest {
+ public:
+  SharedArrayBufferOnDesktopBrowserTest() {
+    feature_list_.InitWithFeatures(
+        {
+            // Enabled
+            features::kSharedArrayBufferOnDesktop,
+        },
+        {
+            // Disabled
+            features::kSharedArrayBuffer,
+            features::kWebAssemblyThreads,
+        });
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         SharedArrayBufferOnDesktopBrowserTest,
+                         kTestParams);
+
+IN_PROC_BROWSER_TEST_P(SharedArrayBufferOnDesktopBrowserTest,
+                       DesktopHasSharedArrayBuffer) {
+  CHECK(!base::FeatureList::IsEnabled(features::kSharedArrayBuffer));
+  GURL url = https_server()->GetURL("a.com", "/empty.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  EXPECT_EQ(false, EvalJs(current_frame_host(), "self.crossOriginIsolated"));
+#if !defined(OS_ANDROID)
+  EXPECT_EQ(true,
+            EvalJs(current_frame_host(), "'SharedArrayBuffer' in globalThis"));
+#else   // defined(OS_ANDROID)
+  EXPECT_EQ(false,
+            EvalJs(current_frame_host(), "'SharedArrayBuffer' in globalThis"));
+#endif  // defined(OS_ANDROID)
+}
+
+IN_PROC_BROWSER_TEST_P(SharedArrayBufferOnDesktopBrowserTest,
+                       DesktopTransferSharedArrayBuffer) {
+  CHECK(!base::FeatureList::IsEnabled(features::kSharedArrayBuffer));
+  GURL main_url = https_server()->GetURL("a.com", "/empty.html");
+  GURL iframe_url = https_server()->GetURL("a.com", "/empty.html");
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  EXPECT_TRUE(ExecJs(current_frame_host(),
+                     JsReplace("g_iframe = document.createElement('iframe');"
+                               "g_iframe.src = $1;"
+                               "document.body.appendChild(g_iframe);",
+                               iframe_url)));
+  WaitForLoadStop(web_contents());
+
+  RenderFrameHostImpl* main_document = current_frame_host();
+  RenderFrameHostImpl* sub_document =
+      current_frame_host()->child_at(0)->current_frame_host();
+
+  EXPECT_EQ(false, EvalJs(main_document, "self.crossOriginIsolated"));
+  EXPECT_EQ(false, EvalJs(sub_document, "self.crossOriginIsolated"));
+
+  EXPECT_TRUE(ExecJs(main_document, R"(
+    g_sab_size = new Promise(resolve => {
+      addEventListener("message", event => resolve(event.data.byteLength));
+    });
+  )",
+                     EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+
+#if !defined(OS_ANDROID)
+  EXPECT_TRUE(ExecJs(sub_document, R"(
+    let sab = new SharedArrayBuffer(1234);
+    parent.postMessage(sab, "*");
+  )"));
+
+  EXPECT_EQ(1234, EvalJs(main_document, "g_sab_size"));
+#else   // defined(OS_ANDROID)
+  EXPECT_FALSE(ExecJs(sub_document, R"(
+    let sab = new SharedArrayBuffer(1234);
+    parent.postMessage(sab, "*");
+  )"));
+#endif  // defined(OS_ANDROID)
+}
 }  // namespace content

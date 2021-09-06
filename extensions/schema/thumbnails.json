@@ -222,19 +222,18 @@
           {
             "name": "params",
             "$ref": "CaptureBookmarkParams"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "True if the thumbnail was successfully generated and stored in the bookmark."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "True if the thumbnail was successfully generated and stored in the bookmark."
+            }
+          ]
+        }
       }
     ]
   }

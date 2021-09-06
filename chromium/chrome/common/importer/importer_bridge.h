@@ -10,7 +10,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/importer/importer_url_row.h"
@@ -32,9 +31,8 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
  public:
   ImporterBridge();
 
-  virtual void AddBookmarks(
-      const std::vector<ImportedBookmarkEntry>& bookmarks,
-      const base::string16& first_folder_name) = 0;
+  virtual void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
+                            const std::u16string& first_folder_name) = 0;
 
   virtual void AddHomePage(const GURL& home_page) = 0;
 
@@ -71,11 +69,11 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   // this calls the set of strings we've ported over to the external process.
   // It's good to avoid having to create a separate ResourceBundle for the
   // external import process, since the importer only needs a few strings.
-  virtual base::string16 GetLocalizedString(int message_id) = 0;
+  virtual std::u16string GetLocalizedString(int message_id) = 0;
 
   // Vivaldi
   virtual void AddNotes(const std::vector<ImportedNotesEntry>& bookmarks,
-                        const base::string16& first_folder_name) {}
+                        const std::u16string& first_folder_name) {}
 
   virtual void AddSpeedDial(
       const std::vector<ImportedSpeedDialEntry>& speeddials) {}

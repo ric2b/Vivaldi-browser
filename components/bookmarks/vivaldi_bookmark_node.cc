@@ -11,13 +11,13 @@
 namespace bookmarks {
 
 // Vivaldi: Returns the nickname for the node.
-const base::string16 TitledUrlNode::GetTitledUrlNodeNickName() const {
-  return base::string16();
+const std::u16string TitledUrlNode::GetTitledUrlNodeNickName() const {
+  return std::u16string();
 }
 
 // Vivaldi: Returns the description for the node.
-const base::string16 TitledUrlNode::GetTitledUrlNodeDescription() const {
-  return base::string16();
+const std::u16string TitledUrlNode::GetTitledUrlNodeDescription() const {
+  return std::u16string();
 }
 
 // BookmarkNode ---------------------------------------------------------------
@@ -25,11 +25,11 @@ const base::string16 TitledUrlNode::GetTitledUrlNodeDescription() const {
 const char BookmarkNode::kVivaldiTrashNodeGuid[] =
     "00000000-0000-4000-a000-000000040000";
 
-const base::string16 BookmarkNode::GetTitledUrlNodeNickName() const {
+const std::u16string BookmarkNode::GetTitledUrlNodeNickName() const {
   return base::UTF8ToUTF16(vivaldi_bookmark_kit::GetNickname(this));
 }
 
-const base::string16 BookmarkNode::GetTitledUrlNodeDescription() const {
+const std::u16string BookmarkNode::GetTitledUrlNodeDescription() const {
   return base::UTF8ToUTF16(vivaldi_bookmark_kit::GetDescription(this));
 }
 

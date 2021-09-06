@@ -16,9 +16,7 @@
       <include name="VIVALDI_PIP_JS_MAIN" file="../../components/picture-in-picture/picture-in-picture.js" type="BINDATA" />
       <include name="VIVALDI_PIP_JS_CSS" file="../../components/picture-in-picture/picture-in-picture.css" type="BINDATA" />
       <include name="VIVALDI_PIP_JS_CONFIG" file="../../components/picture-in-picture/config.json" type="BINDATA" />
-      <if expr="not is_android">
-        <include name="VIVALDI_TRANSLATE_JS" file="resources/vivaldi/translate-bundle.js" type="BINDATA" />
-      </if>
+      <include name="VIVALDI_TRANSLATE_JS" file="resources/vivaldi/translate-bundle.js" type="BINDATA" />
     </includes>
   </release>
 </grit>

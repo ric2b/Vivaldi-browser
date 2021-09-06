@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Älä anna sivustojen ladata useampia tiedostoja automaattisesti</translation>
 <translation id="5039804452771397117">Salli</translation>
 <translation id="5057110919553308744">Napsauttaessasi laajennusta</translation>
+<translation id="5059526285558225588">Valitse, mitä jaat</translation>
 <translation id="5063480226653192405">Käyttö</translation>
 <translation id="5116628073786783676">T&amp;allenna ääni nimellä…</translation>
 <translation id="5143374789336132547">Laajennus <ph name="EXTENSION_NAME" /> on vaihtanut Etusivu-painikkeella avattavan sivun.</translation>
@@ -459,7 +460,6 @@ Tallenna avaintiedosto suojattuun sijaintiin. Sitä tarvitaan uusien laajennusve
 <translation id="8823704566850948458">Ehdota salasanaa…</translation>
 <translation id="8859174528519900719">Alakehys: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Avaa linkki uuteen &amp;ikkunaan</translation>
-<translation id="8910146161325739742">Jaa näyttösi</translation>
 <translation id="8915370057835397490">Ladataan ehdotusta</translation>
 <translation id="8916476537757519021">Incognito-alakehys: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript-muisti</translation>

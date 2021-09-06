@@ -19,6 +19,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/favicon_size.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 
 namespace vivaldi {
 
@@ -76,7 +77,7 @@ ProfileMenuController::Ids ProfileMenuController::GetIds(bool is_image) {
   return ids;
 }
 
-void ProfileMenuController::Populate(base::string16 label,
+void ProfileMenuController::Populate(std::u16string label,
                                  ui::SimpleMenuModel* menu_model,
                                  ui::SimpleMenuModel::Delegate* delegate) {
 

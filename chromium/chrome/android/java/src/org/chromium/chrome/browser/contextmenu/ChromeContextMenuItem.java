@@ -27,6 +27,9 @@ import org.chromium.ui.text.SpanApplier.SpanInfo;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 /**
  * List of all predefined Context Menu Items available in Chrome.
  */
@@ -41,7 +44,7 @@ class ChromeContextMenuItem {
             Item.SHOP_IMAGE_WITH_GOOGLE_LENS, Item.SEARCH_SIMILAR_PRODUCTS, Item.SHARE_IMAGE,
             Item.DIRECT_SHARE_IMAGE, Item.CALL, Item.SEND_MESSAGE, Item.ADD_TO_CONTACTS, Item.COPY,
             Item.OPEN_IN_NEW_TAB_BACKGROUND, // Vivaldi
-            Item.SAVE_VIDEO, Item.OPEN_IN_CHROME})
+            Item.SAVE_VIDEO, Item.OPEN_IN_CHROME, Item.OPEN_IN_NEW_TAB_IN_GROUP})
     @Retention(RetentionPolicy.SOURCE)
     public @interface Item {
         // Values are numerated from 0 and can't have gaps.
@@ -52,43 +55,44 @@ class ChromeContextMenuItem {
         int OPEN_IN_BROWSER_ID = 2;
         // Link Group
         int OPEN_IN_NEW_TAB = 3;
-        int OPEN_IN_INCOGNITO_TAB = 4;
-        int OPEN_IN_OTHER_WINDOW = 5;
-        int OPEN_IN_EPHEMERAL_TAB = 6;
-        int COPY_LINK_ADDRESS = 7;
-        int COPY_LINK_TEXT = 8;
-        int SAVE_LINK_AS = 9;
-        int SHARE_LINK = 10;
-        int DIRECT_SHARE_LINK = 11;
-        int READ_LATER = 12;
+        int OPEN_IN_NEW_TAB_IN_GROUP = 4;
+        int OPEN_IN_INCOGNITO_TAB = 5;
+        int OPEN_IN_OTHER_WINDOW = 6;
+        int OPEN_IN_EPHEMERAL_TAB = 7;
+        int COPY_LINK_ADDRESS = 8;
+        int COPY_LINK_TEXT = 9;
+        int SAVE_LINK_AS = 10;
+        int SHARE_LINK = 11;
+        int DIRECT_SHARE_LINK = 12;
+        int READ_LATER = 13;
         // Image Group
-        int LOAD_ORIGINAL_IMAGE = 13;
-        int SAVE_IMAGE = 14;
-        int OPEN_IMAGE = 15;
-        int OPEN_IMAGE_IN_NEW_TAB = 16;
-        int OPEN_IMAGE_IN_EPHEMERAL_TAB = 17;
-        int COPY_IMAGE = 18;
-        int SEARCH_BY_IMAGE = 19;
-        int SEARCH_WITH_GOOGLE_LENS = 20;
-        int SHOP_SIMILAR_PRODUCTS = 21;
-        int SHOP_IMAGE_WITH_GOOGLE_LENS = 22;
-        int SEARCH_SIMILAR_PRODUCTS = 23;
-        int SHARE_IMAGE = 24;
-        int DIRECT_SHARE_IMAGE = 25;
+        int LOAD_ORIGINAL_IMAGE = 14;
+        int SAVE_IMAGE = 15;
+        int OPEN_IMAGE = 16;
+        int OPEN_IMAGE_IN_NEW_TAB = 17;
+        int OPEN_IMAGE_IN_EPHEMERAL_TAB = 18;
+        int COPY_IMAGE = 19;
+        int SEARCH_BY_IMAGE = 20;
+        int SEARCH_WITH_GOOGLE_LENS = 21;
+        int SHOP_SIMILAR_PRODUCTS = 22;
+        int SHOP_IMAGE_WITH_GOOGLE_LENS = 23;
+        int SEARCH_SIMILAR_PRODUCTS = 24;
+        int SHARE_IMAGE = 25;
+        int DIRECT_SHARE_IMAGE = 26;
         // Message Group
-        int CALL = 26;
-        int SEND_MESSAGE = 27;
-        int ADD_TO_CONTACTS = 28;
-        int COPY = 29;
+        int CALL = 27;
+        int SEND_MESSAGE = 28;
+        int ADD_TO_CONTACTS = 29;
+        int COPY = 30;
         // Video Group
-        int SAVE_VIDEO = 30;
+        int SAVE_VIDEO = 31;
         // Other
-        int OPEN_IN_CHROME = 31;
+        int OPEN_IN_CHROME = 32;
 
-        int OPEN_IN_NEW_TAB_BACKGROUND = 32; // Vivaldi
+        int OPEN_IN_NEW_TAB_BACKGROUND = 33; // Vivaldi
 
         // ALWAYS UPDATE!
-        int NUM_ENTRIES = 33;
+        int NUM_ENTRIES = 34;
     }
 
     /**
@@ -99,6 +103,7 @@ class ChromeContextMenuItem {
             R.id.contextmenu_open_in_chrome_incognito_tab, // Item.OPEN_IN_CHROME_INCOGNITO_TAB
             R.id.contextmenu_open_in_browser_id, // Item.OPEN_IN_BROWSER_ID
             R.id.contextmenu_open_in_new_tab, // Item.OPEN_IN_NEW_TAB
+            R.id.contextmenu_open_in_new_tab_in_group, // Item.OPEN_IN_NEW_TAB_IN_GROUP
             R.id.contextmenu_open_in_incognito_tab, // Item.OPEN_IN_INCOGNITO_TAB
             R.id.contextmenu_open_in_other_window, // Item.OPEN_IN_OTHER_WINDOW
             R.id.contextmenu_open_in_ephemeral_tab, // Item.OPEN_IN_EPHEMERAL_TAB
@@ -138,6 +143,7 @@ class ChromeContextMenuItem {
             R.string.contextmenu_open_in_chrome_incognito_tab, // Item.OPEN_IN_CHROME_INCOGNITO_TAB:
             0, // Item.OPEN_IN_BROWSER_ID is not handled by this mapping.
             R.string.contextmenu_open_in_new_tab, // Item.OPEN_IN_NEW_TAB:
+            R.string.contextmenu_open_in_new_tab_group, // Item.OPEN_IN_NEW_TAB_IN_GROUP
             R.string.contextmenu_open_in_incognito_tab, // Item.OPEN_IN_INCOGNITO_TAB:
             R.string.contextmenu_open_in_other_window, // Item.OPEN_IN_OTHER_WINDOW:
             R.string.contextmenu_open_in_ephemeral_tab, // Item.OPEN_IN_EPHEMERAL_TAB:
@@ -190,7 +196,11 @@ class ChromeContextMenuItem {
     private static @StringRes int getStringId(@Item int item) {
         assert STRING_IDS.length == Item.NUM_ENTRIES;
 
-        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled() && item == Item.OPEN_IN_NEW_TAB) {
+        // Note(david@vivaldi.com): We offer always all  options for our users.
+        if (!ChromeApplicationImpl.isVivaldi())
+        if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled()
+                && TabUiFeatureUtilities.ENABLE_TAB_GROUP_AUTO_CREATION.getValue()
+                && item == Item.OPEN_IN_NEW_TAB) {
             return R.string.contextmenu_open_in_new_tab_group;
         }
 

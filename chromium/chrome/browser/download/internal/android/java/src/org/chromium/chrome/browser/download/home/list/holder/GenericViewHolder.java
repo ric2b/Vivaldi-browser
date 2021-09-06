@@ -23,7 +23,8 @@ import org.chromium.chrome.browser.download.internal.R;
 import org.chromium.components.offline_items_collection.OfflineItemVisuals;
 import org.chromium.ui.modelutil.PropertyModel;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  *  A {@link RecyclerView.ViewHolder} specifically meant to display a generic {@code OfflineItem}.
@@ -38,8 +39,10 @@ public class GenericViewHolder extends OfflineItemViewHolder {
     public static GenericViewHolder create(ViewGroup parent) {
         View view = LayoutInflater.from(parent.getContext())
                             .inflate(R.layout.download_manager_generic_item, null);
+        // Vivaldi
         if (BuildConfig.IS_VIVALDI)
-            view.setBackgroundColor(ApiCompatibilityUtils.getColor(view.getResources(), android.R.color.transparent));
+            view.setBackgroundColor(ApiCompatibilityUtils.getColor(
+                    view.getResources(), android.R.color.transparent));
         return new GenericViewHolder(view);
     }
 

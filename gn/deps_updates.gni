@@ -111,8 +111,6 @@ if (vivaldi_build_tests) {
     }
     deps += [
       "//vivaldi/components/translate/renderer:renderer",
-      "//vivaldi/importer",
-      "//vivaldi/importer:browser",
       "//vivaldi/notes",
       "//vivaldi/prefs:prefs_files_generated",
     ]

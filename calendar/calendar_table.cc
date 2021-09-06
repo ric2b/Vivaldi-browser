@@ -182,8 +182,8 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   int column_index = 0;
   CalendarID id = statement.ColumnInt64(column_index++);
   AccountID account_id = statement.ColumnInt64(column_index++);
-  base::string16 name = statement.ColumnString16(column_index++);
-  base::string16 description = statement.ColumnString16(column_index++);
+  std::u16string name = statement.ColumnString16(column_index++);
+  std::u16string description = statement.ColumnString16(column_index++);
   std::string ctag = statement.ColumnString(column_index++);
   int orderindex = statement.ColumnInt(column_index++);
   std::string color = statement.ColumnString(column_index++);

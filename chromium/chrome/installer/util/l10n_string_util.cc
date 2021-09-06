@@ -28,8 +28,25 @@
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/installer_util_strings.h"
 
+#include "installer/win/vivaldi_install_l10n.h"
+
 namespace {
 
+#if defined(VIVALDI_BUILD)
+const base::win::i18n::LanguageSelector& GetLanguageSelector() {
+  const base::win::i18n::LanguageSelector* selector =
+      vivaldi::GetInstallerLanguageSelector();
+  if (selector)
+    return *selector;
+
+  // This happens during tests - feed them the offset for the English.
+  constexpr base::win::i18n::LanguageSelector::LangToOffset pairs[] = {
+      {L"en-us", IDS_L10N_OFFSET_EN_US}};
+  static base::NoDestructor<base::win::i18n::LanguageSelector> english_selector(
+      std::vector<std::wstring>({L"en-us"}), pairs);
+  return *english_selector;
+}
+#else
 constexpr base::win::i18n::LanguageSelector::LangToOffset
     kLanguageOffsetPairs[] = {
 #define HANDLE_LANGUAGE(l_, o_) {L## #l_, o_},
@@ -50,6 +67,7 @@ const base::win::i18n::LanguageSelector& GetLanguageSelector() {
       GetPreferredLanguageFromGoogleUpdate(), kLanguageOffsetPairs);
   return *instance;
 }
+#endif  // !defined(VIVALDI_BUILD)
 
 installer::TranslationDelegate* g_translation_delegate = nullptr;
 

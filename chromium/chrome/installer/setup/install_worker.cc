@@ -39,8 +39,10 @@
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_modes.h"
 #include "chrome/install_static/install_util.h"
+#include "chrome/installer/setup/downgrade_cleanup.h"
 #include "chrome/installer/setup/install_params.h"
 #include "chrome/installer/setup/installer_state.h"
+#include "chrome/installer/setup/last_breaking_installer_version.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/update_active_setup_version_work_item.h"
@@ -253,7 +255,7 @@ void AddChromeWorkItems(const InstallParams& install_params,
 
   WorkItem::CopyOverWriteOption vivaldi_exe_write_option =
       WorkItem::NEW_NAME_IF_IN_USE;
-  if (vivaldi::IsInstallSilentUpdate()) {
+  if (!vivaldi::IsInstallSilentUpdate()) {
     // If this is not a live update, assume that all Vivaldi processes should be
     // terminated at this point.
     vivaldi_exe_write_option = WorkItem::ALWAYS;
@@ -279,8 +281,6 @@ void AddChromeWorkItems(const InstallParams& install_params,
     install_list->AddDeleteTreeWorkItem(
         target_path.Append(installer::kVisualElementsManifest), temp_path);
   }
-
-  vivaldi::AddVivaldiSpecificWorkItems(install_params, install_list);
 
   // In the past, we copied rather than moved for system level installs so that
   // the permissions of %ProgramFiles% would be picked up.  Now that |temp_path|
@@ -442,7 +442,13 @@ void AddEnterpriseEnrollmentWorkItems(const InstallerState& installer_state,
     cmd_line.AppendSwitch(switches::kVerboseLogging);
     InstallUtil::AppendModeAndChannelSwitches(&cmd_line);
 
-    AppCommand cmd(cmd_line.GetCommandLineString());
+    // The substitution for the insert sequence "%1" here is performed safely by
+    // Google Update rather than insecurely by the Windows shell. Disable the
+    // safety check for unsafe insert sequences since the right thing is
+    // happening. Do not blindly copy this pattern in new code. Check with a
+    // member of base/win/OWNERS if in doubt.
+    AppCommand cmd(cmd_line.GetCommandLineStringWithUnsafeInsertSequences());
+
     // TODO(alito): For now setting this command as web accessible is required
     // by Google Update.  Could revisit this should Google Update change the
     // way permissions are handled for commands.
@@ -565,7 +571,12 @@ void AddVersionKeyWorkItems(const InstallParams& install_params,
 
   // Only set "lang" for user-level installs since for system-level, the install
   // language may not be related to a given user's runtime language.
+#if defined(VIVALDI_BUILD)
+  // This is already written by the installation dialog.
+  constexpr bool add_language_identifier = false;
+#else
   const bool add_language_identifier = !installer_state.system_install();
+#endif
 
   const std::wstring clients_key = install_static::GetClientsKeyPath();
   list->AddCreateRegKeyWorkItem(root, clients_key, KEY_WOW64_32KEY);
@@ -658,6 +669,10 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
   base::FilePath new_chrome_exe(target_path.Append(kChromeNewExe));
   const std::wstring clients_key(install_static::GetClientsKeyPath());
 
+  base::FilePath installer_path(
+      installer_state.GetInstallerDirectory(new_version)
+          .Append(setup_path.BaseName()));
+
   // Append work items that will only be executed if this was an in-use update.
   // We update the 'opv' value with the current version that is active,
   // the 'cpv' value with the critical update version (if present), and the
@@ -668,13 +683,13 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
             new ConditionRunIfFileExists(new_chrome_exe)));
     in_use_update_work_items->set_log_message("InUseUpdateWorkItemList");
 
+    if (!kVivaldi) {
+      // Vivaldi does not need the items below.
+      // clang-format off
     // |critical_version| will be valid only if this in-use update includes a
     // version considered critical relative to the version being updated.
     base::Version critical_version(
         installer_state.DetermineCriticalVersion(current_version, new_version));
-    base::FilePath installer_path(
-        installer_state.GetInstallerDirectory(new_version)
-            .Append(setup_path.BaseName()));
 
     if (current_version.IsValid()) {
       in_use_update_work_items->AddSetRegValueWorkItem(
@@ -695,13 +710,6 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
 
     // Form the mode-specific rename command.
     base::CommandLine product_rename_cmd(installer_path);
-#if !defined(OFFICIAL_BUILD)
-    if (vivaldi::debug_subprocesses_exe) {
-      product_rename_cmd.SetProgram(*vivaldi::debug_subprocesses_exe);
-      product_rename_cmd.AppendSwitchPath(
-          vivaldi::constants::kVivaldiDebugTargetExe, installer_path);
-    }
-#endif
     product_rename_cmd.AppendSwitch(switches::kRenameChromeExe);
     if (installer_state.system_install())
       product_rename_cmd.AppendSwitch(switches::kSystemLevel);
@@ -711,6 +719,8 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
     in_use_update_work_items->AddSetRegValueWorkItem(
         root, clients_key, KEY_WOW64_32KEY, google_update::kRegRenameCmdField,
         product_rename_cmd.GetCommandLineString(), true);
+      // clang-format on
+    }
 
     // Delay deploying the new chrome_proxy while chrome is running.
     in_use_update_work_items->AddCopyTreeWorkItem(
@@ -727,18 +737,18 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
             new Not(new ConditionRunIfFileExists(new_chrome_exe))));
     regular_update_work_items->set_log_message("RegularUpdateWorkItemList");
 
-    // Convey the channel name to the browser if this installer instance's
-    // channel is enforced by policy. Otherwise, delete the registry value.
-    const auto& install_details = install_static::InstallDetails::Get();
-    if (install_details.channel_origin() ==
-        install_static::ChannelOrigin::kPolicy) {
-      post_install_task_list->AddSetRegValueWorkItem(
-          root, clients_key, KEY_WOW64_32KEY, google_update::kRegChannelField,
-          install_details.channel(), true);
-    } else {
-      regular_update_work_items->AddDeleteRegValueWorkItem(
-          root, clients_key, KEY_WOW64_32KEY, google_update::kRegChannelField);
-    }
+    // Disable for Vivaldi standalone the downgrade and related functionality
+    // that depends on shared Windows Registry.
+    // TODO(igor@vivaldi.com): Figure out how to keep that functionality while
+    // allowing for multiple installations.
+    if (!vivaldi::IsInstallStandalone()) {
+      // clang-format off
+    // If a channel was specified by policy, update the "channel" registry value
+    // with it so that the browser knows which channel to use, otherwise delete
+    // whatever value that key holds.
+    AddChannelWorkItems(root, clients_key, regular_update_work_items.get());
+    AddFinalizeUpdateWorkItems(new_version, installer_state, installer_path,
+                               regular_update_work_items.get());
 
     // Since this was not an in-use-update, delete 'opv', 'cpv',
     // and 'cmd' keys.
@@ -749,6 +759,8 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
         google_update::kRegCriticalVersionField);
     regular_update_work_items->AddDeleteRegValueWorkItem(
         root, clients_key, KEY_WOW64_32KEY, google_update::kRegRenameCmdField);
+      // clang-format on
+    }
 
     // Only copy chrome_proxy.exe directly when chrome.exe isn't in use to avoid
     // different versions getting mixed up between the two binaries.
@@ -856,20 +868,37 @@ void AddInstallWorkItems(const InstallParams& install_params,
   // Copy installer in install directory
   AddInstallerCopyTasks(install_params, install_list);
 
-  // Do not create registry entries for Vivaldi standalone install
+  // Do not create registry entries for Vivaldi standalone install.
   if (!vivaldi::IsInstallStandalone()) {
     // clang-format off
   AddUninstallShortcutWorkItems(install_params, install_list);
-
-  AddVersionKeyWorkItems(install_params, install_list);
-
-  AddCleanupDeprecatedPerUserRegistrationsWorkItems(install_list);
-
-  AddActiveSetupWorkItems(installer_state, new_version, install_list);
     // clang-format on
   }
 
+  // For Vivaldi we always read the version string from the browser
+  // executable, not the registry.
+  if (!kVivaldi) {
+    // clang-format off
+  AddVersionKeyWorkItems(install_params, install_list);
+
+  AddCleanupDeprecatedPerUserRegistrationsWorkItems(install_list);
+    // clang-format on
+  }
+
+  if (!vivaldi::IsInstallStandalone()) {
+    // clang-format off
+  AddActiveSetupWorkItems(installer_state, new_version, install_list);
+
   AddOsUpgradeWorkItems(installer_state, setup_path, new_version, install_list);
+    // clang-format on
+  }
+
+  // Add Vivaldi items to upgrade the update notifier after everything else was
+  // copied. This way if the installer crashes before this point the older
+  // notifier will download and run the update again as it will still see a
+  // newer version available.
+  vivaldi::AddVivaldiSpecificWorkItems(install_params, install_list);
+
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   AddEnterpriseEnrollmentWorkItems(installer_state, setup_path, new_version,
                                    install_list);
@@ -890,8 +919,12 @@ void AddInstallWorkItems(const InstallParams& install_params,
   }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING
 
-  InstallUtil::AddUpdateDowngradeVersionItem(
-      installer_state.root_key(), current_version, new_version, install_list);
+  if (!vivaldi::IsInstallStandalone()) {
+    // clang-format off
+  AddUpdateDowngradeVersionItem(installer_state.root_key(), current_version,
+                                new_version, install_list);
+    // clang-format on
+  }
 
   AddUpdateBrandCodeWorkItem(installer_state, install_list);
 
@@ -1064,6 +1097,51 @@ void AddOsUpgradeWorkItems(const InstallerState& installer_state,
     cmd.set_is_auto_run_on_os_upgrade(true);
     cmd.AddWorkItems(installer_state.root_key(), cmd_key, install_list);
   }
+}
+
+void AddChannelWorkItems(HKEY root,
+                         const std::wstring& clients_key,
+                         WorkItemList* list) {
+  const auto& install_details = install_static::InstallDetails::Get();
+  if (install_details.channel_origin() ==
+      install_static::ChannelOrigin::kPolicy) {
+    // Use channel_override rather than simply channel so that extended stable
+    // is differentiated from regular.
+    list->AddSetRegValueWorkItem(root, clients_key, KEY_WOW64_32KEY,
+                                 google_update::kRegChannelField,
+                                 install_details.channel_override(),
+                                 /*overwrite=*/true);
+  } else {
+    list->AddDeleteRegValueWorkItem(root, clients_key, KEY_WOW64_32KEY,
+                                    google_update::kRegChannelField);
+  }
+}
+
+void AddFinalizeUpdateWorkItems(const base::Version& new_version,
+                                const InstallerState& installer_state,
+                                const base::FilePath& setup_path,
+                                WorkItemList* list) {
+  // Cleanup for breaking downgrade first in the post install to avoid
+  // overwriting any of the following post-install tasks.
+  AddDowngradeCleanupItems(new_version, list);
+
+  const std::wstring client_state_key = install_static::GetClientStateKeyPath();
+
+  // Adds the command that needs to be used in order to cleanup any breaking
+  // changes the installer of this version may have added.
+  list->AddSetRegValueWorkItem(
+      installer_state.root_key(), client_state_key, KEY_WOW64_32KEY,
+      google_update::kRegDowngradeCleanupCommandField,
+      GetDowngradeCleanupCommandWithPlaceholders(setup_path, installer_state),
+      true);
+
+  // Write the latest installer's breaking version so that future downgrades
+  // know if they need to do a clean install. This isn't done for in-use since
+  // it is done at the the executable's rename.
+  list->AddSetRegValueWorkItem(
+      installer_state.root_key(), client_state_key, KEY_WOW64_32KEY,
+      google_update::kRegCleanInstallRequiredForVersionBelowField,
+      kLastBreakingInstallerVersion, true);
 }
 
 }  // namespace installer

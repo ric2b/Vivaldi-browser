@@ -94,3 +94,65 @@ ls -l
 
 rm -rf
 ```
+
+### `process.sh` -- automate version addition from a list of urls
+
+```
+extract_version() {
+    local v="${1##*vivaldi-source_}"
+    echo "${v%.tar.xz}"
+}
+
+add() {
+    ###
+    previous_directory="$1"
+    file_url="$2"
+    file_name="${file_url##*/}"
+    version="$(extract_version "$file_url")"
+    echo "(PREVIOUS_DIRECTORY $previous_directory) (URL $file_url) (FILE $file_name) (VERSION $version)"
+    ###
+
+    (
+        set -xe
+        wget "$file_url"
+        tar --xz -xf "$file_name"
+        # echo $(($(ls vivaldi-source -la | awk '{ print "+"$2 }')))
+        # while echo $(date '+%H:%M:%S-') $(($(ls vivaldi-source -la | awk '{ print "+"$2 }'))); do sleep 1; done
+        mv vivaldi-source "v$version"
+        rm "$file_name"
+        
+        mv "$previous_directory"/{.git,README.md} "v$version" && rm -r "$previous_directory"
+        cd "v$version"
+        git add .
+        git commit -m "Added version $version" | grep -v chromium
+        git tag "$version"
+        cd ..
+    )
+}
+
+previous=w
+while IFS= read -r file_url; do
+    add "$previous" "$file_url"
+    previous="v$(extract_version "$file_url")"
+done
+cd "$previous"
+git push && git push --tags
+
+# Usage:
+#
+# git clone --depth=1 "https://${PERSONAL_ACCESS_TOKEN}@github.com/${ORGANISATION_NAME}/${REPOSITORY_NAME}" w
+# git clone --depth=1 "https://${PERSONAL_ACCESS_TOKEN}@github.com/ric2b/Vivaldi-browser" w
+#
+# git config --global user.name  "..."
+# git config --global user.email "..."
+#
+# vim list.txt
+# ...
+#
+# cat list.txt | bash process.sh
+#
+# git push
+# git push --tags
+#
+## process.sh expect the name of the cloned repo to be "w"
+

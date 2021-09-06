@@ -4,7 +4,6 @@
 
 #include "ui/latency/latency_tracker.h"
 
-#include <algorithm>
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
@@ -50,55 +49,43 @@ bool IsInertialScroll(const LatencyInfo& latency) {
   return latency.source_event_type() == ui::SourceEventType::INERTIAL;
 }
 
-bool LatencyTraceIdCompare(const LatencyInfo& i, const LatencyInfo& j) {
-  return i.trace_id() < j.trace_id();
-}
-
 }  // namespace
 
 LatencyTracker::LatencyTracker() = default;
 LatencyTracker::~LatencyTracker() = default;
 
 void LatencyTracker::OnGpuSwapBuffersCompleted(
-    const std::vector<ui::LatencyInfo>& latency_info,
+    std::vector<ui::LatencyInfo> latency_info,
     bool top_controls_visible_height_changed) {
-  // Sort latency_info as they can be in incorrect order.
-  std::vector<ui::LatencyInfo> latency_infos(latency_info);
-  std::sort(latency_infos.begin(), latency_infos.end(), LatencyTraceIdCompare);
-  for (const auto& latency : latency_infos)
-    OnGpuSwapBuffersCompleted(latency, top_controls_visible_height_changed);
-}
+  for (const auto& latency : latency_info) {
+    base::TimeTicks gpu_swap_end_timestamp;
+    if (!latency.FindLatency(INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT,
+                             &gpu_swap_end_timestamp)) {
+      continue;
+    }
 
-void LatencyTracker::OnGpuSwapBuffersCompleted(
-    const LatencyInfo& latency,
-    bool top_controls_visible_height_changed) {
-  base::TimeTicks gpu_swap_end_timestamp;
-  if (!latency.FindLatency(INPUT_EVENT_LATENCY_FRAME_SWAP_COMPONENT,
-                           &gpu_swap_end_timestamp)) {
-    return;
-  }
+    base::TimeTicks gpu_swap_begin_timestamp;
+    bool found_component = latency.FindLatency(
+        ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, &gpu_swap_begin_timestamp);
+    DCHECK_AND_RETURN_ON_FAIL(found_component);
 
-  base::TimeTicks gpu_swap_begin_timestamp;
-  bool found_component = latency.FindLatency(
-      ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, &gpu_swap_begin_timestamp);
-  DCHECK_AND_RETURN_ON_FAIL(found_component);
+    if (!latency.FindLatency(ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
+                             nullptr)) {
+      continue;
+    }
 
-  if (!latency.FindLatency(ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
-                           nullptr)) {
-    return;
-  }
-
-  ui::SourceEventType source_event_type = latency.source_event_type();
-  if (source_event_type == ui::SourceEventType::WHEEL ||
-      source_event_type == ui::SourceEventType::MOUSE ||
-      source_event_type == ui::SourceEventType::TOUCH ||
-      source_event_type == ui::SourceEventType::INERTIAL ||
-      source_event_type == ui::SourceEventType::KEY_PRESS ||
-      source_event_type == ui::SourceEventType::TOUCHPAD ||
-      source_event_type == ui::SourceEventType::SCROLLBAR) {
-    ComputeEndToEndLatencyHistograms(gpu_swap_begin_timestamp,
-                                     gpu_swap_end_timestamp, latency,
-                                     top_controls_visible_height_changed);
+    ui::SourceEventType source_event_type = latency.source_event_type();
+    if (source_event_type == ui::SourceEventType::WHEEL ||
+        source_event_type == ui::SourceEventType::MOUSE ||
+        source_event_type == ui::SourceEventType::TOUCH ||
+        source_event_type == ui::SourceEventType::INERTIAL ||
+        source_event_type == ui::SourceEventType::KEY_PRESS ||
+        source_event_type == ui::SourceEventType::TOUCHPAD ||
+        source_event_type == ui::SourceEventType::SCROLLBAR) {
+      ComputeEndToEndLatencyHistograms(gpu_swap_begin_timestamp,
+                                       gpu_swap_end_timestamp, latency,
+                                       top_controls_visible_height_changed);
+    }
   }
 }
 
@@ -147,6 +134,56 @@ void LatencyTracker::ReportUkmScrollLatency(
   builder.Record(ukm_recorder);
 }
 
+void LatencyTracker::ReportJankyFrame(base::TimeTicks original_timestamp,
+                                      base::TimeTicks gpu_swap_end_timestamp,
+                                      const ui::LatencyInfo& latency,
+                                      bool first_frame) {
+  CONFIRM_EVENT_TIMES_EXIST(original_timestamp, gpu_swap_end_timestamp);
+  base::TimeDelta dur = gpu_swap_end_timestamp - original_timestamp;
+
+  // When processing first frame in a scroll, we do not have any other frames to
+  // compare it to, and thus no way to detect the jank.
+  if (!first_frame) {
+    // TODO(185884172): Investigate using proper vsync interval.
+
+    // Assuming 60fps, each frame is rendered in (1/60) of a second.
+    // To see how many of those intervals fit into the real frame timing,
+    // we divide it on 1/60 which is the same thing as multiplying by 60.
+    double frames_taken = dur.InSecondsF() * 60;
+    double prev_frames_taken = prev_duration_.InSecondsF() * 60;
+
+    // For each GestureScroll update, we would like to report whether it was
+    // janky. However, in order to do that, we need to compare it both to the
+    // previous as well as to the next event. This condition means that no jank
+    // was reported for the previous frame (as compared to the one before that),
+    // so we need to compare it to the current one and report whether it's
+    // janky:
+    if (!prev_scroll_update_reported_) {
+      // The information about previous GestureScrollUpdate was not reported:
+      // check whether it's janky by comparing to the current frame and report.
+      UMA_HISTOGRAM_BOOLEAN("Event.Latency.ScrollJank",
+                            prev_frames_taken > frames_taken + 0.5);
+    }
+
+    // The current GestureScrollUpdate is janky compared to the previous one.
+    if (frames_taken > prev_frames_taken + 0.5) {
+      UMA_HISTOGRAM_BOOLEAN("Event.Latency.ScrollJank", true);
+
+      // Since we have reported the current event as janky, there is no need to
+      // report anything about it on the next iteration, as we would like to
+      // report every GestureScrollUpdate only once.
+      prev_scroll_update_reported_ = true;
+    } else {
+      // We do not have enough information to report whether the current event
+      // is janky, and need to compare it to the next one before reporting
+      // anything about it.
+      prev_scroll_update_reported_ = false;
+    }
+  }
+
+  prev_duration_ = dur;
+}
+
 void LatencyTracker::ComputeEndToEndLatencyHistograms(
     base::TimeTicks gpu_swap_begin_timestamp,
     base::TimeTicks gpu_swap_end_timestamp,
@@ -165,6 +202,7 @@ void LatencyTracker::ComputeEndToEndLatencyHistograms(
           &original_timestamp)) {
     DCHECK(input_modality == "Wheel" || input_modality == "Touch" ||
            input_modality == "Scrollbar");
+    ReportJankyFrame(original_timestamp, gpu_swap_end_timestamp, latency, true);
 
     // For inertial scrolling we don't separate the first event from the rest of
     // them.
@@ -203,6 +241,9 @@ void LatencyTracker::ComputeEndToEndLatencyHistograms(
                  &original_timestamp)) {
     DCHECK(input_modality == "Wheel" || input_modality == "Touch" ||
            input_modality == "Scrollbar");
+    ReportJankyFrame(original_timestamp, gpu_swap_end_timestamp, latency,
+                     false);
+
     // For inertial scrolling we don't separate the first event from the rest of
     // them.
     scroll_name = IsInertialScroll(latency) ? "ScrollInertial" : "ScrollUpdate";

@@ -85,7 +85,7 @@ void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(
 
   std::string app_name =
       web_app::GenerateApplicationNameFromAppId(extension->id());
-  base::string16 app_name_wide = base::UTF8ToWide(app_name);
+  std::wstring app_name_wide = base::UTF8ToWide(app_name);
   HWND hwnd = GetNativeAppWindowHWND();
   Profile* profile = window()->GetProfile();
   app_model_id_ = shell_integration::win::GetAppUserModelIdForApp(

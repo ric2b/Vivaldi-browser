@@ -52,10 +52,9 @@ class PrivacySandboxSettings : public KeyedService,
                          signin::IdentityManager* identity_manager);
   ~PrivacySandboxSettings() override;
 
-  // Returns true when the privacy sandbox settings feature is enabled, and at
-  // least one of the privacy sandbox APIs is also enabled. This function,
-  // rather than direct inspection of the feature itself, should be used to
-  // determine if the privacy sandbox is available to users.
+  // Returns true when the privacy sandbox settings feature is enabled. This
+  // function, rather than direct inspection of the feature itself, should be
+  // used to determine if the privacy sandbox is available to users.
   // TODO(crbug.com/1174572) Remove this when one API is fully launched.
   static bool PrivacySandboxSettingsFunctional();
 
@@ -86,6 +85,18 @@ class PrivacySandboxSettings : public KeyedService,
   bool ShouldSendConversionReport(const url::Origin& impression_origin,
                                   const url::Origin& conversion_origin,
                                   const url::Origin& reporting_origin) const;
+
+  // Determine whether |auction_party| can register an interest group, or sell /
+  // buy in an auction, on |top_frame_origin|.
+  bool IsFledgeAllowed(const url::Origin& top_frame_origin,
+                       const GURL& auction_party);
+
+  // Filter |auction_parties| down to those that may participate as a buyer for
+  // auctions run on |top_frame_origin|. Logically equivalent to calling
+  // IsFledgeAllowed() for each element of |auction_parties|.
+  std::vector<GURL> FilterFledgeAllowedParties(
+      const url::Origin& top_frame_origin,
+      const std::vector<GURL>& auction_parties);
 
   // Used by FLoC to determine whether the FLoC calculation can start in general
   // and whether the FLoC ID can be queried. If the sandbox experiment is

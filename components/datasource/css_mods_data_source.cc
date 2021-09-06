@@ -7,6 +7,7 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
@@ -66,7 +67,7 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
 #if defined(OS_POSIX)
         path.BaseName().value().c_str()
 #elif defined(OS_WIN)
-        base::UTF16ToUTF8(path.BaseName().value()).c_str()
+        base::WideToUTF8(path.BaseName().value()).c_str()
 #endif
       );
       data.append(import_statement);

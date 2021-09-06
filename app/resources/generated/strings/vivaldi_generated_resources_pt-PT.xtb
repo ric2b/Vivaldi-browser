@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Não permitir que os websites transfiram vários ficheiros automaticamente</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Quando clica na extensão</translation>
+<translation id="5059526285558225588">Escolher o que partilhar</translation>
 <translation id="5063480226653192405">Utilização</translation>
 <translation id="5116628073786783676">Gra&amp;var áudio como...</translation>
 <translation id="5143374789336132547">A extensão "<ph name="EXTENSION_NAME" />" alterou a página apresentada quando clica no botão Página inicial.</translation>
@@ -459,7 +460,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8823704566850948458">Sugerir palavra-passe…</translation>
 <translation id="8859174528519900719">Subestrutura: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Abrir ligação numa nova &amp;janela</translation>
-<translation id="8910146161325739742">Partilhar o seu ecrã</translation>
 <translation id="8915370057835397490">A carregar sugestão</translation>
 <translation id="8916476537757519021">Subestrutura da navegação anónima: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Memória JavaScript</translation>

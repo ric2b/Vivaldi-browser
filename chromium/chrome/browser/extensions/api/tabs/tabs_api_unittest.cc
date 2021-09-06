@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 
+#include <memory>
+
 #include "base/containers/contains.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
@@ -21,6 +23,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -116,7 +119,7 @@ void TabsApiUnitTest::SetUp() {
   ExtensionServiceTestBase::SetUp();
   InitializeEmptyExtensionService();
 
-  browser_window_.reset(new TestBrowserWindow());
+  browser_window_ = std::make_unique<TestBrowserWindow>();
   Browser::CreateParams params(profile(), true);
   params.type = Browser::TYPE_NORMAL;
   params.window = browser_window_.get();
@@ -129,6 +132,110 @@ void TabsApiUnitTest::TearDown() {
   browser_.reset();
   browser_window_.reset();
   ExtensionServiceTestBase::TearDown();
+}
+
+// Bug fix for crbug.com/1196309. Ensure that an extension can't update the tab
+// strip while a tab drag is in progress.
+TEST_F(TabsApiUnitTest, IsTabStripEditable) {
+  // Add a couple of web contents to the browser and get their tab IDs.
+  constexpr int kNumTabs = 2;
+  std::vector<int> tab_ids;
+  std::vector<content::WebContents*> web_contentses;
+  for (int i = 0; i < kNumTabs; ++i) {
+    std::unique_ptr<content::WebContents> contents(
+        content::WebContentsTester::CreateTestWebContents(profile(), nullptr));
+    CreateSessionServiceTabHelper(contents.get());
+    tab_ids.push_back(
+        sessions::SessionTabHelper::IdForTab(contents.get()).id());
+    web_contentses.push_back(contents.get());
+    browser()->tab_strip_model()->AppendWebContents(std::move(contents),
+                                                    /* foreground */ true);
+  }
+  ASSERT_EQ(kNumTabs, browser()->tab_strip_model()->count());
+
+  ASSERT_TRUE(browser_window()->IsTabStripEditable());
+  auto extension = CreateTabsExtension();
+
+  // Succeed while tab drag not in progress.
+  {
+    std::string args = base::StringPrintf("[{\"tabs\": [%d]}]", 0);
+    scoped_refptr<TabsHighlightFunction> function =
+        base::MakeRefCounted<TabsHighlightFunction>();
+    function->set_extension(extension);
+    ASSERT_TRUE(extension_function_test_utils::RunFunction(
+        function.get(), args, browser(), api_test_utils::NONE));
+  }
+
+  browser_window()->SetIsTabStripEditable(false);
+  ASSERT_FALSE(browser_window()->IsTabStripEditable());
+
+  // Succeed with updates that don't interact with the tab strip model.
+  {
+    const char* url = "https://example.com/";
+    std::string args =
+        base::StringPrintf("[%d, {\"url\": \"%s\"}]", tab_ids[0], url);
+    scoped_refptr<TabsUpdateFunction> function =
+        base::MakeRefCounted<TabsUpdateFunction>();
+    function->set_extension(extension);
+    std::unique_ptr<base::Value> value(
+        extension_function_test_utils::RunFunctionAndReturnSingleResult(
+            function.get(), args, browser(), api_test_utils::NONE));
+    EXPECT_TRUE(value && value->is_dict());
+    EXPECT_EQ(*value->FindStringKey("pendingUrl"), url);
+  }
+
+  // Bug fix for crbug.com/1198717. Error updating tabs while drag in progress.
+  {
+    std::string args =
+        base::StringPrintf("[%d, {\"highlighted\": true}]", tab_ids[0]);
+    auto function = base::MakeRefCounted<TabsUpdateFunction>();
+    function->set_extension(extension);
+    std::string error =
+        extension_function_test_utils::RunFunctionAndReturnError(
+            function.get(), args, browser());
+    EXPECT_EQ(tabs_constants::kTabStripNotEditableError, error);
+  }
+
+  // Error highlighting tab while drag in progress.
+  {
+    std::string args = base::StringPrintf("[{\"tabs\": [%d]}]", tab_ids[0]);
+    auto function = base::MakeRefCounted<TabsHighlightFunction>();
+    function->set_extension(extension);
+    std::string error =
+        extension_function_test_utils::RunFunctionAndReturnError(
+            function.get(), args, browser(), api_test_utils::NONE);
+    EXPECT_EQ(tabs_constants::kTabStripNotEditableError, error);
+  }
+
+  // Bug fix for crbug.com/1197146. Tab group modification during drag.
+  {
+    std::string args = base::StringPrintf("[{\"tabIds\": [%d]}]", tab_ids[0]);
+    scoped_refptr<TabsGroupFunction> function =
+        base::MakeRefCounted<TabsGroupFunction>();
+    function->set_extension(extension);
+    std::string error =
+        extension_function_test_utils::RunFunctionAndReturnError(
+            function.get(), args, browser());
+    EXPECT_EQ(tabs_constants::kTabStripNotEditableError, error);
+  }
+
+  // Bug fix for crbug.com/1197888. Disable query during any tab drag to ensure
+  // that the result matches the eventual state of the tab strip.
+  {
+    const char* args = "[{}]";
+    scoped_refptr<TabsQueryFunction> function =
+        base::MakeRefCounted<TabsQueryFunction>();
+    function->set_extension(extension);
+    std::string error =
+        extension_function_test_utils::RunFunctionAndReturnError(
+            function.get(), args, browser());
+    EXPECT_EQ(tabs_constants::kTabStripNotEditableQueryError, error);
+  }
+
+  // TODO(solomonkinard): Consider adding tests for drag cancellation.
+
+  while (!browser()->tab_strip_model()->empty())
+    browser()->tab_strip_model()->DetachWebContentsAt(0);
 }
 
 TEST_F(TabsApiUnitTest, QueryWithoutTabsPermission) {
@@ -1079,6 +1186,39 @@ TEST_F(TabsApiUnitTest, ScreenshotsRestricted) {
   EXPECT_CALL(mock_dlp_content_manager, IsScreenshotRestricted(testing::_))
       .Times(1)
       .WillOnce(testing::Return(true));
+
+  // Run the function and check result.
+  std::string error = extension_function_test_utils::RunFunctionAndReturnError(
+      function.get(), "[{}]", browser(), api_test_utils::NONE);
+  EXPECT_EQ(tabs_constants::kScreenshotsDisabledByDlp, error);
+
+  // Clean up.
+  browser()->tab_strip_model()->CloseAllTabs();
+}
+
+// Screenshot should return an error when disabled in user profile preferences.
+TEST_F(TabsApiUnitTest, ScreenshotDisabledInProfilePreferences) {
+  // Setup the function and extension.
+  scoped_refptr<const Extension> extension = ExtensionBuilder("Screenshot")
+                                                 .AddPermission("tabs")
+                                                 .AddPermission("<all_urls>")
+                                                 .Build();
+  auto function = base::MakeRefCounted<TabsCaptureVisibleTabFunction>();
+  function->set_extension(extension.get());
+
+  // Add a visible tab.
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
+  content::WebContentsTester* web_contents_tester =
+      content::WebContentsTester::For(web_contents.get());
+  const GURL kGoogle("http://www.google.com");
+  web_contents_tester->NavigateAndCommit(kGoogle);
+  browser()->tab_strip_model()->AppendWebContents(std::move(web_contents),
+                                                  /*foreground=*/true);
+
+  // Disable screenshot.
+  browser()->profile()->GetPrefs()->SetBoolean(prefs::kDisableScreenshots,
+                                               true);
 
   // Run the function and check result.
   std::string error = extension_function_test_utils::RunFunctionAndReturnError(

@@ -44,9 +44,9 @@ class AccountRow {
   AccountRow(const AccountRow& account);
 
   AccountID id;
-  base::string16 name;
+  std::u16string name;
   GURL url;
-  base::string16 username;
+  std::u16string username;
   int account_type;  // The type of account.
                      // 0: Local.
                      // 1: Vivaldi.net calendar.

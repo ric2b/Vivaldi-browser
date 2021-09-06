@@ -10,8 +10,8 @@ import android.util.AttributeSet;
 
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 
-import org.chromium.base.BuildConfig;
-
+// Vialdi
+import org.chromium.build.BuildConfig;
 /**
  * The Button used for switching tabs. Currently this class is only being used for the bottom
  * toolbar tab switcher button.
@@ -30,7 +30,7 @@ public class TabSwitcherButtonView extends ListMenuButton {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        if (BuildConfig.IS_VIVALDI) {
+        if (BuildConfig.IS_VIVALDI) { // Vivaldi
             mTabSwitcherButtonDrawable =
                     TabSwitcherDrawable.createTabSwitcherDrawableForBottomBar(getContext(),
                             false);

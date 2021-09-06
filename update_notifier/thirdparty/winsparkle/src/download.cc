@@ -26,10 +26,10 @@
 #include "update_notifier/thirdparty/winsparkle/src/download.h"
 
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
-#include "update_notifier/thirdparty/winsparkle/src/winsparkle-version.h"
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/version_info/version_info_values.h"
 
 #include <Windows.h>
 #include <wininet.h>
@@ -51,22 +51,11 @@ void CloseInetHandle(HINTERNET& handle) {
 }
 
 std::wstring MakeUserAgent() {
-  std::wstring userAgent = GetConfig().app_name + L"/" +
-                           GetConfig().app_version + L" WinSparkle/" +
-                           base::UTF8ToWide(WIN_SPARKLE_VERSION_STRING);
-
+  std::string userAgent = PRODUCT_NAME "/" VIVALDI_VERSION " WinSparkle/0.5.2";
 #ifdef _WIN64
-  userAgent += L" (Win64)";
-#else
-  // If we're running a 32bit process, check if we're on 64bit Windows OS:
-  BOOL wow64 = false;
-  IsWow64Process(GetCurrentProcess(), &wow64);
-  if (wow64) {
-    userAgent += L" (WOW64)";
-  }
+  userAgent += " (Win64)";
 #endif
-
-  return userAgent;
+  return base::UTF8ToWide(userAgent);
 }
 
 bool GetHttpNumericHeader(HINTERNET handle, DWORD whatToGet, DWORD& output) {

@@ -20,19 +20,13 @@ class WMFMediaPipelineFactory : public PlatformMediaPipelineFactory {
  public:
   std::unique_ptr<PlatformMediaPipeline> CreatePipeline() override {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-    if (!session_) {
-      session_ = InitializeMediaFoundation();
-      if (!session_) {
-        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " Failed to initialize Media Foundation ";
-        return nullptr;
-      }
+    if(!InitializeMediaFoundation()) {
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                  << " Failed to initialize Media Foundation ";
+      return nullptr;
     }
     return std::make_unique<WMFMediaPipeline>();
   }
-
- private:
-  MFSessionLifetime session_;
 };
 
 }  // namespace

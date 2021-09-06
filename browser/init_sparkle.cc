@@ -4,7 +4,6 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/vivaldi_switches.h"
@@ -71,37 +70,37 @@ const char kVivaldiAppCastUrl[] =
 #endif
 }  // anonymous namespace
 
-Config GetConfig(const base::CommandLine& command_line) {
-  Config config;
+GURL GetAppcastUrl() {
+  GURL url;
 #if defined(OS_WIN) || defined(OS_MAC)
-  config.appcast_url = GURL(kVivaldiAppCastUrl);
-  DCHECK(config.appcast_url.is_valid());
+  url = GURL(kVivaldiAppCastUrl);
+  DCHECK(url.is_valid());
 
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
   if (command_line.HasSwitch(switches::kVivaldiUpdateURL)) {
     // Ref. VB-7983: If the --vuu switch is specified,
     // show the update url in stdout
-    std::string update_url =
+    std::string url_string =
         command_line.GetSwitchValueASCII(switches::kVivaldiUpdateURL);
-    if (!update_url.empty()) {
-      GURL gurl(update_url);
-      if (gurl.is_valid()) {
-        // Use the supplied url for update.
-        config.appcast_url = std::move(gurl);
-        config.with_custom_url = true;
-        LOG(INFO) << "Vivaldi Update URL: " << config.appcast_url.spec();
+    if (!url_string.empty()) {
+      GURL commnad_line_url(url_string);
+      if (commnad_line_url.is_valid()) {
+        url = std::move(commnad_line_url);
+        LOG(INFO) << "Vivaldi Update URL: " << url.spec();
       }
     }
   }
 #endif
-  return config;
+  return url;
 }
 
 #if defined(OS_MAC)
-void Initialize(const base::CommandLine& command_line) {
+void Initialize() {
   static bool vivaldi_updater_initialized = false;
   if (!vivaldi_updater_initialized) {
-    Config config = GetConfig(command_line);
-    SparkleUtil::SetFeedURL(config.appcast_url.spec().c_str());
+    GURL url = GetAppcastUrl();
+    SparkleUtil::SetFeedURL(url.spec().c_str());
     vivaldi_updater_initialized = true;
   }
 }

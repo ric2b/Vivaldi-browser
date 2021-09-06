@@ -26,9 +26,9 @@
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_manager.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_names.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_notification_controller.h"
+#include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
@@ -171,11 +171,23 @@ void EasyUnlockServiceRegular::UseLoadedRemoteDevices(
   if (remote_devices.size() != 1u) {
     PA_LOG(ERROR) << "There should only be 1 Smart Lock host, but there are: "
                   << remote_devices.size();
+    SetProximityAuthDevices(GetAccountId(), multidevice::RemoteDeviceRefList(),
+                            base::nullopt);
     NOTREACHED();
+    return;
   }
 
-  SetProximityAuthDevices(GetAccountId(), remote_devices,
-                          device_sync_client_->GetLocalDeviceMetadata());
+  base::Optional<multidevice::RemoteDeviceRef> local_device =
+      device_sync_client_->GetLocalDeviceMetadata();
+  if (!local_device) {
+    PA_LOG(ERROR) << "EasyUnlockServiceRegular::" << __func__
+                  << ": Local device unexpectedly null.";
+    SetProximityAuthDevices(GetAccountId(), multidevice::RemoteDeviceRefList(),
+                            base::nullopt);
+    return;
+  }
+
+  SetProximityAuthDevices(GetAccountId(), remote_devices, local_device);
 
   // We need to store a copy of `local_and_remote_devices` in the TPM, so it can
   // be retrieved on the sign-in screen when a user session has not been started
@@ -186,8 +198,7 @@ void EasyUnlockServiceRegular::UseLoadedRemoteDevices(
   // be persisted in a dictionary.
   multidevice::RemoteDeviceRefList local_and_remote_devices;
   local_and_remote_devices.push_back(remote_devices[0]);
-  local_and_remote_devices.push_back(
-      *device_sync_client_->GetLocalDeviceMetadata());
+  local_and_remote_devices.push_back(*local_device);
 
   std::unique_ptr<base::ListValue> device_list(new base::ListValue());
   for (const auto& device : local_and_remote_devices) {

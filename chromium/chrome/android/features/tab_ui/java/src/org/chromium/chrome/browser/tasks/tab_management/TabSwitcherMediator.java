@@ -61,7 +61,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The Mediator that is responsible for resetting the tab grid or carousel based on visibility and
@@ -254,7 +254,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
                 // NOTE(david@vivaldi.com) Only ignore next selection when |currentTabModelFilter|
                 // has items, otherwise this could lead into the tab switcher not closing correctly.
-                if (ChromeApplication.isVivaldi())
+                if (ChromeApplicationImpl.isVivaldi())
                     mShouldIgnoreNextSelect = currentTabModelFilter.getCount() > 0;
 
                 mContainerViewModel.set(IS_INCOGNITO, currentTabModelFilter.isIncognito());

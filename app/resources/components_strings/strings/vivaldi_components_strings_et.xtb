@@ -67,6 +67,7 @@
     <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Lehe laadimiseks vajalike andmete taassaatmiseks vajuta uuestilaadimise nuppu.</translation>
 <translation id="3227137524299004712">Mikrofon</translation>
+<translation id="3234666976984236645">Sellel saidil tuvastatakse alati oluline sisu</translation>
 <translation id="3308738399950580893">reklaamid</translation>
 <translation id="3422472998109090673">Hostiga <ph name="HOST_NAME" /> ei saa praegu ühendust.</translation>
 <translation id="3427092606871434483">Lubatud (vaikimisi)</translation>
@@ -137,6 +138,7 @@
 <translation id="5689516760719285838">Asukoht</translation>
 <translation id="5710435578057952990">Selle veebisaidi identiteet pole verifitseeritud.</translation>
 <translation id="5778550464785688721">Täielik ligipääs MIDI-seadmetele</translation>
+<translation id="5785756445106461925">Peale selle sisaldab leht ka muid ebaturvalisi ressursse. Teistel on võimalik neid ressursse edastamise ajal näha ning ründajatel on võimalik neid muuta, et lehe välimust mõjutada.</translation>
 <translation id="5799902971440853357">Saiti <ph name="SITE" /> ei saa praegu külastada, sest selle saadetud turvatunnused on loetamatul kujul, nii et Vivaldil pole võimalik neid töödelda. Võrguvead ja -rünnakud on tavaliselt ajutised, nii et tõenäoliselt leht hiljem taas töötab.</translation>
 <translation id="5810442152076338065">Ühendus domeeniga <ph name="DOMAIN" /> on krüptitud iganenud šifrikomplektiga.</translation>
 <translation id="5838278095973806738">Sellel saidil ei tohiks kuhugi sisestada tundlikke andmeid (nt paroole või krediitkaardi numbreid), kuna ründajad võivad need varastada.</translation>
@@ -157,6 +159,7 @@
 <translation id="6321917430147971392">Kontrolli oma DNS-i seadeid</translation>
 <translation id="6328639280570009161">Proovi keelata võrguprognoos</translation>
 <translation id="6328786501058569169">See on petusait</translation>
+<translation id="6358450015545214790">Mida need tähendavad?</translation>
 <translation id="6433595998831338502">Host <ph name="HOST_NAME" /> keeldus ühendamast.</translation>
 <translation id="6447842834002726250">Küpsised</translation>
 <translation id="6451458296329894277">Vormi andmete taassisestamise kinnitus</translation>
@@ -220,8 +223,10 @@
 <translation id="9008201768610948239">Eira</translation>
 <translation id="9011424611726486705">Ava saidi seaded</translation>
 <translation id="9025348182339809926">(kehtetu)</translation>
+<translation id="9039213469156557790">Peale selle sisaldab leht ka muid ebaturvalisi ressursse. Teistel on võimalik neid ressursse edastamise ajal näha ning ründajatel on võimalik neid muuta, et lehe käitumist mõjutada.</translation>
 <translation id="9062620674789239642">See võidi teisaldada või kustutada, seda võidi muuta.</translation>
 <translation id="9069693763241529744">Laienduse poolt blokeeritud</translation>
+<translation id="910924428752220542">Vivaldi paroolid</translation>
 <translation id="9169664750068251925">Sellel saidil alati blokeeritud</translation>
 <translation id="9180553614777056266">reklaamiblokeerija</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> kasutab toetamata protokolli.</translation>

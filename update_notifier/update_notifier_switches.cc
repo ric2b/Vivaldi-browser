@@ -13,22 +13,11 @@ const char kInstallMode[] = "install-mode";
 
 const char kDisable[] = "disable";
 const char kEnable[] = "enable";
-const char kEnableIfUpgrade[] = "enable-if-upgrade";
 const char kIsEnabled[] = "is-enabled";
 const char kLaunchIfEnabled[] = "launch-if-enabled";
 const char kUnregister[] = "unregister";
 
 #if !defined(OFFICIAL_BUILD)
-// Set the the directory to look for the installer for delta updates.
-const char kDebugExeDir[] = "debug-exe-dir";
-
-// Override the language to use. Without value force to use the system language.
-const char kDebugLanguage[] = "debug-language";
-
-// Keep the process running even when automatic option to check for updates is
-// disabled.
-const char kDebugKeepRunning[] = "debug-keep-running";
-
 // The path of setup.exe to use to install a delta download.
 const char kDebugSetupExe[] = "debug-setup-exe";
 

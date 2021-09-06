@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Να μην επιτρέπεται σε κανέναν ιστότοπο να κατεβάζει αυτόματα πολλά αρχεία</translation>
 <translation id="5039804452771397117">Επιτρέπεται</translation>
 <translation id="5057110919553308744">Όταν κάνετε κλικ στην επέκταση</translation>
+<translation id="5059526285558225588">Επιλέξτε τι θα μοιράζεστε</translation>
 <translation id="5063480226653192405">Χρήση</translation>
 <translation id="5116628073786783676">Απο&amp;θήκευση Ήχου Ως...</translation>
 <translation id="5143374789336132547">Η επέκταση <ph name="EXTENSION_NAME" /> άλλαξε τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας.</translation>
@@ -423,7 +424,8 @@
 <translation id="8071432093239591881">Εκτύπωση ως εικόνα</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">Διαχείριση επεκτάσεων</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Λήψη σε εξέλιξη}other{Λήψεις σε εξέλιξη}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
+        =1 {Λήψη σε εξέλιξη} other {Λήψεις σε εξέλιξη}}</translation>
 <translation id="8230134520748321204">Αποθήκευση κωδικού πρόσβασης για <ph name="ORIGIN" />;</translation>
 <translation id="8261378640211443080">Αυτή η επέκταση δεν αναφέρεται στο <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> και ενδέχεται να έχει προστεθεί εν αγνοία σας.</translation>
 <translation id="8270242299912238708">Έγγραφα PDF</translation>
@@ -458,7 +460,6 @@
 <translation id="8823704566850948458">Πρόταση για κωδικό πρόσβασης...</translation>
 <translation id="8859174528519900719">Υποπλαίσιο: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Άνοιγμα συνδέσμου σε νέο παρά&amp;θυρο</translation>
-<translation id="8910146161325739742">Κοινή χρήση της οθόνης σας</translation>
 <translation id="8915370057835397490">Φόρτωση πρότασης</translation>
 <translation id="8916476537757519021">Υποπλαίσιο ανώνυμης περιήγησης: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Μνήμη JavaScript</translation>

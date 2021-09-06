@@ -277,7 +277,7 @@ void BrowsingDataSettingsFunction::SetDetails(
   permitted_dict->SetBoolean(data_type, is_permitted);
 }
 
-BrowsingDataRemoverFunction::BrowsingDataRemoverFunction() : observer_(this) {}
+BrowsingDataRemoverFunction::BrowsingDataRemoverFunction() = default;
 
 void BrowsingDataRemoverFunction::OnBrowsingDataRemoverDone(
     uint64_t failed_data_types) {
@@ -290,7 +290,7 @@ void BrowsingDataRemoverFunction::OnTaskFinished() {
   if (--pending_tasks_ > 0)
     return;
   synced_data_deletion_.reset();
-  observer_.RemoveAll();
+  observation_.Reset();
   Respond(NoArguments());
   Release();  // Balanced in StartRemoving.
 }
@@ -389,7 +389,7 @@ void BrowsingDataRemoverFunction::StartRemoving() {
   // that we're notified after removal) and call remove() with the arguments
   // we've generated above. We can use a raw pointer here, as the browsing data
   // remover is responsible for deleting itself once data removal is complete.
-  observer_.Add(remover);
+  observation_.Observe(remover);
 
   DCHECK_EQ(pending_tasks_, 0);
   pending_tasks_ = 1;

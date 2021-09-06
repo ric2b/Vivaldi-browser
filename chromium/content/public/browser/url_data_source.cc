@@ -123,6 +123,18 @@ std::string URLDataSource::GetContentSecurityPolicy(
   }
 }
 
+std::string URLDataSource::GetCrossOriginOpenerPolicy() {
+  return std::string();
+}
+
+std::string URLDataSource::GetCrossOriginEmbedderPolicy() {
+  return std::string();
+}
+
+std::string URLDataSource::GetCrossOriginResourcePolicy() {
+  return std::string();
+}
+
 bool URLDataSource::ShouldDenyXFrameOptions() {
   return true;
 }

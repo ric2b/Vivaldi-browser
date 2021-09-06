@@ -11,7 +11,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/path_service.h"
-#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/win/registry.h"
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
@@ -20,7 +20,7 @@
 
 namespace vivaldi {
 
-void VivaldiShortcutPinToTaskbar(const base::string16& app_id) {
+void VivaldiShortcutPinToTaskbar(const std::wstring& app_id) {
   const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
   const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
 
@@ -62,10 +62,10 @@ void StartPinShortcutToTaskbar(VivaldiBrowserWindow* window) {
   DCHECK(window);
   std::string app_name = web_app::GenerateApplicationNameFromAppId(
       window->extension()->id());
-  base::string16 app_name_wide;
+  std::wstring app_name_wide;
   app_name_wide.assign(app_name.begin(), app_name.end());
-  base::PostTask(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock()},
       base::Bind(&VivaldiShortcutPinToTaskbar, app_name_wide));
 }
 

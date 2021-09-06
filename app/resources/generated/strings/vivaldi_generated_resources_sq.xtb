@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Nuk autorizoj asnjë faqe për shkarkimin automatik të skedarëve në seri</translation>
 <translation id="5039804452771397117">Autorizoj</translation>
 <translation id="5057110919553308744">Kur klikoni shtesën</translation>
+<translation id="5059526285558225588">Zgjidhni se çfarë do të ndani</translation>
 <translation id="5063480226653192405">Shfrytëzimi</translation>
 <translation id="5116628073786783676">Regji&amp;stroj zërin në...</translation>
 <translation id="5143374789336132547">Shtesa <ph name="EXTENSION_NAME" /> ka ndryshuar faqen që hapet kur klikoni butonin e Shtëpisë.</translation>
@@ -459,7 +460,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8823704566850948458">Sugjeroj fjalëkalimin...</translation>
 <translation id="8859174528519900719">Kuadri dytësor: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Hap lidhjen në &amp;dritare të re</translation>
-<translation id="8910146161325739742">Ndaj ekranin</translation>
 <translation id="8915370057835397490">Në sugjerim e sipër</translation>
 <translation id="8916476537757519021">Kuadri dytësor privat: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Memoria JavaScript</translation>

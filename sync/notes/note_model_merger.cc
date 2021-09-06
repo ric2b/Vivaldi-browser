@@ -13,7 +13,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/engine/engine_util.h"
 #include "components/sync_bookmarks/switches.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
@@ -105,7 +104,7 @@ std::string LegacyCanonicalizedTitleFromSpecifics(
 bool NodeSemanticsMatch(const vivaldi::NoteNode* local_node,
                         const std::string& remote_canonicalized_title,
                         const GURL& remote_url,
-                        const base::string16& remote_content,
+                        const std::u16string& remote_content,
                         bool remote_is_separator,
                         bool remote_is_folder) {
   DCHECK(!remote_is_folder || !remote_is_separator);
@@ -802,7 +801,7 @@ size_t NoteModelMerger::FindMatchingChildBySemanticsStartingAt(
       remote_entity.specifics.notes().special_node_type() ==
       sync_pb::NotesSpecifics::SEPARATOR;
   GURL remote_url;
-  base::string16 remote_content;
+  std::u16string remote_content;
   if (!remote_entity.is_folder) {
     remote_url = GURL(remote_entity.specifics.notes().url());
     remote_content =

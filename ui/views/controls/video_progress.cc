@@ -91,17 +91,16 @@ void VideoProgress::ToggleVisibility(bool is_visible) {
   SetVisible(is_visible);
 }
 
-bool VideoProgress::GetStringFromPosition(
-    base::DurationFormatWidth time_format,
-    base::TimeDelta position,
-    base::string16& time) const {
+bool VideoProgress::GetStringFromPosition(base::DurationFormatWidth time_format,
+                                          base::TimeDelta position,
+                                          std::u16string& time) const {
   bool time_received = base::TimeDurationFormatWithSeconds(
     position, time_format, &time);
 
   return time_received;
 }
 
-base::string16 VideoProgress::StripHour(base::string16& time) const {
+std::u16string VideoProgress::StripHour(std::u16string& time) const {
   base::ReplaceFirstSubstringAfterOffset(
     &time, 0, base::ASCIIToUTF16("0:"), base::ASCIIToUTF16(""));
 
@@ -130,11 +129,11 @@ void VideoProgress::UpdateProgress(
           ? base::DURATION_WIDTH_NARROW
           : base::DURATION_WIDTH_NUMERIC;
 
-  base::string16 elapsed_time;
+  std::u16string elapsed_time;
   bool elapsed_time_received =
       GetStringFromPosition(time_format, current_position, elapsed_time);
 
-  base::string16 total_time;
+  std::u16string total_time;
   bool total_time_received =
       GetStringFromPosition(time_format, duration_delta_, total_time);
 
@@ -200,8 +199,8 @@ views::View* VideoProgress::GetTooltipHandlerForPoint(const gfx::Point& point) {
   return nullptr;
 }
 
-base::string16 VideoProgress::GetTooltipText(const gfx::Point& p) const {
-  base::string16 time;
+std::u16string VideoProgress::GetTooltipText(const gfx::Point& p) const {
+  std::u16string time;
   if (allows_click_ && progress_bar_->bounds().Contains(p)) {
     base::DurationFormatWidth time_format =
         duration_delta_ >= base::TimeDelta::FromDays(1)
@@ -229,11 +228,11 @@ void VideoProgress::SetBarProgress(double progress) {
   progress_bar_->SetValue(progress);
 }
 
-void VideoProgress::SetProgressTime(const base::string16& time) {
+void VideoProgress::SetProgressTime(const std::u16string& time) {
   progress_time_->SetText(time);
 }
 
-void VideoProgress::SetDuration(const base::string16& duration) {
+void VideoProgress::SetDuration(const std::u16string& duration) {
   duration_->SetText(duration);
 }
 

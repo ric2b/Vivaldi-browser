@@ -334,6 +334,9 @@ class PageLoadTimingMerger {
     mojom::PaintTiming* target_paint_timing = target_->paint_timing.get();
     MaybeUpdateTimeDelta(&target_paint_timing->first_paint,
                          navigation_start_offset, new_paint_timing.first_paint);
+    MaybeUpdateTimeDelta(&target_paint_timing->first_eligible_to_paint,
+                         navigation_start_offset,
+                         new_paint_timing.first_eligible_to_paint);
     MaybeUpdateTimeDelta(&target_paint_timing->first_image_paint,
                          navigation_start_offset,
                          new_paint_timing.first_image_paint);
@@ -566,10 +569,8 @@ void PageLoadMetricsUpdateDispatcher::DidFinishSubFrameNavigation(
       navigation_handle->GetFrameTreeNodeId(), navigation_delta));
 }
 
-void PageLoadMetricsUpdateDispatcher::OnFrameDeleted(
-    content::RenderFrameHost* render_frame_host) {
-  subframe_navigation_start_offset_.erase(
-      render_frame_host->GetFrameTreeNodeId());
+void PageLoadMetricsUpdateDispatcher::OnFrameDeleted(int frame_tree_node_id) {
+  subframe_navigation_start_offset_.erase(frame_tree_node_id);
 }
 
 void PageLoadMetricsUpdateDispatcher::UpdateSubFrameTiming(

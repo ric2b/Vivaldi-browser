@@ -17,8 +17,6 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/sandboxed_page_info.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace extensions {
 
 namespace keys = manifest_keys;
@@ -81,7 +79,7 @@ int GetValidatorOptions(Extension* extension) {
   return options;
 }
 
-base::string16 GetInvalidManifestKeyError(base::StringPiece key) {
+std::u16string GetInvalidManifestKeyError(base::StringPiece key) {
   return ErrorUtils::FormatErrorMessageUTF16(errors::kInvalidManifestKey, key);
 }
 
@@ -98,10 +96,7 @@ const char* GetDefaultExtensionPagesCSP(Extension* extension,
   if (secure_only)
     return kDefaultSecureCSP;
 
-  //todo Arnar@vivaldi.com. Based on which property should the Vivaldi app
-  // be identified on for relaxing special permissions.
-  if (extension->GetType() == Manifest::TYPE_PLATFORM_APP &&
-              !vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi())
+  if (extension->GetType() == Manifest::TYPE_PLATFORM_APP)
     return kDefaultPlatformAppContentSecurityPolicy;
 
   return kDefaultContentSecurityPolicy;
@@ -166,7 +161,7 @@ CSPHandler::CSPHandler() = default;
 
 CSPHandler::~CSPHandler() = default;
 
-bool CSPHandler::Parse(Extension* extension, base::string16* error) {
+bool CSPHandler::Parse(Extension* extension, std::u16string* error) {
   const char* key = extension->GetType() == Manifest::TYPE_PLATFORM_APP
                         ? keys::kPlatformAppContentSecurityPolicy
                         : keys::kContentSecurityPolicy;
@@ -203,7 +198,7 @@ bool CSPHandler::Parse(Extension* extension, base::string16* error) {
 }
 
 bool CSPHandler::ParseCSPDictionary(Extension* extension,
-                                    base::string16* error) {
+                                    std::u16string* error) {
   // keys::kSandboxedPagesCSP shouldn't be used when using
   // keys::kContentSecurityPolicy as a dictionary.
   if (extension->manifest()->HasPath(keys::kSandboxedPagesCSP)) {
@@ -224,7 +219,7 @@ bool CSPHandler::ParseCSPDictionary(Extension* extension,
 
 bool CSPHandler::ParseExtensionPagesCSP(
     Extension* extension,
-    base::string16* error,
+    std::u16string* error,
     base::StringPiece manifest_key,
     bool secure_only,
     const base::Value* content_security_policy) {
@@ -268,7 +263,7 @@ bool CSPHandler::ParseExtensionPagesCSP(
 }
 
 bool CSPHandler::ParseSandboxCSP(Extension* extension,
-                                 base::string16* error,
+                                 std::u16string* error,
                                  base::StringPiece manifest_key,
                                  const base::Value* sandbox_csp) {
   if (!sandbox_csp) {
@@ -303,7 +298,7 @@ bool CSPHandler::SetExtensionPagesCSP(Extension* extension,
                                       bool secure_only,
                                       std::string content_security_policy) {
   if (secure_only) {
-    base::string16 error;
+    std::u16string error;
     DCHECK(csp_validator::DoesCSPDisallowRemoteCode(content_security_policy,
                                                     manifest_key, &error));
   } else {

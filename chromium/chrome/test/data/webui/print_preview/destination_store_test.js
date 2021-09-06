@@ -53,6 +53,9 @@ suite(destination_store_test.suiteName, function() {
   /** @type {!NativeInitialSettings} */
   let initialSettings;
 
+  /** @type {!Array<string>} */
+  let userAccounts = [];
+
   /** @type {!Array<!LocalDestinationInfo>} */
   let localDestinations = [];
 
@@ -64,10 +67,6 @@ suite(destination_store_test.suiteName, function() {
 
   /** @type {number} */
   let numPrintersSelected = 0;
-
-  /** @type {boolean} */
-  const saveToDriveFlagEnabled =
-      isChromeOS && loadTimeData.getBoolean('printSaveToDrive');
 
   /** @override */
   setup(function() {
@@ -83,7 +82,6 @@ suite(destination_store_test.suiteName, function() {
     // </if>
 
     initialSettings = getDefaultInitialSettings();
-    initialSettings.userAccounts = [];
     localDestinations = [];
     destinations = getDestinations(localDestinations);
   });
@@ -113,10 +111,6 @@ suite(destination_store_test.suiteName, function() {
         DestinationStore.EventType.DESTINATION_SELECT, function() {
           numPrintersSelected++;
         });
-    destinationStore.setActiveUser(
-        initialSettings.userAccounts.length > 0 ?
-            initialSettings.userAccounts[0] :
-            '');
 
     // Initialize.
     const recentDestinations = initialSettings.serializedAppStateStr ?
@@ -130,6 +124,11 @@ suite(destination_store_test.suiteName, function() {
         initialSettings.printerName,
         initialSettings.serializedDefaultDestinationSelectionRulesStr,
         recentDestinations);
+
+    if (userAccounts) {
+      destinationStore.setActiveUser(userAccounts[0]);
+      destinationStore.reloadUserCookieBasedDestinations(userAccounts[0]);
+    }
     return opt_expectPrinterFailure ? Promise.resolve() : Promise.race([
       nativeLayer.whenCalled('getPrinterCapabilities'), whenCapabilitiesReady
     ]);
@@ -215,7 +214,7 @@ suite(destination_store_test.suiteName, function() {
           // The other local destinations should be in the store, but only one
           // should have been selected so there was only one preview request.
           const reportedPrinters = destinationStore.destinations();
-          const expectedPrinters = isChromeOS && saveToDriveFlagEnabled ? 7 : 6;
+          const expectedPrinters = isChromeOS ? 7 : 6;
           assertEquals(expectedPrinters, reportedPrinters.length);
           destinations.forEach((destination, index) => {
             assertTrue(reportedPrinters.some(p => p.id === destination.id));
@@ -350,7 +349,7 @@ suite(destination_store_test.suiteName, function() {
           version: 2,
           recentDestinations: [recentDestination],
         });
-        initialSettings.userAccounts = ['foo@chromium.org'];
+        userAccounts = ['foo@chromium.org'];
 
         return setInitialSettings(false).then(function(args) {
           assertEquals('FooDevice', args.destinationId);
@@ -372,7 +371,6 @@ suite(destination_store_test.suiteName, function() {
       recentDestinations: [recentDestination],
     });
 
-    DestinationStore.AUTO_SELECT_TIMEOUT = 0;
     return setInitialSettings(false)
         .then(function() {
           assertEquals(
@@ -396,10 +394,6 @@ suite(destination_store_test.suiteName, function() {
       assert(
           destination_store_test.TestNames.MultipleRecentDestinationsAccounts),
       function() {
-        if (isChromeOS && saveToDriveFlagEnabled) {
-          return;
-        }
-
         const account1 = 'foo@chromium.org';
         const account2 = 'bar@chromium.org';
         const driveUser1 = getGoogleDriveDestination(account1);
@@ -418,8 +412,7 @@ suite(destination_store_test.suiteName, function() {
           version: 2,
           recentDestinations: recentDestinations,
         });
-        initialSettings.userAccounts = [account1, account2];
-        initialSettings.syncAvailable = true;
+        userAccounts = [account1, account2];
 
         const waitForPrinterDone = () => {
           return eventToPromise(
@@ -570,8 +563,7 @@ suite(destination_store_test.suiteName, function() {
           version: 2,
           recentDestinations: recentDestinations,
         });
-        initialSettings.userAccounts = [account1, account2];
-        initialSettings.syncAvailable = true;
+        userAccounts = [account1, account2];
 
         const waitForPrinterDone = () => {
           return eventToPromise(

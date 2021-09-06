@@ -195,6 +195,19 @@ class PrefsSetTranslationDeclinedFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(PrefsSetTranslationDeclinedFunction);
 };
 
+class PrefsResetTranslationPrefsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("prefs.resetTranslationPrefs",
+                             PREFS_RESETTRANSLATIONPREFS)
+  PrefsResetTranslationPrefsFunction() = default;
+
+ private:
+  ~PrefsResetTranslationPrefsFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(PrefsResetTranslationPrefsFunction);
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_PREFS_PREFS_API_H_

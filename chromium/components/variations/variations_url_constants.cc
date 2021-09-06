@@ -4,15 +4,15 @@
 
 #include "components/variations/variations_url_constants.h"
 
-#include "sync/vivaldi_sync_urls.h"
+#include "app/vivaldi_constants.h"
 
 namespace variations {
 
 // Default server of Variations seed info.
 const char kDefaultServerUrl[] =
-    SYNC_URL("/chrome-variations/seed");
+    KNOWN_404("/chrome-variations/seed");
 
 const char kDefaultInsecureServerUrl[] =
-    "http://clientservices.googleapis.com/chrome-variations/seed";
+    KNOWN_404("/chrome-variations/seed");
 
 }  // namespace variations

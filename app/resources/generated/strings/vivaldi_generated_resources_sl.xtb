@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Nobenemu spletnemu mestu ne dovoli samodejnega prenosa več datotek</translation>
 <translation id="5039804452771397117">Dovoli</translation>
 <translation id="5057110919553308744">Ko kliknete razširitev</translation>
+<translation id="5059526285558225588">Izberite, kaj želite deliti</translation>
 <translation id="5063480226653192405">Uporaba</translation>
 <translation id="5116628073786783676">Shr&amp;ani zvočni zapis kot...</translation>
 <translation id="5143374789336132547">Zaradi razširitve <ph name="EXTENSION_NAME" /> se je spremenila stran, ki je prikazana, ko kliknete gumb za začetno stran.</translation>
@@ -458,7 +459,6 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="8823704566850948458">Predlagaj geslo…</translation>
 <translation id="8859174528519900719">Podokvir: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Odpri povezavo v novem &amp;oknu</translation>
-<translation id="8910146161325739742">Skupna raba zaslona</translation>
 <translation id="8915370057835397490">Nalaganje predloga</translation>
 <translation id="8916476537757519021">Podokvir za način brez beleženja zgodovine: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript pomnilnik</translation>

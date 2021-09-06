@@ -11,6 +11,7 @@
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/window_controller.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -37,7 +38,6 @@ namespace extensions {
 namespace {
 
 class VivaldiBrowserObserver : public BrowserListObserver,
-                               public content::NotificationObserver,
                                public TabStripModelObserver {
  public:
   VivaldiBrowserObserver();
@@ -61,11 +61,6 @@ class VivaldiBrowserObserver : public BrowserListObserver,
   void OnBrowserAdded(Browser* browser) override;
   void OnBrowserSetLastActive(Browser* browser) override;
 
-  // content::NotificationObserver implementation.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
   // TabStripModelObserver implementation
   void TabChangedAt(content::WebContents* contents,
                     int index,
@@ -74,8 +69,6 @@ class VivaldiBrowserObserver : public BrowserListObserver,
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
-
-  content::NotificationRegistrar registrar_;
 
   // Used to track windows being closed by profiles being closed, they should
   // not have any confirmation dialogs.
@@ -89,33 +82,6 @@ VivaldiBrowserObserver& VivaldiBrowserObserver::GetInstance() {
 
 VivaldiBrowserObserver::VivaldiBrowserObserver() {
   BrowserList::GetInstance()->AddObserver(this);
-
-  registrar_.Add(this, chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
-                 content::NotificationService::AllSources());
-}
-
-void VivaldiBrowserObserver::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED: {
-      // Browser close was cancelled so notify the client about this
-      // fact so it can re-enable chrome tab event.
-      Browser* browser = content::Source<Browser>(source).ptr();
-      DCHECK(browser);
-      ::vivaldi::BroadcastEvent(
-          vivaldi::window_private::OnWindowCloseCancelled::kEventName,
-          vivaldi::window_private::OnWindowCloseCancelled::Create(
-              browser->session_id().id()),
-          browser->profile());
-      break;
-    }
-    default: {
-      NOTREACHED();
-      break;
-    }
-  }
 }
 
 void VivaldiBrowserObserver::WindowsForProfileClosing(Profile* profile) {
@@ -165,10 +131,9 @@ void VivaldiBrowserObserver::OnBrowserRemoved(Browser* browser) {
   }
 
   int id = browser->session_id().id();
-  ::vivaldi::BroadcastEvent(
-      vivaldi::window_private::OnWindowClosed::kEventName,
-      vivaldi::window_private::OnWindowClosed::Create(id),
-      browser->profile());
+  ::vivaldi::BroadcastEvent(vivaldi::window_private::OnWindowClosed::kEventName,
+                            vivaldi::window_private::OnWindowClosed::Create(id),
+                            browser->profile());
 
   if (chrome::GetTotalBrowserCount() == 1) {
     for (Browser* browser : *BrowserList::GetInstance()) {
@@ -257,22 +222,6 @@ ui::WindowShowState ConvertToWindowShowState(
   return ui::SHOW_STATE_DEFAULT;
 }
 
-VivaldiBrowserWindow::WindowType ConvertToVivaldiWindowType(
-    vivaldi::window_private::WindowType type) {
-  switch (type) {
-    case vivaldi::window_private::WindowType::WINDOW_TYPE_NORMAL:
-      return VivaldiBrowserWindow::WindowType::NORMAL;
-    case vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS:
-      return VivaldiBrowserWindow::WindowType::SETTINGS;
-    case vivaldi::window_private::WindowType::WINDOW_TYPE_NONE:
-      return VivaldiBrowserWindow::WindowType::NORMAL;
-    case vivaldi::window_private::WindowType::WINDOW_TYPE_POPUP:
-      return VivaldiBrowserWindow::WindowType::NORMAL;
-  }
-  NOTREACHED();
-  return VivaldiBrowserWindow::WindowType::NORMAL;
-}
-
 }  // namespace
 
 ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
@@ -297,7 +246,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
     min_width = *params->options.bounds.min_width.get();
   }
   if (params->options.bounds.min_height.get()) {
-    min_height= *params->options.bounds.min_height.get();
+    min_height = *params->options.bounds.min_height.get();
   }
   bool incognito = false;
   bool focused = true;
@@ -329,6 +278,10 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   // App window specific parameters
   VivaldiBrowserWindowParams window_params;
 
+  if (params->type ==
+      vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS) {
+    window_params.settings_window = true;
+  }
   window_params.focused = focused;
   if (params->options.window_decoration.get()) {
     window_params.native_decorations = *params->options.window_decoration.get();
@@ -339,6 +292,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   window_params.content_bounds = bounds;
   window_params.minimum_size = gfx::Size(min_width, min_height);
   window_params.state = ui::SHOW_STATE_DEFAULT;
+  window_params.resource_relative_url = std::move(params->url);
+  window_params.creator_frame = render_frame_host();
 
   if (profile->IsGuestSession() && !incognito) {
     // Opening a new window from a guest session is only allowed for
@@ -349,7 +304,10 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
 
   VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
-  window->set_type(ConvertToVivaldiWindowType(params->type));
+  // Delay sending the response until the newly created window has finished its
+  // navigation or was closed during that process.
+  window->SetDidFinishNavigationCallback(
+      base::BindOnce(&WindowPrivateCreateFunction::OnAppUILoaded, this));
 
   Browser::CreateParams create_params(Browser::TYPE_POPUP, profile, false);
   create_params.initial_bounds = bounds;
@@ -357,32 +315,14 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   create_params.is_vivaldi = true;
   create_params.window = window;
   create_params.ext_data = ext_data;
-  window->SetBrowser(base::WrapUnique(Browser::Create(create_params)));
-
-  int window_id = window->browser()->session_id().id();
-
-  window->CreateWebContents(window_params, render_frame_host());
-
-  // This sets up the parameters used in the "create" binding that fills in the
-  // contentWindow parameter used in the create-callback.
-  content::RenderFrameHost* created_frame =
-      window->web_contents()->GetMainFrame();
-  base::DictionaryValue result;
-  result.SetInteger("frameId", created_frame->GetRoutingID());
-  result.SetInteger("windowId", window_id);
-  ResponseValue result_arg = OneArgument(std::move(result));
-  // Delay sending the response until the newly created window has finished its
-  // navigation or was closed during that process.
-  window->AddOnDidFinishFirstNavigationCallback(
-      base::BindOnce(&WindowPrivateCreateFunction::OnAppUILoaded, this,
-                     std::move(result_arg)));
-
-  window->LoadContents(params->url);
+  std::unique_ptr<Browser> browser(Browser::Create(create_params));
+  DCHECK(browser->window() == window);
+  window->CreateWebContents(std::move(browser), window_params);
 
   if (!tab_url.empty()) {
     content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
+                                     WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                     ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
     window->browser()->OpenURL(urlparams);
   }
 
@@ -391,6 +331,15 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   //  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
 
   return RespondLater();
+}
+
+void WindowPrivateCreateFunction::OnAppUILoaded(VivaldiBrowserWindow* window) {
+  namespace Results = vivaldi::window_private::Create::Results;
+
+  DCHECK(!did_respond());
+
+  int window_id = window ? window->id() : -1;
+  Respond(ArgumentList(Results::Create(window_id)));
 }
 
 ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
@@ -448,18 +397,6 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
       break;
   }
   return RespondNow(NoArguments());
-}
-
-void WindowPrivateCreateFunction::OnAppUILoaded(ResponseValue result_arg,
-                                                bool did_finish) {
-  DCHECK(!did_respond());
-
-  if (!did_finish) {
-    Respond(Error("window closed before app-doc loaded"));
-    return;
-  }
-
-  Respond(std::move(result_arg));
 }
 
 }  // namespace extensions

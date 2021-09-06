@@ -33,7 +33,6 @@ class VivVideoDecoder : public VideoDecoder {
   static void DestroyAsync(std::unique_ptr<VivVideoDecoder>);
 
   // media::VideoDecoder implementation.
-  std::string GetDisplayName() const override;
   VideoDecoderType GetDecoderType() const override;
   void Output(void* source_frame_refcon,
           OSStatus status,

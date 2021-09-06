@@ -210,10 +210,6 @@ ATAudioDecoder::ATAudioDecoder(
 
 ATAudioDecoder::~ATAudioDecoder() = default;
 
-std::string ATAudioDecoder::GetDisplayName() const {
-  return "ATAudioDecoder";
-}
-
 AudioDecoderType ATAudioDecoder::GetDecoderType() const {
   return AudioDecoderType::kDecrypting;
 }

@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.omnibox.status;
 
-import android.app.Activity;
 import android.content.res.Resources;
 import android.view.View;
 
@@ -14,27 +13,21 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
-import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
-import org.chromium.chrome.browser.page_info.ChromePermissionParamsListBuilderDelegate;
-import org.chromium.chrome.browser.page_info.PageInfoIPHController;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
-import org.chromium.components.page_info.PageInfoController;
+import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.permissions.PermissionDialogController;
 import org.chromium.components.search_engines.TemplateUrlService;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 
@@ -43,12 +36,22 @@ import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
  * verbose status text.
  */
 public class StatusCoordinator implements View.OnClickListener, LocationBarDataProvider.Observer {
+    /** Interface for displaying page info popup on omnibox. */
+    public interface PageInfoAction {
+        /**
+         * @param tab Tab containing the content to show page info for.
+         * @param highlightedPermission The ContentSettingsType to be highlighted on the page.
+         */
+        void show(Tab tab, @ContentSettingsType int highlightedPermission);
+    }
+
     // TODO(crbug.com/1109369): Do not store the StatusView
     private final StatusView mStatusView;
     private final StatusMediator mMediator;
     private final PropertyModel mModel;
     private final boolean mIsTablet;
-    private Supplier<ModalDialogManager> mModalDialogManagerSupplier;
+    private final Supplier<ModalDialogManager> mModalDialogManagerSupplier;
+    private final PageInfoAction mPageInfoAction;
     private LocationBarDataProvider mLocationBarDataProvider;
     private boolean mUrlHasFocus;
 
@@ -65,6 +68,7 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
      *         the default search engine.
      * @param searchEngineLogoUtils Utils to query the state of the search engine logos feature.
      * @param windowAndroid The {@link WindowAndroid} that is used by the owning {@link Activity}.
+     * @param pageInfoAction Displays page info popup.
      */
     public StatusCoordinator(boolean isTablet, StatusView statusView,
             UrlBarEditingTextStateProvider urlBarEditingTextStateProvider,
@@ -73,11 +77,12 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
             LocationBarDataProvider locationBarDataProvider,
             Supplier<TemplateUrlService> templateUrlServiceSupplier,
             SearchEngineLogoUtils searchEngineLogoUtils, Supplier<Profile> profileSupplier,
-            WindowAndroid windowAndroid) {
+            WindowAndroid windowAndroid, PageInfoAction pageInfoAction) {
         mIsTablet = isTablet;
         mStatusView = statusView;
         mModalDialogManagerSupplier = modalDialogManagerSupplier;
         mLocationBarDataProvider = locationBarDataProvider;
+        mPageInfoAction = pageInfoAction;
 
         mModel = new PropertyModel(StatusProperties.ALL_KEYS);
 
@@ -145,7 +150,7 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
     public void onNativeInitialized() {
         mMediator.updateLocationBarIcon(StatusView.IconTransitionType.CROSSFADE);
         mMediator.setStatusClickListener(this);
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             SearchEngineIconHandler.get().initialize();
             mMediator.updateSearchEngineStatusIcon(false, "");
             mMediator.getTemplateUrlServiceObserverHelper().onNativeInitialized();
@@ -253,7 +258,6 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
     private void updateVerboseStatusVisibility() {
         mMediator.setPageSecurityLevel(mLocationBarDataProvider.getSecurityLevel());
         mMediator.setPageIsOffline(mLocationBarDataProvider.isOfflinePage());
-        mMediator.setPageIsPreview(mLocationBarDataProvider.isPreview());
         mMediator.setPageIsPaintPreview(mLocationBarDataProvider.isPaintPreview());
     }
 
@@ -270,16 +274,7 @@ public class StatusCoordinator implements View.OnClickListener, LocationBarDataP
             return;
         }
 
-        Tab tab = mLocationBarDataProvider.getTab();
-        WebContents webContents = tab.getWebContents();
-        Activity activity = TabUtils.getActivity(tab);
-        PageInfoController.show(activity, webContents, null,
-                PageInfoController.OpenedFromSource.TOOLBAR,
-                new ChromePageInfoControllerDelegate(activity, webContents,
-                        mModalDialogManagerSupplier,
-                        /*offlinePageLoadUrlDelegate=*/
-                        new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab)),
-                new ChromePermissionParamsListBuilderDelegate(), mMediator.getLastPermission());
+        mPageInfoAction.show(mLocationBarDataProvider.getTab(), mMediator.getLastPermission());
         mMediator.onPageInfoOpened();
     }
 

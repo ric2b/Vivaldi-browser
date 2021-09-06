@@ -18,7 +18,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/sync/engine/engine_util.h"
 #include "components/sync/engine/entity_data.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync_bookmarks/switches.h"
@@ -33,6 +32,9 @@ namespace {
 // Maximum number of bytes to allow in a legacy canonicalized title (must
 // match sync's internal limits; see write_node.cc).
 const int kLegacyCanonicalizedTitleLimitBytes = 255;
+
+// The list of node titles which are reserved for use by the server.
+const char* const kForbiddenTitles[] = {"", ".", ".."};
 
 // This is an exact copy of the same code in note_update_preprocessing.cc.
 // TODO(crbug.com/1032052): Remove when client tags are adopted in
@@ -81,23 +83,34 @@ std::string InferGuidForLegacyNote(
   return guid;
 }
 
-base::string16 NodeTitleFromSpecifics(
+bool IsForbiddenTitleWithMaybeTrailingSpaces(const std::string& title) {
+  return base::Contains(
+      kForbiddenTitles,
+      base::TrimWhitespaceASCII(title, base::TrimPositions::TRIM_TRAILING));
+}
+
+std::u16string NodeTitleFromSpecifics(
     const sync_pb::NotesSpecifics& specifics) {
   if (specifics.has_full_title()) {
     return base::UTF8ToUTF16(specifics.full_title());
   }
-  std::string node_title;
-  syncer::ServerNameToSyncAPIName(specifics.legacy_canonicalized_title(),
-                                  &node_title);
+  std::string node_title = specifics.legacy_canonicalized_title();
+  if (base::EndsWith(node_title, " ") &&
+      IsForbiddenTitleWithMaybeTrailingSpaces(node_title)) {
+    // Legacy clients added an extra space to the real title, so remove it here.
+    // See also FullTitleToLegacyCanonicalizedTitle().
+    node_title.pop_back();
+  }
   return base::UTF8ToUTF16(node_title);
 }
 
 }  // namespace
 
 std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title) {
-  // Adjust the title for backward compatibility with legacy clients.
-  std::string specifics_title;
-  syncer::SyncAPINameToServerName(node_title, &specifics_title);
+  // Add an extra space for backward compatibility with legacy clients.
+  std::string specifics_title =
+      IsForbiddenTitleWithMaybeTrailingSpaces(node_title) ? node_title + " "
+                                                          : node_title;
   base::TruncateUTF8ToByteSize(
       specifics_title, kLegacyCanonicalizedTitleLimitBytes, &specifics_title);
   return specifics_title;
@@ -275,6 +288,20 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
   }
 
   return is_valid;
+}
+
+base::GUID InferGuidFromLegacyOriginatorId(
+    const std::string& originator_cache_guid,
+    const std::string& originator_client_item_id) {
+  // notes created around 2016, between [M44..M52) use an uppercase GUID
+  // as originator client item ID, so it requires case-insensitive parsing.
+  base::GUID guid = base::GUID::ParseCaseInsensitive(originator_client_item_id);
+  if (guid.is_valid()) {
+    return guid;
+  }
+
+  return base::GUID::ParseLowercase(InferGuidForLegacyNote(
+      originator_cache_guid, originator_client_item_id));
 }
 
 bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,

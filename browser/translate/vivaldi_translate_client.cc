@@ -52,6 +52,7 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/android_theme_resources.h"
+#include "chrome/browser/ui/android/infobars/translate_compact_infobar.h"
 #else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -265,7 +266,7 @@ bool VivaldiTranslateClient::ShowTranslateUI(
     const std::string& source_language,
     const std::string& target_language,
     translate::TranslateErrors::Type error_type,
-    bool triggered_from_menu) {
+    bool triggered_from_menu /* only set on android */) {
   DCHECK(web_contents());
   DCHECK(translate_manager_);
 
@@ -273,8 +274,7 @@ bool VivaldiTranslateClient::ShowTranslateUI(
     step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
   }
 
-// Translate uses a bubble UI on desktop and an infobar on Android (here)
-// and iOS (in ios/chrome/browser/translate/chrome_ios_translate_client.mm).
+// Translate uses a an infobar on Android (here)
 #if defined(OS_ANDROID)
   // Infobar UI.
   DCHECK(!TranslateService::IsTranslateBubbleEnabled());
@@ -285,31 +285,37 @@ bool VivaldiTranslateClient::ShowTranslateUI(
       web_contents()->GetBrowserContext()->IsOffTheRecord(), step,
       source_language, target_language, error_type, triggered_from_menu);
 #else
-#if 0
-  ShowTranslateBubbleResult result =
-      ShowBubble(step, source_language, target_language, error_type);
-  if (result != ShowTranslateBubbleResult::SUCCESS &&
-      step == translate::TRANSLATE_STEP_BEFORE_TRANSLATE) {
-    translate_manager_->RecordTranslateEvent(
-        BubbleResultToTranslateEvent(result));
-  }
-#endif
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::vivaldi::tabs_private::TranslateError api_error =
       ToVivaldiTranslateError(error_type);
   extensions::vivaldi::tabs_private::TranslateStep api_step =
       ToVivaldiTranslateStep(step);
 
+  bool auto_translate = false;
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      CreateTranslatePrefs(profile->GetPrefs());
+  if (!profile->IsOffTheRecord()) {
+    std::string source = translate::TranslateDownloadManager::GetLanguageCode(
+        GetLanguageState().original_language());
+    std::string auto_translate_language =
+        translate::TranslateManager::GetAutoTargetLanguage(
+            source, translate_prefs.get());
+    if (!auto_translate_language.empty()) {
+      auto_translate = true;
+    }
+  }
   int tab_id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
   if (tab_id) {
     ::vivaldi::BroadcastEvent(
         extensions::vivaldi::tabs_private::OnShowTranslationUI::kEventName,
         extensions::vivaldi::tabs_private::OnShowTranslationUI::Create(
-            tab_id, api_step, api_error, triggered_from_menu),
+            tab_id, api_step, api_error, auto_translate),
         web_contents()->GetBrowserContext());
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-#endif
+#endif  // OS_ANDROID
 
   return true;
 }
@@ -337,6 +343,11 @@ VivaldiTranslateClient::GetTranslateAcceptLanguages() {
 }
 
 #if defined(OS_ANDROID)
+std::unique_ptr<infobars::InfoBar> VivaldiTranslateClient::CreateInfoBar(
+    std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
+  return std::make_unique<TranslateCompactInfoBar>(std::move(delegate));
+}
+
 int VivaldiTranslateClient::GetInfobarIconID() const {
   return IDR_ANDROID_INFOBAR_TRANSLATE;
 }

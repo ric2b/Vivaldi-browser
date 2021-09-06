@@ -25,7 +25,7 @@ import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.components.embedder_support.util.UrlConstants;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Provides functionality when the user interacts with the Incognito NTP.
@@ -48,7 +48,8 @@ public class IncognitoNewTabPage
     private void showIncognitoLearnMore() {
         HelpAndFeedbackLauncherImpl.getInstance().show(mActivity,
                 mActivity.getString(R.string.help_context_incognito_learn_more),
-                Profile.getLastUsedRegularProfile().getPrimaryOTRProfile(), null);
+                Profile.getLastUsedRegularProfile().getPrimaryOTRProfile(/*createIfNeeded=*/true),
+                null);
     }
 
     /**
@@ -127,7 +128,7 @@ public class IncognitoNewTabPage
 
         TextView newTabIncognitoHeader =
                 mIncognitoNewTabPageView.findViewById(R.id.new_tab_incognito_title);
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         newTabIncognitoHeader.setText(R.string.new_tab_otr_title);
 
         // Work around https://crbug.com/943873 and https://crbug.com/963385 where default focus

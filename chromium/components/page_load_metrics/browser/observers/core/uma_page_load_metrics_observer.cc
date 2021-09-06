@@ -6,16 +6,21 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "build/chromeos_buildflags.h"
 #include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
+#include "components/page_load_metrics/browser/page_load_metrics_memory_tracker.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "content/public/common/process_type.h"
 #include "net/http/http_response_headers.h"
+#include "services/network/public/cpp/request_destination.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/base/page_transition_types.h"
@@ -251,6 +256,22 @@ const char kHistogramFirstContentfulPaintUserInitiated[] =
 const char kHistogramFirstMeaningfulPaintStatus[] =
     "PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintStatus";
 
+const char kHistogramCachedResourceLoadTimePrefix[] =
+    "PageLoad.Experimental.PageTiming.CachedResourceLoadTime.";
+const char kHistogramCommitSentToFirstSubresourceLoadStart[] =
+    "PageLoad.Experimental.PageTiming.CommitSentToFirstSubresourceLoadStart";
+const char kHistogramNavigationToFirstSubresourceLoadStart[] =
+    "PageLoad.Experimental.PageTiming.NavigationToFirstSubresourceLoadStart";
+const char kHistogramResourceLoadTimePrefix[] =
+    "PageLoad.Experimental.PageTiming.ResourceLoadTime.";
+const char kHistogramTotalSubresourceLoadTimeAtFirstContentfulPaint[] =
+    "PageLoad.Experimental.PageTiming."
+    "TotalSubresourceLoadTimeAtFirstContentfulPaint";
+const char kHistogramFirstEligibleToPaint[] =
+    "PageLoad.Experimental.PaintTiming.NavigationToFirstEligibleToPaint";
+const char kHistogramFirstEligibleToPaintToFirstPaint[] =
+    "PageLoad.Experimental.PaintTiming.FirstEligibleToPaintToFirstPaint";
+
 const char kHistogramFirstNonScrollInputAfterFirstPaint[] =
     "PageLoad.InputTiming.NavigationToFirstNonScroll.AfterPaint";
 const char kHistogramFirstScrollInputAfterFirstPaint[] =
@@ -366,6 +387,16 @@ const char kHistogramEarlyHintsFinalRequestStartToEarlyHints[] =
 const char kHistogramEarlyHintsEarlyHintsToFinalResponseStart[] =
     "PageLoad.Experimental.EarlyHints.EarlyHintsToFinalResponseStart";
 
+// V8 memory usage metrics.
+const char kHistogramMemoryMainframe[] =
+    "PageLoad.Experimental.Memory.Core.MainFrame.Max";
+const char kHistogramMemorySubframeAggregate[] =
+    "PageLoad.Experimental.Memory.Core.Subframe.Aggregate.Max";
+const char kHistogramMemoryTotal[] =
+    "PageLoad.Experimental.Memory.Core.Total.Max";
+const char kHistogramMemoryUpdateReceived[] =
+    "PageLoad.Experimental.Memory.Core.UpdateReceived";
+
 }  // namespace internal
 
 UmaPageLoadMetricsObserver::UmaPageLoadMetricsObserver()
@@ -445,6 +476,14 @@ void UmaPageLoadMetricsObserver::OnFirstPaintInPage(
           timing.paint_timing->first_paint, GetDelegate())) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstPaint,
                         timing.paint_timing->first_paint.value());
+    if (timing.paint_timing->first_eligible_to_paint) {
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstEligibleToPaint,
+                          timing.paint_timing->first_eligible_to_paint.value());
+      PAGE_LOAD_HISTOGRAM(
+          internal::kHistogramFirstEligibleToPaintToFirstPaint,
+          timing.paint_timing->first_paint.value() -
+              timing.paint_timing->first_eligible_to_paint.value());
+    }
 
     if (timing.input_to_navigation_start) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramInputToFirstPaint,
@@ -490,6 +529,10 @@ void UmaPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     PAGE_LOAD_HISTOGRAM(internal::kHistogramParseStartToFirstContentfulPaint,
                         timing.paint_timing->first_contentful_paint.value() -
                             timing.parse_timing->parse_start.value());
+
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramTotalSubresourceLoadTimeAtFirstContentfulPaint,
+        total_subresource_load_time_);
 
     // Emit a trace event to highlight a long navigation to first contentful
     // paint.
@@ -732,6 +775,7 @@ void UmaPageLoadMetricsObserver::OnComplete(
   RecordByteAndResourceHistograms(timing);
   RecordCpuUsageHistograms();
   RecordForegroundDurationHistograms(timing, base::TimeTicks());
+  RecordV8MemoryHistograms();
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
@@ -746,6 +790,7 @@ UmaPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
     RecordTimingHistograms(timing);
     RecordByteAndResourceHistograms(timing);
     RecordCpuUsageHistograms();
+    RecordV8MemoryHistograms();
   }
   RecordForegroundDurationHistograms(timing, base::TimeTicks::Now());
   return STOP_OBSERVING;
@@ -768,6 +813,58 @@ void UmaPageLoadMetricsObserver::OnFailedProvisionalLoad(
   // for failed provisional loads.
   RecordForegroundDurationHistograms(page_load_metrics::mojom::PageLoadTiming(),
                                      base::TimeTicks());
+}
+
+void UmaPageLoadMetricsObserver::OnLoadedResource(
+    const page_load_metrics::ExtraRequestCompleteInfo&
+        extra_request_complete_info) {
+  const net::LoadTimingInfo& timing_info =
+      *extra_request_complete_info.load_timing_info;
+  if (timing_info.receive_headers_end.is_null())
+    return;
+
+  base::StringPiece destination = network::RequestDestinationToString(
+      extra_request_complete_info.request_destination);
+  if (destination.empty())
+    destination = "empty";
+
+  base::TimeDelta delta =
+      timing_info.receive_headers_end - timing_info.request_start;
+  if (extra_request_complete_info.was_cached) {
+    base::UmaHistogramMediumTimes(
+        base::StrCat(
+            {internal::kHistogramCachedResourceLoadTimePrefix, destination}),
+        delta);
+  } else {
+    base::UmaHistogramMediumTimes(
+        base::StrCat({internal::kHistogramResourceLoadTimePrefix, destination}),
+        delta);
+  }
+
+  // Rest of the method only operates on subresource loads.
+  if (extra_request_complete_info.request_destination ==
+      network::mojom::RequestDestination::kDocument) {
+    return;
+  }
+
+  total_subresource_load_time_ += delta;
+
+  // Rest of the method only logs metrics for the first subresource load.
+  if (received_first_subresource_load_)
+    return;
+
+  received_first_subresource_load_ = true;
+  PAGE_LOAD_HISTOGRAM(
+      internal::kHistogramNavigationToFirstSubresourceLoadStart,
+      timing_info.request_start - GetDelegate().GetNavigationStart());
+
+  base::TimeTicks commit_sent_time =
+      navigation_handle_timing_.navigation_commit_sent_time;
+  if (!commit_sent_time.is_null()) {
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramCommitSentToFirstSubresourceLoadStart,
+        timing_info.request_start - commit_sent_time);
+  }
 }
 
 void UmaPageLoadMetricsObserver::OnUserInput(
@@ -1190,4 +1287,46 @@ void UmaPageLoadMetricsObserver::OnRestoreFromBackForwardCache(
   UMA_HISTOGRAM_ENUMERATION(
       internal::kHistogramBackForwardCacheEvent,
       internal::PageLoadBackForwardCacheEvent::kRestoreFromBackForwardCache);
+}
+
+void UmaPageLoadMetricsObserver::OnV8MemoryChanged(
+    const std::vector<page_load_metrics::MemoryUpdate>& memory_updates) {
+  DCHECK(base::FeatureList::IsEnabled(features::kV8PerFrameMemoryMonitoring));
+
+  for (const auto& update : memory_updates) {
+    memory_update_received_ = true;
+
+    content::RenderFrameHost* render_frame_host =
+        content::RenderFrameHost::FromID(update.routing_id);
+
+    if (!render_frame_host)
+      continue;
+
+    if (!render_frame_host->GetParent()) {
+      // |render_frame_host| is the main frame.
+      main_frame_memory_usage_.UpdateUsage(update.delta_bytes);
+    } else {
+      aggregate_subframe_memory_usage_.UpdateUsage(update.delta_bytes);
+    }
+
+    aggregate_total_memory_usage_.UpdateUsage(update.delta_bytes);
+  }
+}
+
+void UmaPageLoadMetricsObserver::RecordV8MemoryHistograms() {
+  if (base::FeatureList::IsEnabled(features::kV8PerFrameMemoryMonitoring)) {
+    PAGE_BYTES_HISTOGRAM(internal::kHistogramMemoryMainframe,
+                         main_frame_memory_usage_.max_bytes_used());
+    PAGE_BYTES_HISTOGRAM(internal::kHistogramMemorySubframeAggregate,
+                         aggregate_subframe_memory_usage_.max_bytes_used());
+    PAGE_BYTES_HISTOGRAM(internal::kHistogramMemoryTotal,
+                         aggregate_total_memory_usage_.max_bytes_used());
+    UMA_HISTOGRAM_BOOLEAN(internal::kHistogramMemoryUpdateReceived,
+                          memory_update_received_);
+  }
+}
+
+void UmaPageLoadMetricsObserver::MemoryUsage::UpdateUsage(int64_t delta_bytes) {
+  current_bytes_used_ += delta_bytes;
+  max_bytes_used_ = std::max(max_bytes_used_, current_bytes_used_);
 }

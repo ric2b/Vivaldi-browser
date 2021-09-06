@@ -8,10 +8,11 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 
+#include <string>
+
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "extensions/browser/extension_function_dispatcher.h"
-#include "extensions/common/view_type.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 
 namespace content {
   class WebContents;
@@ -27,7 +28,7 @@ class VivaldiExtensionHost
     : public extensions::ExtensionFunctionDispatcher::Delegate {
  public:
   VivaldiExtensionHost(content::BrowserContext* browser_context,
-                       extensions::ViewType host_type,
+                       extensions::mojom::ViewType host_type,
                        content::WebContents* webcontents);
 
   ~VivaldiExtensionHost() override;

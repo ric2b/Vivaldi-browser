@@ -254,6 +254,7 @@ bool MediaFoundationVideoEncodeAccelerator::Initialize(const Config& config,
     frame_rate_ = kMaxFrameRateNumerator / kMaxFrameRateDenominator;
   target_bitrate_ = config.initial_bitrate;
   bitstream_buffer_size_ = config.input_visible_size.GetArea();
+  gop_length_ = config.gop_length;
 
   if (!SetEncoderModes()) {
     DLOG(ERROR) << "Failed setting encoder parameters.";
@@ -432,9 +433,8 @@ uint32_t MediaFoundationVideoEncodeAccelerator::EnumerateHardwareEncoders(
     }
   }
 
-  if (!(session_ = InitializeMediaFoundation())) {
+  if (!InitializeMediaFoundation())
     return 0;
-  }
 
   uint32_t flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER;
   MFT_REGISTER_TYPE_INFO input_info;
@@ -668,6 +668,12 @@ bool MediaFoundationVideoEncodeAccelerator::SetEncoderModes() {
     if (!compatible_with_win7_) {
       RETURN_ON_HR_FAILURE(hr, "Couldn't set adaptive mode", false);
     }
+  }
+
+  if (gop_length_.has_value()) {
+    var.ulVal = gop_length_.value();
+    hr = codec_api_->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
+    RETURN_ON_HR_FAILURE(hr, "Couldn't set low keyframe interval", false);
   }
 
   if (!is_async_mft_ ||

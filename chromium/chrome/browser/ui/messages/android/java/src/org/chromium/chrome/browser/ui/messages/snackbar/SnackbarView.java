@@ -34,6 +34,9 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Visual representation of a snackbar. On phone it matches the width of the activity; on tablet it
  * has a fixed width and is anchored at the start-bottom corner of the current window.
@@ -298,6 +301,7 @@ public class SnackbarView {
                 mActionButtonView, getButtonTextAppearance(snackbar));
 
         int backgroundColor = getBackgroundColor(mContainerView, snackbar);
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi
         if (mIsTablet) {
             // On tablet, snackbars have rounded corners.
             mSnackbarView.setBackgroundResource(R.drawable.snackbar_background_tablet);
@@ -323,9 +327,14 @@ public class SnackbarView {
             mProfileImageView.setVisibility(View.GONE);
         }
 
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi
         if (mIsTablet) {
             mContainerView.findViewById(R.id.snackbar_shadow_left).setVisibility(View.VISIBLE);
             mContainerView.findViewById(R.id.snackbar_shadow_right).setVisibility(View.VISIBLE);
+        }
+
+        if (BuildConfig.IS_VIVALDI) { // Vivaldi
+            mContainerView.findViewById(R.id.snackbar_shadow_top).setVisibility(View.GONE);
         }
 
         return true;

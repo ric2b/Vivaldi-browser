@@ -71,7 +71,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
   bool IsItemForCommandIdDynamic(int command_id) const override;
-  base::string16 GetLabelForCommandId(int command_id) const override;
+  std::u16string GetLabelForCommandId(int command_id) const override;
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) const override;
   void VivaldiCommandIdHighlighted(int command_id) override;

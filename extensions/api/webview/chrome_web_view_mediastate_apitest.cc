@@ -9,6 +9,7 @@ using base::PathService;
 
 namespace extensions {
 
+ #if 0
 class VivaldiExtensionApiTest : public ExtensionApiTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -25,5 +26,6 @@ class VivaldiExtensionApiTest : public ExtensionApiTest {
 IN_PROC_BROWSER_TEST_F(VivaldiExtensionApiTest, DISABLED_WebviewMediastate) {
   ASSERT_TRUE(RunPlatformAppTest("webview/mediastate_event")) << message_;
 }
+#endif
 
 }  // namespace extensions

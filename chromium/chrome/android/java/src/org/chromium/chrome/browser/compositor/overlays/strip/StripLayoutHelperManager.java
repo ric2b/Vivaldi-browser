@@ -48,7 +48,7 @@ import java.util.List;
 
 //Vivaldi
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.toolbar.top.TabSwitcherActionMenuCoordinator;
@@ -123,14 +123,14 @@ public class StripLayoutHelperManager implements SceneOverlay {
         public void onDown(float x, float y, boolean fromMouse, int buttons) {
             // Note(david@vivaldi.com): We need to manipulate the y value of the event when the
             // toolbar is at the bottom in order to handle the input events.
-            if (ChromeApplication.isVivaldi()) y = getValueOfY(y);
+            if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
             if (mModelSelectorButton.onDown(x, y)) return;
             getActiveStripLayoutHelper().onDown(time(), x, y, fromMouse, buttons);
         }
 
         @Override
         public void onUpOrCancel() {
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 if (mModelSelectorButton.onUpOrCancel()) return;
             else
             if (mModelSelectorButton.onUpOrCancel() && mTabModelSelector != null) {
@@ -151,7 +151,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         @Override
         public void click(float x, float y, boolean fromMouse, int buttons) {
             // Vivaldi - consider the offset of y when the toolbar is at the bottom
-            if (ChromeApplication.isVivaldi()) y = getValueOfY(y);
+            if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
             long time = time();
             if (mModelSelectorButton.click(x, y)) {
                 mModelSelectorButton.handleClick(time);
@@ -168,7 +168,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         @Override
         public void onLongPress(float x, float y) {
             /** Vivaldi - Handling long click event on + button in tab strip **/
-            if (ChromeApplication.isVivaldi()) {
+            if (ChromeApplicationImpl.isVivaldi()) {
                 if (isNewTabButtonClicked(x, y)) {
                     showTabSwitcherPopupMenu();
                     return;
@@ -224,7 +224,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mModelSelectorButton.setIncognito(false);
         mModelSelectorButton.setVisible(false);
         // Pressed resources are the same as the unpressed resources.
-        if(ChromeApplication.isVivaldi()) {
+        if(ChromeApplicationImpl.isVivaldi()) {
             mModelSelectorButton.setResources(R.drawable.btn_tabstrip_new_tab_normal,
                     R.drawable.btn_tabstrip_new_tab_pressed, R.drawable.btn_tabstrip_new_tab_normal,
                     R.drawable.btn_tabstrip_new_tab_pressed);
@@ -240,7 +240,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
         // Note(david@vivaldi.com): In order to avoid a line between tab strip and address-bar we
         // apply a margin.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             final int tabStripMargin = 2;
             mHeight = (res.getDimension(R.dimen.tab_strip_height) + tabStripMargin)
                     / res.getDisplayMetrics().density;
@@ -278,7 +278,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     private void handleModelSelectorButtonClick() {
         // Note(david@vivaldi.com): We are abusing the |mModelSelectorButton| to create a new tab.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             createNewTab();
             return;
         }
@@ -353,7 +353,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         }
 
         // Note(david@vivaldi.com): We need to take the orientation into account.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mNormalHelper.onSizeChanged(mWidth, mHeight, visibleViewportOffsetY, orientation);
             mIncognitoHelper.onSizeChanged(mWidth, mHeight, visibleViewportOffsetY, orientation);
         } else {
@@ -644,7 +644,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         if (mTabModelSelector != null) {
             boolean isVisible = mTabModelSelector.getModel(true).getCount() != 0;
             // Note (david@vivaldi.com): No model selector button in Vivaldi.
-            if (!ChromeApplication.isVivaldi()) {
+            if (!ChromeApplicationImpl.isVivaldi()) {
             mModelSelectorButton.setVisible(isVisible);
             }
 
@@ -723,6 +723,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
     /** Vivaldi - Function to return value of y with correct offset value **/
     private float getValueOfY(float y) {
         if (!VivaldiUtils.isTopToolbarOn()) return mViewportHeightOffset - y;
-        return y - mActivity.getBrowserControlsManager().getTopControlsMinHeight();
+        float dpToPx = (1.f / mActivity.getResources().getDisplayMetrics().density);
+        return y - (mActivity.getBrowserControlsManager().getTopControlsMinHeight() *dpToPx);
     }
 }

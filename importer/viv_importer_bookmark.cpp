@@ -29,10 +29,10 @@ class OperaBookmarkReader : public OperaAdrFileReader {
   OperaBookmarkReader() {}
   ~OperaBookmarkReader() override {}
 
-  void AddBookmark(const std::vector<base::string16>& current_folder,
+  void AddBookmark(const std::vector<std::u16string>& current_folder,
                    const base::DictionaryValue& entries,
                    bool is_folder,
-                   base::string16* item_name = NULL);
+                   std::u16string* item_name = NULL);
 
   const std::vector<ImportedBookmarkEntry>& Bookmarks() const {
     return bookmarks;
@@ -43,7 +43,7 @@ class OperaBookmarkReader : public OperaAdrFileReader {
                    const base::DictionaryValue& entries) override;
 
  private:
-  std::vector<base::string16> current_folder;
+  std::vector<std::u16string> current_folder;
   std::vector<ImportedBookmarkEntry> bookmarks;
 
   DISALLOW_COPY_AND_ASSIGN(OperaBookmarkReader);
@@ -52,7 +52,7 @@ class OperaBookmarkReader : public OperaAdrFileReader {
 void OperaBookmarkReader::HandleEntry(const std::string& category,
                                       const base::DictionaryValue& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
-    base::string16 foldername;
+    std::u16string foldername;
     AddBookmark(current_folder, entries, true, &foldername);
     current_folder.push_back(foldername);
   } else if (base::LowerCaseEqualsASCII(category, "url")) {
@@ -63,20 +63,20 @@ void OperaBookmarkReader::HandleEntry(const std::string& category,
 }
 
 void OperaBookmarkReader::AddBookmark(
-    const std::vector<base::string16>& current_folder,
+    const std::vector<std::u16string>& current_folder,
     const base::DictionaryValue& entries,
     bool is_folder,
-    base::string16* item_name) {
+    std::u16string* item_name) {
   std::string temp;
-  base::string16 name;
-  base::string16 url;
+  std::u16string name;
+  std::u16string url;
   std::string nickname;
   std::string description;
 
   double created_time = 0;
 
   if (!is_folder && !entries.GetString("url", &url))
-    url = base::string16();
+    url = std::u16string();
 
   if (!entries.GetString("name", &name))
     name = url;
@@ -120,7 +120,7 @@ bool OperaImporter::ImportBookMarks(std::string* error) {
     return false;
   }
   if (!reader.Bookmarks().empty() && !cancelled()) {
-    const base::string16& first_folder_name =
+    const std::u16string& first_folder_name =
         bridge_->GetLocalizedString(IDS_BOOKMARK_GROUP_FROM_OPERA);
     bridge_->AddBookmarks(reader.Bookmarks(), first_folder_name);
   }

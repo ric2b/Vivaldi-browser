@@ -16,7 +16,7 @@ const int kNumSpeedDialToSend = 100;
 
 void ExternalProcessImporterBridge::AddNotes(
     const std::vector<ImportedNotesEntry>& notes,
-    const base::string16& first_folder_name) {
+    const std::u16string& first_folder_name) {
   observer_->OnNotesImportStart(first_folder_name, notes.size());
 
   // |notes_left| is required for the checks below as Windows has a

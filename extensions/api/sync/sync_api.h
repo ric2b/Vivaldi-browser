@@ -230,35 +230,6 @@ class SyncClearDataFunction : public ExtensionFunction {
 
   DISALLOW_COPY_AND_ASSIGN(SyncClearDataFunction);
 };
-
-class SyncUpdateNotificationClientStatusFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("sync.updateNotificationClientStatus",
-                             SYNC_UPDATE_NOTIFICATION_CLIENT_STATUS)
-  SyncUpdateNotificationClientStatusFunction() = default;
-
- private:
-  ~SyncUpdateNotificationClientStatusFunction() override = default;
-  // ExtensionFunction:
-  ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncUpdateNotificationClientStatusFunction);
-};
-
-class SyncNotificationReceivedFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("sync.notificationReceived",
-                             SYNC_NOTIFICATION_RECEIVED)
-  SyncNotificationReceivedFunction() = default;
-
- private:
-  ~SyncNotificationReceivedFunction() override = default;
-  // ExtensionFunction:
-  ResponseAction Run() override;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncNotificationReceivedFunction);
-};
-
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SYNC_SYNC_API_H_

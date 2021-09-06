@@ -91,7 +91,7 @@ std::unique_ptr<PermanentNoteNode> PermanentNoteNode::CreateNoteTrash(
 PermanentNoteNode::PermanentNoteNode(int64_t id,
                                      Type type,
                                      const base::GUID& guid,
-                                     const base::string16& title)
+                                     const std::u16string& title)
     : NoteNode(id, guid, type, true) {
   DCHECK(IsPermanentType(type));
   SetTitle(title);

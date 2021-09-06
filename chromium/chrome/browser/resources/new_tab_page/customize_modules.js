@@ -13,8 +13,9 @@ import {assert} from 'chrome://resources/js/assert.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {BrowserProxy} from './browser_proxy.js';
+import {ChromeCartProxy} from './modules/cart/chrome_cart_proxy.js';
 import {ModuleRegistry} from './modules/module_registry.js';
+import {NewTabPageProxy} from './new_tab_page_proxy.js';
 
 /** Element that lets the user configure modules settings. */
 class CustomizeModulesElement extends PolymerElement {
@@ -59,6 +60,28 @@ class CustomizeModulesElement extends PolymerElement {
         value: () => ModuleRegistry.getInstance().getDescriptors().map(
             d => ({name: d.name, id: d.id, checked: true, hidden: false})),
       },
+
+      /**
+       * @private {
+       *   !Object<{
+       *     enabled: boolean,
+       *     initiallyEnabled: boolean,
+       *   }>
+       * }
+       */
+      // Discount toggle is a workaround for crbug.com/1199465 and will be
+      // removed after module customization is better defined. Please avoid
+      // using similar pattern for other features.
+      discountToggle_: {
+        type: Object,
+        value: {enabled: false, initiallyEnabled: false},
+      },
+
+      /** @private */
+      discountToggleEligible_: {
+        type: Boolean,
+        value: false,
+      }
     };
   }
 
@@ -72,7 +95,7 @@ class CustomizeModulesElement extends PolymerElement {
   connectedCallback() {
     super.connectedCallback();
     this.setDisabledModulesListenerId_ =
-        BrowserProxy.getInstance()
+        NewTabPageProxy.getInstance()
             .callbackRouter.setDisabledModules.addListener((all, ids) => {
               this.show_ = !all;
               this.modules_.forEach(({id}, i) => {
@@ -82,13 +105,24 @@ class CustomizeModulesElement extends PolymerElement {
                 this.set(`modules_.${i}.disabled`, ids.includes(id));
               });
             });
-    BrowserProxy.getInstance().handler.updateDisabledModules();
+    NewTabPageProxy.getInstance().handler.updateDisabledModules();
+    this.set(
+        'discountToggleEligible_',
+        loadTimeData.getBoolean('ruleBasedDiscountEnabled'));
+    if (!this.discountToggleEligible_) {
+      return;
+    }
+    ChromeCartProxy.getInstance().handler.getDiscountEnabled().then(
+        ({enabled}) => {
+          this.set('discountToggle_.enabled', enabled);
+          this.discountToggle_.initiallyEnabled = enabled;
+        });
   }
 
   /** @override */
   disconnectedCallback() {
     super.disconnectedCallback();
-    BrowserProxy.getInstance().callbackRouter.removeListener(
+    NewTabPageProxy.getInstance().callbackRouter.removeListener(
         assert(this.setDisabledModulesListenerId_));
   }
 
@@ -106,7 +140,7 @@ class CustomizeModulesElement extends PolymerElement {
   }
 
   apply() {
-    const handler = BrowserProxy.getInstance().handler;
+    const handler = NewTabPageProxy.getInstance().handler;
     handler.setModulesVisible(this.show_);
     this.modules_
         .filter(({checked, initiallyChecked}) => checked !== initiallyChecked)
@@ -120,6 +154,15 @@ class CustomizeModulesElement extends PolymerElement {
           chrome.metricsPrivate.recordSparseHashable(base, id);
           chrome.metricsPrivate.recordSparseHashable(`${base}.Customize`, id);
         });
+    // Discount toggle is a workaround for crbug.com/1199465 and will be
+    // removed after module customization is better defined. Please avoid
+    // using similar pattern for other features.
+    if (this.discountToggleEligible_ &&
+        this.discountToggle_.enabled !==
+            this.discountToggle_.initiallyEnabled) {
+      ChromeCartProxy.getInstance().handler.setDiscountEnabled(
+          this.discountToggle_.enabled);
+    }
   }
 
   /**
@@ -150,6 +193,17 @@ class CustomizeModulesElement extends PolymerElement {
    */
   moduleToggleDisabled_() {
     return this.showManagedByPolicy_ || !this.show_;
+  }
+
+  /**
+   * @param {string} id
+   * @param {boolean} checked
+   * @param {boolean} eligible
+   * @return {boolean}
+   * @private
+   */
+  showDiscountToggle_(id, checked, eligible) {
+    return id === 'chrome_cart' && checked && eligible;
   }
 }
 

@@ -26,8 +26,8 @@ CalendarRow::~CalendarRow() {}
 
 CalendarRow::CalendarRow(CalendarID id,
                          AccountID account_id,
-                         base::string16 name,
-                         base::string16 description,
+                         std::u16string name,
+                         std::u16string description,
                          std::string ctag,
                          int orderindex,
                          std::string color,

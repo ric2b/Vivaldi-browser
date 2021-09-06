@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Tillåt inte att någon webbplats hämtar flera filer till datorn automatiskt</translation>
 <translation id="5039804452771397117">Tillåt</translation>
 <translation id="5057110919553308744">När du klickar på tillägget</translation>
+<translation id="5059526285558225588">Välj vad du vill dela</translation>
 <translation id="5063480226653192405">Förbrukning</translation>
 <translation id="5116628073786783676">S&amp;para ljud som...</translation>
 <translation id="5143374789336132547">Tillägget <ph name="EXTENSION_NAME" /> har ändrat vilken sida som visas när du klickar på knappen Startsida.</translation>
@@ -459,7 +460,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="8823704566850948458">Föreslå lösenord…</translation>
 <translation id="8859174528519900719">Underram: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Öppna länk i nytt f&amp;önster</translation>
-<translation id="8910146161325739742">Dela skärmen</translation>
 <translation id="8915370057835397490">Läser in förslag</translation>
 <translation id="8916476537757519021">Underram i privatläge: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript-minne</translation>

@@ -37,7 +37,7 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
 
   static UpdateNotifierManager& GetInstance();
 
-  ExitCode RunNotifier(base::FilePath exe_dir);
+  ExitCode RunNotifier();
 
   void StartUpdateCheck();
   static bool IsSilentDownload();
@@ -68,7 +68,7 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   void LaunchInstaller();
   void FinishCheck();
 
-  void ShowUpdateNotification(const std::string& version);
+  void ShowUpdateNotification(const base::Version& version);
 
   // winsparkle::UIDelegate implementation.
 
@@ -76,9 +76,6 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   void WinsparkleLaunchInstaller() override;
   void WinsparkleOnUIClose() override;
 
-  // The directory containing the notifier executable. Normally it is deduced
-  // from the path of the current executable, but it can be altered for
-  // debugging.
   base::FilePath exe_dir_;
 
   std::unique_ptr<UpdateNotifierWindow> update_notifier_window_;

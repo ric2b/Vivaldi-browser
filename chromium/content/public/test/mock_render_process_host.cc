@@ -145,6 +145,7 @@ void MockRenderProcessHost::RemoveObserver(
 void MockRenderProcessHost::ShutdownForBadMessage(
     CrashReportMode crash_report_mode) {
   ++bad_msg_count_;
+  shutdown_requested_ = true;
 }
 
 void MockRenderProcessHost::UpdateClientPriority(PriorityClient* client) {}
@@ -191,8 +192,7 @@ StoragePartition* MockRenderProcessHost::GetStoragePartition() {
   return BrowserContext::GetDefaultStoragePartition(browser_context_);
 }
 
-void MockRenderProcessHost::AddWord(const base::string16& word) {
-}
+void MockRenderProcessHost::AddWord(const std::u16string& word) {}
 
 bool MockRenderProcessHost::Shutdown(int exit_code) {
   shutdown_requested_ = true;
@@ -466,6 +466,12 @@ MockRenderProcessHost::GetInfoForBrowserContextDestructionCrashReporting() {
   return std::string();
 }
 
+void MockRenderProcessHost::WriteIntoTracedValue(
+    perfetto::TracedValue context) {
+  auto dict = std::move(context).WriteDictionary();
+  dict.Add("id", GetID());
+}
+
 void MockRenderProcessHost::FilterURL(bool empty_allowed, GURL* url) {
   RenderProcessHostImpl::FilterURL(this, empty_allowed, url);
 }
@@ -482,10 +488,6 @@ MockRenderProcessHost::StartRtpDump(bool incoming,
                                     WebRtcRtpPacketCallback packet_callback) {
   return base::NullCallback();
 }
-
-void MockRenderProcessHost::EnableWebRtcEventLogOutput(int lid,
-                                                       int output_period_ms) {}
-void MockRenderProcessHost::DisableWebRtcEventLogOutput(int lid) {}
 
 bool MockRenderProcessHost::OnMessageReceived(const IPC::Message& msg) {
   IPC::Listener* listener = listeners_.Lookup(msg.routing_id());

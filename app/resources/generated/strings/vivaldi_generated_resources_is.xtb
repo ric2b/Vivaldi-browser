@@ -199,7 +199,7 @@
 <translation id="4100839878934973028">Annað forrit á tölvunni þinni bætti við appi sem gæti breytt virkni Vivaldi.</translation>
 <translation id="4109898769411476438">Lokaðu vafra áður en þú flytur inn (gögn)</translation>
 <translation id="4115080753528843955">Sumar efnisveitur nota sérstök auðkenni til þess að heimila aðgang að vörðu efni</translation>
-<translation id="4130207949184424187">Þessi viðbót hefur breytt hvaða síða er sýnd þegar þú leitar í netfangasvæði í veffangsstiku.</translation>
+<translation id="4130207949184424187">Þessi viðbót hefur breytt hvaða síða er sýnd þegar þú leitar í veffangasvæði.</translation>
 <translation id="4131410914670010031">Svarthvítt</translation>
 <translation id="4176463684765177261">Óvirkt</translation>
 <translation id="4200983522494130825">Nýr &amp;flipi</translation>
@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Ekki leyfa neinni síðu að hlaða niður mörgum skrám sjálfkrafa</translation>
 <translation id="5039804452771397117">Leyfa</translation>
 <translation id="5057110919553308744">Þegar þú smellir á viðbót</translation>
+<translation id="5059526285558225588">Veldu hverju þú deilir</translation>
 <translation id="5063480226653192405">Notkun</translation>
 <translation id="5116628073786783676">Vi&amp;sta hljóð sem...</translation>
 <translation id="5143374789336132547">Viðbót "<ph name="EXTENSION_NAME" />" hefur breytt hvaða síða er sýnd þegar þú ýtir á heimasíðuhnapp.</translation>
@@ -258,7 +259,7 @@
 <translation id="5301954838959518834">Allt í lagi, náði því</translation>
 <translation id="5317780077021120954">Vista</translation>
 <translation id="5334142896108694079">Skyndiminni skriptu</translation>
-<translation id="5355926466126177564">Viðbótin "<ph name="EXTENSION_NAME" />" hefur breytt hvaða síða er sýnd þegar leitað er í netfangasvæði í veffangastiku.</translation>
+<translation id="5355926466126177564">Viðbótin "<ph name="EXTENSION_NAME" />" hefur breytt hvaða síða er sýnd þegar leitað er í veffangasvæði.</translation>
 <translation id="5360150013186312835">Sýna í stiku</translation>
 <translation id="5362741141255528695">Veldu einkalyklaskrá.</translation>
 <translation id="536638840841140142">Engin</translation>
@@ -346,7 +347,7 @@
 <translation id="6812841287760418429">Geyma breytingar</translation>
 <translation id="6817174620439930047">Spyrja þegar síða vill nota kerfistilkynningar fyrir aðgang að MIDI tækjum (mælt með)</translation>
 <translation id="682123305478866682">Varpa borðtölvu</translation>
-<translation id="6824564591481349393">Afrita &amp;netfang</translation>
+<translation id="6824564591481349393">Afrita n&amp;etfang</translation>
 <translation id="6840155290835956714">Spyrja áður en sent er</translation>
 <translation id="6886871292305414135">Opna hlekk í nýjum &amp;flipa</translation>
 <translation id="6892812721183419409">Opna hlekk sem <ph name="USER" /></translation>
@@ -430,7 +431,7 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8270242299912238708">PDF skjöl</translation>
 <translation id="8339059274628563283"><ph name="SITE" /> staðvistuð gögn</translation>
 <translation id="8351419472474436977">Þessi viðbót hefur tekið yfir stjórn á vefsels (proxy) stillingum þínum sem þýðir að viðbótin getur breytt, brotið eða hlerað allt sem að þú gerir þetta þú ert nettengur. Ef þú ert ekki viss um afhverju þessi breyting átti sér stað þá viltu líklega ekki hafa hana.</translation>
-<translation id="8382913212082956454">Afrita &amp;netfang</translation>
+<translation id="8382913212082956454">Afrita n&amp;etfang</translation>
 <translation id="8413385045638830869">Spurðu fyrst (mælt með)</translation>
 <translation id="8434480141477525001">NaCl aflúsunargátt</translation>
 <translation id="8449008133205184768">Líma og halda útliti</translation>
@@ -459,7 +460,6 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="8823704566850948458">Stinga upp á lykilorði...</translation>
 <translation id="8859174528519900719">Undirgluggi: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Opna hlekk í nýjum &amp;glugga</translation>
-<translation id="8910146161325739742">Deila skjánum þínum</translation>
 <translation id="8915370057835397490">Hleð tillögum</translation>
 <translation id="8916476537757519021">Einkaundirgluggi: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript minni</translation>

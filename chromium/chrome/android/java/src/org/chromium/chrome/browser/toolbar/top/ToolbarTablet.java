@@ -56,7 +56,7 @@ import org.chromium.ui.widget.Toast;
 import java.util.ArrayList;
 import java.util.Collection;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 
 import org.vivaldi.browser.panels.PanelUtils;
@@ -129,7 +129,7 @@ public class ToolbarTablet extends ToolbarLayout
         mForwardButton = findViewById(R.id.forward_button);
         mReloadButton = findViewById(R.id.refresh_button);
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mReloadButton.setVisibility(View.GONE);
             mPanelButton = findViewById(R.id.panel_button);
             mPanelButton.setOnClickListener(this);
@@ -171,7 +171,7 @@ public class ToolbarTablet extends ToolbarLayout
         // changes.
         mShouldAnimateButtonVisibilityChange = false;
         mToolbarButtonsVisible = true;
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mToolbarButtons = new ImageButton[]{mBackButton, mForwardButton};
         else
         mToolbarButtons = new ImageButton[] {mBackButton, mForwardButton, mReloadButton};
@@ -253,7 +253,7 @@ public class ToolbarTablet extends ToolbarLayout
             }
         });
 
-        if (!ChromeApplication.isVivaldi()) {
+        if (!ChromeApplicationImpl.isVivaldi()) {
         mReloadButton.setOnClickListener(this);
         mReloadButton.setOnLongClickListener(this);
         mReloadButton.setOnKeyListener(new KeyboardNavigationListener() {
@@ -360,7 +360,7 @@ public class ToolbarTablet extends ToolbarLayout
         }
         /** Vivaldi **/
         else if (mPanelButton == v) {
-            PanelUtils.showPanel(null, false);
+            PanelUtils.showPanel(mActivity, false);
         } else if (mModelSelectorButton == v) {
             if(!mModelSelectorButton.isShown()) return;
             mActivity.getTabModelSelector().selectModel(
@@ -389,7 +389,7 @@ public class ToolbarTablet extends ToolbarLayout
 
     private void updateSwitcherButtonVisibility(boolean enabled) {
         // Note(david@vivaldi.com): We always show the tab switcher button on tablet.
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mAccessibilitySwitcherButton.setVisibility(View.VISIBLE);
         else
         mAccessibilitySwitcherButton.setVisibility(
@@ -491,7 +491,7 @@ public class ToolbarTablet extends ToolbarLayout
 
     @Override
     void updateReloadButtonVisibility(boolean isReloading) {
-        if (ChromeApplication.isVivaldi()) return;
+        if (ChromeApplicationImpl.isVivaldi()) return;
         if (isReloading) {
             mReloadButton.getDrawable().setLevel(
                     getResources().getInteger(R.integer.reload_button_level_stop));

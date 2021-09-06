@@ -21,7 +21,7 @@ namespace {
 void FillEmailRow(sql::Statement& statement, EmailAddressRow* email_row) {
   int email_address_id = statement.ColumnInt(0);
   int contact_id = statement.ColumnInt(1);
-  base::string16 email = statement.ColumnString16(2);
+  std::u16string email = statement.ColumnString16(2);
   std::string type = statement.ColumnString(3);
   bool favorite = statement.ColumnInt(4) == 1 ? true : false;
   bool obsolete = statement.ColumnInt(5) == 1 ? true : false;

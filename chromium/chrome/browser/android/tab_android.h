@@ -9,13 +9,13 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "base/strings/string16.h"
 #include "base/supports_user_data.h"
 #include "chrome/browser/sync/glue/synced_tab_delegate_android.h"
 #include "chrome/browser/tab/web_contents_state.h"
@@ -37,6 +37,11 @@ class TabWebContentsDelegateAndroid;
 namespace content {
 class DevToolsAgentHost;
 class WebContents;
+}
+
+// Vivaldi
+namespace autofill {
+class AutofillProvider;
 }
 
 class TabAndroid : public base::SupportsUserData {
@@ -92,7 +97,7 @@ class TabAndroid : public base::SupportsUserData {
   bool IsNativePage() const;
 
   // Return the tab title.
-  base::string16 GetTitle() const;
+  std::u16string GetTitle() const;
 
   // Return the tab url.
   GURL GetURL() const;
@@ -225,6 +230,9 @@ class TabAndroid : public base::SupportsUserData {
 
   base::ObserverList<Observer> observers_;
 
+  // Vivaldi
+  std::unique_ptr<autofill::AutofillProvider> autofill_provider_;
+
   DISALLOW_COPY_AND_ASSIGN(TabAndroid);
 
  public:
@@ -234,6 +242,11 @@ class TabAndroid : public base::SupportsUserData {
       const base::android::JavaParamRef<jobject>& j_new_web_contents,
       jboolean did_start_load,
       jboolean did_finish_load);
+
+  // Vivaldi: Init the autofill provider.
+  void OnAutofillProviderChanged(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& autofill_provider);
 };
 
 #endif  // CHROME_BROWSER_ANDROID_TAB_ANDROID_H_

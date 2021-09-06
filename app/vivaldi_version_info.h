@@ -3,6 +3,8 @@
 #ifndef APP_VIVALDI_VERSION_INFO_H_
 #define APP_VIVALDI_VERSION_INFO_H_
 
+#include <string>
+
 // Defines used when determining build versions.
 #define BUILD_VERSION_normal 0
 #define BUILD_VERSION_snapshot 0
@@ -15,10 +17,20 @@
 
 #define VIVALDI_BUILD_PUBLIC_RELEASE 1
 
+namespace base {
+class Version;
+}
+
 namespace vivaldi {
 
 // Returns a version string to be displayed in "About Vivaldi" dialog.
 std::string GetVivaldiVersionString();
+
+// Return the Vivaldi build version as base::Version instance.
+const base::Version& GetVivaldiVersion();
+
+// Returns true when running a build that is a beta or a final.
+bool IsBetaOrFinal();
 
 }  // namespace vivaldi
 

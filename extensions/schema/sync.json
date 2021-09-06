@@ -205,19 +205,18 @@
             "type": "string",
             "optional": true,
             "description": "The encryption password to use. If not specified, We will attempt to use the currently stored login password instead."
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "accepted",
-                "type": "boolean",
-                "description": "Whether the password was accepted. This will be false if we have data to decrypt and the password doesn't allow to decrypt them or if we already had a password set."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "accepted",
+              "type": "boolean",
+              "description": "Whether the password was accepted. This will be false if we have data to decrypt and the password doesn't allow to decrypt them or if we already had a password set."
+            }
+          ]
+        }
       },
       {
         "name": "backupEncryptionToken",
@@ -228,18 +227,17 @@
             "type": "string",
             "name": "target_file",
             "description": "The file to which the token should be saved"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "restoreEncryptionToken",
@@ -250,36 +248,33 @@
             "type": "string",
             "name": "source_file",
             "description": "The file from which the token should be recovered"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean",
-                "description": "Whether the file was read successfully. Failure may still occur if the retrieved token is incorrect."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean",
+              "description": "Whether the file was read successfully. Failure may still occur if the retrieved token is incorrect."
+            }
+          ]
+        }
       },
       {
         "name": "getDefaultSessionName",
         "type": "function",
         "description": "Returns the device name as determined by the OS.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "setTypes",
@@ -305,35 +300,31 @@
         "name": "getEngineState",
         "type": "function",
         "description": "Returns informations about the status of the sync engine.",
-        "parameters":[
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters":[
-              {
-                "name": "data",
-                "$ref": "EngineData"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters":[
+            {
+              "name": "data",
+              "$ref": "EngineData"
+            }
+          ]
+        }
       },
       {
         "name": "getLastCycleState",
         "type": "function",
         "description": "Returns informations about the status of the last sync cycle.",
-        "parameters":[
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters":[
-              {
-                "name": "data",
-                "$ref": "CycleData"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "data",
+              "$ref": "CycleData"
+            }
+          ]
+        }
       },
       {
         "name": "setupComplete",
@@ -346,37 +337,6 @@
         "type": "function",
         "description": "Clear all the user's data on the server side and logs them out",
         "parameters": [ ]
-      },
-      {
-        "name": "updateNotificationClientStatus",
-        "type": "function",
-        "description": "Tells whether we are successfully connected to the notification server",
-        "parameters": [
-          {
-            "name": "status",
-            "$ref": "SyncNotificationClientStatus"
-          }
-        ]
-      },
-      {
-        "name": "notificationReceived",
-        "type": "function",
-        "description": "Informs that we have received a notification",
-        "parameters": [
-          {
-            "name": "client_id",
-            "type": "string"
-          },
-          {
-            "name": "notification_type",
-            "type": "string"
-          },
-          {
-            "name": "version",
-            "type": "string",
-            "serialized_type": "int64"
-        }
-        ]
       }
     ],
     "events": [

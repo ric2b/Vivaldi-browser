@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">N’autoriser le téléchargement automatique de plusieurs fichiers pour aucun site</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5057110919553308744">Lorsque vous cliquez sur l’extension</translation>
+<translation id="5059526285558225588">Choisir ce que vous partagez</translation>
 <translation id="5063480226653192405">Utilisation</translation>
 <translation id="5116628073786783676">En&amp;registrer le fichier audio sous…</translation>
 <translation id="5143374789336132547">L’extension <ph name="EXTENSION_NAME" /> a modifié la page affichée lorsque vous cliquez sur le bouton Accueil.</translation>
@@ -459,7 +460,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="8823704566850948458">Suggérer un mot de passe…</translation>
 <translation id="8859174528519900719">Sous-cadre : <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Ouvrir le lien dans une nouvelle &amp;fenêtre</translation>
-<translation id="8910146161325739742">Partager votre écran</translation>
 <translation id="8915370057835397490">Chargement des suggestions en cours…</translation>
 <translation id="8916476537757519021">Sous-cadre de navigation privée : <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Mémoire JavaScript</translation>

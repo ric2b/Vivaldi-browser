@@ -18,7 +18,7 @@
 #include "base/files/file_util.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string_util.h"
-#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "browser/sessions/vivaldi_session_service.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/tab_helper.h"
@@ -140,9 +140,9 @@ ExtensionFunction::ResponseAction SessionsPrivateGetAllFunction::Run() {
   base::FilePath path(profile->GetPath());
   path = path.Append(kSessionPath);
 
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&SessionsPrivateGetAllFunction::RunOnFileThread, this,
                      path),
       base::BindOnce(&SessionsPrivateGetAllFunction::SendResponse, this));

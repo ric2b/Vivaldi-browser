@@ -16,7 +16,7 @@ import org.chromium.chrome.R;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.ui.base.ViewUtils;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The New Tab Page for use in the incognito profile.
@@ -70,7 +70,7 @@ public class IncognitoNewTabPageView extends FrameLayout {
         super.onFinishInflate();
 
         mScrollView = (NewTabPageScrollView) findViewById(R.id.ntp_scrollview);
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             mScrollView.setBackground(null);
         }
         else

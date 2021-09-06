@@ -76,6 +76,10 @@ from grit.extern import tclib
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "app", "resources"))
 import vivaldi_resources as vivaldi
 
+# Treat the list of expected translation input files as a filter and ignore any
+# translation not on the list.
+vivaldi_filter_translation_files = True
+
 class GrdHandler(sax.handler.ContentHandler):
   """Extracts selected strings from a .grd file.
 
@@ -84,7 +88,7 @@ class GrdHandler(sax.handler.ContentHandler):
     referenced_xtb_files: A list of all xtb files referenced inside the .grd
       file.
   """
-  def __init__(self, string_id_set):
+  def __init__(self, string_id_set, dir):
     """Constructs a handler that reads selected strings from a .grd file.
 
     The dict attribute |messages| is populated with the strings that are read.
@@ -101,21 +105,55 @@ class GrdHandler(sax.handler.ContentHandler):
     self.__element_stack = []
     self.__text_scraps = []
     self.__characters_callback = None
+    self.__dir = dir
+
+    # Map a message name to its translation id
+    self.translation_ids = {}
+
+    # Map a translation id to a map of its placeholders
+    self.translation_placeholders = {}
+
+    # An array of message parts that are used to calculate a hash to get the
+    # translation id. This is similar to __text_scraps but uses the placeholder
+    # name, not the placeholder text for placeholders.
+    self.__hash_scraps = []
+
+    # Map a placeholder name to its text for the current message
+    self.__placeholders = {}
+
+    # The current placeholder name if any
+    self.__placeholder_name = ''
+    self.__placeholder_text = ''
 
   def startElement(self, name, attrs):
     self.__element_stack.append(name)
     if name == 'message':
       self.__OnOpenMessage(attrs.getValue('name'))
+    elif name == 'ph':
+      self.__placeholder_name = attrs.getValue('name')
     elif name == 'file':
       parent = self.__element_stack[-2]
       if parent == 'translations':
         self.__OnAddXtbFile(attrs.getValue('path'))
+    elif name == 'part':
+      part_path = os.path.join(self.__dir, attrs.getValue('file'))
+      saved_dir = self.__dir
+      self.__dir = os.path.dirname(part_path)
+      sax.parse(part_path, self)
+      self.__dir = saved_dir
 
   def endElement(self, name):
     popped = self.__element_stack.pop()
     assert popped == name
     if name == 'message':
       self.__OnCloseMessage()
+    elif name == 'ph':
+      if self.__message_name:
+        self.__text_scraps.append(self.__placeholder_text)
+        self.__hash_scraps.append(self.__placeholder_name)
+        self.__placeholders[self.__placeholder_name] = self.__placeholder_text
+      self.__placeholder_name = ''
+      self.__placeholder_text = ''
 
   def characters(self, content):
     if self.__characters_callback:
@@ -136,19 +174,27 @@ class GrdHandler(sax.handler.ContentHandler):
 
   def __OnMessageText(self, containing_element, message_text):
     """Invoked to handle a block of text for a message."""
-    if message_text and (containing_element == 'message' or
-                         containing_element == 'ph'):
+    if message_text and containing_element == 'message':
       self.__text_scraps.append(message_text)
+      self.__hash_scraps.append(message_text)
+    if message_text and containing_element == 'ph':
+      self.__placeholder_text += message_text
 
   def __OnCloseMessage(self):
     """Invoked at the end of a message."""
     if self.__IsExtractingMessage():
       message_text = ''.join(self.__text_scraps).strip()
       if self.__message_name not in vivaldi.REPLACE_GOOGLE_EXCEPTIONS:
-        message_text = (vivaldi.ReplaceGoogleInString(message_text), message_text)
+        message_text = vivaldi.ReplaceGoogleInString(message_text)
       self.messages[self.__message_name] = message_text
+      hash_text = ''.join(self.__hash_scraps).strip()
+      translation_id = tclib.GenerateMessageId(hash_text)
+      self.translation_ids[self.__message_name] = translation_id
+      self.translation_placeholders[translation_id] = self.__placeholders
       self.__message_name = None
       self.__text_scraps = []
+      self.__hash_scraps = []
+      self.__placeholders = {}
       self.__characters_callback = None
 
   def __OnAddXtbFile(self, xtb_file_path):
@@ -167,20 +213,24 @@ class XtbHandler(sax.handler.ContentHandler):
     translations: A mapping of translation ids to strings.
     lang: The language parsed from the .xtb file.
   """
-  def __init__(self, translation_ids):
+  def __init__(self, translation_ids, translation_placeholders):
     """Constructs an instance to parse the given strings from an .xtb file.
 
     Args:
       translation_ids: a mapping of translation ids to their string
         identifiers list for the translations to be extracted.
+      translation_placeholders: a mapping of translation ids to their
+        mappig of placeholder names to the corresponding placeholder texts.
     """
     sax.handler.ContentHandler.__init__(self)
     self.lang = None
     self.translations = None
     self.__translation_ids = translation_ids
+    self.__translation_placeholders = translation_placeholders
     self.__element_stack = []
     self.__string_ids = None
     self.__text_scraps = []
+    self.__placeholders = {}
     self.__characters_callback = None
 
   def startDocument(self):
@@ -196,6 +246,10 @@ class XtbHandler(sax.handler.ContentHandler):
       self.__OnLanguage(attrs.getValue('lang'))
     if name == 'translation':
       self.__OnOpenTranslation(attrs.getValue('id'))
+    elif name == 'ph':
+      placeholder_text = self.__placeholders.get(attrs.getValue('name'), '')
+      if placeholder_text:
+        self.__text_scraps.append(placeholder_text)
 
   def endElement(self, name):
     popped = self.__element_stack.pop()
@@ -215,6 +269,7 @@ class XtbHandler(sax.handler.ContentHandler):
     self.__string_ids = self.__translation_ids.get(translation_id)
     if self.__string_ids:
       self.__characters_callback = self.__OnTranslationText
+      self.__placeholders = self.__translation_placeholders.get(translation_id, {})
 
   def __OnTranslationText(self, containing_element, message_text):
     if message_text and containing_element == 'translation':
@@ -322,6 +377,11 @@ class StringRcMaker(object):
     translated_strings.sort()
     all_xtb_files.sort()
 
+    # When filtering all_xtb_files must include all files from the filter.
+    if vivaldi_filter_translation_files and \
+        len(set(self.expected_xtb_input_files) - set(all_xtb_files)) == 0:
+      return translated_strings
+
     if self.expected_xtb_input_files != all_xtb_files:
       extra = list(set(all_xtb_files) - set(self.expected_xtb_input_files))
       missing = list(set(self.expected_xtb_input_files) - set(all_xtb_files))
@@ -359,7 +419,7 @@ Extra input files:
     sax_parser = sax.make_parser()
 
     # Read the source (en-US) string from the .grd file.
-    grd_handler = GrdHandler(self.string_id_set)
+    grd_handler = GrdHandler(self.string_id_set, os.path.dirname(grd_file))
     sax_parser.setContentHandler(grd_handler)
     sax_parser.parse(grd_file)
     source_strings = grd_handler.messages
@@ -372,23 +432,13 @@ Extra input files:
       source_xtb_files.append(relative_xtb_file_path)
     missing_xtb_files = list(set(source_xtb_files) - set(xtb_files))
 
-    def pick_vivaldi_string(message):
-      if isinstance(message, tuple):
-        return message[0]
-      return message
-
-    def pick_chromium_string(message):
-      if isinstance(message, tuple):
-        return message[1]
-      return message
-
     # Manually put the source strings as en-US in the list of translated
     # strings.
     translated_strings = []
     for string_id, message_text in source_strings.items():
       translated_strings.append(self.__TranslationData(string_id,
                                                        'EN_US',
-                                                       pick_vivaldi_string(message_text)))
+                                                       message_text))
 
     # Generate the message ID for each source string to correlate it with its
     # translations in the .xtb files. Multiple source strings may have the same
@@ -396,23 +446,26 @@ Extra input files:
     # instead of a single value.
     translation_ids = {}
     for (string_id, message_text) in source_strings.items():
-      message_id = tclib.GenerateMessageId(pick_chromium_string(message_text))
-      translation_ids.setdefault(message_id, []).append(string_id);
+      translation_id = grd_handler.translation_ids[string_id]
+      translation_ids.setdefault(translation_id, []).append(string_id);
 
     # Track any xtb files that appear in the xtb folder but are not present in
     # the grd file.
     extra_xtb_files = []
     # Gather the translated strings from the .xtb files. Use the en-US string
     # for any message lacking a translation.
-    xtb_handler = XtbHandler(translation_ids)
+    xtb_handler = XtbHandler(translation_ids, grd_handler.translation_placeholders)
     sax_parser.setContentHandler(xtb_handler)
     for xtb_filename in xtb_files:
       if not xtb_filename in source_xtb_files:
         extra_xtb_files.append(xtb_filename)
+      if vivaldi_filter_translation_files:
+        if xtb_filename not in self.expected_xtb_input_files:
+          continue
       sax_parser.parse(xtb_filename)
       for string_id, message_text in source_strings.items():
         translated_string = xtb_handler.translations.get(string_id,
-                                                         pick_vivaldi_string(message_text))
+                                                         message_text)
         translated_strings.append(self.__TranslationData(string_id,
                                                          xtb_handler.lang,
                                                          translated_string))

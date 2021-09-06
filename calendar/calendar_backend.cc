@@ -884,6 +884,7 @@ void CalendarBackend::DeleteCalendar(
   if (db_->GetRowForCalendar(calendar_id, &calendar_row)) {
     db_->DeleteRecurrenceExceptionsForCalendar(calendar_id);
     db_->DeleteNotificationsForCalendar(calendar_id);
+    db_->DeleteInvitesForCalendar(calendar_id);
     db_->DeleteEventsForCalendar(calendar_id);
     result->success = db_->DeleteCalendar(calendar_id);
     NotifyCalendarDeleted(calendar_row);

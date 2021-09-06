@@ -27,6 +27,9 @@ config("features") {
     }
     ldflags = [ "notelemetry.obj" ]
   }
+  if (is_final_build) {
+    defines += [ "VIVALDI_FINAL_BUILD" ]
+  }
 }
 
 config("linux_386_linking") {

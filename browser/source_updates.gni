@@ -56,6 +56,12 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.h",
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.cc",
       "//vivaldi/browser/android/prefs/vivaldi_relaunch_utils.cc",
+      "//vivaldi/browser/android/autofill/autofill_provider_android.cc",
+      "//vivaldi/browser/android/autofill/autofill_provider_android.h",
+      "//vivaldi/browser/android/autofill/form_data_android.cc",
+      "//vivaldi/browser/android/autofill/form_data_android.h",
+      "//vivaldi/browser/android/autofill/form_field_data_android.cc",
+      "//vivaldi/browser/android/autofill/form_field_data_android.h",
     ]
   }
 }
@@ -119,6 +125,12 @@ if (!is_android) {
   update_target("//components/history/core/browser:browser") {
     sources += [
       "//vivaldi/browser/history/top_sites_convert.h",
+    ]
+  }
+
+  update_target("//chrome/test:unit_tests") {
+    sources += [
+      "//vivaldi/browser/stats_reporter_unittest.cc"
     ]
   }
 }

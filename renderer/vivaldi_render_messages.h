@@ -47,7 +47,7 @@ IPC_STRUCT_END()
 
 IPC_MESSAGE_CONTROL0(VivaldiMsg_MediaElementAddedEvent)
 
-IPC_MESSAGE_ROUTED1(VivaldiMsg_InsertText, base::string16)
+IPC_MESSAGE_ROUTED1(VivaldiMsg_InsertText, std::u16string)
 
 IPC_MESSAGE_ROUTED4(VivaldiMsg_DidUpdateFocusedElementInfo,
                     std::string,

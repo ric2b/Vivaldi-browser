@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.features.start_surface;
 
+import android.content.Intent;
 import android.text.TextUtils;
 
 import androidx.annotation.VisibleForTesting;
@@ -11,6 +12,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
 import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
@@ -25,9 +27,12 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.user_prefs.UserPrefs;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Flag configuration for Start Surface. Source of truth for whether it should be enabled and
@@ -99,6 +104,11 @@ public class StartSurfaceConfiguration {
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_ANDROID, SHOW_TABS_IN_MRU_ORDER_PARAM, false);
 
+    private static final String SUPPORT_ACCESSIBILITY_PARAM = "support_accessibility";
+    public static final BooleanCachedFieldTrialParameter SUPPORT_ACCESSIBILITY =
+            new BooleanCachedFieldTrialParameter(
+                    ChromeFeatureList.START_SURFACE_ANDROID, SUPPORT_ACCESSIBILITY_PARAM, true);
+
     private static final String STARTUP_UMA_PREFIX = "Startup.Android.";
     private static final String INSTANT_START_SUBFIX = ".Instant";
     private static final String REGULAR_START_SUBFIX = ".NoInstant";
@@ -108,7 +118,7 @@ public class StartSurfaceConfiguration {
      */
     public static boolean isStartSurfaceEnabled() {
         // Vivaldi does not use start surface.
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         return CachedFeatureFlags.isEnabled(ChromeFeatureList.START_SURFACE_ANDROID)
                 && !SysUtils.isLowEndDevice();
     }
@@ -224,8 +234,37 @@ public class StartSurfaceConfiguration {
         StartSurfaceUserData.setCreatedAsNtp(tab);
     }
 
+    /**
+     * @return Whether new surface should show when home button is clicked.
+     */
     public static boolean shouldShowNewSurfaceFromHomeButton() {
         return NEW_SURFACE_FROM_HOME_BUTTON.getValue().equals("hide_tab_switcher_only")
                 || NEW_SURFACE_FROM_HOME_BUTTON.getValue().equals("hide_mv_tiles_and_tab_switcher");
+    }
+
+    /**
+     * @return Whether start surface should be hidden when accessibility is enabled. If it's true,
+     *         NTP is shown as homepage. Also, when time threshold is reached, grid tab switcher or
+     *         overview list layout is shown instead of start surface.
+     */
+    public static boolean shouldHideStartSurfaceWithAccessibilityOn() {
+        return ChromeAccessibilityUtil.get().isAccessibilityEnabled()
+                && !(SUPPORT_ACCESSIBILITY.getValue()
+                        && TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled());
+    }
+
+    /**
+     * @return Whether the {@link Intent} will open a new tab with the omnibox focused.
+     */
+    public static boolean shouldIntentShowNewTabOmniboxFocused(Intent intent) {
+        final String intentUrl = IntentHandler.getUrlFromIntent(intent);
+        // If Chrome is launched by tapping the New tab item from the launch icon and
+        // OMNIBOX_FOCUSED_ON_NEW_TAB is enabled, a new Tab with omnibox focused will be shown on
+        // Startup.
+        final boolean isCanonicalizedNTPUrl =
+                ReturnToChromeExperimentsUtil.isCanonicalizedNTPUrl(intentUrl);
+        return isCanonicalizedNTPUrl && IntentHandler.isTabOpenAsNewTabFromLauncher(intent)
+                && OMNIBOX_FOCUSED_ON_NEW_TAB.getValue()
+                && IntentHandler.wasIntentSenderChrome(intent);
     }
 }

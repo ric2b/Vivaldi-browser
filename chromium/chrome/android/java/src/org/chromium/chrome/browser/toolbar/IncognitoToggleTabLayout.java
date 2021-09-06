@@ -21,22 +21,22 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.ui.widget.ChromeImageView;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * TabLayout shown in the Horizontal Tab Switcher.
  */
 public class IncognitoToggleTabLayout extends TabLayout implements TabCountObserver {
-    private TabLayout.Tab mStandardButton;
-    private TabLayout.Tab mIncognitoButton;
-    private ImageView mStandardButtonIcon;
-    private ImageView mIncognitoButtonIcon;
-    private TabSwitcherDrawable mTabSwitcherDrawable;
+    private final TabLayout.Tab mStandardButton;
+    private final TabLayout.Tab mIncognitoButton;
+    private final ImageView mStandardButtonIcon;
+    private final ImageView mIncognitoButtonIcon;
+    private final TabSwitcherDrawable mTabSwitcherDrawable;
 
-    private ColorStateList mTabIconDarkColor;
-    private ColorStateList mTabIconLightColor;
-    private ColorStateList mTabIconSelectedDarkColor;
-    private ColorStateList mTabIconSelectedLightColor;
+    private final ColorStateList mTabIconDarkColor;
+    private final ColorStateList mTabIconLightColor;
+    private final ColorStateList mTabIconSelectedDarkColor;
+    private final ColorStateList mIncognitoSelectedColor;
 
     private TabModelSelector mTabModelSelector;
     private TabCountProvider mTabCountProvider;
@@ -54,8 +54,8 @@ public class IncognitoToggleTabLayout extends TabLayout implements TabCountObser
                 getContext(), R.color.default_control_color_active);
         mTabIconLightColor =
                 AppCompatResources.getColorStateList(getContext(), R.color.white_alpha_70);
-        mTabIconSelectedLightColor =
-                AppCompatResources.getColorStateList(getContext(), R.color.white_mode_tint);
+        mIncognitoSelectedColor = AppCompatResources.getColorStateList(
+                getContext(), R.color.default_control_color_active_dark);
 
         mStandardButtonIcon = new ChromeImageView(getContext());
         mTabSwitcherDrawable = TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), false);
@@ -64,7 +64,7 @@ public class IncognitoToggleTabLayout extends TabLayout implements TabCountObser
                 getResources().getString(R.string.accessibility_tab_switcher_standard_stack));
         mIncognitoButtonIcon = new ChromeImageView(getContext());
         mIncognitoButtonIcon.setImageResource(R.drawable.incognito_small);
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mIncognitoButtonIcon.setImageResource(R.drawable.vivaldi_private_page_favicon_small);
         mIncognitoButtonIcon.setContentDescription(
                 getResources().getString(R.string.accessibility_tab_switcher_incognito_stack));
@@ -131,18 +131,22 @@ public class IncognitoToggleTabLayout extends TabLayout implements TabCountObser
     private void setStateBasedOnModel() {
         if (mTabModelSelector == null) return;
         final boolean isIncognitoSelected = mTabModelSelector.isIncognitoSelected();
-        if (isIncognitoSelected) {
-            setSelectedTabIndicatorColor(mTabIconSelectedLightColor.getDefaultColor());
-            ApiCompatibilityUtils.setImageTintList(mStandardButtonIcon, mTabIconLightColor);
-            mTabSwitcherDrawable.setTint(mTabIconLightColor);
-            ApiCompatibilityUtils.setImageTintList(
-                    mIncognitoButtonIcon, mTabIconSelectedLightColor);
-        } else {
-            setSelectedTabIndicatorColor(mTabIconSelectedDarkColor.getDefaultColor());
-            ApiCompatibilityUtils.setImageTintList(mStandardButtonIcon, mTabIconSelectedDarkColor);
-            mTabSwitcherDrawable.setTint(mTabIconSelectedDarkColor);
-            ApiCompatibilityUtils.setImageTintList(mIncognitoButtonIcon, mTabIconDarkColor);
-        }
+
+        // Update the selected tab indicator
+        setSelectedTabIndicatorColor(isIncognitoSelected
+                        ? mIncognitoSelectedColor.getDefaultColor()
+                        : mTabIconSelectedDarkColor.getDefaultColor());
+
+        // Update the Tab Switcher (Standard button) tab
+        mTabSwitcherDrawable.setTint(
+                isIncognitoSelected ? mTabIconLightColor : mTabIconSelectedDarkColor);
+        ApiCompatibilityUtils.setImageTintList(mStandardButtonIcon,
+                isIncognitoSelected ? mTabIconLightColor : mTabIconSelectedDarkColor);
+
+        // Update the Incognito tab
+        ApiCompatibilityUtils.setImageTintList(mIncognitoButtonIcon,
+                isIncognitoSelected ? mIncognitoSelectedColor : mTabIconDarkColor);
+
         // Ensure the tab in tab layout is correctly selected when tab switcher is
         // first opened.
         if (isIncognitoSelected && !mIncognitoButton.isSelected()) {

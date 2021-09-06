@@ -98,7 +98,7 @@ void ChromeBookmarkFileReader::LoadFile(const base::FilePath& file) {
 bool ChromeBookmarkFileReader::DecodeNode(const base::DictionaryValue& value) {
   std::string id_string;
 
-  base::string16 title;
+  std::u16string title;
   value.GetString(kNameKey, &title);
 
   std::string date_added_string;

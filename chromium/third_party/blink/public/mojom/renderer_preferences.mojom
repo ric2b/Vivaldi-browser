@@ -160,6 +160,8 @@ struct RendererPreferences {
   [EnableIf=is_selection_clipboard_buffer_possible]
   bool selection_clipboard_buffer_available = false;
 
+  array<uint16> explicitly_allowed_network_ports;
+
   // Vivaldi specific:
   // Maps to the Cycle focus setting in Vivaldi.
   bool allow_tab_cycle_from_webpage_into_ui = false;

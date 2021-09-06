@@ -114,7 +114,7 @@ const char PlatformStateStoreWinTest::kProfileName_[] = "test_profile";
 const wchar_t PlatformStateStoreWinTest::kStoreKeyName_[] =
     L"Software\\Google\\Chrome\\IncidentsSent";
 #elif defined(VIVALDI_BUILD)
-const base::char16 PlatformStateStoreWinTest::kStoreKeyName_[] =
+const wchar_t PlatformStateStoreWinTest::kStoreKeyName_[] =
     L"Software\\Vivaldi\\IncidentsSent";
 #else
 const wchar_t PlatformStateStoreWinTest::kStoreKeyName_[] =

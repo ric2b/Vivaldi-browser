@@ -127,7 +127,7 @@
 <translation id="5386426401304769735">Vottorðskeðjan fyrir þessa síðu inniheldur vottorð undirritað með SHA-1.</translation>
 <translation id="5452270690849572955">Þessi <ph name="HOST_NAME" /> síða var ekki fundin</translation>
 <translation id="5457113250005438886">Ógilt</translation>
-<translation id="5492298309214877701">Þessi síða á innra neti fyrirtækis, stofnunar eða skóla er með sama netfang og almenn vefsíða
+<translation id="5492298309214877701">Þessi síða á innra neti fyrirtækis, stofnunar eða skóla er með sama veffang og almenn vefsíða
 <ph name="LINE_BREAK" />
 Hafðu samband við kerfisstjóra.</translation>
 <translation id="5510766032865166053">Hefur mögulega verið fært eða fjarlægt.</translation>
@@ -226,6 +226,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="9039213469156557790">Þessi síða geymir að auki önnur gögn sem ekki eru örugg. Aðrir geta skoðað þessi gögn þegar verið er að sækja þau og getur þeim verið breytt af tölvuþrjóti til þess að breyta hegðun á síðunni.</translation>
 <translation id="9062620674789239642">Hugsanlega var hún færð, henni breytt eða eytt.</translation>
 <translation id="9069693763241529744">Hamlað af viðbót</translation>
+<translation id="910924428752220542">Vivaldi lykilorð</translation>
 <translation id="9169664750068251925">Aldrei leyfa á þessari síðu</translation>
 <translation id="9180553614777056266">Auglýsingavörn</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> notar óstudda samskiptareglu.</translation>

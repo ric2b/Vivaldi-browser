@@ -24,7 +24,7 @@ import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.widget.ChromeImageView;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Represents a generic toolbar used in the bottom strip/grid component.
@@ -57,7 +57,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
         mTitleTextView = (EditText) findViewById(R.id.title);
         mMainContent = findViewById(R.id.main_content);
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             setLayoutParams(new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             if (getId() == -1) setVisibility(View.GONE);

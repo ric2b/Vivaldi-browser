@@ -99,7 +99,7 @@ void VivaldiRenderFrameObserver::OnDestruct() {
 
 
 // Inserts text into input fields.
-void VivaldiRenderFrameObserver::OnInsertText(const base::string16& text) {
+void VivaldiRenderFrameObserver::OnInsertText(const std::u16string& text) {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
   const std::vector<ui::ImeTextSpan> ime_text_spans;
   frame->GetInputMethodController()->CommitText(

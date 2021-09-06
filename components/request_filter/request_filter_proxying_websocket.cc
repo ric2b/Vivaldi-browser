@@ -13,11 +13,15 @@
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
-#include "extensions/browser/api/web_request/permission_helper.h"
-#include "extensions/browser/extension_navigation_ui_data.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/base/ip_endpoint.h"
 #include "net/http/http_util.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/api/web_request/permission_helper.h"
+#include "extensions/browser/extension_navigation_ui_data.h"
+#endif
 
 namespace vivaldi {
 namespace {
@@ -101,8 +105,6 @@ RequestFilterProxyingWebSocket::RequestFilterProxyingWebSocket(
             process_id,
             render_frame_id,
             MSG_ROUTING_NONE,
-            process_id,
-            render_frame_id,
             request,
             content::ContentBrowserClient::URLLoaderFactoryType::
                 kDocumentSubResource,

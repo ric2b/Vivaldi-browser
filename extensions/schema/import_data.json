@@ -100,19 +100,17 @@
         "name": "getProfiles",
         "type": "function",
         "description": "Retrieves import data profiles.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": {"$ref": "ProfileItem"}
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": {"$ref": "ProfileItem"}
+            }
+          ]
+        }
       },
       {
         "name": "startImport",

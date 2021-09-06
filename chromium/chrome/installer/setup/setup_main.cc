@@ -36,6 +36,7 @@
 #include "base/process/process_metrics.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,6 +58,7 @@
 #include "chrome/installer/setup/archive_patch_helper.h"
 #include "chrome/installer/setup/brand_behaviors.h"
 #include "chrome/installer/setup/buildflags.h"
+#include "chrome/installer/setup/downgrade_cleanup.h"
 #include "chrome/installer/setup/install.h"
 #include "chrome/installer/setup/install_params.h"
 #include "chrome/installer/setup/install_worker.h"
@@ -457,9 +459,12 @@ installer::InstallStatus RenameChromeExecutables(
                                     temp_path.path(), WorkItem::ALWAYS_MOVE);
   install_list->AddDeleteTreeWorkItem(chrome_proxy_new_exe, temp_path.path());
 
+  AddFinalizeUpdateWorkItems(base::Version(chrome::kChromeVersion),
+                             *installer_state, setup_exe, install_list.get());
+
   // Add work items to delete Chrome's "opv", "cpv", and "cmd" values.
   // TODO(grt): Clean this up; https://crbug.com/577816.
-  HKEY reg_root = installer_state->root_key();
+  const HKEY reg_root = installer_state->root_key();
   const std::wstring clients_key = install_static::GetClientsKeyPath();
 
   install_list->AddDeleteRegValueWorkItem(reg_root, clients_key,
@@ -475,17 +480,7 @@ installer::InstallStatus RenameChromeExecutables(
   // If a channel was specified by policy, update the "channel" registry value
   // with it so that the browser knows which channel to use, otherwise delete
   // whatever value that key holds.
-  const auto& install_details = install_static::InstallDetails::Get();
-  if (install_details.channel_origin() ==
-      install_static::ChannelOrigin::kPolicy) {
-    install_list->AddSetRegValueWorkItem(reg_root, clients_key, KEY_WOW64_32KEY,
-                                         google_update::kRegChannelField,
-                                         install_details.channel(), true);
-  } else {
-    install_list->AddDeleteRegValueWorkItem(reg_root, clients_key,
-                                            KEY_WOW64_32KEY,
-                                            google_update::kRegChannelField);
-  }
+  installer::AddChannelWorkItems(reg_root, clients_key, install_list.get());
 
   // old_chrome.exe is still in use in most cases, so ignore failures here.
   install_list->AddDeleteTreeWorkItem(chrome_old_exe, temp_path.path())
@@ -924,14 +919,33 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
           installer::switches::kRegisterChromeBrowserSuffix);
     }
     if (cmd_line.HasSwitch(installer::switches::kRegisterURLProtocol)) {
-      std::wstring protocol = cmd_line.GetSwitchValueNative(
-          installer::switches::kRegisterURLProtocol);
+      const std::wstring protocol_associations_value =
+          cmd_line.GetSwitchValueNative(
+              installer::switches::kRegisterURLProtocol);
+      base::Optional<ShellUtil::ProtocolAssociations> protocol_associations =
+          ShellUtil::ProtocolAssociations::FromCommandLineArgument(
+              protocol_associations_value);
+
       // ShellUtil::RegisterChromeForProtocol performs all registration
       // done by ShellUtil::RegisterChromeBrowser, as well as registering
       // with Windows as capable of handling the supplied protocol.
-      if (ShellUtil::RegisterChromeForProtocol(chrome_exe, suffix, protocol,
-                                               false))
+      if (protocol_associations.has_value() &&
+          ShellUtil::RegisterChromeForProtocols(
+              chrome_exe, suffix, protocol_associations.value(), false)) {
         status = installer::IN_USE_UPDATED;
+      }
+    } else if (cmd_line.HasSwitch(
+                   installer::switches::kDeregisterURLProtocol)) {
+      const std::wstring protocols_value = cmd_line.GetSwitchValueNative(
+          installer::switches::kDeregisterURLProtocol);
+      std::vector<std::wstring> protocols = base::SplitString(
+          protocols_value, L",", base::WhitespaceHandling::TRIM_WHITESPACE,
+          base::SplitResult::SPLIT_WANT_NONEMPTY);
+
+      if (!protocols.empty() && ShellUtil::RemoveAppProtocolAssociations(
+                                    protocols, chrome_exe, false)) {
+        status = installer::IN_USE_UPDATED;
+      }
     } else {
       if (ShellUtil::RegisterChromeBrowser(chrome_exe, suffix,
                                            /*elevate_if_not_admin=*/false))
@@ -953,6 +967,21 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
       DCHECK(cmd_line.HasSwitch(installer::switches::kRenameChromeExe));
       *exit_code =
           RenameChromeExecutables(setup_exe, *original_state, installer_state);
+    }
+  } else if (cmd_line.HasSwitch(
+                 installer::switches::kCleanupForDowngradeVersion)) {
+    // The version being downgraded to.
+    std::string new_version = cmd_line.GetSwitchValueASCII(
+        installer::switches::kCleanupForDowngradeVersion);
+    std::wstring operation = cmd_line.GetSwitchValueNative(
+        installer::switches::kCleanupForDowngradeOperation);
+    if (operation == L"cleanup" || operation == L"revert") {
+      *exit_code = installer::ProcessCleanupForDowngrade(
+          base::Version(new_version), /*revert=*/operation == L"revert");
+    } else {
+      LOG(ERROR) << "Ignoring \"" << cmd_line.GetCommandLineString()
+                 << "\" because of invalid \"operation\" argument.";
+      *exit_code = installer::DOWNGRADE_CLEANUP_UNKNOWN_OPERATION;
     }
   } else if (cmd_line.HasSwitch(
                  installer::switches::kRemoveChromeRegistration)) {
@@ -1173,7 +1202,8 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
           original_state.GetProductState(system_install);
       if (product_state != nullptr &&
           (product_state->version().CompareTo(*installer_version) > 0)) {
-        LOG(ERROR) << "Higher version of Vivaldi is already installed.";
+        LOG(ERROR) << "Higher version of Vivaldi " << product_state->version()
+                   << " is already installed.";
         // NOTE(jarle@vivaldi): If standalone we allow downgrading.
         if (!vivaldi::IsInstallStandalone()) {
           // clang-format off

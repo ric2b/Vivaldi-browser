@@ -10,6 +10,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
@@ -20,7 +21,9 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.omnibox.status.StatusProperties.StatusIconResource;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -32,7 +35,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 
 /**
@@ -97,7 +100,7 @@ public class SearchEngineLogoUtils {
      */
     public boolean isSearchEngineLogoEnabled() {
         // Vivaldi: Should always show dse icon.
-        if (ChromeApplication.isVivaldi()) return true;
+        if (ChromeApplicationImpl.isVivaldi()) return true;
         // LocaleManager#needToCheckForSearchEnginePromo() checks several system features which
         // risk throwing exceptions. See the exception cases below for details.
         try {
@@ -120,7 +123,7 @@ public class SearchEngineLogoUtils {
      */
     public boolean shouldShowSearchEngineLogo(boolean isOffTheRecord) {
         // Vivaldi: Should always show dse icon.
-        if (ChromeApplication.isVivaldi()) return true;
+        if (ChromeApplicationImpl.isVivaldi()) return true;
         return !isOffTheRecord
                 && isSearchEngineLogoEnabled()
                 // Using the profile now, so we need to pay attention to browser initialization.
@@ -133,6 +136,7 @@ public class SearchEngineLogoUtils {
      * @return True if we should show the rounded search engine logo.
      */
     public boolean shouldShowRoundedSearchEngineLogo(boolean isOffTheRecord) {
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         return shouldShowSearchEngineLogo(isOffTheRecord) && ChromeFeatureList.isInitialized()
                 && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                         ChromeFeatureList.OMNIBOX_SEARCH_ENGINE_LOGO, ROUNDED_EDGES_VARIANT,
@@ -158,7 +162,8 @@ public class SearchEngineLogoUtils {
 
     /** @return Whether the status icon should be hidden when the LocationBar is unfocused. */
     public boolean currentlyOnNTP(LocationBarDataProvider locationBarDataProvider) {
-        if (ChromeApplication.isVivaldi()) return false; // Vivaldi should always display DSE logo.
+        if (ChromeApplicationImpl.isVivaldi())
+            return false; // Vivaldi should always display DSE logo.
         return locationBarDataProvider != null
                 && UrlUtilities.isNTPUrl(locationBarDataProvider.getCurrentUrl());
     }
@@ -212,23 +217,40 @@ public class SearchEngineLogoUtils {
      * Get the search engine logo favicon. This can return a null bitmap under certain
      * circumstances, such as: no logo url found, network/cache error, etc.
      *
-     * @param profile The current profile.
      * @param resources Provides access to Android resources.
+     * @param inNightMode Whether the device is currently in night mode, used to tint icons.
+     * @param profile The current profile. When null, falls back to locally-provided icons.
+     * @param templateUrlService The current templateUrlService. When null, falls back to
+     *         locally-provided icons.
      * @param callback How the bitmap will be returned to the caller.
      */
-    public void getSearchEngineLogoFavicon(Profile profile, Resources resources,
-            Callback<Bitmap> callback, TemplateUrlService templateUrlService) {
+    public void getSearchEngineLogo(@NonNull Resources resources, boolean inNightMode,
+            @Nullable Profile profile, @Nullable TemplateUrlService templateUrlService,
+            @NonNull Callback<StatusIconResource> callback) {
+        // If either of the nullable dependencies are null, fallback to the search loupe. If
+        // templateUrlService is available and the default search engine is Google, serve that
+        // locally.
+        if (profile == null || templateUrlService == null) {
+            callback.onResult(getSearchLoupeResource(inNightMode));
+            return;
+        } else if (templateUrlService.isDefaultSearchEngineGoogle()) {
+            callback.onResult(new StatusIconResource(R.drawable.ic_logo_googleg_20dp, 0));
+            return;
+        }
+
+        // If all of the nullable dependencies are present and the search engine is non-Google,
+        // then go to the network to fetch the icon.
         recordEvent(Events.FETCH_NON_GOOGLE_LOGO_REQUEST);
         if (mFaviconHelper == null) mFaviconHelper = new FaviconHelper();
 
         String logoUrl = getSearchLogoUrl(templateUrlService);
         if (logoUrl == null) {
-            callback.onResult(null);
+            callback.onResult(getSearchLoupeResource(inNightMode));
             recordEvent(Events.FETCH_FAILED_NULL_URL);
             return;
         }
         // For Vivaldi, bypassing the cache in an attempt to fix VB-62775.
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             Bitmap image =
                     SearchEngineIconHandler.get().getSearchEngineLogoImage(logoUrl, resources);
             if (image != null) {
@@ -237,9 +259,8 @@ public class SearchEngineLogoUtils {
             }
         }
         // Return a cached copy if it's available.
-        if (sCachedComposedBackground != null
-                && sCachedComposedBackgroundLogoUrl.equals(getSearchLogoUrl(templateUrlService))) {
-            callback.onResult(sCachedComposedBackground);
+        if (sCachedComposedBackground != null && sCachedComposedBackgroundLogoUrl.equals(logoUrl)) {
+            callback.onResult(new StatusIconResource(logoUrl, sCachedComposedBackground, 0));
             recordEvent(Events.FETCH_SUCCESS_CACHE_HIT);
             return;
         }
@@ -248,7 +269,7 @@ public class SearchEngineLogoUtils {
         boolean willCallbackBeCalled = mFaviconHelper.getLocalFaviconImageForURL(
                 profile, logoUrl, logoSizePixels, (image, iconUrl) -> {
                     if (image == null) {
-                        callback.onResult(image);
+                        callback.onResult(getSearchLoupeResource(inNightMode));
                         recordEvent(Events.FETCH_FAILED_RETURNED_BITMAP_NULL);
                         return;
                     }
@@ -257,9 +278,16 @@ public class SearchEngineLogoUtils {
                     recordEvent(Events.FETCH_SUCCESS);
                 });
         if (!willCallbackBeCalled) {
-            callback.onResult(null);
+            callback.onResult(getSearchLoupeResource(inNightMode));
             recordEvent(Events.FETCH_FAILED_FAVICON_HELPER_ERROR);
         }
+    }
+
+    @VisibleForTesting
+    StatusIconResource getSearchLoupeResource(boolean inNightMode) {
+        return new StatusIconResource(R.drawable.ic_search,
+                inNightMode ? R.color.default_icon_color_secondary_tint_list
+                            : ThemeUtils.getThemedToolbarIconTintRes(/* useLight= */ true));
     }
 
     /**
@@ -275,8 +303,8 @@ public class SearchEngineLogoUtils {
      * @param resources Android resources object used to access dimensions.
      * @param callback The client callback to receive the processed logo.
      */
-    private void processReturnedLogo(
-            String logoUrl, Bitmap image, Resources resources, Callback<Bitmap> callback) {
+    private void processReturnedLogo(String logoUrl, Bitmap image, Resources resources,
+            Callback<StatusIconResource> callback) {
         // Scale the logo up to the desired size.
         int logoSizePixels = getSearchEngineLogoSizePixels(resources);
         Bitmap scaledIcon =
@@ -306,7 +334,7 @@ public class SearchEngineLogoUtils {
         sCachedComposedBackground = composedIcon;
         sCachedComposedBackgroundLogoUrl = logoUrl;
 
-        callback.onResult(sCachedComposedBackground);
+        callback.onResult(new StatusIconResource(logoUrl, sCachedComposedBackground, 0));
     }
 
     /**

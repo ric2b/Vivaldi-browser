@@ -60,18 +60,24 @@ import org.chromium.content_public.browser.navigation_controller.UserAgentOverri
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
 //** Vivaldi */
-import org.chromium.chrome.browser.ChromeApplication;
+import android.os.Build;
+
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+
+import org.vivaldi.browser.autofill.AutofillProvider;
 import org.vivaldi.browser.common.VivaldiColorUtils;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.vivaldi.browser.embedder.ContentViewWithAutofill;
 
 /**
  * Implementation of the interface {@link Tab}. Contains and manages a {@link ContentView}.
@@ -123,7 +129,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     private TabViewManagerImpl mTabViewManager;
 
     /** A list of Tab observers.  These are used to broadcast Tab events to listeners. */
-    private final ObserverList<TabObserver> mObservers = new ObserverList<>();
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    protected final ObserverList<TabObserver> mObservers = new ObserverList<>();
 
     // Content layer Delegates
     private TabWebContentsDelegateAndroidImpl mWebContentsDelegate;
@@ -218,6 +225,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     //** Vivaldi */
     private SharedPreferencesManager.Observer mPreferenceObserver;
     boolean mOverrideUserAgent;
+    AutofillProvider mAutofillProvider;
 
     /**
      * Creates an instance of a {@link TabImpl}.
@@ -504,7 +512,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             if (!mIsNativePageCommitPending) {
                 mIsNativePageCommitPending = maybeShowNativePage(params.getUrl(), false);
                 // Vivaldi has panels and does not load these urls as native pages.
-                if (ChromeApplication.isVivaldi()) {
+                if (ChromeApplicationImpl.isVivaldi()) {
                     if (VivaldiUrlConstants.VIVALDI_BOOKMARKS_URL.equals(params.getUrl())
                             || VivaldiUrlConstants.VIVALDI_DOWNLOADS_URL.equals(params.getUrl())
                             || VivaldiUrlConstants.VIVALDI_HISTORY_URL.equals(params.getUrl())
@@ -901,6 +909,14 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 CriticalPersistedTabData.from(this).setUrl(new GURL(loadUrlParams.getUrl()));
             }
 
+            // The {@link mDelegateFactory} needs to be set before calling
+            // {@link TabHelpers.initTabHelpers()}. This is because it creates a
+            // TabBrowserControlsConstraintsHelper, and
+            // {@link TabBrowserControlsConstraintsHelper#updateVisibilityDelegate()} will call the
+            // Tab#getDelegateFactory().createBrowserControlsVisibilityDelegate().
+            // See https://crbug.com/1179419.
+            mDelegateFactory = delegateFactory;
+
             TabHelpers.initTabHelpers(this, parent);
 
             if (tabState != null) {
@@ -909,7 +925,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
             initializeNative();
 
-            mDelegateFactory = delegateFactory;
             RevenueStats.getInstance().tabCreated(this);
 
             // If there is a frozen WebContents state or a pending lazy load, don't create a new
@@ -955,7 +970,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 hasThemeColor = tabState.hasThemeColor();
             }
             if (hasThemeColor != null) {
-                if (!ChromeApplication.isVivaldi())
+                if (!ChromeApplicationImpl.isVivaldi())
                 updateThemeColor(hasThemeColor ? themeColor : TabState.UNSPECIFIED_THEME_COLOR);
             }
 
@@ -986,7 +1001,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
      */
     void restoreFieldsFromState(TabState state) {
         assert state != null;
-        assert !mUsedCriticalPersistedTabData;
         CriticalPersistedTabData.from(this).setWebContentsState(state.contentsState);
         CriticalPersistedTabData.from(this).setTimestampMillis(state.timestampMillis);
         CriticalPersistedTabData.from(this).setUrl(
@@ -1319,8 +1333,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 TabImplJni.get().onPhysicalBackingSizeChanged(
                         mNativeTabAndroid, webContents, bounds.right, bounds.bottom);
             }
-            webContents.onShow();
             initWebContents(webContents);
+            webContents.onShow();
         });
 
         if (didStartLoad) {
@@ -1366,12 +1380,12 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     }
 
     @CalledByNative
-    private static long[] getAllNativePtrs(TabImpl[] tabsArray) {
+    private static long[] getAllNativePtrs(Tab[] tabsArray) {
         if (tabsArray == null) return null;
 
         long[] tabsPtrArray = new long[tabsArray.length];
         for (int i = 0; i < tabsArray.length; i++) {
-            tabsPtrArray[i] = tabsArray[i].getNativePtr();
+            tabsPtrArray[i] = ((TabImpl) tabsArray[i]).getNativePtr();
         }
         return tabsPtrArray;
     }
@@ -1394,7 +1408,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             WebContents oldWebContents = mWebContents;
             mWebContents = webContents;
 
-            ContentView cv = ContentView.createContentView(
+            ContentView cv = ContentViewWithAutofill.createContentView( // Vivaldi
                     mThemedApplicationContext, null /* eventOffsetHandler */, webContents);
             cv.setContentDescription(mThemedApplicationContext.getResources().getString(
                     R.string.accessibility_content_view));
@@ -1425,6 +1439,16 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                             mDelegateFactory.createContextMenuPopulatorFactory(this), this));
 
             mWebContents.notifyRendererPreferenceUpdate();
+            // Note(david@vivaldi.com): Init the autofill provider and the appropriate content view
+            // with autofill which handles the android autofill requests.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                mAutofillProvider = new AutofillProvider(getContext(), cv, "Vivaldi");
+                TabImplJni.get().onAutofillProviderChanged(mNativeTabAndroid, mAutofillProvider);
+                mAutofillProvider.setWebContents(webContents);
+                cv.setWebContents(webContents);
+                if (cv instanceof ContentViewWithAutofill)
+                    ((ContentViewWithAutofill) cv).setAutofillProvider(mAutofillProvider);
+            }
             TabHelpers.initWebContentsHelpers(this);
             notifyContentChanged();
         } finally {
@@ -1451,7 +1475,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             }
             pushNativePageStateToNavigationEntry();
 
-            if (!ChromeApplication.isVivaldi())
+            if (!ChromeApplicationImpl.isVivaldi())
             updateThemeColor(TabState.UNSPECIFIED_THEME_COLOR);
         });
     }
@@ -1659,11 +1683,20 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             // WebContents.
             TabImplJni.get().destroyWebContents(mNativeTabAndroid);
         } else {
+            // This branch is to not delete the WebContents, but just to release the WebContent from
+            // the Tab and clear the WebContents for two different cases a) The WebContents will be
+            // destroyed eventually, but from the native WebContents. b) The WebContents will be
+            // reused later. We need to clear the reference to the Tab from WebContentsObservers or
+            // the UserData. If the WebContents will be reused, we should set the necessary
+            // delegates again.
             TabImplJni.get().releaseWebContents(mNativeTabAndroid);
-            // Since the native WebContents is still alive, we need to clear its reference to the
-            // Java WebContents. While doing so, it will also call back into Java to destroy the
-            // Java WebContents.
-            contentsToDestroy.clearNativeReference();
+            // This call is just a workaround, Chrome should clean up the WebContentsObservers
+            // itself.
+            contentsToDestroy.clearJavaWebContentsObservers();
+            contentsToDestroy.initialize(PRODUCT_VERSION,
+                    ViewAndroidDelegate.createBasicDelegate(/* containerView */ null),
+                    /* accessDelegate */ null, /* windowAndroid */ null,
+                    WebContents.createDefaultInternalsHolder());
         }
     }
 
@@ -1770,5 +1803,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         // Vivaldi: Native exchange of webcontents.
         void changeWebContents(long nativeTabAndroid, WebContents newWebContents,
                 boolean didStartLoad, boolean didFinishLoad);
+        // Vivaldi: Native autofill provider initialisation.
+        void onAutofillProviderChanged(long nativeTabAndroid, AutofillProvider autofillProvider);
     }
 }

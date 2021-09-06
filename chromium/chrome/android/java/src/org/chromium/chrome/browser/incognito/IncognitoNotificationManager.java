@@ -21,7 +21,7 @@ import org.chromium.components.browser_ui.notifications.NotificationMetadata;
 import org.chromium.components.browser_ui.notifications.NotificationWrapper;
 import org.chromium.components.browser_ui.notifications.NotificationWrapperBuilder;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Manages the notification indicating that there are incognito tabs opened in Document mode.
@@ -64,7 +64,7 @@ public class IncognitoNotificationManager {
                         .setShowWhen(false)
                         .setLocalOnly(true)
                         .setGroup(NotificationConstants.GROUP_INCOGNITO);
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             builder.setSmallIcon(R.drawable.vivaldi_private_page_favicon_small);
         NotificationManagerProxy nm = new NotificationManagerProxyImpl(context);
         NotificationWrapper notification = builder.buildNotificationWrapper();

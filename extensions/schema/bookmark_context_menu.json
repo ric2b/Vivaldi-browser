@@ -69,14 +69,13 @@
               "sortOrder": {"$ref": "SortOrder", "optional": true},
               "icons": {"$ref": "Icons", "description": "Default and folder icons."}
             }
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "optional": false,
-            "description": "Notifies caller that menu has closed."
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Notifies caller that menu has closed.",
+          "parameters": []
+        }
       }
     ],
     "events": [

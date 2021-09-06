@@ -123,7 +123,7 @@ contact::ContactRow GetContactRow(
   contact::ContactRow contactRow;
 
   if (contact.name.get()) {
-    base::string16 name;
+    std::u16string name;
     name = base::UTF8ToUTF16(*contact.name);
     contactRow.set_name(name);
   }
@@ -133,19 +133,19 @@ contact::ContactRow GetContactRow(
   }
 
   if (contact.note.get()) {
-    base::string16 note;
+    std::u16string note;
     note = base::UTF8ToUTF16(*contact.note);
     contactRow.set_note(note);
   }
 
   if (contact.avatar_url.get()) {
-    base::string16 avatar_url;
+    std::u16string avatar_url;
     avatar_url = base::UTF8ToUTF16(*contact.avatar_url);
     contactRow.set_avatar_url(avatar_url);
   }
 
   if (contact.separator.get()) {
-    base::string16 avatar_url;
+    std::u16string avatar_url;
     avatar_url = base::UTF8ToUTF16(*contact.avatar_url);
     contactRow.set_avatar_url(avatar_url);
   }
@@ -527,7 +527,7 @@ ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
     return RespondNow(Error("Error. Invalid contact id"));
   }
 
-  base::string16 property_value =
+  std::u16string property_value =
       base::UTF8ToUTF16(params->property_to_add.property_value);
   add_property.contact_id = contact_id;
   add_property.value = property_value;
@@ -670,7 +670,7 @@ ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
   add_email.set_contact_id(contact_id);
 
   if (params->email_to_add.email_address.get()) {
-    base::string16 email_address;
+    std::u16string email_address;
     email_address = base::UTF8ToUTF16(*params->email_to_add.email_address);
     add_email.set_email_address(email_address);
   }
@@ -774,7 +774,7 @@ ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
   updated_email.set_email_address_id(email_address_id);
 
   if (params->email_to_update.email_address.get()) {
-    base::string16 email_address;
+    std::u16string email_address;
     email_address = base::UTF8ToUTF16(*params->email_to_update.email_address);
     updated_email.set_email_address(email_address);
   }

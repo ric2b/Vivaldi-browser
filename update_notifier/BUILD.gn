@@ -1,14 +1,14 @@
+import("//base/win/embedded_i18n/generate_embedded_i18n.gni")
 import("//build/config/locales.gni")
 import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//chrome/process_version_rc_template.gni")
 
-import("//vivaldi/app/resources/vivaldi_grit.gni")
 import("//vivaldi/gn/config/locales.gni")
 
 executable("update_notifier") {
     deps = [
-      ":translation_strings_resource",
+      ":strings",
       ":update_notifier_version",
       "//base",
       "//build/win:default_exe_manifest",
@@ -31,8 +31,6 @@ executable("update_notifier") {
       "update_notifier_manager.cc",
       "update_notifier_manager.h",
       "update_notifier_resources.h",
-      "update_notifier_utils.cc",
-      "update_notifier_utils.h",
       "update_notifier_window.cc",
       "update_notifier_window.h",
     ]
@@ -52,31 +50,31 @@ process_version_rc_template("update_notifier_version") {
   output = "$target_gen_dir/update_notifier_version.rc"
 }
 
-vivaldi_strings_grit_action("translation_strings") {
-  defines = [ "update_notifier=1" ]
-  source = "//vivaldi/app/native_resources/vivaldi_native_strings.grd"
-  resource_ids = "//vivaldi/app/gritsettings/resource_ids"
+generate_embedded_i18n("generate_strings") {
+  languages_json = read_file(
+      "//vivaldi/vivapp/src/constants/language-list.json", "json"
+  )
+  languages = languages_json.languages
+  vivaldi_translation_locales = [ ]
+  foreach(code_and_names, languages.list) {
+    vivaldi_translation_locales += [ code_and_names[0] ]
+  }
+  vivaldi_translation_locales -= [ "en-US" ]
+
+  extractor_datafile = "create_update_notifier_strings_rc.py"
+
+  grd_files_info = [ [
+      "//vivaldi/app/native_resources/",
+      "vivaldi_native_strings",
+      "strings",
+      vivaldi_translation_locales,
+      ] ]
+
+  output_file_name_base = "update_notifier_strings"
 }
 
-source_set("translation_strings_resource") {
-  # Create translations.rc that embeds all *.pak files. Each line should be in
-  # the following format:
-  # locale PAKFILE "locale.pak"
-  rc_lines = []
-  foreach(locale, locales_with_fake_bidi + vivaldi_pending_locales) {
-    locale_underscore = string_replace(locale, "-", "_")
-    file = "vivaldi_native_strings_$locale.pak"
-    line = "$locale_underscore PAKFILE \"$file\""
-
-    # Ensure that the generated file gets \r\n line endings.
-    rc_lines += [ line + "$0x0D" ]
-  }
-  write_file("$target_gen_dir/translations.rc", rc_lines)
-
-  sources = [
-    "$target_gen_dir/translations.rc",
-  ]
-  deps = [
-    ":translation_strings",
-  ]
+# Compile the generated .rc file.
+source_set("strings") {
+  sources = get_target_outputs(":generate_strings")
+  public_deps = [ ":generate_strings" ]
 }

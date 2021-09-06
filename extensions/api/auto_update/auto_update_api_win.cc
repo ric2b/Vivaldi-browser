@@ -16,6 +16,7 @@
 #include "chrome/browser/upgrade_detector/build_state.h"
 #include "chrome/browser/upgrade_detector/build_state_observer.h"
 #include "chrome/browser/upgrade_detector/installed_version_poller.h"
+#include "extensions/tools/vivaldi_tools.h"
 
 #include "app/vivaldi_constants.h"
 #include "browser/launch_update_notifier.h"
@@ -30,15 +31,14 @@ namespace {
 
 void StartManualUpdateCheck() {
   base::CommandLine update_notifier_command =
-      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+      ::vivaldi::GetCommonUpdateNotifierCommand();
   update_notifier_command.AppendSwitch(
       ::vivaldi_update_notifier::kCheckForUpdates);
   ::vivaldi::LaunchNotifierProcess(update_notifier_command);
 }
 
 bool IsUpdateNotifierEnabledFromBrowser() {
-  base::CommandLine cmdline =
-      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
   cmdline.AppendSwitch(vivaldi_update_notifier::kIsEnabled);
   int exit_code = ::vivaldi::RunNotifierSubaction(cmdline);
   if (exit_code != 0 &&
@@ -53,8 +53,7 @@ bool IsUpdateNotifierEnabledFromBrowser() {
 }
 
 bool DisableUpdateNotifierFromBrowser() {
-  base::CommandLine cmdline =
-      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
   cmdline.AppendSwitch(vivaldi_update_notifier::kDisable);
   int exit_code = ::vivaldi::RunNotifierSubaction(cmdline);
   if (exit_code != 0) {
@@ -65,8 +64,7 @@ bool DisableUpdateNotifierFromBrowser() {
 }
 
 bool EnableUpdateNotifierFromBrowser() {
-  base::CommandLine cmdline =
-      ::vivaldi::GetCommonUpdateNotifierCommand(nullptr);
+  base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
   cmdline.AppendSwitch(vivaldi_update_notifier::kEnable);
   int exit_code = ::vivaldi::RunNotifierSubaction(cmdline);
   if (exit_code != 0) {
@@ -87,7 +85,9 @@ class AutoUpdateObserver : public BuildStateObserver {
 
  private:
   void OnUpdate(const BuildState* build_state) override {
-    extensions::AutoUpdateAPI::SendWillInstallUpdateOnQuit();
+    base::Optional<base::Version> version = build_state->installed_version();
+    extensions::AutoUpdateAPI::SendWillInstallUpdateOnQuit(
+        version.value_or(base::Version()));
   }
 
   InstalledVersionPoller installed_version_poller_{
@@ -196,6 +196,12 @@ void AutoUpdateDisableUpdateNotifierFunction::DeliverResult(bool success) {
   namespace Results = vivaldi::auto_update::DisableUpdateNotifier::Results;
 
   Respond(ArgumentList(Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction
+AutoUpdateInstallUpdateAndRestartFunction::Run() {
+  ::vivaldi::RestartBrowser();
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction

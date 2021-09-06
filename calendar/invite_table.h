@@ -40,6 +40,7 @@ class InviteTable {
   bool GetInviteRow(InviteID invite_id, InviteRow* out_invite);
   bool UpdateInvite(const InviteRow& invite);
   bool DeleteInvite(InviteID invite_id);
+  bool DeleteInvitesForCalendar(CalendarID calendar_id);
   bool DoesInviteIdExist(InviteID invite_id);
   bool MigrateCalendarToVersion5();
 

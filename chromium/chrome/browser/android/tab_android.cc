@@ -66,6 +66,9 @@
 #include "url/android/gurl_android.h"
 #include "url/gurl.h"
 
+// Vivaldi
+#include "components/autofill/android/provider/autofill_provider_android.h"
+
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
@@ -174,12 +177,12 @@ bool TabAndroid::IsNativePage() const {
   return Java_TabImpl_isNativePage(env, weak_java_tab_.get(env));
 }
 
-base::string16 TabAndroid::GetTitle() const {
+std::u16string TabAndroid::GetTitle() const {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> java_title =
       Java_TabImpl_getTitle(env, weak_java_tab_.get(env));
   return java_title ? base::android::ConvertJavaStringToUTF16(java_title)
-                    : base::string16();
+                    : std::u16string();
 }
 
 GURL TabAndroid::GetURL() const {
@@ -464,7 +467,7 @@ void TabAndroid::SetActiveNavigationEntryTitleForUrl(
     const JavaParamRef<jstring>& jtitle) {
   DCHECK(web_contents());
 
-  base::string16 title;
+  std::u16string title;
   if (jtitle)
     title = base::android::ConvertJavaStringToUTF16(env, jtitle);
 

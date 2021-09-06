@@ -16,4 +16,6 @@
 - (void)updater:(SUUpdater *)updater willInstallUpdateOnQuit:(SUAppcastItem *)item immediateInstallationInvocation:(NSInvocation *)invocation;
 - (void)updater:(SUUpdater *)updater didAbortWithError:(NSError *)error;
 
+- (void)installUpdateAndRestart;
+
 @end // @interface SparkleUpdaterDelegate

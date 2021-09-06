@@ -19,14 +19,14 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
-import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
-import org.chromium.chrome.browser.webapps.WebApkExtras;
-import org.chromium.chrome.browser.webapps.WebappExtras;
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.intents.WebApkExtras;
+import org.chromium.chrome.browser.browserservices.intents.WebappExtras;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.ui.base.DeviceFormFactor;
 
 // Vivaldi
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * This class makes a decision what FRE type to launch and creates a corresponding intent. Should be
@@ -182,7 +182,7 @@ public class FreIntentCreator {
      */
     private static boolean shouldSwitchToTabbedMode(Context caller) {
         // Vivaldi
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
 
         // Caller must be an activity.
         if (!(caller instanceof Activity)) return false;

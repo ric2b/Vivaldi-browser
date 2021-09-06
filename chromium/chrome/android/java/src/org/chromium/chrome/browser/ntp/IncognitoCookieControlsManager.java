@@ -19,7 +19,7 @@ import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * A manager for cookie controls related behaviour on the incognito description view.
@@ -64,7 +64,7 @@ public class IncognitoCookieControlsManager
 
         mServiceBridge = new CookieControlsServiceBridge(this);
         // Vivaldi
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mShowCard = false;
         else
         mShowCard = true;

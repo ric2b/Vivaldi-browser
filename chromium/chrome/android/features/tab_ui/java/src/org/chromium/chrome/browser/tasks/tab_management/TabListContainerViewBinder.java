@@ -22,7 +22,7 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * ViewBinder for TabListRecyclerView.
@@ -43,7 +43,7 @@ class TabListContainerViewBinder {
                 view.startHiding(model.get(ANIMATE_VISIBILITY_CHANGES));
             }
         } else if (IS_INCOGNITO == propertyKey) {
-            if (!ChromeApplication.isVivaldi())
+            if (!ChromeApplicationImpl.isVivaldi())
             view.setBackgroundColor(ChromeColors.getPrimaryBackgroundColor(
                     view.getResources(), model.get(IS_INCOGNITO)));
         } else if (VISIBILITY_LISTENER == propertyKey) {
@@ -71,7 +71,7 @@ class TabListContainerViewBinder {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
             // Note(david@vivaldi.com): In the tab switcher view the bottom toolbar has always a
             // fixed height (VAB-3531).
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 params.bottomMargin = view.getResources().getDimensionPixelSize(
                         org.chromium.chrome.tab_ui.R.dimen.bottom_toolbar_height);
             else

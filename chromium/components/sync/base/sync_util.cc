@@ -15,8 +15,8 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "app/vivaldi_version_info.h"
-#include "sync/vivaldi_sync_urls.h"
 
 namespace {
 
@@ -55,10 +55,9 @@ std::string GetSystemString() {
 
 namespace syncer {
 namespace internal {
+const char* const kSyncServerUrl = KNOWN_404("/chrome-sync");
 
-const char* const kSyncServerUrl = SYNC_URL("/vivid-sync");
-
-const char* const kSyncDevServerUrl = TEST_SYNC_URL("/vivid-sync");
+const char* const kSyncDevServerUrl = KNOWN_404("/chrome-sync/dev");
 
 std::string FormatUserAgentForSync(const std::string& system,
                                    version_info::Channel channel) {
@@ -121,9 +120,8 @@ GURL GetSyncServiceURL(const base::CommandLine& command_line,
   // development servers. Development servers have more features than standard
   // sync servers. Users with officially-branded Chrome stable and beta builds
   // will go to the standard sync servers.
-  if ((channel == version_info::Channel::STABLE ||
-      channel == version_info::Channel::BETA) &&
-      version_info::IsOfficialBuild()) {
+  if (channel == version_info::Channel::STABLE ||
+      channel == version_info::Channel::BETA) {
     return GURL(internal::kSyncServerUrl);
   }
 

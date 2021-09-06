@@ -13,6 +13,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/time/time_to_iso8601.h"
 #include "base/values.h"
@@ -45,8 +46,8 @@ AdverseAdFilterListService::AdverseAdFilterListService(Profile* profile)
   if (!vivaldi::IsVivaldiRunning())
     return;
   if (profile_) {  // Profile will be null in components.
-    task_runner_ = base::CreateSequencedTaskRunner(
-        {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+    task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
     PrefService* prefs = profile_->GetPrefs();

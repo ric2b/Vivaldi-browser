@@ -20,7 +20,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
@@ -79,11 +79,11 @@ namespace {
 
 void CopyDebuggee(Debuggee* dst, const Debuggee& src) {
   if (src.tab_id)
-    dst->tab_id.reset(new int(*src.tab_id));
+    dst->tab_id = std::make_unique<int>(*src.tab_id);
   if (src.extension_id)
-    dst->extension_id.reset(new std::string(*src.extension_id));
+    dst->extension_id = std::make_unique<std::string>(*src.extension_id);
   if (src.target_id)
-    dst->target_id.reset(new std::string(*src.target_id));
+    dst->target_id = std::make_unique<std::string>(*src.target_id);
 }
 
 // Returns true if the given |Extension| is allowed to attach to the specified
@@ -103,6 +103,10 @@ bool ExtensionMayAttachToURL(const Extension& extension,
   // such to the user), so we don't check explicit page access. However, we
   // still need to check if it's an otherwise-restricted URL.
   if (extension.permissions_data()->IsRestrictedUrl(url, error))
+    return false;
+
+  // Policy blocked hosts supersede the `debugger` permission.
+  if (extension.permissions_data()->IsPolicyBlockedHost(url))
     return false;
 
   if (url.SchemeIsFile() && !util::AllowFileAccess(extension.id(), profile)) {
@@ -221,8 +225,8 @@ class ExtensionDevToolsClientHost : public content::DevToolsAgentHostClient,
       api::debugger::DETACH_REASON_TARGET_CLOSED;
 
   // Listen to extension unloaded notification.
-  ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
-      extension_registry_observer_{this};
+  base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
+      extension_registry_observation_{this};
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionDevToolsClientHost);
 };
@@ -241,7 +245,7 @@ ExtensionDevToolsClientHost::ExtensionDevToolsClientHost(
 
   // ExtensionRegistryObserver listen extension unloaded and detach debugger
   // from there.
-  extension_registry_observer_.Add(ExtensionRegistry::Get(profile_));
+  extension_registry_observation_.Observe(ExtensionRegistry::Get(profile_));
 
   // RVH-based agents disconnect from their clients when the app is terminating
   // but shared worker-based agents do not.
@@ -470,8 +474,9 @@ bool DebuggerFunction::InitAgentHost(std::string* error) {
         ProcessManager::Get(browser_context())
             ->GetBackgroundHostForExtension(*debuggee_.extension_id);
     if (extension_host) {
-      if (extension()->permissions_data()->IsRestrictedUrl(
-              extension_host->GetLastCommittedURL(), error)) {
+      const GURL& url = extension_host->GetLastCommittedURL();
+      if (extension()->permissions_data()->IsRestrictedUrl(url, error) ||
+          extension()->permissions_data()->IsPolicyBlockedHost(url)) {
         return false;
       }
       agent_host_ =

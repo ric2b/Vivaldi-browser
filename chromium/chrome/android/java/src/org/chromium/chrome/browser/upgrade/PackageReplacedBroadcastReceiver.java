@@ -18,7 +18,7 @@ import org.chromium.chrome.browser.vr.VrModuleProvider;
 
 // Vivaldi
 import org.vivaldi.browser.common.VivaldiUtils;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Triggered when Chrome's package is replaced (e.g. when it is upgraded).

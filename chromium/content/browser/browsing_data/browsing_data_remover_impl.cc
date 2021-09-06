@@ -144,6 +144,13 @@ BrowsingDataRemoverImpl::~BrowsingDataRemoverImpl() {
 void BrowsingDataRemoverImpl::SetRemoving(bool is_removing) {
   DCHECK_NE(is_removing_, is_removing);
   is_removing_ = is_removing;
+  if (embedder_delegate_) {
+    if (is_removing_) {
+      embedder_delegate_->OnStartRemoving();
+    } else {
+      embedder_delegate_->OnDoneRemoving();
+    }
+  }
 }
 
 void BrowsingDataRemoverImpl::SetEmbedderDelegate(
@@ -339,6 +346,10 @@ void BrowsingDataRemoverImpl::RemoveImpl(
   if (remove_mask & DATA_TYPE_COOKIES &&
       origin_type_mask_ & ORIGIN_TYPE_UNPROTECTED_WEB) {
     storage_partition_remove_mask |= StoragePartition::REMOVE_DATA_MASK_COOKIES;
+    // Interest groups should be cleared with cookies for its origin trial as
+    // the current FLEDGE implementation has the same privacy characteristics.
+    storage_partition_remove_mask |=
+        StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS;
     if (embedder_delegate_) {
       domains_for_deferred_cookie_deletion_ =
           embedder_delegate_->GetDomainsForDeferredCookieDeletion(remove_mask);

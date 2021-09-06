@@ -4,17 +4,17 @@
 
 #include "components/metrics/url_constants.h"
 
-#include "sync/vivaldi_sync_urls.h"
+#include "app/vivaldi_constants.h"
 
 namespace metrics {
 
 const char kNewMetricsServerUrl[] =
-    SYNC_URL("/uma/v2");
+    KNOWN_404("/uma/v2");
 
 const char kNewMetricsServerUrlInsecure[] =
-    SYNC_URL("/uma/v2");
+    KNOWN_404("/uma/v2");
 
-const char kOldMetricsServerUrl[] = SYNC_URL("/uma/v2");
+const char kOldMetricsServerUrl[] = KNOWN_404("/uma/v2");
 
 const char kDefaultMetricsMimeType[] = "application/vnd.chrome.uma";
 

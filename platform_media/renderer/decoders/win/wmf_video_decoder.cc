@@ -17,10 +17,6 @@ WMFVideoDecoder::WMFVideoDecoder(
 WMFVideoDecoder::~WMFVideoDecoder() {
 }
 
-std::string WMFVideoDecoder::GetDisplayName() const {
-  return "WMFVideoDecoder";
-}
-
 void WMFVideoDecoder::Initialize(const VideoDecoderConfig& config,
                                  bool low_delay,
                                  CdmContext* cdm_context,

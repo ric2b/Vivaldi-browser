@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "content/public/browser/notification_observer.h"
 #include "ui/base/models/tree_node_model.h"

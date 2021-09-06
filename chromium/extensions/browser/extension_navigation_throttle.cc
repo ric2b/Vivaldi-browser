@@ -31,6 +31,7 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
 #include "extensions/common/manifest_handlers/webview_info.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -48,8 +49,8 @@ namespace {
 bool ShouldBlockNavigationToPlatformAppResource(
     const Extension* platform_app,
     content::WebContents* web_contents) {
-  ViewType view_type = GetViewType(web_contents);
-  DCHECK_NE(VIEW_TYPE_INVALID, view_type);
+  mojom::ViewType view_type = GetViewType(web_contents);
+  DCHECK_NE(mojom::ViewType::kInvalid, view_type);
 
   if (vivaldi::IsVivaldiApp(platform_app->id())) {
     WebViewGuest* web_view_guest = WebViewGuest::FromWebContents(web_contents);
@@ -59,17 +60,17 @@ bool ShouldBlockNavigationToPlatformAppResource(
   }
 
   // Navigation to platform app's background page.
-  if (view_type == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE)
+  if (view_type == mojom::ViewType::kExtensionBackgroundPage)
     return false;
 
   // Navigation within an extension dialog, e.g. this is used by ChromeOS file
   // manager.
-  if (view_type == VIEW_TYPE_EXTENSION_DIALOG)
+  if (view_type == mojom::ViewType::kExtensionDialog)
     return false;
 
   // Navigation within an app window. The app window must belong to the
   // |platform_app|.
-  if (view_type == VIEW_TYPE_APP_WINDOW) {
+  if (view_type == mojom::ViewType::kAppWindow) {
     AppWindowRegistry* registry =
         AppWindowRegistry::Get(web_contents->GetBrowserContext());
     DCHECK(registry);
@@ -83,7 +84,7 @@ bool ShouldBlockNavigationToPlatformAppResource(
   }
 
   // Navigation within a guest web contents.
-  if (view_type == VIEW_TYPE_EXTENSION_GUEST) {
+  if (view_type == mojom::ViewType::kExtensionGuest) {
     // Platform apps can be embedded by other platform apps using an <appview>
     // tag.
     AppViewGuest* app_view = AppViewGuest::FromWebContents(web_contents);
@@ -101,10 +102,10 @@ bool ShouldBlockNavigationToPlatformAppResource(
     return true;
   }
 
-  DCHECK(view_type == VIEW_TYPE_BACKGROUND_CONTENTS ||
-         view_type == VIEW_TYPE_COMPONENT ||
-         view_type == VIEW_TYPE_EXTENSION_POPUP ||
-         view_type == VIEW_TYPE_TAB_CONTENTS)
+  DCHECK(view_type == mojom::ViewType::kBackgroundContents ||
+         view_type == mojom::ViewType::kComponent ||
+         view_type == mojom::ViewType::kExtensionPopup ||
+         view_type == mojom::ViewType::kTabContents)
       << "Unhandled view type: " << view_type;
 
   return true;
@@ -137,7 +138,8 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     DCHECK(!navigation_handle()->IsSameDocument());
 
     if (host &&
-        host->extension_host_type() == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE &&
+        host->extension_host_type() ==
+            mojom::ViewType::kExtensionBackgroundPage &&
         host->initial_url() != navigation_handle()->GetURL()) {
       return content::NavigationThrottle::CANCEL;
     }
@@ -202,7 +204,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     // https://crbug.com/652077.
     bool has_webview_permission =
         target_extension->permissions_data()->HasAPIPermission(
-            APIPermission::kWebView);
+            mojom::APIPermissionID::kWebView);
     if (!has_webview_permission) {
       RecordExtensionResourceAccessResult(
           source_id, url, ExtensionResourceAccessResult::kCancel);
@@ -221,10 +223,20 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
           registry->enabled_extensions().GetByID(owner_extension_id);
 
       content::StoragePartitionConfig storage_partition_config =
-          content::StoragePartitionConfig::CreateDefault();
-      bool is_guest = WebViewGuest::GetGuestPartitionConfigForSite(
-          navigation_handle()->GetStartingSiteInstance()->GetSiteURL(),
-          &storage_partition_config);
+          content::StoragePartitionConfig::CreateDefault(browser_context);
+      bool is_guest = navigation_handle()->GetStartingSiteInstance()->IsGuest();
+      if (is_guest) {
+        is_guest = WebViewGuest::GetGuestPartitionConfigForSite(
+            browser_context,
+            navigation_handle()->GetStartingSiteInstance()->GetSiteURL(),
+            &storage_partition_config);
+      }
+      // NOTE (andre@vivaldi.com) : navigation_handle()->IsGuest() might be true
+      //  while GetGuestPartitionConfigForSite is not for non-guest schemes.
+      if (!vivaldi::IsVivaldiRunning()) {
+      CHECK_EQ(is_guest,
+               navigation_handle()->GetStartingSiteInstance()->IsGuest());
+      }
 
       bool allowed = true;
       url_request_util::AllowCrossRendererResourceLoadHelper(

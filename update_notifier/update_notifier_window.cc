@@ -18,12 +18,15 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/current_module.h"
 
+#include "installer/win/vivaldi_install_l10n.h"
 #include "update_notifier/update_notifier_manager.h"
 #include "update_notifier/update_notifier_resources.h"
-#include "update_notifier/update_notifier_utils.h"
-#include "vivaldi/update_notifier/grit/vivaldi_native_strings.h"
+#include "vivaldi/update_notifier/update_notifier_strings.h"
 
 namespace vivaldi_update_notifier {
+
+using installer::GetLocalizedString;
+using installer::GetLocalizedStringF;
 
 namespace {
 const int kNotificationUid = 1;
@@ -103,7 +106,7 @@ UpdateNotifierWindow::UpdateNotifierWindow() : is_showing_notification_(false) {
   }
 
   notification_menu_.AppendStringMenuItem(
-      GetTranslation(IDS_UPDATE_NOTIFIER_UPDATE_VIVALDI), MFS_DEFAULT,
+      GetLocalizedString(IDS_UPDATE_NOTIFIER_UPDATE_VIVALDI_BASE), MFS_DEFAULT,
       kUpdateMenuItemId);
 }
 
@@ -126,8 +129,9 @@ void UpdateNotifierWindow::ShowNotification(const std::wstring& version) {
   notify_icon.uCallbackMessage = kNotificationCallbackMessage;
   LoadIconMetric(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_NOTIFIER_MAIN),
                  LIM_SMALL, &notify_icon.hIcon);
-  SetNotificationString(notify_icon.szTip, base::size(notify_icon.szTip),
-                        GetTranslation(IDS_UPDATE_NOTIFICATION_TOOLTIP));
+  SetNotificationString(
+      notify_icon.szTip, base::size(notify_icon.szTip),
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_TOOLTIP_BASE));
   notify_icon.dwInfoFlags = NIIF_USER;
 
   if (is_showing_notification_)
@@ -139,15 +143,16 @@ void UpdateNotifierWindow::ShowNotification(const std::wstring& version) {
   notify_icon.uVersion = NOTIFYICON_VERSION_4;
   Shell_NotifyIcon(NIM_SETVERSION, &notify_icon);
 
-  SetNotificationString(notify_icon.szInfo, base::size(notify_icon.szInfo),
-                        GetTranslation(IDS_UPDATE_NOTIFICATION_TEXT, version));
+  SetNotificationString(
+      notify_icon.szInfo, base::size(notify_icon.szInfo),
+      GetLocalizedStringF(IDS_UPDATE_NOTIFICATION_TEXT_BASE, version));
   notify_icon.uTimeout = 30000;
   int message_id = UpdateNotifierManager::IsSilentDownload()
-                       ? IDS_UPDATE_DOWNLOAD_NOTIFICATION_TITLE
-                       : IDS_UPDATE_NOTIFICATION_TITLE;
+                       ? IDS_UPDATE_DOWNLOAD_NOTIFICATION_TITLE_BASE
+                       : IDS_UPDATE_NOTIFICATION_TITLE_BASE;
   SetNotificationString(notify_icon.szInfoTitle,
                         base::size(notify_icon.szInfoTitle),
-                        GetTranslation(message_id));
+                        GetLocalizedString(message_id));
   Shell_NotifyIcon(NIM_MODIFY, &notify_icon);
 }
 

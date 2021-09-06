@@ -219,20 +219,19 @@
           {
             "name": "tabInfo",
             "$ref": "UpdateTabInfo"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "tabInfo",
-                "$ref": "UpdateTabInfo",
-                "description": "Return value with the updated tab info."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "tabInfo",
+              "$ref": "UpdateTabInfo",
+              "description": "Return value with the updated tab info."
+            }
+          ]
+        }
       },
       {
         "name": "get",
@@ -243,19 +242,18 @@
             "type": "integer",
             "name": "tabId",
             "minimum": 0
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "tabInfo",
-                "$ref": "UpdateTabInfo"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "tabInfo",
+              "$ref": "UpdateTabInfo"
+            }
+          ]
+        }
       },
       {
         "name": "insertText",
@@ -306,14 +304,13 @@
             "type": "integer",
             "optional": "true",
             "description": "The amount to scroll by"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "description": "Callback function used for error handling",
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Callback function used for error handling",
+          "parameters": []
+        }
       },
       {
         "name": "getSpatialNavigationRects",
@@ -324,21 +321,20 @@
             "name": "tabId",
             "type": "integer",
             "minimum": 0
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "navigationRectList",
-                "type": "array",
-                "items": { "$ref": "NavigationRect" },
-                "description": "All navigable rects on the page."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "navigationRectList",
+              "type": "array",
+              "items": { "$ref": "NavigationRect" },
+              "description": "All navigable rects on the page."
+            }
+          ]
+        }
       },
       {
         "name": "getScrollPosition",
@@ -353,7 +349,6 @@
           {
             "type": "function",
             "name": "callback",
-            "optional": false,
             "parameters": [
               {
                 "name": "scrollX",
@@ -408,20 +403,18 @@
             "name": "tabId",
             "type": "integer",
             "minimum": 0
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": false,
-            "parameters": [
-              {
-                "name": "hasHandler",
-                "type": "boolean",
-                "description": "true if the page has a beforeunload or unload handler, blocking a quick termination of the tab."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "hasHandler",
+              "type": "boolean",
+              "description": "true if the page has a beforeunload or unload handler, blocking a quick termination of the tab."
+            }
+          ]
+        }
       },
       {
         "name": "translatePage",
@@ -442,20 +435,18 @@
             "name": "destLang",
             "type": "string",
             "description": "Destination language code to translate to. Must be present."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": false,
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "Immediate errors will be given in the callback, eg. for invalid or missing language codes, pages that cannot be translated (eg. devtools, blank pages), etc."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "Immediate errors will be given in the callback, eg. for invalid or missing language codes, pages that cannot be translated (eg. devtools, blank pages), etc."
+            }
+          ]
+        }
       },
       {
         "name": "revertTranslatePage",
@@ -466,19 +457,18 @@
             "name": "tabId",
             "type": "integer",
             "minimum": 0
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if the page can be reverted, otherwise false."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "true if the page can be reverted, otherwise false."
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -531,6 +521,11 @@
             "type": "integer",
             "name": "tabId",
             "minimum": 0
+          },
+          {
+            "type": "integer",
+            "name": "windowId",
+            "minimum": -1
           },
           {
             "name": "tabInfo",
@@ -883,8 +878,8 @@
           },
           {
             "type": "boolean",
-            "name": "triggeredFromMenu",
-            "description": "true if this was triggered by a manual action or not."
+            "name": "automaticTranslation",
+            "description": "true if this was triggered by an automatic translation."
           }
         ]
       },

@@ -33,7 +33,7 @@ class InProcessImporterBridge : public ImporterBridge {
 
   // Begin ImporterBridge implementation:
   void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
-                    const base::string16& first_folder_name) override;
+                    const std::u16string& first_folder_name) override;
 
   void AddHomePage(const GURL& home_page) override;
 
@@ -56,10 +56,11 @@ class InProcessImporterBridge : public ImporterBridge {
   void NotifyItemEnded(importer::ImportItem item) override;
   void NotifyEnded() override;
 
+  std::u16string GetLocalizedString(int message_id) override;
+
   // Vivaldi
-  void AddNotes(
-      const std::vector<ImportedNotesEntry>& notes,
-      const base::string16& first_folder_name) override;
+  void AddNotes(const std::vector<ImportedNotesEntry>& notes,
+                const std::u16string& first_folder_name) override;
 
   void AddSpeedDial(
       const std::vector<ImportedSpeedDialEntry>& speeddials) override;
@@ -67,7 +68,6 @@ class InProcessImporterBridge : public ImporterBridge {
   void NotifyItemFailed(importer::ImportItem item,
                         const std::string& error) override;
 
-  base::string16 GetLocalizedString(int message_id) override;
   // End ImporterBridge implementation.
 
  private:

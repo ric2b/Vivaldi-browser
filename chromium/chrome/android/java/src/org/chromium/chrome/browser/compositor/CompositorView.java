@@ -41,7 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 // Vivaldi
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The is the {@link View} displaying the ui compositor results; including webpages and tabswitcher.
@@ -152,7 +152,7 @@ public class CompositorView
         // Request the opaque surface.  We might need the translucent one, but
         // we don't know yet.  We'll switch back later if we discover that
         // we're on a low memory device that always uses translucent.
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         mCompositorSurfaceManager.requestSurface(PixelFormat.OPAQUE);
         // Note(david@vivaldi.com): Changing to translucent surface might fix our rending issues
         // like VAB-3138.
@@ -348,12 +348,15 @@ public class CompositorView
      * Enables/disables immersive AR overlay mode, a variant of overlay video mode.
      * @param enabled Whether to enter or leave overlay immersive ar mode.
      */
-    public void setOverlayImmersiveArMode(boolean enabled) {
+    public void setOverlayImmersiveArMode(boolean enabled, boolean domSurfaceNeedsConfiguring) {
         // Disable SurfaceControl for the duration of the session. This works around a black
         // screen after activating the screen keyboard (IME), see https://crbug.com/1166248.
         mIsInXr = enabled;
 
-        setOverlayVideoMode(enabled);
+        if (domSurfaceNeedsConfiguring) {
+            setOverlayVideoMode(enabled);
+        }
+
         CompositorViewJni.get().setOverlayImmersiveArMode(
                 mNativeCompositorView, CompositorView.this, enabled);
         // Entering or exiting AR mode can leave SurfaceControl in a confused state, especially if

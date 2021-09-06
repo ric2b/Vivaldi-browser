@@ -44,11 +44,12 @@ import android.text.TextUtils;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import org.chromium.base.task.PostTask;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
 import static org.chromium.content_public.browser.ActionModeCallbackHelper.MAX_SEARCH_QUERY_LENGTH;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.vivaldi.browser.common.VivaldiIntentHandler;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -192,7 +193,7 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
 
         Barcode firstCode = barcodes.valueAt(0);
         if (!URLUtil.isValidUrl(firstCode.rawValue)) {
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 promptForScannedNonUrlOptions(firstCode.rawValue, camera);
             else {
             String toastMessage =
@@ -223,6 +224,8 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
                         .putExtra(Browser.EXTRA_APPLICATION_ID, mContext.getPackageName())
                         .putExtra(ShortcutHelper.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, true);
         IntentHandler.addTrustedIntentExtras(intent);
+        if (ChromeApplicationImpl.isVivaldi())
+            intent.putExtra(VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, true);
         mContext.startActivity(intent);
     }
 

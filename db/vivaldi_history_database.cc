@@ -81,7 +81,7 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
         base::Time::FromInternalValue(url_sql.ColumnInt64(1));
 
     GURL url(url_sql.ColumnString(2));
-    base::string16 title = url_sql.ColumnString16(3);
+    std::u16string title = url_sql.ColumnString16(3);
     ui::PageTransition transitionType =
         ui::PageTransitionFromInt(url_sql.ColumnInt(4));
     int visit_count = url_sql.ColumnInt(5);

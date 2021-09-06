@@ -3,16 +3,13 @@
 #ifndef UI_VIVALDI_LOCATION_BAR_H_
 #define UI_VIVALDI_LOCATION_BAR_H_
 
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
-
-class Profile;
-class Browser;
 
 namespace content {
 class WebContents;
 }
+
+class VivaldiBrowserWindow;
 
 /*
 This is the Vivaldi implementation of the LocationBar class, but
@@ -20,7 +17,7 @@ for the most part it's empty.
 */
 class VivaldiLocationBar : public LocationBar {
  public:
-  VivaldiLocationBar();
+  VivaldiLocationBar(const VivaldiBrowserWindow& window);
   ~VivaldiLocationBar() override;
 
   // The details necessary to open the user's desired omnibox match.
@@ -46,14 +43,12 @@ class VivaldiLocationBar : public LocationBar {
   // Returns a pointer to the testing interface.
   LocationBarTesting* GetLocationBarForTesting() override;
 
-  void SetBrowser(Browser* browser) {browser_ = browser;}
-
  protected:
   DISALLOW_COPY_AND_ASSIGN(VivaldiLocationBar);
 
  private:
-  //Profile* profile_ = nullptr;
-  Browser* browser_ = nullptr;
+ // Owner
+  const VivaldiBrowserWindow& window_;
 };
 
 #endif  // UI_VIVALDI_LOCATION_BAR_H_

@@ -6,7 +6,6 @@
 #include <string>
 #include <vector>
 
-#include "base/strings/string16.h"
 #include "url/gurl.h"
 
 struct ImportedSpeedDialEntry {
@@ -14,7 +13,7 @@ struct ImportedSpeedDialEntry {
   ~ImportedSpeedDialEntry();
 
   GURL url;
-  base::string16 title;
+  std::u16string title;
 };
 
 #endif  // IMPORTER_IMPORTED_SPEEDDIAL_ENTRY_H_

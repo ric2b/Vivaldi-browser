@@ -25,7 +25,6 @@ class MEDIA_EXPORT WMFAudioDecoder : public AudioDecoder {
   ~WMFAudioDecoder() override;
 
   // AudioDecoder implementation.
-  std::string GetDisplayName() const override;
   void Initialize(const AudioDecoderConfig& config,
                   CdmContext* cdm_context,
                   InitCB init_cb,

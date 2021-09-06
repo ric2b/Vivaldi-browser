@@ -29,7 +29,7 @@ DeviceMenuController::DeviceMenuController(
 DeviceMenuController::~DeviceMenuController() {}
 
 void DeviceMenuController::Populate(Browser* browser,
-                                    base::string16 label,
+                                    std::u16string label,
                                     ui::SimpleMenuModel* menu_model,
                                     ui::SimpleMenuModel::Delegate* delegate) {
   if (mode_ == kPage) {

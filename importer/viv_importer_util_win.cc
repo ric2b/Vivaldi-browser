@@ -19,7 +19,7 @@ static const wchar_t* kMailFolder = L"mail";
 
 base::FilePath GetOperaInstallPathFromRegistry() {
   // Detects the path that Opera is installed in.
-  base::string16 registry_path = kOperaRegPath;
+  std::wstring registry_path = kOperaRegPath;
   wchar_t buffer[MAX_PATH];
   DWORD buffer_length = sizeof(buffer);
   base::win::RegKey reg_key(HKEY_CURRENT_USER, registry_path.c_str(), KEY_READ);

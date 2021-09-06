@@ -7,6 +7,9 @@ package org.chromium.components.translate;
 import java.util.ArrayList;
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Translate menu config and its item entity definition.
  */
@@ -47,7 +50,8 @@ public final class TranslateMenu {
     public static final int ITEM_LANGUAGE = 0;
     public static final int ITEM_CHECKBOX_OPTION = 1;
     public static final int ITEM_CONTENT_LANGUAGE = 2;
-    public static final int MENU_ITEM_TYPE_COUNT = 3;
+    public static final int ITEM_VIVALDI_INFO = 3;
+    public static final int MENU_ITEM_TYPE_COUNT = 4;
 
     // Menu Item ID config for MENU_OVERFLOW.
     public static final int ID_OVERFLOW_MORE_LANGUAGE = 0;
@@ -55,7 +59,7 @@ public final class TranslateMenu {
     public static final int ID_OVERFLOW_NEVER_SITE = 2;
     public static final int ID_OVERFLOW_NEVER_LANGUAGE = 3;
     public static final int ID_OVERFLOW_NOT_THIS_LANGUAGE = 4;
-
+    public static final int ID_OVERFLOW_VIVALDI_INFO = 5;
     /**
      * Build overflow menu item list.
      */
@@ -71,8 +75,13 @@ public final class TranslateMenu {
         if (!isSourceLangUnknown) {
             menu.add(new MenuItem(ITEM_CHECKBOX_OPTION, ID_OVERFLOW_NEVER_LANGUAGE, false));
         }
+        if (BuildConfig.IS_VIVALDI) {
+            menu.add(new MenuItem(ITEM_CHECKBOX_OPTION, ID_OVERFLOW_NEVER_SITE, true));
+            menu.add(new MenuItem(ITEM_VIVALDI_INFO, ID_OVERFLOW_VIVALDI_INFO, false));
+        } else {
         menu.add(new MenuItem(ITEM_CHECKBOX_OPTION, ID_OVERFLOW_NEVER_SITE, false));
         menu.add(new MenuItem(ITEM_CHECKBOX_OPTION, ID_OVERFLOW_NOT_THIS_LANGUAGE, false));
+        }
         return menu;
     }
 

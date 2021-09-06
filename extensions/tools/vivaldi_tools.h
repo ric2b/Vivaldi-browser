@@ -6,7 +6,6 @@
 #include <memory>
 #include <string>
 
-#include "base/strings/string16.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -61,7 +60,7 @@ void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect);
 gfx::PointF ToUICoordinates(content::WebContents* web_contents,
                             const gfx::PointF& p);
 
-base::string16 KeyCodeToName(ui::KeyboardCode key_code);
+std::u16string KeyCodeToName(ui::KeyboardCode key_code);
 
 std::string ShortcutTextFromEvent(const content::NativeWebKeyboardEvent& event);
 
@@ -72,6 +71,8 @@ std::string GetImagePathFromProfilePath(const std::string& preferences_path,
 void SetImagePathForProfilePath(const std::string& preferences_path,
                                 const std::string& avatar_path,
                                 const std::string& profile_path);
+
+void RestartBrowser();
 
 }  // namespace vivaldi
 

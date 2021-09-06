@@ -170,37 +170,34 @@
                 "minItems": 1
               }
             ]
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "NoteTreeNode" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "NoteTreeNode" }
+            }
+          ]
+        }
       },
       {
         "name": "getTree",
         "type": "function",
         "description": "Retrieves the entire Notes hierarchy.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "NoteTreeNode" }
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "NoteTreeNode" }
+            }
+          ]
+        }
       },
       {
         "name": "create",
@@ -210,19 +207,18 @@
           {
             "$ref": "CreateDetails",
             "name": "note"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "NoteTreeNode"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "NoteTreeNode"
+            }
+          ]
+        }
       },
       {
         "name": "update",
@@ -257,19 +253,18 @@
                 "optional": true
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "NoteTreeNode"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "NoteTreeNode"
+            }
+          ]
+        }
       },
       {
         "name": "remove",
@@ -280,14 +275,13 @@
             "type": "string",
             "serialized_type": "int64",
             "name": "id"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": []
+        }
       },
       {
         "name": "search",
@@ -298,19 +292,18 @@
             "name": "query",
             "description": "A string of words matched agains note contents.",
             "type": "string"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "NoteTreeNode" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "NoteTreeNode" }
+            }
+          ]
+        }
       },
       {
         "name": "move",
@@ -340,37 +333,34 @@
                 "optional": true
               }
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "$ref": "NoteTreeNode"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "NoteTreeNode"
+            }
+          ]
+        }
       },
       {
         "name": "emptyTrash",
         "type": "function",
         "description": "Empty the notes trash folder.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if the operation was successful, otherwise false."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "true if the operation was successful, otherwise false."
+            }
+          ]
+        }
       }
     ],
     "events": [

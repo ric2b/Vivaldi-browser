@@ -271,14 +271,14 @@ void ImportDataGetProfilesFunction::Finished() {
 
     profile->profile_path =
 #if defined(OS_WIN)
-        base::UTF16ToUTF8(source_profile.source_path.value());
+        base::WideToUTF8(source_profile.source_path.value());
 #else
         source_profile.source_path.value();
 #endif  // defined(OS_WIN)
 
     profile->mail_path =
 #if defined(OS_WIN)
-        base::UTF16ToUTF8(source_profile.mail_path.value());
+        base::WideToUTF8(source_profile.mail_path.value());
 #else
         source_profile.mail_path.value();
 #endif  // defined(OS_WIN)
@@ -342,7 +342,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 dialog_title;
+  std::u16string dialog_title;
 
   std::vector<std::string>& ids = params->items_to_import;
   size_t count = ids.size();
@@ -431,7 +431,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
 
 ExtensionFunction::ResponseAction
 ImportDataStartImportFunction::HandleChooseBookmarksFileOrFolder(
-    const base::string16& title,
+    const std::u16string& title,
     base::StringPiece extension,
     const base::FilePath& default_file,
     bool file_selection) {

@@ -19,6 +19,7 @@
 #include "components/feed/core/proto/v2/wire/request_schedule.pb.h"
 #include "components/feed/core/proto/v2/wire/stream_structure.pb.h"
 #include "components/feed/core/proto/v2/wire/token.pb.h"
+#include "components/feed/core/v2/feedstore_util.h"
 #include "components/feed/core/v2/metrics_reporter.h"
 #include "components/feed/core/v2/proto_util.h"
 
@@ -96,7 +97,7 @@ bool TranslateFeature(feedwire::Feature* feature,
   result.stream_structure.set_type(type);
 
   if (type == feedstore::StreamStructure::CONTENT) {
-    feedwire::Content* wire_content = feature->mutable_content_extension();
+    feedwire::Content* wire_content = feature->mutable_content();
 
     if (!wire_content->has_xsurface_content())
       return false;
@@ -138,8 +139,13 @@ bool TranslatePayload(base::Time now,
   switch (operation.payload_case()) {
     case feedwire::DataOperation::kFeature: {
       feedwire::Feature* feature = operation.mutable_feature();
-      result.stream_structure.set_allocated_parent_id(
-          feature->release_parent_id());
+      DCHECK(!result.stream_structure.has_parent_id());
+      if (feature->has_parent_id()) {
+        result.stream_structure.set_allocated_parent_id(
+            feature->release_parent_id());
+      } else if (feature->is_root()) {
+        result.stream_structure.set_is_root(true);
+      }
 
       if (!TranslateFeature(feature, result))
         return false;
@@ -291,12 +297,9 @@ RefreshResponseData TranslateWireResponse(
   }
 
   if (!result->shared_states.empty()) {
-    if (result->shared_states.size() > 1) {
-      DLOG(ERROR)
-          << "Receieved more than one shared state. Only the first is used.";
+    for (const auto& shared_state : result->shared_states) {
+      *result->stream_data.add_shared_state_ids() = shared_state.content_id();
     }
-    *result->stream_data.mutable_shared_state_id() =
-        result->shared_states.front().content_id();
   }
   feedstore::SetLastAddedTime(current_time, result->stream_data);
 

@@ -15,15 +15,18 @@ namespace blink {
 class NGBlockNode;
 class NGBlockBreakToken;
 class NGBoxFragment;
+struct DevtoolsFlexInfo;
 
 class CORE_EXPORT NGFlexLayoutAlgorithm
     : public NGLayoutAlgorithm<NGBlockNode,
                                NGBoxFragmentBuilder,
                                NGBlockBreakToken> {
  public:
-  NGFlexLayoutAlgorithm(const NGLayoutAlgorithmParams& params);
+  explicit NGFlexLayoutAlgorithm(const NGLayoutAlgorithmParams& params,
+                                 DevtoolsFlexInfo* devtools = nullptr);
 
-  MinMaxSizesResult ComputeMinMaxSizes(const MinMaxSizesInput&) const override;
+  MinMaxSizesResult ComputeMinMaxSizes(
+      const MinMaxSizesFloatInput&) const override;
   scoped_refptr<const NGLayoutResult> Layout() override;
 
  private:
@@ -37,7 +40,6 @@ class CORE_EXPORT NGFlexLayoutAlgorithm
                                      const Length& length) const;
   bool AspectRatioProvidesMainSize(const NGBlockNode& child,
                                    const Length& cross_axis_length) const;
-  bool ShouldItemShrinkToFit(const NGBlockNode& child) const;
   double GetMainOverCrossAspectRatio(const NGBlockNode& child) const;
   bool DoesItemStretch(const NGBlockNode& child) const;
   // This implements the first of the additional scenarios where a flex item
@@ -86,6 +88,7 @@ class CORE_EXPORT NGFlexLayoutAlgorithm
 
   bool ignore_child_scrollbar_changes_ = false;
   FlexLayoutAlgorithm algorithm_;
+  DevtoolsFlexInfo* layout_info_for_devtools_;
 };
 
 }  // namespace blink

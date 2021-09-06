@@ -298,8 +298,14 @@
           "syncable": true
         }
       },
+      "confirm_adding": {
+        "description": "Always show dialog when adding a bookmarks via shortcut",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
       "confirm_opening": {
-        "description": "Ask before opening a number of bookmarks >= to  kBookmarksConfirmOpeningThreshold",
+        "description": "Ask before opening a number of bookmarks >= to kBookmarksConfirmOpeningThreshold",
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -404,6 +410,12 @@
       }
     },
     "calendar": {
+      "onboarding_shown": {
+        "description": "Allow relative dates display",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
       "date_format": {
         "type": "enum",
         "enum_values": {
@@ -539,6 +551,17 @@
         "default": "",
         "syncable": true
       },
+      "send_invite_email_action": {
+        "description": "Sending of invite emails to attendees, 'ask' shows a dialog for user",
+        "type": "enum",
+        "enum_values": {
+          "ask": 0,
+          "cancel": 1,
+          "send": 2
+        },
+        "default": "ask",
+        "syncable": false
+      },
       "day_starts": {
         "type": "integer",
         "default": 8,
@@ -586,6 +609,17 @@
           "timed_only": 2
         },
         "default": "always",
+        "syncable": true
+      },
+      "auto_tab_datetime": {
+        "description": "Whether to automatically move focus on complete date/time typed",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "default_account_id": {
+        "type": "string",
+        "default": "",
         "syncable": true
       }
     },
@@ -894,7 +928,7 @@
       "is_turned_off": {
         "description": "Is mail client turned on or off?",
         "type": "boolean",
-        "default": false,
+        "default": true,
         "syncable": false
       },
       "last_sent_from": {
@@ -1548,6 +1582,14 @@
         }
       }
     },
+    "chained_commands": {
+      "command_list": {
+        "description": "A list of chained commands",
+        "type": "list",
+        "syncable": false,
+        "default": []
+      }
+    },
     "quick_commands": {
       "open_url_in_new_tab": {
         "description": "Open QC links in a new tab, overriding global setting",
@@ -1627,6 +1669,7 @@
         "default": [
           "CALCULATOR",
           "NORMAL_COMMAND",
+          "COMMAND_CHAIN",
           "KEYWORD_SEARCH",
           "OPEN_TABS",
           "BOOKMARK_ITEM_OR_FOLDER",
@@ -1796,7 +1839,7 @@
         "game_button_show": {
           "description": "Show Game button on the Speed Dial",
           "type": "boolean",
-          "default": true,
+          "default": false,
           "syncable": true
         },
         "width": {
@@ -1812,6 +1855,16 @@
         "type": "boolean",
         "default": true,
         "syncable": false
+      },
+      "has_seen_feature": {
+        "description": "Most recent major feature shown in welcome page. 'none' means the initial welcome content pre mail. Appaned new features to enum when needed in increasing order.",
+        "type": "enum",
+        "enum_values": {
+          "none": 0,
+          "mail": 1
+        },
+        "default": "none",
+        "syncable": true
       },
       "last_seen_version": {
         "description": "Most recent version number seen on startup",
@@ -2313,7 +2366,7 @@
           "description": "A valid color, image path, 'user_color', 'user_image', 'desktop_image' or empty string",
           "type": "string",
           "syncable": false,
-          "default": "../resources/bg_3.8.light.webp"
+          "default": "../resources/4-0-wallpaper-light.jpg"
         },
         "user_color": {
           "description": "User-defined background color",
@@ -2338,6 +2391,12 @@
           "default": "stretched",
           "syncable": false
         }
+      },
+      "simple_scrollbar": {
+        "description": "Use simple scrollbars on Windows/Linux",
+        "type": "boolean",
+        "default": false,
+        "syncable": true
       },
       "schedule": {
         "enabled": {
@@ -2691,6 +2750,32 @@
         "default": true,
         "description": "Should embed YouTube attachments",
         "syncable": true
+      },
+      "detect_feeds": {
+        "description": "Inject feeds detection code into web pages?",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      }
+    },
+    "update": {
+      "notifier": {
+        "type": "boolean",
+        "default": true,
+        "description": "Displays information about current update state",
+        "syncable": false
+      },
+      "schedule": {
+        "type": "enum",
+        "default": "auto_install",
+        "description": "Determines how interactive the update process should be",
+        "syncable": false,
+        "enum_values": {
+          "manual": 0,
+          "ask": 1,
+          "auto_download": 2,
+          "auto_install": 3
+        }
       }
     },
     "windows": {

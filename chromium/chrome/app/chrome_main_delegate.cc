@@ -136,7 +136,7 @@
 #include "chrome/browser/android/metrics/uma_session_stats.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/common/chrome_descriptors.h"
-#include "content/public/common/cpu_affinity.h"
+#include "components/power_scheduler/power_scheduler.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #else  // defined(OS_ANDROID)
 // Diagnostics is only available on non-android platforms.
@@ -345,7 +345,7 @@ bool HandleVersionSwitches(const base::CommandLine& command_line) {
 #else
            version_info::GetVersionNumber().c_str(),
 #endif
-           chrome::GetChannelName().c_str());
+           chrome::GetChannelName(chrome::WithExtendedStable(true)).c_str());
     return true;
   }
 
@@ -639,7 +639,12 @@ void ChromeMainDelegate::PostFieldTrialInitialization() {
   // removed, the sandbox allowlist should be updated too.
   if (base::FeatureList::IsEnabled(
           features::kCpuAffinityRestrictToLittleCores)) {
-    content::EnforceProcessCpuAffinity(base::CpuAffinityMode::kLittleCoresOnly);
+    power_scheduler::PowerScheduler::GetInstance()->SetPolicy(
+        power_scheduler::SchedulingPolicy::kLittleCoresOnly);
+  } else if (base::FeatureList::IsEnabled(
+                 features::kPowerSchedulerThrottleIdle)) {
+    power_scheduler::PowerScheduler::GetInstance()->SetPolicy(
+        power_scheduler::SchedulingPolicy::kThrottleIdle);
   }
 #endif
 

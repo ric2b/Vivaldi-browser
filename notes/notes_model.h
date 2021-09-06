@@ -38,8 +38,8 @@ class NotesModel : public KeyedService {
  public:
   struct URLAndTitle {
     GURL url;
-    base::string16 title;
-    base::string16 content;
+    std::u16string title;
+    std::u16string content;
   };
 
  public:
@@ -98,7 +98,7 @@ class NotesModel : public KeyedService {
   // a GUID is provided, it must be valid.
   NoteNode* AddFolder(const NoteNode* parent,
                       size_t index,
-                      const base::string16& name,
+                      const std::u16string& name,
                       base::Optional<base::GUID> guid = base::nullopt);
 
   // Adds a note at the specified position with the given |creation_time| and
@@ -106,9 +106,9 @@ class NotesModel : public KeyedService {
   // generated. If a GUID is provided, it must be valid.
   NoteNode* AddNote(const NoteNode* parent,
                     size_t index,
-                    const base::string16& subject,
+                    const std::u16string& subject,
                     const GURL& url,
-                    const base::string16& content,
+                    const std::u16string& content,
                     base::Optional<base::Time> creation_time = base::nullopt,
                     base::Optional<base::GUID> guid = base::nullopt);
 
@@ -118,7 +118,7 @@ class NotesModel : public KeyedService {
   NoteNode* AddSeparator(
       const NoteNode* parent,
       size_t index,
-      base::Optional<base::string16> name = base::nullopt,
+      base::Optional<std::u16string> name = base::nullopt,
       base::Optional<base::Time> creation_time = base::nullopt,
       base::Optional<base::GUID> guid = base::nullopt);
 
@@ -144,13 +144,13 @@ class NotesModel : public KeyedService {
   bool Move(const NoteNode* node, const NoteNode* new_parent, size_t index);
 
   void SetURL(const NoteNode* node, const GURL& url);
-  void SetTitle(const NoteNode* node, const base::string16& title);
+  void SetTitle(const NoteNode* node, const std::u16string& title);
 
   // Sets the date added time of |node|.
   void SetDateAdded(const NoteNode* node, base::Time date_added);
   void SetDateFolderModified(const NoteNode* parent, const base::Time time);
 
-  void SetContent(const NoteNode* node, const base::string16& content);
+  void SetContent(const NoteNode* node, const std::u16string& content);
 
   void ClearAttachments(const NoteNode* node);
   void AddAttachment(const NoteNode* node, NoteAttachment&& attachment);
@@ -205,7 +205,7 @@ class NotesModel : public KeyedService {
 
   void set_next_node_id(int64_t id) { next_node_id_ = id; }
 
-  void GetNotesMatching(const base::string16& text,
+  void GetNotesMatching(const std::u16string& text,
                         size_t max_count,
                         std::vector<std::pair<int, NoteNode::Type>>* matches);
 

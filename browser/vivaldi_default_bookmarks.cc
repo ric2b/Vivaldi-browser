@@ -484,7 +484,7 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   custom_meta.SetDescription(item.description);
   custom_meta.SetSpeeddial(item.speeddial);
 
-  base::string16 title = base::UTF8ToUTF16(item.title);
+  std::u16string title = base::UTF8ToUTF16(item.title);
   size_t index = parent_node->children().size();
   const BookmarkNode* node;
   if (item.url.is_empty()) {

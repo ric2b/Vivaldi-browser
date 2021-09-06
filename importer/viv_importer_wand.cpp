@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/files/file_util.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/importer/importer_list.h"
@@ -259,7 +258,7 @@ bool WandReadTagLenDataVector(std::string::iterator* buffer,
 
 bool WandReadEncryptedField(std::string::iterator* buffer,
                             const std::string::iterator& buffer_end,
-                            base::string16* result,
+                            std::u16string* result,
                             binary_string* master_password = NULL) {
   uint32_t len = 0;
   uint32_t iv_len = 0;
@@ -361,8 +360,8 @@ bool WandReadEncryptedField(std::string::iterator* buffer,
 
 bool WandReadEncryptedNameAndField(std::string::iterator* buffer,
                                    const std::string::iterator& buffer_end,
-                                   base::string16* name,
-                                   base::string16* value,
+                                   std::u16string* name,
+                                   std::u16string* value,
                                    bool* is_password,
                                    binary_string* master_password = NULL) {
   *is_password = false;
@@ -374,8 +373,8 @@ bool WandReadEncryptedNameAndField(std::string::iterator* buffer,
   if (!WandReadEncryptedField(buffer, buffer_end, name))
     return false;
 
-  base::string16 temp_val1;
-  base::string16 temp_val2;
+  std::u16string temp_val1;
+  std::u16string temp_val2;
 
   if (!WandReadEncryptedField(buffer, buffer_end, &temp_val1))
     return false;
@@ -392,8 +391,8 @@ bool WandReadEncryptedNameAndField(std::string::iterator* buffer,
 }
 
 struct wand_field_entry {
-  base::string16 fieldname;
-  base::string16 fieldvalue;
+  std::u16string fieldname;
+  std::u16string fieldvalue;
   bool is_password;
 };
 
@@ -402,12 +401,12 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
     const std::string::iterator& buffer_end,
     std::vector<importer::ImportedPasswordForm>* passwords,
     bool ignore_entry) {
-  base::string16 guid;
-  base::string16 date_used;
-  base::string16 url;
-  base::string16 submit_button;
-  base::string16 submit_value;
-  base::string16 domain;
+  std::u16string guid;
+  std::u16string date_used;
+  std::u16string url;
+  std::u16string submit_button;
+  std::u16string submit_value;
+  std::u16string domain;
   uint32_t field_count = 0;
   std::vector<wand_field_entry> fields;
   uint32_t dummy = 0;
@@ -494,10 +493,10 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
     const std::string::iterator& buffer_end,
     std::vector<importer::ImportedPasswordForm>* passwords,
     bool ignore_entry) {
-  base::string16 guid;
-  base::string16 date_used;
-  base::string16 url;
-  base::string16 domain;
+  std::u16string guid;
+  std::u16string date_used;
+  std::u16string url;
+  std::u16string domain;
   uint32_t field_count = 0;
   std::vector<wand_field_entry> fields;
   uint32_t dummy = 0;
@@ -575,7 +574,7 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
         static_cast<int>(i) != first_pass && !fields[first_pass].is_password) {
       password.all_possible_usernames.push_back(
           password_manager::ValueElementPair(fields[first_pass].fieldvalue,
-                                             base::string16()));
+                                             std::u16string()));
     }
   }
   */
@@ -709,7 +708,7 @@ bool OperaImporter::ImportWand(std::string* error) {
     return WandFormatError(error);
 
   uint32_t dummy;
-  base::string16 dummy_str;
+  std::u16string dummy_str;
   uint32_t entry_count;
   uint32_t i;
   for (i = 0; i < 6; i++) {

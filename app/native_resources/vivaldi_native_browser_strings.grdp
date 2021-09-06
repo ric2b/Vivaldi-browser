@@ -182,8 +182,11 @@
     Local Account
   </message>
   <!-- Version UI -->
-  <message name="IDS_VIVALDI_VERSION_UI_LICENSE" desc="The label below the copyright message, containing the URLs.">
-    Vivaldi is made possible by the <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Chromium<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> open source project and other <ph name="BEGIN_LINK_OSS">&lt;a target="_blank" href="$2"&gt;</ph>open source software<ph name="END_LINK_OSS">&lt;/a&gt;</ph>.
+  <message name="IDS_VIVALDI_VERSION_UI_LICENSE_NEW" desc="The label below the copyright message.">
+    Vivaldi is made possible by the Chromium open source project and other open source software.
+  </message>
+  <message name="IDS_VIVALDI_VERSION_UI_CREDITS" desc="The label below the copyright message, containing the credits URL.">
+    Credits
   </message>
   <message name="IDS_WELCOME_PAGE_URL" translateable="false">
     chrome-extension://mpognobbkildjkofajifpdfhcoklimli/components/welcome/welcome.html

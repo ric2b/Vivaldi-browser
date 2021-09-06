@@ -144,7 +144,8 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
                               base::Unretained(this)))),
       channel_(init_params.channel),
       debug_identifier_(init_params.debug_identifier),
-      sync_service_url_(
+      sync_service_url_(init_params.sync_server_url.is_valid()?
+          init_params.sync_server_url :
           GetSyncServiceURL(*base::CommandLine::ForCurrentProcess(), channel_)),
       crypto_(
           base::BindRepeating(&ProfileSyncService::NotifyObservers,
@@ -290,12 +291,15 @@ ModelTypeSet ProfileSyncService::GetRegisteredDataTypesForTest() const {
   return GetRegisteredDataTypes();
 }
 
-ModelTypeSet ProfileSyncService::GetThrottledDataTypesForTest() const {
+void ProfileSyncService::GetThrottledDataTypesForTest(
+    base::OnceCallback<void(ModelTypeSet)> cb) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (engine_ && engine_->IsInitialized()) {
-    return engine_->GetDetailedStatus().throttled_types;
+  if (!engine_ || !engine_->IsInitialized()) {
+    std::move(cb).Run(ModelTypeSet());
+    return;
   }
-  return ModelTypeSet();
+
+  engine_->GetThrottledDataTypesForTest(std::move(cb));
 }
 
 void ProfileSyncService::TriggerPoliciesLoadedForTest() {
@@ -893,11 +897,11 @@ void ProfileSyncService::OnActionableError(const SyncProtocolError& error) {
         DCHECK(account_mutator);
 
         // Note: On some platforms, revoking the sync consent will also clear
-        // the primary account as transitioning from ConsentLevel::kSync
-        // ConsentLevel::kNotRequired is not supported.
+        // the primary account as transitioning from ConsentLevel::kSync to
+        // ConsentLevel::kSignin is not supported.
         account_mutator->RevokeSyncConsent(
             signin_metrics::SERVER_FORCED_DISABLE,
-            signin_metrics::SignoutDelete::IGNORE_METRIC);
+            signin_metrics::SignoutDelete::kIgnoreMetric);
       }
 #endif
       break;

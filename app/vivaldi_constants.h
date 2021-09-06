@@ -14,6 +14,9 @@
 #define VIVALDI_WEBUI_URL_HOST "vivaldi-webui"
 #define VIVALDI_THUMB_URL_HOST "thumb"
 
+#define HOSTNAME_404 "return-404.vivaldi.com"
+#define KNOWN_404(path) "https://" HOSTNAME_404 path
+
 namespace vivaldi {
 
 // All constants in alphabetical order. The constants should be documented

@@ -25,6 +25,9 @@ import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.HashSet;
 
+// Vivaldi
+import org.vivaldi.browser.common.VivaldiUtils;
+
 class StatusIndicatorMediator
         implements BrowserControlsStateProvider.Observer, View.OnLayoutChangeListener {
     private static final int STATUS_BAR_COLOR_TRANSITION_DURATION_MS = 200;
@@ -401,6 +404,12 @@ class StatusIndicatorMediator
     }
 
     private void onOffsetChanged(int topControlsMinHeightOffset) {
+        // Note(david@vivaldi.com): When toolbar is at the bottom we don't set the
+        // |topControlsMinHeightOffset| as this would cause for some reason a render crash and shows
+        // a |sadTab|. Due to that we consider the top controls height which has always the same
+        // high as the indicator status bar. See VAB-3774.
+        if (!VivaldiUtils.isTopToolbarOn())
+            topControlsMinHeightOffset = mBrowserControlsStateProvider.getTopControlsHeight();
         final boolean indicatorVisible = topControlsMinHeightOffset > 0;
         // Composited view should be visible if we have a positive top min-height offset (or current
         // min-height) and we're running the animations in native.
@@ -417,7 +426,7 @@ class StatusIndicatorMediator
         mModel.set(StatusIndicatorProperties.ANDROID_VIEW_VISIBILITY,
                 mIsHiding && (mCanAnimateNativeBrowserControls.get() || !indicatorVisible)
                         ? View.GONE
-                        : (isCompletelyShown || !mCanAnimateNativeBrowserControls.get()
+                        : (isCompletelyShown // Vivaldi
                                         ? View.VISIBLE
                                         : View.INVISIBLE));
 

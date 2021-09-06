@@ -3,45 +3,47 @@
 #ifndef EXTENSIONS_PERMISSIONS_VIVALDI_SKIP_API_PERMISSION_ENUMS_INC_
 #define EXTENSIONS_PERMISSIONS_VIVALDI_SKIP_API_PERMISSION_ENUMS_INC_
 
+using extensions::mojom::APIPermissionID;
+
 namespace extensions {
 
 void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   // Skip vivaldi permissions in
 
-  skip.insert(APIPermission::kAccessKeys);
-  skip.insert(APIPermission::kAutoUpdate);
-  skip.insert(APIPermission::kBookmarkContextMenu);
-  skip.insert(APIPermission::kBookmarksPrivate);
-  skip.insert(APIPermission::kCalendar);
-  skip.insert(APIPermission::kContacts);
-  skip.insert(APIPermission::kContentBlocking);
-  skip.insert(APIPermission::kContextMenu);
-  skip.insert(APIPermission::kDevtoolsPrivate);
-  skip.insert(APIPermission::kEditCommand);
-  skip.insert(APIPermission::kExtensionActionUtils);
-  skip.insert(APIPermission::kHistoryPrivate);
-  skip.insert(APIPermission::kImportData);
-  skip.insert(APIPermission::kInfobars);
-  skip.insert(APIPermission::kMailPrivate);
-  skip.insert(APIPermission::kMenuContent);
-  skip.insert(APIPermission::kMenubar);
-  skip.insert(APIPermission::kMenubarMenu);
-  skip.insert(APIPermission::kNotes);
-  skip.insert(APIPermission::kPageActions);
-  skip.insert(APIPermission::kPipPrivate);
-  skip.insert(APIPermission::kPrefs);
-  skip.insert(APIPermission::kRuntimePrivate);
-  skip.insert(APIPermission::kSavedPasswords);
-  skip.insert(APIPermission::kSessionsPrivate);
-  skip.insert(APIPermission::kSettings);
-  skip.insert(APIPermission::kSync);
-  skip.insert(APIPermission::kTabsPrivate);
-  skip.insert(APIPermission::kThumbnails);
-  skip.insert(APIPermission::kUtilities);
-  skip.insert(APIPermission::kVivaldiAccount);
-  skip.insert(APIPermission::kWebViewPrivate);
-  skip.insert(APIPermission::kWindowPrivate);
-  skip.insert(APIPermission::kZoom);
+  skip.insert(APIPermissionID::kAccessKeys);
+  skip.insert(APIPermissionID::kAutoUpdate);
+  skip.insert(APIPermissionID::kBookmarkContextMenu);
+  skip.insert(APIPermissionID::kBookmarksPrivate);
+  skip.insert(APIPermissionID::kCalendar);
+  skip.insert(APIPermissionID::kContacts);
+  skip.insert(APIPermissionID::kContentBlocking);
+  skip.insert(APIPermissionID::kContextMenu);
+  skip.insert(APIPermissionID::kDevtoolsPrivate);
+  skip.insert(APIPermissionID::kEditCommand);
+  skip.insert(APIPermissionID::kExtensionActionUtils);
+  skip.insert(APIPermissionID::kHistoryPrivate);
+  skip.insert(APIPermissionID::kImportData);
+  skip.insert(APIPermissionID::kInfobars);
+  skip.insert(APIPermissionID::kMailPrivate);
+  skip.insert(APIPermissionID::kMenuContent);
+  skip.insert(APIPermissionID::kMenubar);
+  skip.insert(APIPermissionID::kMenubarMenu);
+  skip.insert(APIPermissionID::kNotes);
+  skip.insert(APIPermissionID::kPageActions);
+  skip.insert(APIPermissionID::kPipPrivate);
+  skip.insert(APIPermissionID::kPrefs);
+  skip.insert(APIPermissionID::kRuntimePrivate);
+  skip.insert(APIPermissionID::kSavedPasswords);
+  skip.insert(APIPermissionID::kSessionsPrivate);
+  skip.insert(APIPermissionID::kSettings);
+  skip.insert(APIPermissionID::kSync);
+  skip.insert(APIPermissionID::kTabsPrivate);
+  skip.insert(APIPermissionID::kThumbnails);
+  skip.insert(APIPermissionID::kUtilities);
+  skip.insert(APIPermissionID::kVivaldiAccount);
+  skip.insert(APIPermissionID::kWebViewPrivate);
+  skip.insert(APIPermissionID::kWindowPrivate);
+  skip.insert(APIPermissionID::kZoom);
 }
 
 }  // namespace extensions

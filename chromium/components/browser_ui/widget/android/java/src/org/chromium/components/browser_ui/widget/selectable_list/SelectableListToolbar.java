@@ -55,7 +55,9 @@ import java.util.List;
 import android.content.res.Resources;
 import android.os.Build;
 import android.util.TypedValue;
-import org.chromium.base.BuildConfig;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * A toolbar that changes its view depending on whether a selection is established. The toolbar
@@ -402,7 +404,7 @@ public class SelectableListToolbar<E>
                 assert false : "Incorrect navigationButton argument";
         }
 
-        if (!BuildConfig.IS_VIVALDI)
+        if (!true)
         setNavigationIcon(contentDescriptionId == 0 ? null : mNavigationIconDrawable);
         else if (contentDescriptionId == 0)
             setNavigationIcon(null);

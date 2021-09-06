@@ -32,7 +32,7 @@ public final class MessageWrapper {
     private MessageWrapper(long nativeMessageWrapper) {
         mNativeMessageWrapper = nativeMessageWrapper;
         mMessageProperties =
-                new PropertyModel.Builder(MessageBannerProperties.SINGLE_ACTION_MESSAGE_KEYS)
+                new PropertyModel.Builder(MessageBannerProperties.ALL_KEYS)
                         .with(MessageBannerProperties.ON_PRIMARY_ACTION, this::handleActionClick)
                         .with(MessageBannerProperties.ON_SECONDARY_ACTION,
                                 this::handleSecondaryActionClick)
@@ -56,11 +56,12 @@ public final class MessageWrapper {
 
     @CalledByNative
     String getDescription() {
-        return mMessageProperties.get(MessageBannerProperties.DESCRIPTION);
+        CharSequence description = mMessageProperties.get(MessageBannerProperties.DESCRIPTION);
+        return description == null ? null : description.toString();
     }
 
     @CalledByNative
-    void setDescription(String description) {
+    void setDescription(CharSequence description) {
         mMessageProperties.set(MessageBannerProperties.DESCRIPTION, description);
     }
 
@@ -75,13 +76,14 @@ public final class MessageWrapper {
     }
 
     @CalledByNative
-    String getSecondaryActionText() {
-        return mMessageProperties.get(MessageBannerProperties.SECONDARY_ACTION_TEXT);
+    String getSecondaryButtonMenuText() {
+        return mMessageProperties.get(MessageBannerProperties.SECONDARY_BUTTON_MENU_TEXT);
     }
 
     @CalledByNative
-    void setSecondaryActionText(String secondaryActionText) {
-        mMessageProperties.set(MessageBannerProperties.SECONDARY_ACTION_TEXT, secondaryActionText);
+    void setSecondaryButtonMenuText(String secondaryButtonMenuText) {
+        mMessageProperties.set(
+                MessageBannerProperties.SECONDARY_BUTTON_MENU_TEXT, secondaryButtonMenuText);
     }
 
     @CalledByNative

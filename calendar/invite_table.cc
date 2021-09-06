@@ -111,6 +111,19 @@ bool InviteTable::DeleteInvite(InviteID invite_id) {
   return statement.Run();
 }
 
+bool InviteTable::DeleteInvitesForCalendar(CalendarID calendar_id) {
+  sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
+                                                      "DELETE from invite \
+        WHERE event_id IN( \
+          select i.event_id from invite i \
+            inner join events e on(e.id = i.event_id) \
+            where e.calendar_id = ?)"));
+
+  statement.BindInt64(0, calendar_id);
+
+  return statement.Run();
+}
+
 bool InviteTable::GetInviteRow(InviteID invite_id, InviteRow* out_invite) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE, "SELECT" INVITE_ROW_FIELDS "FROM invite WHERE id=?"));
@@ -127,8 +140,8 @@ bool InviteTable::GetInviteRow(InviteID invite_id, InviteRow* out_invite) {
 void InviteTable::FillInviteRow(sql::Statement& statement, InviteRow* invite) {
   InviteID invite_id = statement.ColumnInt64(0);
   EventID event_id = statement.ColumnInt64(1);
-  base::string16 name = statement.ColumnString16(2);
-  base::string16 address = statement.ColumnString16(3);
+  std::u16string name = statement.ColumnString16(2);
+  std::u16string address = statement.ColumnString16(3);
   bool sent = statement.ColumnInt(4) != 0;
   std::string partstat = statement.ColumnString(5);
 

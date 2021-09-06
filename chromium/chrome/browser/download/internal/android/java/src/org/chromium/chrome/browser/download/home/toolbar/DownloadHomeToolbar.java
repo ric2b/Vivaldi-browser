@@ -17,7 +17,8 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableListT
 
 import java.util.List;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Handles toolbar functionality for the download home.
@@ -29,6 +30,7 @@ public class DownloadHomeToolbar extends SelectableListToolbar<ListItem> {
         super(context, attrs);
         inflateMenu(R.menu.download_manager_menu);
 
+        // Vivaldi
         if (BuildConfig.IS_VIVALDI) {
             getMenu().removeItem(R.id.settings_menu_id);
         }

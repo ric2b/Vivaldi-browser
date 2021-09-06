@@ -22,6 +22,7 @@ static_library("importer") {
       #"//chrome/app:generated_resources",
       #"//chrome/common:common",
       #"//chrome/utility:utility",
+      "//chrome/common:buildflags",
       "//components/autofill/core/common",
       "//components/bookmarks/browser:browser",
       "//sql",

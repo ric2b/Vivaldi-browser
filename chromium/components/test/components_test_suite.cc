@@ -39,6 +39,10 @@
 #include "base/win/scoped_com_initializer.h"
 #endif
 
+#if defined(VIVALDI_BUILD)
+#include "base/test/vivaldi_testinit.h"
+#endif
+
 namespace {
 
 // Not using kExtensionScheme and kChromeSearchScheme to avoid the dependency
@@ -129,7 +133,8 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
 #if defined(OS_IOS)
     ios_initializer_.reset(new IosComponentsTestInitializer());
 #else
-    content_initializer_.reset(new content::TestContentClientInitializer());
+    content_initializer_ =
+        std::make_unique<content::TestContentClientInitializer>();
 #endif
   }
 
@@ -152,6 +157,10 @@ class ComponentsUnitTestEventListener : public testing::EmptyTestEventListener {
 }  // namespace
 
 base::RunTestSuiteCallback GetLaunchCallback(int argc, char** argv) {
+#if defined(VIVALDI_BUILD)
+  vivaldi::InitTestPathEnvironment();
+#endif
+
 #if !defined(OS_IOS)
   auto test_suite = std::make_unique<content::UnitTestTestSuite>(
       new ComponentsTestSuite(argc, argv));

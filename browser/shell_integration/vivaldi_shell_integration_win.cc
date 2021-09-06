@@ -5,9 +5,9 @@
 
 #include "browser/shell_integration/vivaldi_shell_integration.h"
 
+#include <string>
 #include <windows.h>
 
-#include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
@@ -29,19 +29,19 @@ namespace vivaldi {
 bool IsChromeDefaultBrowser() {
   bool chrome_default = false;
   if (base::win::GetVersion() >= base::win::Version::VISTA) {
-    base::string16 app_cmd;
+    std::wstring app_cmd;
     base::win::RegKey key(HKEY_CURRENT_USER, ShellUtil::kRegVistaUrlPrefs,
                           KEY_READ);
     if (key.Valid() && (key.ReadValue(L"Progid", &app_cmd) == ERROR_SUCCESS) &&
         app_cmd == L"chrome")
       chrome_default = true;
   } else {
-    base::string16 key_path(L"http");
+    std::wstring key_path(L"http");
     key_path.append(ShellUtil::kRegShellOpen);
     base::win::RegKey key(HKEY_CLASSES_ROOT, key_path.c_str(), KEY_READ);
-    base::string16 app_cmd;
+    std::wstring app_cmd;
     if (key.Valid() && (key.ReadValue(L"", &app_cmd) == ERROR_SUCCESS) &&
-        base::string16::npos != base::ToLowerASCII(app_cmd).find(L"chrome"))
+        std::u16string::npos != base::ToLowerASCII(app_cmd).find(L"chrome"))
       chrome_default = true;
   }
   return chrome_default;
@@ -61,19 +61,19 @@ bool IsChromeDefaultBrowser() {
 bool IsOperaDefaultBrowser() {
   bool opera_default = false;
   if (base::win::GetVersion() >= base::win::Version::VISTA) {
-    base::string16 app_cmd;
+    std::wstring app_cmd;
     base::win::RegKey key(HKEY_CURRENT_USER, ShellUtil::kRegVistaUrlPrefs,
                           KEY_READ);
     if (key.Valid() && (key.ReadValue(L"Progid", &app_cmd) == ERROR_SUCCESS) &&
-        base::string16::npos != base::ToLowerASCII(app_cmd).find(L"opera"))
+        std::u16string::npos != base::ToLowerASCII(app_cmd).find(L"opera"))
       opera_default = true;
   } else {
-    base::string16 key_path(L"http");
+    std::wstring key_path(L"http");
     key_path.append(ShellUtil::kRegShellOpen);
     base::win::RegKey key(HKEY_CLASSES_ROOT, key_path.c_str(), KEY_READ);
-    base::string16 app_cmd;
+    std::wstring app_cmd;
     if (key.Valid() && (key.ReadValue(L"", &app_cmd) == ERROR_SUCCESS) &&
-        base::string16::npos != base::ToLowerASCII(app_cmd).find(L"opera"))
+        std::u16string::npos != base::ToLowerASCII(app_cmd).find(L"opera"))
       opera_default = true;
   }
   return opera_default;

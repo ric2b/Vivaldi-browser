@@ -7,6 +7,49 @@
     "compiler_options": {
       "implemented_in": "extensions/api/mail/mail_private_api.h"
     },
+    "types": [
+      {
+        "id": "message",
+        "type": "object",
+        "description": "Message object. Used to create message in full text database table.",
+        "properties": {
+          "searchListId": {
+            "name": "The search list id of the message.",
+            "type": "integer"
+          },
+          "subject": {
+            "optional": "true",
+            "description": "The message subject.",
+            "type": "string"
+          },
+          "body": {
+            "optional": "true",
+            "type": "string",
+            "description": "The message body."
+          },
+          "to": {
+            "optional": "true",
+            "description": "The message to address .",
+            "type": "string"
+          },
+          "cc": {
+            "optional": "true",
+            "type": "string",
+            "description": "The message cc address ."
+          },
+          "from": {
+            "optional": "true",
+            "type": "string",
+            "description": "The message from address ."
+          },
+          "replyTo": {
+            "optional": "true",
+            "type": "string",
+            "description": "The message reply address ."
+          }
+        }
+      }
+    ],
     "functions": [
       {
         "name": "getFilePaths",
@@ -17,23 +60,42 @@
             "name": "path",
             "type": "string",
             "description": "The root folder from where to build up the file paths."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "paths",
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "description": "Paths to mail files"
-                }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "paths",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Paths to mail files"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "getMailFilePaths",
+        "type": "function",
+        "description": "Returns array of file paths under the  default profile /Mail directory.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "paths",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Paths to mail files"
+              }
+            }
+          ]
+        }
       },
       {
         "name": "writeTextToMessageFile",
@@ -57,19 +119,18 @@
             "name": "raw",
             "type": "string",
             "description": "The raw mail content."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "writeBufferToMessageFile",
@@ -93,19 +154,18 @@
             "name": "raw",
             "type": "binary",
             "description": "The raw mail content as arrayBuffer"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "deleteMessageFile",
@@ -124,19 +184,18 @@
             "name": "fileName",
             "type": "string",
             "description": "The file name to be deleted. With ending."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string"
+            }
+          ]
+        }
       },
       {
         "name": "readFileToBuffer",
@@ -147,20 +206,19 @@
             "name": "fileName",
             "type": "string",
             "description": "Absoloute path to the file to be read."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "raw",
-                "type": "binary",
-                "description": "The file raw content as arrayBuffer."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "raw",
+              "type": "binary",
+              "description": "The file raw content as arrayBuffer."
+            }
+          ]
+        }
       },
       {
         "name": "readMessageFileToBuffer",
@@ -179,20 +237,19 @@
             "name": "fileName",
             "type": "string",
             "description": "The file name to be read."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "raw",
-                "type": "binary",
-                "description": "The mail raw content. as arrayBuffer"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "raw",
+              "type": "binary",
+              "description": "The mail raw content. as arrayBuffer"
+            }
+          ]
+        }
       },
       {
         "name": "readFileToText",
@@ -203,20 +260,19 @@
             "name": "path",
             "type": "string",
             "description": "Absoulout path to the file to be read."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "raw",
-                "type": "string",
-                "description": "The file raw content."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "raw",
+              "type": "string",
+              "description": "The file raw content."
+            }
+          ]
+        }
       },
       {
         "name": "getFileDirectory",
@@ -227,20 +283,19 @@
             "name": "hashedAccountId",
             "type": "string",
             "description": "First 6 characters from the MD5 hash of the accountId. Appended to the end of the default mail data directory"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "paths",
-                "type": "string",
-                "description": "The directory path to the user mail data directory."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "paths",
+              "type": "string",
+              "description": "The directory path to the user mail data directory."
+            }
+          ]
+        }
       },
       {
         "name": "createFileDirectory",
@@ -251,19 +306,148 @@
             "name": "hashedAccountId",
             "type": "string",
             "description": "First 6 characters from the MD5 hash of the accountId. Appended to the end of the default mail data directory"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      {
+        "name": "createMessages",
+        "type": "function",
+        "description": "Creates messages for full text search.",
+        "parameters": [
+          {
+            "name": "messages",
+            "type": "array",
+            "items": {
+              "$ref": "message"
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean",
+              "description": "Returns true if the operation is successful, false otherwise."
+            }
+          ]
+        }
+      },
+      {
+        "name": "deleteMessages",
+        "type": "function",
+        "description": "Deletes messages from full text search.",
+        "parameters": [
+          {
+            "name": "searchListIds",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean",
+              "description": "Returns true if the operation is successful, false otherwise."
+            }
+          ]
+        }
+      },
+      {
+        "name": "addMessageBody",
+        "type": "function",
+        "description": "Adds a message body to the message.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "searchListId",
+            "description": "The searchListId of the message to be deleted"
           },
           {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "result",
-                "type": "string"
-              }
-            ]
+            "type": "string",
+            "name": "body",
+            "description": "The message body to add"
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "searchMessages",
+        "type": "function",
+        "description": "Searches messages with certain query.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "searchValue",
+            "description": "The value to search for"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "results",
+              "description": "Messages matching the search value",
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "matchMessage",
+        "type": "function",
+        "description": "Does search value match certain message.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "searchListId",
+            "description": "The searchListId of the message to be checked."
+          },
+          {
+            "type": "string",
+            "name": "searchValue",
+            "description": "The value to search for"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       }
     ]
   }

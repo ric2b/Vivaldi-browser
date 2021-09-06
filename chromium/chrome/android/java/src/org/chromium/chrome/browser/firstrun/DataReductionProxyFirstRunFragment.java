@@ -25,7 +25,7 @@ import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * The First Run Experience fragment that allows the user to opt in to Data Saver.
@@ -89,7 +89,7 @@ public class DataReductionProxyFirstRunFragment extends Fragment implements Firs
             }
         });
 
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         enableDataSaverSwitch.setChecked(true);
         DataReductionProxySettings.getInstance().setDataReductionProxyEnabled(
                 view.getContext(), enableDataSaverSwitch.isChecked());

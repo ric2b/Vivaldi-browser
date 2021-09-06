@@ -18,12 +18,14 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/user_account_image_update_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
+#import "ios/chrome/browser/ui/start_surface/start_surface_features.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
@@ -58,6 +60,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 #endif  // defined(__IPHONE14_0)
 
 @interface ContentSuggestionsHeaderViewController () <
+    DoodleObserver,
     UserAccountImageUpdateDelegate>
 
 // If YES the animations of the fake omnibox triggered when the collection is
@@ -206,8 +209,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 
 - (CGFloat)pinnedOffsetY {
   CGFloat headerHeight = content_suggestions::heightForLogoHeader(
-      self.logoIsShowing, self.promoCanShow, YES, [self topInset],
-      self.traitCollection);
+      self.logoIsShowing, self.logoVendor.isShowingDoodle, self.promoCanShow,
+      YES, [self topInset], self.traitCollection);
 
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
@@ -232,8 +235,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 
 - (CGFloat)headerHeight {
   return content_suggestions::heightForLogoHeader(
-      self.logoIsShowing, self.promoCanShow, YES, [self topInset],
-      self.traitCollection);
+      self.logoIsShowing, self.logoVendor.isShowingDoodle, self.promoCanShow,
+      YES, [self topInset], self.traitCollection);
 }
 
 #pragma mark - ContentSuggestionsHeaderProvider
@@ -393,8 +396,8 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
       };
   }
 
-  // TODO(crbug.com/965958): Set action on button to launch into Settings.
-  [self.headerView setIdentityDiscView:self.identityDiscButton];
+    // TODO(crbug.com/965958): Set action on button to launch into Settings.
+    [self.headerView setIdentityDiscView:self.identityDiscButton];
 
   // Register to receive the avatar of the currently signed in user.
   [self.delegate registerImageUpdater:self];
@@ -466,8 +469,9 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 // shows fakebox if the logo is visible and hides otherwise
 - (void)updateFakeboxDisplay {
   [self.doodleHeightConstraint
-      setConstant:content_suggestions::doodleHeight(self.logoIsShowing,
-                                                    self.traitCollection)];
+      setConstant:content_suggestions::doodleHeight(
+                      self.logoVendor.showingLogo,
+                      self.logoVendor.isShowingDoodle, self.traitCollection)];
   self.fakeOmnibox.hidden =
       IsRegularXRegularSizeClass(self) && !self.logoIsShowing;
   [self.collectionSynchronizer invalidateLayout];
@@ -502,7 +506,9 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
                                   YES, [self topInset], self.traitCollection)];
   self.doodleHeightConstraint = [logoView.heightAnchor
       constraintEqualToConstant:content_suggestions::doodleHeight(
-                                    self.logoIsShowing, self.traitCollection)];
+                                    self.logoVendor.showingLogo,
+                                    self.logoVendor.isShowingDoodle,
+                                    self.traitCollection)];
   self.fakeOmniboxHeightConstraint = [fakeOmnibox.heightAnchor
       constraintEqualToConstant:ToolbarExpandedHeight(
                                     self.traitCollection
@@ -679,6 +685,16 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
                             : nil;
 }
 
+#pragma mark - DoodleObserver
+
+- (void)doodleDisplayStateChanged:(BOOL)doodleShowing {
+  [self.doodleHeightConstraint
+      setConstant:content_suggestions::doodleHeight(self.logoVendor.showingLogo,
+                                                    doodleShowing,
+                                                    self.traitCollection)];
+  [self.headerCommandHandler updateForHeaderSizeChange];
+}
+
 #pragma mark - NTPHomeConsumer
 
 - (void)setLogoIsShowing:(BOOL)logoIsShowing {
@@ -688,6 +704,7 @@ const NSString* kScribbleFakeboxElementId = @"fakebox";
 
 - (void)setLogoVendor:(id<LogoVendor>)logoVendor {
   _logoVendor = logoVendor;
+  _logoVendor.doodleObserver = self;
 }
 
 - (void)locationBarBecomesFirstResponder {

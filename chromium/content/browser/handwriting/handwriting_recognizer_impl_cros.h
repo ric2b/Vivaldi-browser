@@ -9,10 +9,11 @@
 
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
 #include "chromeos/services/machine_learning/public/mojom/handwriting_recognizer.mojom-forward.h"
+#include "chromeos/services/machine_learning/public/mojom/web_platform_handwriting.mojom.h"
 #include "content/browser/handwriting/handwriting_recognizer_impl.h"
+#include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/blink/public/mojom/handwriting/handwriting.mojom.h"
 
 namespace content {
 
@@ -23,11 +24,12 @@ namespace content {
 // checks etc. This class will also hold a mojo remote to the mlservice daemon
 // CrOS and mlservice will create a handwriting model instance for each of this
 // class.
-class CrOSHandwritingRecognizerImpl final : public HandwritingRecognizerImpl {
+class CONTENT_EXPORT CrOSHandwritingRecognizerImpl final
+    : public HandwritingRecognizerImpl {
  public:
   // The interface to create an object, called by handwriting service.
   static void Create(
-      handwriting::mojom::HandwritingModelConstraintPtr model_constraint,
+      handwriting::mojom::HandwritingModelConstraintPtr constraint_blink,
       handwriting::mojom::HandwritingRecognitionService::
           CreateHandwritingRecognizerCallback callback);
 
@@ -36,11 +38,13 @@ class CrOSHandwritingRecognizerImpl final : public HandwritingRecognizerImpl {
       delete;
   ~CrOSHandwritingRecognizerImpl() override;
 
+  // Returns whether the provided |language_tag| is supported.
+  static bool SupportsLanguageTag(base::StringPiece language_tag);
+
  private:
   explicit CrOSHandwritingRecognizerImpl(
-      mojo::PendingRemote<
-          chromeos::machine_learning::mojom::HandwritingRecognizer>
-          pending_remote);
+      mojo::PendingRemote<chromeos::machine_learning::web_platform::mojom::
+                              HandwritingRecognizer> pending_remote);
 
   // handwriting::mojom::HandwritingRecognizer
   void GetPrediction(
@@ -48,7 +52,8 @@ class CrOSHandwritingRecognizerImpl final : public HandwritingRecognizerImpl {
       handwriting::mojom::HandwritingHintsPtr hints,
       GetPredictionCallback callback) override;
 
-  mojo::Remote<chromeos::machine_learning::mojom::HandwritingRecognizer>
+  mojo::Remote<
+      chromeos::machine_learning::web_platform::mojom::HandwritingRecognizer>
       remote_cros_;
 };
 

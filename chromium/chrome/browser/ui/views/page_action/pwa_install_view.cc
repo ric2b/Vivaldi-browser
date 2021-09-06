@@ -4,16 +4,18 @@
 
 #include "chrome/browser/ui/views/page_action/pwa_install_view.h"
 
+#include <string>
+
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/user_education/feature_promo_controller.h"
 #include "chrome/browser/ui/user_education/feature_promo_text_replacements.h"
 #include "chrome/browser/ui/views/user_education/feature_promo_bubble_params.h"
@@ -59,17 +61,38 @@ constexpr base::FeatureParam<int> kIphSiteEngagementThresholdParam{
 PwaInstallView::PwaInstallView(
     CommandUpdater* command_updater,
     IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
-    PageActionIconView::Delegate* page_action_icon_delegate)
+    PageActionIconView::Delegate* page_action_icon_delegate,
+    Browser* browser)
     : PageActionIconView(nullptr,
                          0,
                          icon_label_bubble_delegate,
-                         page_action_icon_delegate) {
+                         page_action_icon_delegate),
+      browser_(browser) {
   SetVisible(false);
   SetLabel(l10n_util::GetStringUTF16(IDS_OMNIBOX_PWA_INSTALL_ICON_LABEL));
   SetUpForInOutAnimation();
+  browser_->tab_strip_model()->AddObserver(this);
 }
 
-PwaInstallView::~PwaInstallView() {}
+PwaInstallView::~PwaInstallView() {
+  browser_->tab_strip_model()->RemoveObserver(this);
+}
+
+void PwaInstallView::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  // If the active tab changed, or the content::WebContents in the
+  // active tab was replaced, close IPH
+  bool active_tab_changed = selection.active_tab_changed();
+  bool web_content_replaced =
+      change.type() == TabStripModelChange::Type::kReplaced;
+  if (active_tab_changed || web_content_replaced) {
+    FeaturePromoControllerViews* controller =
+        FeaturePromoControllerViews::GetForView(this);
+    controller->CloseBubble(feature_engagement::kIPHDesktopPwaInstallFeature);
+  }
+}
 
 void PwaInstallView::UpdateImpl() {
   content::WebContents* web_contents = GetWebContents();
@@ -184,10 +207,10 @@ const gfx::VectorIcon& PwaInstallView::GetVectorIcon() const {
   return omnibox::kPlusIcon;
 }
 
-base::string16 PwaInstallView::GetTextForTooltipAndAccessibleName() const {
+std::u16string PwaInstallView::GetTextForTooltipAndAccessibleName() const {
   content::WebContents* web_contents = GetWebContents();
   if (!web_contents)
-    return base::string16();
+    return std::u16string();
   return l10n_util::GetStringFUTF16(
       IDS_OMNIBOX_PWA_INSTALL_ICON_TOOLTIP,
       webapps::AppBannerManager::GetInstallableWebAppName(web_contents));

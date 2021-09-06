@@ -326,6 +326,12 @@ std::string WsTextToString(const WS_XML_TEXT* text) {
   return std::string();
 }
 
+base::Version GetAsVersion(const WS_XML_ATTRIBUTE* attr) {
+  std::string attr_value = WsTextToString(attr->value);
+  return base::Version(attr_value);
+}
+
+
 void OnStartElement(int depth,
                     const WS_XML_ELEMENT_NODE* node,
                     ContextData& ctxt) {
@@ -368,22 +374,16 @@ void OnStartElement(int depth,
           *url = GURL(WsTextToString(attr->value));
           continue;
         }
-
-        // where to place the value string
-        std::string* value = nullptr;
         if (delta) {
           if (HasName(attr, kAttrDeltaFrom)) {
-            value = &delta->DeltaFrom;
+            delta->DeltaFrom = GetAsVersion(attr);
           }
         } else {
           if (HasName(attr, kAttrVersion)) {
-            value = &item.Version;
+            item.Version = GetAsVersion(attr);
           } else if (HasName(attr, kAttrOs)) {
-            value = &item.Os;
+            item.Os = WsTextToString(attr->value);
           }
-        }
-        if (value) {
-          *value = WsTextToString(attr->value);
         }
       }
     }
@@ -442,7 +442,7 @@ void OnEndElement(int depth, std::string text, ContextData& ctxt) {
   }
   if (depth == ctxt.in_version) {
     ctxt.in_version = 0;
-    ctxt.items.back().Version = std::move(text);
+    ctxt.items.back().Version = base::Version(text);
   }
 
   // Process structured elements.

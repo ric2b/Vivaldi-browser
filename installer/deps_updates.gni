@@ -4,9 +4,12 @@ if (is_win) {
     deps -= ["//build/win:default_exe_manifest"]
     deps += [
       "//components/version_info",
-      "//vivaldi/installer/win:dpi_aware_exe_manifest"
+      "//vivaldi/installer/win:dpi_aware_exe_manifest",
     ]
     libs += [ "comctl32.lib" ]
+  }
+  update_target("//chrome/installer/util:with_no_strings") {
+    deps += [ "//vivaldi/installer/win:language_names_include" ]
   }
 }
 

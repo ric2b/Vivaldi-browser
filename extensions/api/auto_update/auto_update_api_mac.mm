@@ -4,6 +4,8 @@
 
 #import <Foundation/Foundation.h>
 #include "app/vivaldi_constants.h"
+#include "base/mac/foundation_util.h"
+#import "chrome/browser/app_controller_mac.h"
 
 namespace extensions {
 
@@ -30,6 +32,14 @@ AutoUpdateEnableUpdateNotifierFunction::Run() {
 ExtensionFunction::ResponseAction
 AutoUpdateDisableUpdateNotifierFunction::Run() {
   return RespondNow(Error("Not implemented"));
+}
+
+ExtensionFunction::ResponseAction
+AutoUpdateInstallUpdateAndRestartFunction::Run() {
+  AppController* controller =
+        base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
+  [controller installUpdateAndRestart];
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction

@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "contact/contact_typedefs.h"
@@ -53,10 +52,10 @@ struct Contact {
   Contact(const Contact& contact);
   ~Contact();
   ContactID contact_id;
-  base::string16 name;
+  std::u16string name;
   base::Time birthday;
-  base::string16 note;
-  base::string16 avatar_url;
+  std::u16string note;
+  std::u16string avatar_url;
   bool separator;
   bool generated_from_sent_mail;
   bool trusted;
@@ -73,7 +72,7 @@ class AddPropertyObject {
   ~AddPropertyObject();
   ContactPropertyNameEnum property_name;
   ContactID contact_id;
-  base::string16 value;
+  std::u16string value;
   std::string type;
   bool favorite;
 };
@@ -89,7 +88,7 @@ class UpdatePropertyObject {
   ContactPropertyNameEnum property_name;
   ContactID contact_id;
   PropertyID property_id;
-  base::string16 value;
+  std::u16string value;
   std::string type;
   bool favorite;
 };
@@ -108,7 +107,7 @@ class RemovePropertyObject {
 class ContactRow {
  public:
   ContactRow();
-  ContactRow(ContactID id, base::string16 name);
+  ContactRow(ContactID id, std::u16string name);
   ~ContactRow();
 
   ContactRow(const ContactRow& row);
@@ -118,14 +117,14 @@ class ContactRow {
   ContactID contact_id() const { return contact_id_; }
   void set_contact_id(ContactID contact_id) { contact_id_ = contact_id; }
 
-  base::string16 name() const { return name_; }
-  void set_name(base::string16 name) { name_ = name; }
+  std::u16string name() const { return name_; }
+  void set_name(std::u16string name) { name_ = name; }
 
   base::Time birthday() const { return birthday_; }
   void set_birthday(base::Time birthday) { birthday_ = birthday; }
 
-  base::string16 note() const { return note_; }
-  void set_note(base::string16 note) { note_ = note; }
+  std::u16string note() const { return note_; }
+  void set_note(std::u16string note) { note_ = note; }
 
   EmailAddressRows emails() const { return emails_; }
   void set_emails(EmailAddressRows emails) { emails_ = emails; }
@@ -138,8 +137,8 @@ class ContactRow {
     postaladdresses_ = postaladdresses;
   }
 
-  base::string16 avatar_url() const { return avatar_url_; }
-  void set_avatar_url(base::string16 avatar_url) { avatar_url_ = avatar_url; }
+  std::u16string avatar_url() const { return avatar_url_; }
+  void set_avatar_url(std::u16string avatar_url) { avatar_url_ = avatar_url; }
 
   bool separator() const { return separator_; }
   void set_separator(bool separator) { separator_ = separator; }
@@ -153,13 +152,13 @@ class ContactRow {
   void set_trusted(bool is_trusted) { trusted_ = is_trusted; }
 
   ContactID contact_id_;
-  base::string16 name_;
+  std::u16string name_;
   base::Time birthday_;
-  base::string16 note_;
+  std::u16string note_;
   EmailAddressRows emails_;
   PhonenumberRows phones_;
   PostalAddressRows postaladdresses_;
-  base::string16 avatar_url_;
+  std::u16string avatar_url_;
   bool separator_;
   bool generated_from_sent_mail_;
   bool trusted_;

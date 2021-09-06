@@ -555,8 +555,6 @@ WorkerGlobalScope::WorkerGlobalScope(
       user_agent_(creation_params->user_agent),
       ua_metadata_(creation_params->ua_metadata),
       thread_(thread),
-      agent_group_scheduler_compositor_task_runner_(std::move(
-          creation_params->agent_group_scheduler_compositor_task_runner)),
       time_origin_(time_origin),
       font_selector_(MakeGarbageCollected<OffscreenFontSelector>(this)),
       script_eval_state_(ScriptEvalState::kPauseAfterFetch),
@@ -584,11 +582,12 @@ WorkerGlobalScope::WorkerGlobalScope(
         GetTaskRunner(TaskType::kInternalDefault));
   }
 
-  // A FeaturePolicy is created by FeaturePolicy::CreateFromParentPolicy, even
-  // if the parent policy is null.
-  DCHECK(creation_params->worker_feature_policy);
-  GetSecurityContext().SetFeaturePolicy(
-      std::move(creation_params->worker_feature_policy));
+  // A PermissionsPolicy is created by
+  // PermissionsPolicy::CreateFromParentPolicy, even if the parent policy is
+  // null.
+  DCHECK(creation_params->worker_permissions_policy);
+  GetSecurityContext().SetPermissionsPolicy(
+      std::move(creation_params->worker_permissions_policy));
 }
 
 void WorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {

@@ -93,6 +93,7 @@ class CONTENT_EXPORT ServiceWorkerUpdatedScriptLoader final
   void ResumeReadingBodyFromNet() override;
 
   // network::mojom::URLLoaderClient for the network load:
+  void OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) override;
   void OnReceiveResponse(
       network::mojom::URLResponseHeadPtr response_head) override;
   void OnReceiveRedirect(
@@ -159,10 +160,7 @@ class CONTENT_EXPORT ServiceWorkerUpdatedScriptLoader final
 
   const GURL request_url_;
 
-  // This is network::mojom::RequestDestination::kServiceWorker for the main
-  // script or network::mojom::RequestDestination::kScript for an imported
-  // script.
-  const network::mojom::RequestDestination request_destination_;
+  const bool is_main_script_;
 
   // Loader options to pass to the network loader.
   const uint32_t options_;

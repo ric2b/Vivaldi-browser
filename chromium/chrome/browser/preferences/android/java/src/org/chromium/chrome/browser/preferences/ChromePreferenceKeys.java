@@ -23,7 +23,7 @@ import java.util.List;
  * 1. Add its constant value to {@link DeprecatedChromePreferenceKeys#getKeysForTesting()}, in
  * alphabetical order by value.
  * 2. Remove the key from {@link #getKeysInUse()} or {@link
- * GrandfatheredChromePreferenceKeys#getKeysInUse()}.
+ * LegacyChromePreferenceKeys#getKeysInUse()}.
  * 3. Delete the constant.
  *
  * To add a new KeyPrefix:
@@ -35,7 +35,7 @@ import java.util.List;
  * 1. Add its String value to {@link DeprecatedChromePreferenceKeys#getPrefixesForTesting()},
  * including the ".*", in alphabetical order by value.
  * 2. Remove it from {@link #getKeysInUse()} or {@link
- * GrandfatheredChromePreferenceKeys#getPrefixesInUse()}.
+ * LegacyChromePreferenceKeys#getPrefixesInUse()}.
  * 3. Delete the KeyPrefix constant.
  *
  * Tests in ChromePreferenceKeysTest and checks in {@link ChromePreferenceKeyChecker} ensure the
@@ -58,6 +58,24 @@ public final class ChromePreferenceKeys {
     /** The language code to override application language with. */
     public static final String APPLICATION_OVERRIDE_LANGUAGE =
             "Chrome.Language.ApplicationOverrideLanguage";
+
+    /**
+     * The last known state of the active tab that can take any value from
+     * {@link TabPersistentStore#ActiveTabState}, recorded when TabModelSelector is serialized. This
+     * pref is recorded because we delay the first draw only if we're going to show the NTP, and the
+     * tab state isn't available when we need to make a decision
+     * (ChromeTabbedActivity#performPostInflationStartup).
+     */
+    public static final String APP_LAUNCH_LAST_KNOWN_ACTIVE_TAB_STATE =
+            "Chrome.AppLaunch.LastKnownActiveTabState";
+
+    /**
+     * Whether the default search engine had a logo when #onStop was called. This is used with
+     * |Chrome.AppLaunch.LastKnownActiveTabState| to predict if we are going to show NTP with a
+     * logo on startup.
+     */
+    public static final String APP_LAUNCH_SEARCH_ENGINE_HAD_LOGO =
+            "Chrome.AppLaunch.SearchEngineHadLogo";
 
     public static final String APP_LOCALE = "locale";
 
@@ -99,10 +117,25 @@ public final class ChromePreferenceKeys {
     public static final String CHROME_DEFAULT_BROWSER = "applink.chrome_default_browser";
 
     /**
-     * The URI of Chrome shared to Android system clibpoard, we only need this preference for the
-     * Android O and O_MR1 version.
+     * Key prefix used to indicate the timestamps when the survey info bar is displayed for a
+     * certain survey.
      */
+    public static final KeyPrefix CHROME_SURVEY_PROMPT_DISPLAYED_TIMESTAMP =
+            new KeyPrefix("Chrome.Survey.PromptDisplayedTimestamp.*");
+
+    /** The URI of Chrome shared URI to Android system clibpoard. */
     public static final String CLIPBOARD_SHARED_URI = "Chrome.Clipboard.SharedUri";
+
+    /** The timestamp of Chrome shared URI to Android system clibpoard. */
+    public static final String CLIPBOARD_SHARED_URI_TIMESTAMP =
+            "Chrome.Clipboard.SharedUriTimestamp";
+
+    /**
+     * Save the timestamp of the last time that chrome-managed commerce subscriptions are
+     * initialized.
+     */
+    public static final String COMMERCE_SUBSCRIPTIONS_CHROME_MANAGED_TIMESTAMP =
+            "Chrome.CommerceSubscriptions.ChromeManagedTimestamp";
 
     /**
      * Saves a counter of how many continuous feature sessions in which a user has dismissed
@@ -230,6 +263,14 @@ public final class ChromePreferenceKeys {
             "Chrome.Contextmenu.OpenImageInEphemeralTabClicked";
     public static final String CONTEXT_MENU_OPEN_IN_EPHEMERAL_TAB_CLICKED =
             "Chrome.Contextmenu.OpenInEphemeralTabClicked";
+
+    /**
+     * Key used to save the context menu item order for the "Open in new tab" item and
+     * the "Open in new tab in group" item.
+     */
+    public static final String CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST =
+            "Chrome.ContextMenu.OpenNewTabInGroupFirst";
+
     public static final String CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED =
             "Chrome.ContextMenu.SearchWithGoogleLensClicked";
 
@@ -484,6 +525,20 @@ public final class ChromePreferenceKeys {
      */
     public static final String LATEST_UNSUPPORTED_VERSION = "android_os_unsupported_chrome_version";
 
+    /**
+     * The previous browser process PID, updated when crash reporting is initialized.
+     */
+    public static final String LAST_SESSION_BROWSER_PID =
+            "Chrome.CrashReporting.LastSessionBrowserPid";
+
+    /**
+     * The application state last recorded by browser in previous session, updated when crash
+     * reporting is initialized and when current application state changes henceforth. If read after
+     * crash reporting is initialized, then the value would hold current session state.
+     */
+    public static final String LAST_SESSION_APPLICATION_STATE =
+            "Chrome.CrashReporting.LastSessionApplicationState";
+
     public static final String LOCALE_MANAGER_AUTO_SWITCH = "LocaleManager_PREF_AUTO_SWITCH";
     public static final String LOCALE_MANAGER_PROMO_SHOWN = "LocaleManager_PREF_PROMO_SHOWN";
     public static final String LOCALE_MANAGER_SEARCH_ENGINE_PROMO_SHOW_STATE =
@@ -552,12 +607,39 @@ public final class ChromePreferenceKeys {
     public static final String OFFLINE_MEASUREMENTS_LAST_CHECK_MILLIS =
             "Chrome.OfflineMeasurements.LastCheckMillis";
 
+    /** Parameters that control the HTTP probe of the Offline Measurements Background task */
+    public static final String OFFLINE_MEASUREMENTS_USER_AGENT_STRING =
+            "Chrome.OfflineMeasurements.UserAgentString";
+    public static final String OFFLINE_MEASUREMENTS_HTTP_PROBE_URL =
+            "Chrome.OfflineMeasurements.HttpProbeUrl";
+    public static final String OFFLINE_MEASUREMENTS_HTTP_PROBE_TIMEOUT_MS =
+            "Chrome.OfflineMeasurements.HttpProbeTimeoutMs";
+    public static final String OFFLINE_MEASUREMENTS_HTTP_PROBE_METHOD =
+            "Chrome.OfflineMeasurements.HttpProbeMethod";
+
     /**
      * Comma separated list of time between OfflineMeasurementsBackgroundTask checks. When possible
      * these values will be recorded to UMA.
      */
     public static final String OFFLINE_MEASUREMENTS_TIME_BETWEEN_CHECKS_MILLIS_LIST =
             "Chrome.OfflineMeasurements.TimeBetweenChecksMillisList";
+
+    /**
+     * Comma separated list of the results of HTTP probes from OfflineMeasurementsBackgroundTask.
+     * When possible values will be recorded to UMA then cleared.
+     */
+    public static final String OFFLINE_MEASUREMENTS_HTTP_PROBE_RESULTS_LIST =
+            "Chrome.OfflineMeasurements.HttpProbeResultsList";
+
+    /**
+     * Comma separated list of the airplane mode and roaming state from the
+     * OfflineMeasurementsBackgroundTask. When possible, values will be recorded to UMA then
+     * cleared.
+     */
+    public static final String OFFLINE_MEASUREMENTS_IS_AIRPLANE_MODE_ENABLED_LIST =
+            "Chrome.OfflineMeasurements.IsAirplaneModeEnabledList";
+    public static final String OFFLINE_MEASUREMENTS_IS_ROAMING_LIST =
+            "Chrome.OfflineMeasurements.IsRoaming";
 
     /** The shared preference for the 'save card to device' checkbox status. */
     public static final String PAYMENTS_CHECK_SAVE_CARD_TO_DEVICE = "check_save_card_to_device";
@@ -765,12 +847,6 @@ public final class ChromePreferenceKeys {
     public static final String SNAPSHOT_DATABASE_REMOVED = "snapshot_database_removed";
 
     public static final String SURVEY_DATE_LAST_ROLLED = "last_rolled_for_chrome_survey_key";
-    /**
-     *  The survey questions for this survey are the same as those in the survey used for Chrome
-     *  Home, so we reuse the old infobar key to prevent the users from seeing the same survey more
-     *  than once.
-     */
-    public static final String SURVEY_INFO_BAR_DISPLAYED = "chrome_home_survey_info_bar_displayed";
 
     public static final String TABBED_ACTIVITY_LAST_BACKGROUNDED_TIME_MS_PREF =
             "ChromeTabbedActivity.BackgroundTimeMs";
@@ -880,7 +956,7 @@ public final class ChromePreferenceKeys {
 
     /**
      * These values are currently used as SharedPreferences keys, along with the keys in
-     * {@link GrandfatheredChromePreferenceKeys#getKeysInUse()}. Add new SharedPreferences keys
+     * {@link LegacyChromePreferenceKeys#getKeysInUse()}. Add new SharedPreferences keys
      * here.
      *
      * @return The list of [keys in use] conforming to the format.
@@ -895,14 +971,20 @@ public final class ChromePreferenceKeys {
                 AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
                 AUTOFILL_ASSISTANT_NUMBER_OF_LITE_SCRIPTS_CANCELED,
                 AUTOFILL_ASSISTANT_PROACTIVE_HELP,
+                APP_LAUNCH_LAST_KNOWN_ACTIVE_TAB_STATE,
+                APP_LAUNCH_SEARCH_ENGINE_HAD_LOGO,
                 APPLICATION_OVERRIDE_LANGUAGE,
+                CHROME_SURVEY_PROMPT_DISPLAYED_TIMESTAMP.pattern(),
                 CLIPBOARD_SHARED_URI,
+                CLIPBOARD_SHARED_URI_TIMESTAMP,
+                COMMERCE_SUBSCRIPTIONS_CHROME_MANAGED_TIMESTAMP,
                 CONDITIONAL_TAB_STRIP_CONTINUOUS_DISMISS_COUNTER,
                 CONDITIONAL_TAB_STRIP_FEATURE_STATUS,
                 CONDITIONAL_TAB_STRIP_LAST_SHOWN_TIMESTAMP,
                 CONDITIONAL_TAB_STRIP_OPT_OUT,
                 CONTEXT_MENU_OPEN_IMAGE_IN_EPHEMERAL_TAB_CLICKED,
                 CONTEXT_MENU_OPEN_IN_EPHEMERAL_TAB_CLICKED,
+                CONTEXT_MENU_OPEN_NEW_TAB_IN_GROUP_ITEM_FIRST,
                 CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED,
                 CONTEXT_MENU_SHOP_IMAGE_WITH_GOOGLE_LENS_CLICKED,
                 CONTEXT_MENU_SHOP_SIMILAR_PRODUCTS_CLICKED,
@@ -925,6 +1007,8 @@ public final class ChromePreferenceKeys {
                 IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT,
                 IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN,
                 ISOLATED_SPLITS_DEX_COMPILE_VERSION,
+                LAST_SESSION_BROWSER_PID,
+                LAST_SESSION_APPLICATION_STATE,
                 OFFLINE_INDICATOR_V2_WALL_TIME_SHOWN_MS,
                 OFFLINE_INDICATOR_V2_LAST_UPDATE_WALL_TIME_MS,
                 OFFLINE_INDICATOR_V2_TIME_IN_FOREGROUND_MS,
@@ -932,6 +1016,13 @@ public final class ChromePreferenceKeys {
                 OFFLINE_INDICATOR_V2_FIRST_TIME_IN_FOREGROUND_MS,
                 OFFLINE_INDICATOR_V2_NUM_TIMES_BACKGROUNDED,
                 OFFLINE_MEASUREMENTS_CURRENT_TASK_MEASUREMENT_INTERVAL_IN_MINUTES,
+                OFFLINE_MEASUREMENTS_HTTP_PROBE_METHOD,
+                OFFLINE_MEASUREMENTS_HTTP_PROBE_TIMEOUT_MS,
+                OFFLINE_MEASUREMENTS_HTTP_PROBE_URL,
+                OFFLINE_MEASUREMENTS_HTTP_PROBE_RESULTS_LIST,
+                OFFLINE_MEASUREMENTS_IS_AIRPLANE_MODE_ENABLED_LIST,
+                OFFLINE_MEASUREMENTS_IS_ROAMING_LIST,
+                OFFLINE_MEASUREMENTS_USER_AGENT_STRING,
                 OFFLINE_MEASUREMENTS_LAST_CHECK_MILLIS,
                 OFFLINE_MEASUREMENTS_TIME_BETWEEN_CHECKS_MILLIS_LIST,
                 PERSISTENT_OFFLINE_CONTENT_AVAILABILITY_STATUS,

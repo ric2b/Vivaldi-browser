@@ -233,7 +233,9 @@ generate_embedded_i18n("generate_strings") {
 
   output_file_name_base = "installer_util_strings"
 
-  branding = branding_path_component
+  if (!defined(is_vivaldi) || !is_vivaldi) {
+    branding = branding_path_component
+  }
 }
 
 # Compile the generated .rc file.

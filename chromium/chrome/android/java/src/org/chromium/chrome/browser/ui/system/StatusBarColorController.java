@@ -37,9 +37,10 @@ import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.util.ColorUtils;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.vivaldi.browser.common.VivaldiColorUtils;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
 
 /**
@@ -174,7 +175,7 @@ public class StatusBarColorController
                 if (tab == null) return;
 
                 // Note(david@vivaldi.com): Avoid colour blinking while restoring tab.
-                if (ChromeApplication.isVivaldi() && !tab.isBeingRestored()
+                if (ChromeApplicationImpl.isVivaldi() && !tab.isBeingRestored()
                         && !((TabImpl) tab).isHidden())
                 updateStatusBarColor();
             }
@@ -202,7 +203,7 @@ public class StatusBarColorController
                             @Override
                             public void onOverviewModeStartedShowing(boolean showToolbar) {
                                 mIsInOverviewMode = true;
-                                if (!ChromeApplication.isVivaldi())
+                                if (!ChromeApplicationImpl.isVivaldi())
                                 updateStatusBarColor();
                             }
 
@@ -241,7 +242,7 @@ public class StatusBarColorController
     public void onUrlExpansionProgressChanged(float fraction) {
         mToolbarUrlExpansionPercentage = fraction;
         // Note (david@vivaldi.com): This is not required and would only lead into blinking effects.
-        if (!ChromeApplication.isVivaldi()) {
+        if (!ChromeApplicationImpl.isVivaldi()) {
         if (mShouldUpdateStatusBarColorForNTP) updateStatusBarColor();
         }
     }
@@ -333,8 +334,10 @@ public class StatusBarColorController
 
         // Return status bar color to match the toolbar.
         // Note(david@vivaldi.com): Always return the current tab color.
-        if (ChromeApplication.isVivaldi() && mCurrentTab != null)
-            return mCurrentTab.getThemeColor();
+        if (ChromeApplicationImpl.isVivaldi()) {
+            if (!VivaldiUtils.isTopToolbarOn()) return calculateDefaultStatusBarColor();
+            if (mCurrentTab != null) return mCurrentTab.getThemeColor();
+        }
 
         return mTopUiThemeColor.getThemeColorOrFallback(
                 mCurrentTab, calculateDefaultStatusBarColor());
@@ -411,7 +414,7 @@ public class StatusBarColorController
      * @return Whether or not the current tab is a new tab page in standard mode.
      */
     private boolean isStandardNTP() {
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             return mCurrentTab != null && mCurrentTab.getNativePage() instanceof SpeedDialPage;
         return mCurrentTab != null && mCurrentTab.getNativePage() instanceof NewTabPage;
     }
@@ -421,7 +424,7 @@ public class StatusBarColorController
      */
     private boolean isLocationBarShownInNTP() {
         if (!isStandardNTP()) return false;
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         final NewTabPage newTabPage = (NewTabPage) mCurrentTab.getNativePage();
         return newTabPage != null && newTabPage.isLocationBarShownInNTP();
     }

@@ -11,7 +11,6 @@
 
 #include "base/guid.h"
 #include "base/hash/md5.h"
-#include "base/strings/string16.h"
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 
@@ -63,7 +62,7 @@ class NotesCodec {
 
   // Updates the check-sum with the given string.
   void UpdateChecksum(const std::string& str);
-  void UpdateChecksum(const base::string16& str);
+  void UpdateChecksum(const std::u16string& str);
 
   // Returns the checksum computed during last encoding/decoding call.
   const std::string& computed_checksum() const { return computed_checksum_; }

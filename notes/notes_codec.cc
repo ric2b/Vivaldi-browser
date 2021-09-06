@@ -131,7 +131,7 @@ std::unique_ptr<base::Value> NotesCodec::EncodeNode(
   value->SetString(NotesCodec::kIdKey, node_id);
   UpdateChecksum(node_id);
 
-  base::string16 subject = node->GetTitle();
+  std::u16string subject = node->GetTitle();
   value->SetString(NotesCodec::kSubjectKey, subject);
   UpdateChecksum(subject);
 
@@ -272,7 +272,7 @@ bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
 
   maximum_id_ = std::max(maximum_id_, id);
 
-  base::string16 title_string;
+  std::u16string title_string;
   if (value.GetString(NotesCodec::kSubjectKey, &title_string)) {
     UpdateChecksum(title_string);
   }
@@ -334,7 +334,7 @@ bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
     return false;
   UpdateChecksum(type_string);
 
-  base::string16 content_string;
+  std::u16string content_string;
   if (type_string == kTypeNote) {
     if (!value.GetString(NotesCodec::kContentKey, &content_string))
       return false;
@@ -456,7 +456,7 @@ void NotesCodec::UpdateChecksum(const std::string& str) {
   base::MD5Update(&md5_context_, str);
 }
 
-void NotesCodec::UpdateChecksum(const base::string16& str) {
+void NotesCodec::UpdateChecksum(const std::u16string& str) {
   base::StringPiece temp(reinterpret_cast<const char*>(str.data()),
                          str.length() * sizeof(str[0]));
   base::MD5Update(&md5_context_,

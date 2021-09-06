@@ -27,17 +27,18 @@ import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.components.browser_ui.widget.FadingShadow;
 import org.chromium.components.browser_ui.widget.FadingShadowView;
-import org.chromium.components.browser_ui.widget.LoadingView;
 import org.chromium.components.browser_ui.widget.R;
 import org.chromium.components.browser_ui.widget.displaystyle.DisplayStyleObserver;
 import org.chromium.components.browser_ui.widget.displaystyle.HorizontalDisplayStyle;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig.DisplayStyle;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
+import org.chromium.ui.widget.LoadingView;
 
 import java.util.List;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * Contains UI elements common to selectable list views: a loading view, empty view, selection
@@ -313,7 +314,7 @@ public class SelectableListLayout<E>
         mRecyclerView.setItemAnimator(null);
         mToolbarShadow.setVisibility(View.VISIBLE);
         mEmptyView.setText(mSearchEmptyStringResId);
-        if (BuildConfig.IS_VIVALDI)
+        if (BuildConfig.IS_VIVALDI) // Vivaldi
             mEmptyView.setTag(TAG_SEARCH);
     }
 
@@ -324,7 +325,7 @@ public class SelectableListLayout<E>
         mRecyclerView.setItemAnimator(mItemAnimator);
         setToolbarShadowVisibility();
         mEmptyView.setText(mEmptyStringResId);
-        if (BuildConfig.IS_VIVALDI)
+        if (BuildConfig.IS_VIVALDI) // Vivaldi
             mEmptyView.setTag(TAG_NORMAL);
     }
 
@@ -334,7 +335,7 @@ public class SelectableListLayout<E>
      * @return The lateral padding to use for the current display style.
      */
     public static int getPaddingForDisplayStyle(DisplayStyle displayStyle, Resources resources) {
-        if (BuildConfig.IS_VIVALDI) return 0;
+        if (BuildConfig.IS_VIVALDI) return 0; // Vivaldi
         int padding = 0;
         if (displayStyle.horizontal == HorizontalDisplayStyle.WIDE) {
             int screenWidthDp = resources.getConfiguration().screenWidthDp;
@@ -351,7 +352,7 @@ public class SelectableListLayout<E>
 
         boolean showShadow = mRecyclerView.canScrollVertically(-1)
                 || (mToolbar.getSelectionDelegate().isSelectionEnabled() && mShowShadowOnSelection);
-        if (BuildConfig.IS_VIVALDI) showShadow = false;
+        if (BuildConfig.IS_VIVALDI) showShadow = false; // Vivaldi
         mToolbarShadow.setVisibility(showShadow ? View.VISIBLE : View.GONE);
     }
 

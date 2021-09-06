@@ -91,7 +91,7 @@ if (is_android) {
     outputs = [
       "values/vivaldi_android_strings.xml",
     ]
-    foreach(locale, locales + vivaldi_pending_locales - ["en-US"]) {
+    foreach(locale, android_bundle_locales_as_resources + vivaldi_pending_locales) {
       if (locale == "en-GB") {
         locale = "en-rGB"
       } else if (locale == "de-CH") {
@@ -120,6 +120,8 @@ if (is_android) {
         locale = "zh-rHK"
       } else if (locale == "sr-Latn") {
         locale = "b+sr+Latn"
+      } else if (locale == "fil") {
+        locale = "tl"
       }
       outputs += [ "values-$locale/vivaldi_android_strings.xml" ]
     }
@@ -138,6 +140,10 @@ grit("vivaldi_native_resources") {
   if (!is_android) {
     deps = [
       "//vivaldi/vivapp:vivaldi_app"
+    ]
+  } else {
+    deps = [
+      "//vivaldi/vivapp:bundle"
     ]
   }
 }

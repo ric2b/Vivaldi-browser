@@ -120,12 +120,12 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
       menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
     }
     else {
-      base::string16 data = node->GetTitle();
+      std::u16string data = node->GetTitle();
       if (data.length() == 0) {
         data = node->GetContent();
       }
       // Remove newlines inside string
-      base::string16 title = base::CollapseWhitespace(data, false);
+      std::u16string title = base::CollapseWhitespace(data, false);
       // Remove spaces at start and end
       base::TrimWhitespace(title, base::TRIM_ALL, &title);
       // Truncate string if it is too long
@@ -137,7 +137,7 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
       bool underline = underline_letter;
       if (underline) {
         // Prevent underlining a space
-        base::char16 c = ui::GetMnemonic(title);
+        char16_t c = ui::GetMnemonic(title);
         if (c == ' ') {
           underline = false;
         }

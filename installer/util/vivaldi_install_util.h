@@ -8,17 +8,26 @@
 #include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "base/version.h"
-#include "base/win/scoped_handle.h"
+#include "base/win/registry.h"
 
 #include "installer/util/vivaldi_install_constants.h"
 
-namespace base {
-namespace win {
-class RegKey;
-}
-}  // namespace base
+// Installation-related utilities shared by the browser, installer and
+// update_notifier.exe
+
+namespace installer {
+
+// Marker to annotate Vivaldi-specific changes to the Chromium
+// installation-related code when it is otherwise not clear if the change is
+// from a Vivaldi patch.
+constexpr bool kVivaldi = true;
+
+}  // namespace installer
 
 namespace vivaldi {
+
+// Flag indicating that we are running setup.exe, not the browser process.
+extern bool g_inside_installer_application;
 
 enum class InstallType {
   // Install for the current user
@@ -42,25 +51,6 @@ bool IsStandaloneBrowser();
 // be kStandalone as that has no notion of a default directory.
 base::FilePath GetDefaultInstallTopDir(InstallType install_type);
 
-// Does the post uninstall operations - open the URL to the uninstall survey.
-void DoPostUninstallOperations(const base::Version& version);
-
-// Launches process non-elevated even if the caller is elevated,
-// using explorer. Reference:
-// https://blogs.msdn.microsoft.com/oldnewthing/20131118-00/?p=2643
-bool ShellExecuteFromExplorer(const base::FilePath& application_path,
-                              const base::string16& parameters,
-                              const base::FilePath& directory);
-
-// Gets handles to all active processes on the system running from a given path.
-// If path matches the path of the current process, it is not included.
-std::vector<base::win::ScopedHandle> GetRunningProcessesForPath(
-    const base::FilePath& path);
-
-// Kills |processes|. The handles must have been open with PROCESS_TERMINATE
-// access for this to succeed.
-void KillProcesses(std::vector<base::win::ScopedHandle> processes);
-
 // Return the path of the directory holding the current exe. Compared with
 // base::PathService::Get(base::FILE_EXE) the result is normalized with all
 // symbolic link and mount points resolved.
@@ -69,34 +59,39 @@ const base::FilePath& GetDirectoryOfCurrentExe();
 // Get path of the current exe with all symlinks and mount points resolved.
 const base::FilePath& GetPathOfCurrentExe();
 
-// Get the update notifier executable from the given directory. If exe_dir is
-// null, use GetDirectoryOfCurrentExe().
-base::FilePath GetUpdateNotifierPath(const base::FilePath* exe_dir);
+base::FilePath GetInstallBinaryDir();
+
+base::Version GetInstallVersion(const base::FilePath& install_binary_dir);
+
+// Assuming kChromeNewExe exists alongside the browser executable, return the
+// command to finish the installation. Return an empty string on errors.
+std::wstring GetNewUpdateFinalizeCommand();
+
+// Get the update notifier executable from the given directory. If
+// install_binary_dir is empty, use GetDirectoryOfCurrentExe().
+base::FilePath GetUpdateNotifierPath(const base::FilePath& install_binary_dir);
 
 // Get the command line to start the update notifier with common switches
 // reflecting the current browser process flags. This can be called from any
-// thread. If exe_dir is null, use GetDirectoryOfCurrentExe().
-base::CommandLine GetCommonUpdateNotifierCommand(const base::FilePath* exe_dir);
+// thread. If install_binary_dir is empty, use GetDirectoryOfCurrentExe().
+base::CommandLine GetCommonUpdateNotifierCommand(
+    const base::FilePath& install_binary_dir = base::FilePath());
 
-// Return true if the update notifier is enabled for the installation in the
-// given exe_dir and optionally copy the full command line that should be used
-// with it. If exe_dir is null, use GetDirectoryOfCurrentExe().
-bool IsUpdateNotifierEnabled(const base::FilePath* exe_dir,
-                             base::CommandLine* cmdline = nullptr);
+// Return true if an update notifier autorun entry in the registry exists and
+// matches the given installation.
+bool IsUpdateNotifierEnabledAsAutorun(const base::FilePath& install_binary_dir);
 
-// Return true if the update notifier is enabled for some path installation
-// path. This can block and must not be called from the browser UI thread.
-bool IsUpdateNotifierEnabledForAnyPath();
+// Return true if an update notifier autorun entry in the registry exists and
+// points to some path.
+bool IsUpdateNotifierEnabledAsAutorunForAnyPath();
 
-// Enable the update notifier using the given commnad line and launch the
-// updater process. This can block and must not be called from the browser UI
-// thread.
-bool EnableUpdateNotifier(const base::CommandLine& cmdline);
+// Create an update notifier autorun entry in the registry and launch the
+// notification process.
+bool EnableUpdateNotifierWithAutorun(const base::FilePath& install_binary_dir);
 
-// Disable the update notifier and quit any running instance. If exe_dir is
-// null, use GetDirectoryOfCurrentExe(). This can block and must not be called
-// from the browser UI thread.
-bool DisableUpdateNotifier(const base::FilePath* exe_dir);
+// If an update notifier autorun entry in the registry exists and matches the
+// given installation, remove it and quit corresponding update notifier process.
+bool DisableUpdateNotifierAsAutorun(const base::FilePath& install_binary_dir);
 
 // Launch the update notifier using the given commnad line. This can block and
 // must not be called from the browser UI thread.
@@ -107,34 +102,43 @@ bool LaunchNotifierProcess(const base::CommandLine& command);
 // from the browser UI thread.
 int RunNotifierSubaction(const base::CommandLine& command);
 
-void SendQuitUpdateNotifier(const base::FilePath* exe_dir, bool global);
+void SendQuitUpdateNotifier(const base::FilePath& install_binary_dir,
+                            bool global = false);
 
-// Get Winapi event name for the update notifier from the given exe_dir. If
-// exe_dir is null, use GetDirectoryOfCurrentExe().
-base::string16 GetUpdateNotifierEventName(base::StringPiece16 event_prefix,
-                                          const base::FilePath* exe_dir);
+// Get Winapi event name for the update notifier from the given
+// install_binary_dir. If install_binary_dir is empty, use
+// GetDirectoryOfCurrentExe().
+std::wstring GetUpdateNotifierEventName(
+    base::WStringPiece event_prefix,
+    const base::FilePath& install_binary_dir);
 
-// For the installer installer_exe_dir comes from the user input, not
-// GetDirectoryOfCurrentExe(), and may contain symlinks etc. Thus we must
-// normalize it as we use the path to construct signal names and compare with
-// the path in the registry for autostart.
-base::FilePath NormalizeInstallExeDirectory(const base::FilePath& exe_dir);
-
-// Installer-specific helper to quit all running notifiers.
-void QuitAllUpdateNotifiers(const base::FilePath& installer_exe_dir,
-                            bool quit_old);
+base::win::RegKey OpenRegistryKeyToRead(HKEY rootkey, const wchar_t* subkey);
+base::win::RegKey OpenRegistryKeyToWrite(HKEY rootkey, const wchar_t* subkey);
 
 // Read a string from the registry. Return an empty string on errors. This
 // assumes that an empty string is never a valid value.
-std::wstring ReadRegistryString(const wchar_t* name, base::win::RegKey& key);
+std::wstring ReadRegistryString(const wchar_t* name,
+                                const base::win::RegKey& key);
 
 // Return nullopt on errors.
-base::Optional<DWORD> ReadRegistryDW(const wchar_t* name,
-                                     base::win::RegKey& key);
+base::Optional<uint32_t> ReadRegistryUint32(const wchar_t* name,
+                                            const base::win::RegKey& key);
 
 // Return nullopt on errors.
 base::Optional<bool> ReadRegistryBool(const wchar_t* name,
-                                      base::win::RegKey& key);
+                                      const base::win::RegKey& key);
+
+// If value is empty, this delete the name.
+void WriteRegistryString(const wchar_t* name,
+                         const std::wstring& value,
+                         base::win::RegKey& key);
+
+void WriteRegistryUint32(const wchar_t* name,
+                         DWORD value,
+                         base::win::RegKey& key);
+
+void WriteRegistryBool(const wchar_t* name, bool value, base::win::RegKey& key);
+
 }  // namespace vivaldi
 
 #endif  // INSTALLER_UTIL_VIVALDI_INSTALL_UTIL_H_

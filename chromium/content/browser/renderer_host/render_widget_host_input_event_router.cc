@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <memory>
 #include <vector>
 
 #include "base/debug/crash_logging.h"
@@ -1623,7 +1624,10 @@ void RenderWidgetHostInputEventRouter::DispatchTouchscreenGestureEvent(
 
   if (gesture_event.unique_touch_event_id == 0 || is_gesture_start) {
     bool moved_recently = touchscreen_gesture_target_moved_recently_;
-    if (is_gesture_start)
+    // It seem that |target| can be nullptr here, not sure why. Until we know
+    // why, let's avoid dereferencing it in that case.
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=1155297
+    if (is_gesture_start && target)
       moved_recently = target->ScreenRectIsUnstableFor(gesture_event);
     SetTouchscreenGestureTarget(target, moved_recently);
   }
@@ -1954,8 +1958,10 @@ void RenderWidgetHostInputEventRouter::DispatchEventToTarget(
 }
 
 TouchEmulator* RenderWidgetHostInputEventRouter::GetTouchEmulator() {
-  if (!touch_emulator_)
-    touch_emulator_.reset(new TouchEmulator(this, last_device_scale_factor_));
+  if (!touch_emulator_) {
+    touch_emulator_ =
+        std::make_unique<TouchEmulator>(this, last_device_scale_factor_);
+  }
 
   return touch_emulator_.get();
 }
@@ -2002,13 +2008,14 @@ void RenderWidgetHostInputEventRouter::SetCursor(const WebCursor& cursor) {
   last_device_scale_factor_ =
       last_mouse_move_root_view_->current_device_scale_factor();
   if (auto* cursor_manager = last_mouse_move_root_view_->GetCursorManager()) {
-    for (auto it : owner_map_)
+    for (auto it : owner_map_) {
       // NOTE(david@vivaldi.com): In Vivaldi we need to check if the device
       // emulation is active for that specific view and then change the cursor
       // accordingly.
       if (it.second && (!vivaldi::IsVivaldiRunning() ||
           it.second->host()->IsDeviceEmulationActive()))
-      cursor_manager->UpdateCursor(it.second.get(), cursor);
+        cursor_manager->UpdateCursor(it.second.get(), cursor);
+    }
   }
 }
 
@@ -2028,7 +2035,7 @@ void RenderWidgetHostInputEventRouter::OnAggregatedHitTestRegionListUpdated(
     const std::vector<viz::AggregatedHitTestRegion>& hit_test_data) {
   for (auto& region : hit_test_data) {
     auto iter = owner_map_.find(region.frame_sink_id);
-    if (iter != owner_map_.end() && iter->second)
+    if (iter != owner_map_.end())
       iter->second->NotifyHitTestRegionUpdated(region);
   }
 }

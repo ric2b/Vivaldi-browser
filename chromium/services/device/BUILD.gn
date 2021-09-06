@@ -258,7 +258,7 @@ source_set("tests") {
     deps += [
       "//components/variations:test_support",
       "//services/device/battery",
-      "//services/device/hid:mocks",
+      "//services/device/hid:test_support",
       "//services/device/public/cpp/hid",
       "//services/device/vibration",
     ]
@@ -266,13 +266,14 @@ source_set("tests") {
     if ((!is_linux && !is_chromeos) || use_udev) {
       sources += [
         "hid/hid_connection_impl_unittest.cc",
-        "hid/test_report_descriptors.cc",
-        "hid/test_report_descriptors.h",
         "public/cpp/hid/hid_device_filter_unittest.cc",
         "public/cpp/hid/hid_report_descriptor_unittest.cc",
       ]
       if (is_linux || is_chromeos) {
-        sources += [ "hid/input_service_linux_unittest.cc" ]
+        sources += [
+          "hid/hid_service_linux_unittest.cc",
+          "hid/input_service_linux_unittest.cc",
+        ]
       }
       if (!is_fuchsia) {
         # Fuchsia does not currently implement HidService.

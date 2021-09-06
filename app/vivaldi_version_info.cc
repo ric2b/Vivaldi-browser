@@ -1,14 +1,31 @@
 // Copyright (c) 2015 Vivaldi Technologies.
 
-#include <string>
-
 #include "app/vivaldi_version_info.h"
+
+#include "base/check.h"
+#include "base/no_destructor.h"
+#include "base/version.h"
 #include "components/version_info/version_info_values.h"
 
 namespace vivaldi {
 
 std::string GetVivaldiVersionString() {
   return VIVALDI_VERSION;
+}
+
+const base::Version& GetVivaldiVersion() {
+  static const base::NoDestructor<base::Version> version(VIVALDI_VERSION);
+  DCHECK(version->IsValid());
+  return *version;
+}
+
+bool IsBetaOrFinal() {
+#if defined(OFFICIAL_BUILD) && \
+    (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
+  return true;
+#else
+  return false;
+#endif
 }
 
 }  // namespace vivaldi

@@ -111,7 +111,8 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
     RequestFilterProxyingURLLoaderFactory* factory,
     uint64_t request_id,
     int32_t network_service_request_id,
-    int32_t routing_id,
+    int32_t view_routing_id,
+    int32_t frame_routing_id,
     uint32_t options,
     const network::ResourceRequest& request,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
@@ -122,7 +123,8 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
       original_initiator_(request.request_initiator),
       request_id_(request_id),
       network_service_request_id_(network_service_request_id),
-      routing_id_(routing_id),
+      view_routing_id_(view_routing_id),
+      frame_routing_id_(frame_routing_id),
       options_(options),
       traffic_annotation_(traffic_annotation),
       proxied_loader_receiver_(this, std::move(loader_receiver)),
@@ -146,11 +148,13 @@ RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
 RequestFilterProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
     RequestFilterProxyingURLLoaderFactory* factory,
     uint64_t request_id,
+    int32_t frame_routing_id,
     const network::ResourceRequest& request)
     : factory_(factory),
       request_(request),
       original_initiator_(request.request_initiator),
       request_id_(request_id),
+      frame_routing_id_(frame_routing_id),
       proxied_loader_receiver_(this),
       for_cors_preflight_(true),
       has_any_extra_headers_listeners_(
@@ -187,16 +191,16 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   // the original for |initiator| in the event.
   network::ResourceRequest request_for_info = request_;
   request_for_info.request_initiator = original_initiator_;
-  info_.emplace(request_id_, factory_->initiator_render_process_id_,
-                request_.render_frame_id, routing_id_,
-                factory_->render_process_id_, factory_->render_frame_id_,
-                request_for_info, factory_->loader_factory_type(),
+  info_.emplace(request_id_, factory_->render_process_id_, frame_routing_id_,
+                view_routing_id_, request_for_info,
+                factory_->loader_factory_type(),
                 !(options_ & network::mojom::kURLLoadOptionSynchronous),
                 factory_->navigation_id_);
 
   current_request_uses_header_client_ =
       factory_->url_loader_header_client_receiver_.is_bound() &&
-      request_.url.SchemeIsHTTPOrHTTPS() &&
+      (request_.url.SchemeIsHTTPOrHTTPS() ||
+       request_.url.SchemeIs(url::kUrnScheme)) &&
       (for_cors_preflight_ || network_service_request_id_ != 0) &&
       factory_->request_handler_->WantsExtraHeadersForRequest(&info_.value());
 }
@@ -229,11 +233,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       factory_->browser_context_, &info_.value(), continuation, &redirect_url_,
       &collapse_initiator_);
   if (result == net::ERR_BLOCKED_BY_CLIENT) {
-    network::URLLoaderCompletionStatus status(result);
-    if (collapse_initiator_) {
-      status.extended_error_code = static_cast<int>(
-          blink::ResourceRequestBlockedReason::kCollapsedByClient);
-    }
+    network::URLLoaderCompletionStatus status =
+        CreateURLLoaderCompletionStatus(result, collapse_initiator_);
 
     OnRequestError(status, state_on_error);
     return;
@@ -319,6 +320,11 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
+    OnReceiveEarlyHints(network::mojom::EarlyHintsPtr early_hints) {
+  target_client_->OnReceiveEarlyHints(std::move(early_hints));
+}
+
+void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     OnReceiveResponse(network::mojom::URLResponseHeadPtr head) {
   if (current_request_uses_header_client_) {
     // Use the headers we got from OnHeadersReceived as that'll contain
@@ -343,8 +349,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
                       info_->loader_factory_type ==
                           content::ContentBrowserClient::URLLoaderFactoryType::
                               kNavigation)) {
-    OnNetworkError(
-        network::URLLoaderCompletionStatus(net::ERR_UNSAFE_REDIRECT));
+    OnNetworkError(CreateURLLoaderCompletionStatus(net::ERR_UNSAFE_REDIRECT));
     return;
   }
 
@@ -433,7 +438,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnLoaderCreated(
         base::BindOnce(&RequestFilterProxyingURLLoaderFactory::
                            InProgressRequest::OnNetworkError,
                        weak_factory_.GetWeakPtr(),
-                       network::URLLoaderCompletionStatus(net::ERR_FAILED)));
+                       CreateURLLoaderCompletionStatus(net::ERR_FAILED)));
   }
 }
 
@@ -542,14 +547,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToBeforeSendHeaders(State state_on_error, int error_code) {
   if (error_code != net::OK) {
-    network::URLLoaderCompletionStatus status(error_code);
-    if (collapse_initiator_) {
-      status.extended_error_code = static_cast<int>(
-          blink::ResourceRequestBlockedReason::kCollapsedByClient);
-    }
-
-    OnRequestError(network::URLLoaderCompletionStatus(error_code),
-                   state_on_error);
+    OnRequestError(
+        CreateURLLoaderCompletionStatus(error_code, collapse_initiator_),
+        state_on_error);
     return;
   }
 
@@ -561,10 +561,11 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   if (proxied_client_receiver_.is_bound())
     proxied_client_receiver_.Resume();
 
-  if (request_.url.SchemeIsHTTPOrHTTPS()) {
+  if (request_.url.SchemeIsHTTPOrHTTPS() ||
+      request_.url.SchemeIs(url::kUrnScheme)) {
     // NOTE: While it does not appear to be documented (and in fact it may be
     // intuitive), |onBeforeSendHeaders| is only dispatched for HTTP and HTTPS
-    // requests.
+    // and urn: requests.
 
     set_request_headers_.clear();
     removed_request_headers_.clear();
@@ -580,8 +581,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     if (result == net::ERR_BLOCKED_BY_CLIENT) {
       // The request was cancelled synchronously. Dispatch an error notification
       // and terminate the request.
-      OnRequestError(network::URLLoaderCompletionStatus(result),
-                     state_on_error);
+      OnRequestError(CreateURLLoaderCompletionStatus(result), state_on_error);
       return;
     }
 
@@ -609,19 +609,16 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToStartRequest(State state_on_error, int error_code) {
   if (error_code != net::OK) {
-    network::URLLoaderCompletionStatus status(error_code);
-    if (collapse_initiator_) {
-      status.extended_error_code = static_cast<int>(
-          blink::ResourceRequestBlockedReason::kCollapsedByClient);
-    }
-    OnRequestError(network::URLLoaderCompletionStatus(status), state_on_error);
+    OnRequestError(
+        CreateURLLoaderCompletionStatus(error_code, collapse_initiator_),
+        state_on_error);
     return;
   }
 
   if (current_request_uses_header_client_ && !redirect_url_.is_empty()) {
     if (for_cors_preflight_) {
       // CORS preflight doesn't support redirect.
-      OnRequestError(network::URLLoaderCompletionStatus(net::ERR_FAILED),
+      OnRequestError(CreateURLLoaderCompletionStatus(net::ERR_FAILED),
                      state_on_error);
       return;
     }
@@ -653,7 +650,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     if (has_any_extra_headers_listeners_)
       options |= network::mojom::kURLLoadOptionUseHeaderClient;
     factory_->target_factory_->CreateLoaderAndStart(
-        target_loader_.BindNewPipeAndPassReceiver(), info_->routing_id,
+        target_loader_.BindNewPipeAndPassReceiver(),
         network_service_request_id_, options, request_,
         proxied_client_receiver_.BindNewPipeAndPassRemote(),
         traffic_annotation_);
@@ -672,8 +669,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToSendHeaders(State state_on_error, int error_code) {
   if (error_code != net::OK) {
-    OnRequestError(network::URLLoaderCompletionStatus(error_code),
-                   state_on_error);
+    OnRequestError(CreateURLLoaderCompletionStatus(error_code), state_on_error);
     return;
   }
 
@@ -718,7 +714,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   if (proxied_client_receiver_.is_bound())
     proxied_client_receiver_.Resume();
 
-  if (request_.url.SchemeIsHTTPOrHTTPS()) {
+  if (request_.url.SchemeIsHTTPOrHTTPS() ||
+      request_.url.SchemeIs(url::kUrnScheme)) {
     // NOTE: While it does not appear to be documented (and in fact it may be
     // intuitive), |onSendHeaders| is only dispatched for HTTP and HTTPS
     // requests.
@@ -749,7 +746,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     } else {
       state = State::kRejectedByOnHeadersReceivedForFinalResponse;
     }
-    OnRequestError(network::URLLoaderCompletionStatus(error_code), state);
+    OnRequestError(CreateURLLoaderCompletionStatus(error_code), state);
     return;
   }
 
@@ -766,7 +763,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   }
 
   if (for_cors_preflight_ && !redirect_url_.is_empty()) {
-    OnRequestError(network::URLLoaderCompletionStatus(net::ERR_FAILED),
+    OnRequestError(CreateURLLoaderCompletionStatus(net::ERR_FAILED),
                    State::kRejectedByOnHeadersReceivedForRedirect);
     return;
   }
@@ -809,7 +806,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToResponseStarted(int error_code) {
   DCHECK(!for_cors_preflight_);
   if (error_code != net::OK) {
-    OnRequestError(network::URLLoaderCompletionStatus(error_code),
+    OnRequestError(CreateURLLoaderCompletionStatus(error_code),
                    State::kRejectedByOnHeadersReceivedForFinalResponse);
     return;
   }
@@ -861,7 +858,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ContinueToBeforeRedirect(const net::RedirectInfo& redirect_info,
                              int error_code) {
   if (error_code != net::OK) {
-    OnRequestError(network::URLLoaderCompletionStatus(error_code),
+    OnRequestError(CreateURLLoaderCompletionStatus(error_code),
                    kRejectedByOnHeadersReceivedForRedirect);
     return;
   }
@@ -898,7 +895,8 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   net::CompletionRepeatingCallback copyable_callback =
       base::AdaptCallbackForRepeating(std::move(continuation));
-  if (request_.url.SchemeIsHTTPOrHTTPS()) {
+  if (request_.url.SchemeIsHTTPOrHTTPS() ||
+      request_.url.SchemeIs(url::kUrnScheme)) {
     DCHECK(info_.has_value());
     int result = factory_->request_handler_->OnHeadersReceived(
         factory_->browser_context_, &info_.value(), copyable_callback,
@@ -916,7 +914,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       } else {
         state = State::kRejectedByOnHeadersReceivedForFinalResponse;
       }
-      OnRequestError(network::URLLoaderCompletionStatus(result), state);
+      OnRequestError(CreateURLLoaderCompletionStatus(result), state);
       return;
     }
 
@@ -970,7 +968,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   } else if (state_ == State::kInProgressWithFinalResponseReceived) {
     state = State::kDetachedFromClientAfterReceivingResponse;
   }
-  OnRequestError(network::URLLoaderCompletionStatus(net::ERR_ABORTED), state);
+  OnRequestError(CreateURLLoaderCompletionStatus(net::ERR_ABORTED), state);
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -983,13 +981,13 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     // be retrieved in the restarted request, which will call
     // RequestIDGenerator::Generate() with the same ID pair.
     factory_->request_id_generator_->SaveID(
-        routing_id_, network_service_request_id_, request_id_);
+        view_routing_id_, network_service_request_id_, request_id_);
 
     state_ = State::kRedirectFollowedByAnotherInProgressRequest;
     // Deletes |this|.
     factory_->RemoveRequest(network_service_request_id_, request_id_);
   } else {
-    OnNetworkError(network::URLLoaderCompletionStatus(net::ERR_ABORTED));
+    OnNetworkError(CreateURLLoaderCompletionStatus(net::ERR_ABORTED));
   }
 }
 
@@ -1013,11 +1011,20 @@ bool RequestFilterProxyingURLLoaderFactory::InProgressRequest::IsRedirectSafe(
   return content::IsSafeRedirectTarget(from_url, to_url);
 }
 
+network::URLLoaderCompletionStatus RequestFilterProxyingURLLoaderFactory::
+    InProgressRequest::CreateURLLoaderCompletionStatus(
+        int error_code,
+        bool collapse_initiator) {
+  network::URLLoaderCompletionStatus status(error_code);
+  status.should_collapse_initiator = collapse_initiator;
+  return status;
+}
+
 RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
     content::BrowserContext* browser_context,
-    int initiator_render_process_id,
     int render_process_id,
-    int render_frame_id,
+    int frame_routing_id,
+    int view_routing_id,
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
     base::Optional<int64_t> navigation_id,
@@ -1030,9 +1037,9 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
     RequestFilterManager::ProxySet* proxies,
     content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type)
     : browser_context_(browser_context),
-      initiator_render_process_id_(initiator_render_process_id),
       render_process_id_(render_process_id),
-      render_frame_id_(render_frame_id),
+      frame_routing_id_(frame_routing_id),
+      view_routing_id_(view_routing_id),
       request_handler_(request_handler),
       request_id_generator_(request_id_generator),
       navigation_id_(std::move(navigation_id)),
@@ -1065,9 +1072,9 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
 
 void RequestFilterProxyingURLLoaderFactory::StartProxying(
     content::BrowserContext* browser_context,
-    int initiator_render_process_id,
     int render_process_id,
-    int render_frame_id,
+    int frame_routing_id,
+    int view_routing_id,
     RequestFilterManager::RequestHandler* request_handler,
     RequestFilterManager::RequestIDGenerator* request_id_generator,
     base::Optional<int64_t> navigation_id,
@@ -1082,18 +1089,17 @@ void RequestFilterProxyingURLLoaderFactory::StartProxying(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   auto proxy = std::make_unique<RequestFilterProxyingURLLoaderFactory>(
-      browser_context, initiator_render_process_id, render_process_id,
-      render_frame_id, request_handler, request_id_generator,
-      std::move(navigation_id), std::move(loader_receiver),
-      std::move(target_factory_remote), std::move(header_client_receiver),
-      std::move(forwarding_header_client), proxies, loader_factory_type);
+      browser_context, render_process_id, frame_routing_id, view_routing_id,
+      request_handler, request_id_generator, std::move(navigation_id),
+      std::move(loader_receiver), std::move(target_factory_remote),
+      std::move(header_client_receiver), std::move(forwarding_header_client),
+      proxies, loader_factory_type);
 
   proxies->AddProxy(std::move(proxy));
 }
 
 void RequestFilterProxyingURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
-    int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& request,
@@ -1108,7 +1114,7 @@ void RequestFilterProxyingURLLoaderFactory::CreateLoaderAndStart(
   // previous request if the previous request was redirected to a URL that
   // required a different loader.
   const uint64_t filtered_request_id =
-      request_id_generator_->Generate(routing_id, request_id);
+      request_id_generator_->Generate(view_routing_id_, request_id);
 
   if (request_id) {
     // Only requests with a non-zero request ID can have their proxy associated
@@ -1120,8 +1126,9 @@ void RequestFilterProxyingURLLoaderFactory::CreateLoaderAndStart(
   auto result = requests_.emplace(
       filtered_request_id,
       std::make_unique<InProgressRequest>(
-          this, filtered_request_id, request_id, routing_id, options, request,
-          traffic_annotation, std::move(loader_receiver), std::move(client)));
+          this, filtered_request_id, request_id, view_routing_id_,
+          frame_routing_id_, options, request, traffic_annotation,
+          std::move(loader_receiver), std::move(client)));
   result.first->second->Restart();
 }
 
@@ -1169,8 +1176,8 @@ void RequestFilterProxyingURLLoaderFactory::OnLoaderForCorsPreflightCreated(
       request_id_generator_->Generate(MSG_ROUTING_NONE, 0);
 
   auto result = requests_.insert(std::make_pair(
-      web_request_id,
-      std::make_unique<InProgressRequest>(this, web_request_id, request)));
+      web_request_id, std::make_unique<InProgressRequest>(
+                          this, web_request_id, frame_routing_id_, request)));
 
   mojo::PendingRemote<network::mojom::TrustedHeaderClient>
       forwarding_header_client;

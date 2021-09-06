@@ -36,10 +36,6 @@ void PassThroughVideoDecoder::Reset(base::OnceClosure closure) {
   impl_.Reset(std::move(closure));
 }
 
-std::string PassThroughVideoDecoder::GetDisplayName() const {
-  return "PassThroughVideoDecoder";
-}
-
 VideoDecoderType PassThroughVideoDecoder::GetDecoderType() const {
   return VideoDecoderType::kDecrypting;
 }

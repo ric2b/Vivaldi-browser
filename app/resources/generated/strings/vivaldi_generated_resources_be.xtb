@@ -158,7 +158,7 @@
 <translation id="3505030558724226696">Адклікаць доступ да прылад</translation>
 <translation id="3511307672085573050">Скапіяваць адрас &amp;спасылкі</translation>
 <translation id="354068948465830244">Можа чытаць і змяняць даныя сайтаў</translation>
-<translation id="3560034655160545939">&amp;Праверка арфа</translation>
+<translation id="3560034655160545939">&amp;Праверка правапісу</translation>
 <translation id="3574917942258583917">Усё адно выйсці з рэжыму інкогніта?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хоча даць доступ да прынтара &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; вашай групе:&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Калі вы ўхваліце гэтае дзеянне, то ўсе удзельнікі групы змогуць карыстацца прынтарам.</translation>
 <translation id="3587482841069643663">Усе</translation>
@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Забараніць сайтам аўтаматычнае спампоўванне файлаў</translation>
 <translation id="5039804452771397117">Дазволіць</translation>
 <translation id="5057110919553308744">Пры націсканні на пашырэнне</translation>
+<translation id="5059526285558225588">Абярыце тое, чым хочаце падзяліцца</translation>
 <translation id="5063480226653192405">Выкарыстанне</translation>
 <translation id="5116628073786783676">Захаваць аўдыё як...</translation>
 <translation id="5143374789336132547">Пашырэнне "<ph name="EXTENSION_NAME" />" змяніла хатнюю старонку.</translation>
@@ -458,7 +459,6 @@
 <translation id="8823704566850948458">Прапаноўваць пароль...</translation>
 <translation id="8859174528519900719">Падфрэйм: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Адкрыць спасылку ў новым &amp;акне</translation>
-<translation id="8910146161325739742">Адкрыйце доступ да экрана</translation>
 <translation id="8915370057835397490">Загрузка прапановы</translation>
 <translation id="8916476537757519021">Рамка ў рэжыме інкогніта: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Памяць JavaScript</translation>

@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "browser/stats_reporter.h"
 #include "net/base/backoff_entry.h"
+#include "ui/display/screen.h"
 
 namespace network {
 class SimpleURLLoader;
@@ -24,14 +25,13 @@ namespace vivaldi {
 
 class StatsReporterImpl : public StatsReporter {
  public:
-  StatsReporterImpl();
-  ~StatsReporterImpl() override;
-
- private:
   struct NextPingTimes {
     base::Time daily;
     base::Time weekly;
     base::Time monthly;
+    base::Time trimestrial;
+    base::Time semestrial;
+    base::Time yearly;
   };
 
   struct ReportingData {
@@ -40,38 +40,45 @@ class StatsReporterImpl : public StatsReporter {
     base::Time installation_time;
     int next_extra_ping = 0;
     base::Time next_extra_ping_time;
+    int pings_since_last_month = 0;
   };
 
-  class Worker {
+  struct FileAndContent {
+    base::File file;
+    std::string content;
+  };
+
+  StatsReporterImpl();
+  ~StatsReporterImpl() override;
+
+  static bool GeneratePingRequest(
+      base::Time now,
+      const std::string& legacy_user_id,
+      const gfx::Size& display_size,
+      const std::string& architecture,
+      const std::string& vivaldi_version,
+      const std::string& user_agent,
+      ReportingData& local_state_reporting_data,
+      base::Optional<base::Value>& os_profile_reporting_data_json,
+      std::string& request_url,
+      std::string& body,
+      base::TimeDelta& next_reporting_time_interval);
+
+  static bool IsValidUserId(const std::string& user_id);
+
+ private:
+  class FileHolder {
    public:
-    static void Start(const base::FilePath& os_profile_reporting_data_path,
-                      const std::string& legacy_user_id,
-                      const ReportingData& local_state_reporting_data,
-                      base::WeakPtr<StatsReporterImpl> stats_reporter);
+    explicit FileHolder(base::File file);
+    ~FileHolder();
+    FileHolder(FileHolder&& other);
+    FileHolder& operator=(FileHolder&& other);
+
+    base::File release();
+    bool IsValid();
 
    private:
-    friend std::unique_ptr<Worker>::deleter_type;
-    Worker(base::WeakPtr<StatsReporterImpl> stats_reporter);
-    ~Worker();
-
-    void Run(const base::FilePath& os_profile_reporting_data_path,
-             const std::string& legacy_user_id,
-             const ReportingData& local_state_reporting_data);
-    void LoadUrlOnUIThread();
-    void OnURLLoadComplete(std::unique_ptr<std::string> response_body);
-    void Finish(bool success);
-
-    base::File os_profile_reporting_data_file_;
-
-    base::Value os_profile_reporting_data_json_;
-    std::string user_id_;
-    NextPingTimes new_next_pings_;
-    int next_extra_ping_ = false;
-
-    std::unique_ptr<network::SimpleURLLoader> url_loader_;
-
-    base::WeakPtr<StatsReporterImpl> stats_reporter_;
-    scoped_refptr<base::SequencedTaskRunner> original_task_runner_;
+    base::File file_;
   };
 
   static std::string GetUserIdFromLegacyStorage();
@@ -80,17 +87,24 @@ class StatsReporterImpl : public StatsReporter {
   void OnLegacyUserIdGot(const std::string& legacy_user_id);
   void StartReporting();
 
-  void OnWorkerDone(const std::string& user_id,
-                    NextPingTimes next_pings,
-                    int next_extra_ping);
-  void OnWorkerFailed(base::TimeDelta next_try_delay);
+  void OnOSStatFileRead(base::Optional<FileAndContent> file_and_content);
+  void DoReporting(FileHolder os_profile_reporting_data_file,
+                   std::string os_profile_reporting_data);
+  void OnURLLoadComplete(
+      FileHolder os_profile_reporting_data_file,
+      ReportingData local_state_reporting_data,
+      base::Optional<base::Value> os_profile_reporting_data_json,
+      base::TimeDelta next_reporting_time_interval_,
+      std::unique_ptr<std::string> response_body);
+  void ScheduleNextReporting(base::TimeDelta next_try_delay, bool add_jitter);
 
   std::string legacy_user_id_;
 
   net::BackoffEntry report_backoff_;
+  std::unique_ptr<network::SimpleURLLoader> url_loader_;
   base::OneShotTimer next_report_timer_;
 
-  base::WeakPtrFactory<StatsReporterImpl> weak_factory_;
+  base::WeakPtrFactory<StatsReporterImpl> weak_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(StatsReporterImpl);
 };
 

@@ -26,10 +26,10 @@ class OperaNotesReader : public OperaAdrFileReader {
   OperaNotesReader() {}
   ~OperaNotesReader() override {}
 
-  void AddNote(const std::vector<base::string16>& current_folder,
+  void AddNote(const std::vector<std::u16string>& current_folder,
                const base::DictionaryValue& entries,
                bool is_folder,
-               base::string16* item_name = NULL);
+               std::u16string* item_name = NULL);
 
   const std::vector<ImportedNotesEntry>& Notes() const { return notes; }
 
@@ -38,7 +38,7 @@ class OperaNotesReader : public OperaAdrFileReader {
                    const base::DictionaryValue& entries) override;
 
  private:
-  std::vector<base::string16> current_folder;
+  std::vector<std::u16string> current_folder;
   std::vector<ImportedNotesEntry> notes;
 
   DISALLOW_COPY_AND_ASSIGN(OperaNotesReader);
@@ -47,7 +47,7 @@ class OperaNotesReader : public OperaAdrFileReader {
 void OperaNotesReader::HandleEntry(const std::string& category,
                                    const base::DictionaryValue& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
-    base::string16 foldername;
+    std::u16string foldername;
     AddNote(current_folder, entries, true, &foldername);
     current_folder.push_back(foldername);
   } else if (base::LowerCaseEqualsASCII(category, "note")) {
@@ -58,27 +58,27 @@ void OperaNotesReader::HandleEntry(const std::string& category,
 }
 
 void OperaNotesReader::AddNote(
-    const std::vector<base::string16>& current_folder,
+    const std::vector<std::u16string>& current_folder,
     const base::DictionaryValue& entries,
     bool is_folder,
-    base::string16* item_name) {
+    std::u16string* item_name) {
   std::string temp;
-  base::string16 wtemp;
-  base::string16 title;
-  base::string16 url;
-  base::string16 nickname;
-  base::string16 content;
+  std::u16string wtemp;
+  std::u16string title;
+  std::u16string url;
+  std::u16string nickname;
+  std::u16string content;
 
   double created_time = 0;
 
   if (!is_folder && !entries.GetString("url", &url))
-    url = base::string16();
+    url = std::u16string();
 
   if (!entries.GetString("name", &wtemp))
     wtemp = url;
 
   int line_end = -1;
-  for (base::string16::iterator it = wtemp.begin(); it != wtemp.end(); it++) {
+  for (std::u16string::iterator it = wtemp.begin(); it != wtemp.end(); it++) {
     // LF is coded as 0x02 char in the file, to prevent
     // linebreak. treat 2 sequential 0x02s as CRLF
     if (*it == 0x02) {
@@ -127,7 +127,7 @@ bool OperaImporter::ImportNotes(std::string* error) {
     return false;
   }
   if (!reader.Notes().empty() && !cancelled()) {
-    const base::string16& first_folder_name =
+    const std::u16string& first_folder_name =
         bridge_->GetLocalizedString(IDS_NOTES_GROUP_FROM_OPERA);
     bridge_->AddNotes(reader.Notes(), first_folder_name);
   }

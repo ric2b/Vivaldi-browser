@@ -4,7 +4,9 @@
 
 #include "chrome/browser/chromeos/nearby/nearby_connections_dependencies_provider.h"
 
-#include "chrome/browser/chromeos/nearby/bluetooth_adapter_util.h"
+#include "base/command_line.h"
+#include "chrome/browser/chromeos/nearby/bluetooth_adapter_manager.h"
+#include "chrome/browser/nearby_sharing/common/nearby_share_switches.h"
 #include "chrome/browser/nearby_sharing/webrtc_signaling_messenger.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sharing/webrtc/ice_config_fetcher.h"
@@ -86,6 +88,7 @@ NearbyConnectionsDependenciesProvider::NearbyConnectionsDependenciesProvider(
     : profile_(profile), identity_manager_(identity_manager) {
   DCHECK(profile_);
   DCHECK(identity_manager_);
+  bluetooth_manager_ = std::make_unique<BluetoothAdapterManager>();
 }
 
 NearbyConnectionsDependenciesProvider::NearbyConnectionsDependenciesProvider() =
@@ -109,7 +112,19 @@ NearbyConnectionsDependenciesProvider::GetDependencies() {
 
   dependencies->webrtc_dependencies = GetWebRtcDependencies();
 
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kNearbyShareVerboseLogging)) {
+    dependencies->min_log_severity =
+        location::nearby::api::LogMessage::Severity::kVerbose;
+  }
+
   return dependencies;
+}
+
+void NearbyConnectionsDependenciesProvider::PrepareForShutdown() {
+  if (bluetooth_manager_) {
+    bluetooth_manager_->Shutdown();
+  }
 }
 
 void NearbyConnectionsDependenciesProvider::Shutdown() {
@@ -118,12 +133,13 @@ void NearbyConnectionsDependenciesProvider::Shutdown() {
 
 mojo::PendingRemote<bluetooth::mojom::Adapter>
 NearbyConnectionsDependenciesProvider::GetBluetoothAdapterPendingRemote() {
-  mojo::PendingRemote<bluetooth::mojom::Adapter> pending_adapter;
-  device::BluetoothAdapterFactory::Get()->GetAdapter(
-      base::BindOnce(&MakeSelfOwnedBluetoothAdapter,
-                     pending_adapter.InitWithNewPipeAndPassReceiver()));
-
-  return pending_adapter;
+  mojo::PendingReceiver<bluetooth::mojom::Adapter> pending_receiver;
+  mojo::PendingRemote<bluetooth::mojom::Adapter> pending_remote =
+      pending_receiver.InitWithNewPipeAndPassRemote();
+  device::BluetoothAdapterFactory::Get()->GetAdapter(base::BindOnce(
+      &BluetoothAdapterManager::Initialize, bluetooth_manager_->GetWeakPtr(),
+      std::move(pending_receiver)));
+  return pending_remote;
 }
 
 location::nearby::connections::mojom::WebRtcDependenciesPtr

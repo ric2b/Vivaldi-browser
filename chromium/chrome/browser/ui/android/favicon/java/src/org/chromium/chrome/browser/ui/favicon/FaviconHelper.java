@@ -28,7 +28,8 @@ import org.chromium.url.GURL;
 
 import java.util.List;
 
-import org.chromium.base.BuildConfig;
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * This is a helper class to use favicon_service.cc's functionality.

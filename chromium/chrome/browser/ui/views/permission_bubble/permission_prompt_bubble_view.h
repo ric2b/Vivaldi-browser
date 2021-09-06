@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PERMISSION_BUBBLE_PERMISSION_PROMPT_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_PERMISSION_BUBBLE_PERMISSION_PROMPT_BUBBLE_VIEW_H_
 
+#include <string>
+
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_style.h"
 #include "components/permissions/permission_prompt.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -14,6 +15,7 @@
 
 namespace permissions {
 enum class RequestType;
+enum class PermissionAction;
 }
 
 class Browser;
@@ -43,8 +45,8 @@ class PermissionPromptBubbleView : public views::BubbleDialogDelegateView {
   // views::BubbleDialogDelegateView:
   void AddedToWidget() override;
   bool ShouldShowCloseButton() const override;
-  base::string16 GetAccessibleWindowTitle() const override;
-  base::string16 GetWindowTitle() const override;
+  std::u16string GetAccessibleWindowTitle() const override;
+  std::u16string GetWindowTitle() const override;
 
   void AcceptPermission();
   void AcceptPermissionThisTime();
@@ -58,16 +60,18 @@ class PermissionPromptBubbleView : public views::BubbleDialogDelegateView {
 
   // Returns the origin to be displayed in the permission prompt. May return
   // a non-origin, e.g. extension URLs use the name of the extension.
-  base::string16 GetDisplayName() const;
+  std::u16string GetDisplayName() const;
 
   // Returns whether the display name is an origin.
   bool GetDisplayNameIsOrigin() const;
 
   // Get extra information to display for the permission, if any.
-  base::Optional<base::string16> GetExtraText() const;
+  base::Optional<std::u16string> GetExtraText() const;
 
-  // Record UMA Permissions.Prompt.TimeToDecision metric.
-  void RecordDecision();
+  // Record UMA Permissions.*.TimeToDecision.|action| metric. Can be
+  // Permissions.Prompt.TimeToDecision.* or Permissions.Chip.TimeToDecision.*,
+  // depending on which UI is used.
+  void RecordDecision(permissions::PermissionAction action);
 
   // Determines whether the current request should also display an
   // "Allow only this time" option in addition to the "Allow on every visit"
@@ -78,6 +82,8 @@ class PermissionPromptBubbleView : public views::BubbleDialogDelegateView {
   permissions::PermissionPrompt::Delegate* const delegate_;
 
   base::TimeTicks permission_requested_time_;
+
+  PermissionPromptStyle prompt_style_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PERMISSION_BUBBLE_PERMISSION_PROMPT_BUBBLE_VIEW_H_

@@ -25,7 +25,6 @@ class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
   ~WMFVideoDecoder() override;
 
   // VideoDecoder implementation.
-  std::string GetDisplayName() const override;
   void Initialize(const VideoDecoderConfig& config,
                   bool low_delay,
                   CdmContext* cdm_context,

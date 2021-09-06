@@ -169,19 +169,18 @@
                 "description": "The maximum number of results to retrieve.  Defaults to 100."
               }
             }
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "HistoryPrivateItem" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "HistoryPrivateItem" }
+            }
+          ]
+        }
       },
       {
         "name": "search",
@@ -198,19 +197,18 @@
               "maxResults": {"type": "integer", "optional": true, "minimum": 0, "description": "The maximum number of results to retrieve.  Defaults to 100."},
               "resultGrouping": {"$ref": "HistoryResultSetGrouping", "optional": true, "description": "The way the result set should be grouped."}
             }
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "HistoryPrivateItem" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "HistoryPrivateItem" }
+            }
+          ]
+        }
       },
       {
         "name": "deleteVisits",
@@ -225,14 +223,13 @@
               "startTime": {"type": "number", "description": "Items added to history after this date, represented in milliseconds since the epoch."},
               "endTime": {"type": "number", "description": "Items added to history before this date, represented in milliseconds since the epoch."}
             }
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "optional": true,
-            "parameters": [ ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": []
+        }
       },
       {
         "name": "getTopUrlsPerDay",
@@ -243,19 +240,18 @@
             "name": "maxTopUrlResults",
             "type": "number",
             "description": "The number of top urls to return per day."
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "TopUrlItem" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "TopUrlItem" }
+            }
+          ]
+        }
       },
       {
         "name": "visitSearch",
@@ -269,19 +265,18 @@
               "startTime": {"type": "number", "optional": true, "description": "Limit results to those visited after this date, represented in milliseconds since the epoch. If not specified, this defaults to 24 hours in the past."},
               "endTime": {"type": "number", "optional": true, "description": "Limit results to those visited before this date, represented in milliseconds since the epoch."}
             }
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "HistoryPrivateItem" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "HistoryPrivateItem" }
+            }
+          ]
+        }
       },
       {
         "name": "setKeywordSearchTermsForURL",
@@ -336,19 +331,18 @@
             "name": "max_results",
             "type": "integer",
             "description": "The number of items to return"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "results",
-                "type": "array",
-                "items": { "$ref": "TypedHistoryItem" }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "TypedHistoryItem" }
+            }
+          ]
+        }
       },
       {
         "name": "migrateOldTypedUrl",

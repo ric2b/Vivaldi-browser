@@ -20,7 +20,7 @@ import org.chromium.ui.resources.ResourceManager;
 import java.util.List;
 
 // Vivaldi
-import org.chromium.base.BuildConfig;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
@@ -121,7 +121,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
         // screen instead of making scene invisible. This will ensure that all scrolling offsets
         // continue to work and we won't run in any UI glitches or freezes (see VAB-2956 &
         // VAB-2947).
-        if (BuildConfig.IS_VIVALDI && !mIsVisible) {
+        if (!mIsVisible) {
             if (mCurrentYOffsetPx < mBottomView.getHeight())
                 mCurrentYOffsetPx += mBottomView.getHeight();
         }

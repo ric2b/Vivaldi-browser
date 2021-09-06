@@ -27,7 +27,7 @@ class VivaldiRenderFrameObserver
    void FocusedElementChanged(const blink::WebElement& element) override;
    void OnResumeParser();
 
-   void OnInsertText(const base::string16& text);
+   void OnInsertText(const std::u16string& text);
    void OnPinchZoom(float scale, int x, int y);
    void OnRequestThumbnailForFrame(
      VivaldiViewMsg_RequestThumbnailForFrame_Params params);

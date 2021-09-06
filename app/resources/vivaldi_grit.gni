@@ -25,7 +25,7 @@ template("vivaldi_strings_grit_action") {
     inputs += [ "$source_translations$locale.xtb" ]
   }
   outputs = [ output_header ]
-  foreach(locale, locales_with_fake_bidi + vivaldi_pending_locales) {
+  foreach(locale, locales_with_pseudolocales + vivaldi_pending_locales) {
     outputs += [ "${source_name}_$locale.pak" ]
   }
   grit(name) {

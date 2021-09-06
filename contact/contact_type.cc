@@ -49,7 +49,7 @@ RemovePropertyObject::~RemovePropertyObject() {}
 
 ContactRow::ContactRow() {}
 
-ContactRow::ContactRow(ContactID contact_id, base::string16 name)
+ContactRow::ContactRow(ContactID contact_id, std::u16string name)
     : contact_id_(contact_id), name_(name) {}
 
 ContactRow::~ContactRow() {}

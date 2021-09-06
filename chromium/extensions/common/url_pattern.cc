@@ -36,6 +36,7 @@ const char* const kValidSchemes[] = {
     content::kChromeUIScheme, extensions::kExtensionScheme,
     url::kFileSystemScheme,   url::kWsScheme,
     url::kWssScheme,          url::kDataScheme,
+    url::kUrnScheme,
     vivaldi::kVivaldiUIScheme,
 };
 
@@ -45,6 +46,7 @@ const int kValidSchemeMasks[] = {
     URLPattern::SCHEME_CHROMEUI,   URLPattern::SCHEME_EXTENSION,
     URLPattern::SCHEME_FILESYSTEM, URLPattern::SCHEME_WS,
     URLPattern::SCHEME_WSS,        URLPattern::SCHEME_DATA,
+    URLPattern::SCHEME_URN,
     URLPattern::SCHEME_VIVALDIUI,
 };
 

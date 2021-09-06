@@ -41,6 +41,8 @@
 #include "components/prefs/pref_service.h"
 #include "ui/base/ui_base_switches.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "google_update/google_update_idl.h"
 #endif
@@ -149,11 +151,19 @@ bool SwapNewChromeExeIfPresent() {
   }
 
   std::wstring rename_cmd;
+  if (installer::kVivaldi) {
+    rename_cmd = vivaldi::GetNewUpdateFinalizeCommand();
+    if (rename_cmd.empty())
+      return true;
+  } else {
+    // clang-format off
   result = key.ReadValue(google_update::kRegRenameCmdField, &rename_cmd);
   if (result != ERROR_SUCCESS) {
     ::SetLastError(result);
     PLOG(ERROR) << "Read rename command failed";
     return false;
+  }
+    // clang-format on
   }
 
   base::LaunchOptions options;

@@ -202,8 +202,8 @@ class NotesBridge : public vivaldi::NotesModelObserver {
   void EndGroupingUndos(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj);
 
-  base::string16 GetContent(const vivaldi::NoteNode* node) const;
-  base::string16 GetTitle(const vivaldi::NoteNode* node) const;
+  std::u16string GetContent(const vivaldi::NoteNode* node) const;
+  std::u16string GetTitle(const vivaldi::NoteNode* node) const;
 
   // notes_model_observer
   // Invoked when the model has finished loading. |ids_reassigned| mirrors

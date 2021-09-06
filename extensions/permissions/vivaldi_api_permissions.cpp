@@ -9,6 +9,8 @@
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/common/permissions/permissions_info.h"
 
+using extensions::mojom::APIPermissionID;
+
 namespace extensions {
 namespace vivaldi_api_permissions {
 
@@ -18,40 +20,40 @@ namespace {
 // ChromePermissionMessageProvider::GetCoalescedPermissionMessages as well.
 constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     // Register permissions for all extension types.
-    {APIPermission::kAccessKeys, "accessKeys"},
-    {APIPermission::kAutoUpdate, "autoUpdate"},
-    {APIPermission::kBookmarkContextMenu, "bookmarkContextMenu"},
-    {APIPermission::kBookmarksPrivate, "bookmarksPrivate"},
-    {APIPermission::kCalendar, "calendar"},
-    {APIPermission::kContacts, "contacts"},
-    {APIPermission::kContentBlocking, "contentBlocking"},
-    {APIPermission::kContextMenu, "contextMenu"},
-    {APIPermission::kDevtoolsPrivate, "devtoolsPrivate"},
-    {APIPermission::kEditCommand, "editcommand"},
-    {APIPermission::kExtensionActionUtils, "extensionActionUtils"},
-    {APIPermission::kHistoryPrivate, "historyPrivate"},
-    {APIPermission::kImportData, "importData"},
-    {APIPermission::kInfobars, "infobars"},
-    {APIPermission::kMailPrivate, "mailPrivate"},
-    {APIPermission::kMenuContent, "menuContent"},
-    {APIPermission::kMenubar, "menubar"},
-    {APIPermission::kMenubarMenu, "menubarMenu"},
-    {APIPermission::kNotes, "notes"},
-    {APIPermission::kPageActions, "pageActions"},
-    {APIPermission::kPipPrivate, "pipPrivate"},
-    {APIPermission::kPrefs, "prefs"},
-    {APIPermission::kRuntimePrivate, "runtimePrivate"},
-    {APIPermission::kSessionsPrivate, "sessionsPrivate"},
-    {APIPermission::kSettings, "settings"},
-    {APIPermission::kSavedPasswords, "savedpasswords"},
-    {APIPermission::kSync, "sync"},
-    {APIPermission::kTabsPrivate, "tabsPrivate"},
-    {APIPermission::kThumbnails, "thumbnails"},
-    {APIPermission::kUtilities, "utilities"},
-    {APIPermission::kVivaldiAccount, "vivaldiAccount"},
-    {APIPermission::kWebViewPrivate, "webViewPrivate"},
-    {APIPermission::kWindowPrivate, "windowPrivate"},
-    {APIPermission::kZoom, "zoom"},
+    {APIPermissionID::kAccessKeys, "accessKeys"},
+    {APIPermissionID::kAutoUpdate, "autoUpdate"},
+    {APIPermissionID::kBookmarkContextMenu, "bookmarkContextMenu"},
+    {APIPermissionID::kBookmarksPrivate, "bookmarksPrivate"},
+    {APIPermissionID::kCalendar, "calendar"},
+    {APIPermissionID::kContacts, "contacts"},
+    {APIPermissionID::kContentBlocking, "contentBlocking"},
+    {APIPermissionID::kContextMenu, "contextMenu"},
+    {APIPermissionID::kDevtoolsPrivate, "devtoolsPrivate"},
+    {APIPermissionID::kEditCommand, "editcommand"},
+    {APIPermissionID::kExtensionActionUtils, "extensionActionUtils"},
+    {APIPermissionID::kHistoryPrivate, "historyPrivate"},
+    {APIPermissionID::kImportData, "importData"},
+    {APIPermissionID::kInfobars, "infobars"},
+    {APIPermissionID::kMailPrivate, "mailPrivate"},
+    {APIPermissionID::kMenuContent, "menuContent"},
+    {APIPermissionID::kMenubar, "menubar"},
+    {APIPermissionID::kMenubarMenu, "menubarMenu"},
+    {APIPermissionID::kNotes, "notes"},
+    {APIPermissionID::kPageActions, "pageActions"},
+    {APIPermissionID::kPipPrivate, "pipPrivate"},
+    {APIPermissionID::kPrefs, "prefs"},
+    {APIPermissionID::kRuntimePrivate, "runtimePrivate"},
+    {APIPermissionID::kSessionsPrivate, "sessionsPrivate"},
+    {APIPermissionID::kSettings, "settings"},
+    {APIPermissionID::kSavedPasswords, "savedpasswords"},
+    {APIPermissionID::kSync, "sync"},
+    {APIPermissionID::kTabsPrivate, "tabsPrivate"},
+    {APIPermissionID::kThumbnails, "thumbnails"},
+    {APIPermissionID::kUtilities, "utilities"},
+    {APIPermissionID::kVivaldiAccount, "vivaldiAccount"},
+    {APIPermissionID::kWebViewPrivate, "webViewPrivate"},
+    {APIPermissionID::kWindowPrivate, "windowPrivate"},
+    {APIPermissionID::kZoom, "zoom"},
 };
 
 }  // namespace

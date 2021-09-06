@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
@@ -56,8 +55,8 @@ class CalendarRow {
   CalendarRow();
   CalendarRow(CalendarID id,
               AccountID account_id,
-              base::string16 name,
-              base::string16 description,
+              std::u16string name,
+              std::u16string description,
               std::string ctag,
               int orderindex,
               std::string color,
@@ -79,11 +78,11 @@ class CalendarRow {
   AccountID account_id() const { return account_id_; }
   void set_account_id(AccountID account_id) { account_id_ = account_id; }
 
-  base::string16 name() const { return name_; }
-  void set_name(base::string16 name) { name_ = name; }
+  std::u16string name() const { return name_; }
+  void set_name(std::u16string name) { name_ = name; }
 
-  base::string16 description() const { return description_; }
-  void set_description(base::string16 description) {
+  std::u16string description() const { return description_; }
+  void set_description(std::u16string description) {
     description_ = description;
   }
 
@@ -129,8 +128,8 @@ class CalendarRow {
 
   CalendarID id_;
   AccountID account_id_;
-  base::string16 name_;
-  base::string16 description_;
+  std::u16string name_;
+  std::u16string description_;
   std::string ctag_;
   int orderindex_;
   std::string color_;
@@ -163,8 +162,8 @@ struct Calendar {
 
   CalendarID id;
   AccountID account_id;
-  base::string16 name;
-  base::string16 description;
+  std::u16string name;
+  std::u16string description;
   std::string ctag;
   int orderindex;
   std::string color;

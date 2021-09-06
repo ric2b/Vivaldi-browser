@@ -327,13 +327,13 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
   NoteNode* newnode_ptr = newnode.get();
   // Lots of optionals, make sure to check for the contents.
   if (params->note.title.get()) {
-    base::string16 title;
+    std::u16string title;
     title = base::UTF8ToUTF16(*params->note.title);
     newnode->SetTitle(title);
   }
 
   if (params->note.content.get()) {
-    base::string16 content;
+    std::u16string content;
     content = base::UTF8ToUTF16(*params->note.content);
     newnode->SetContent(content);
   }
@@ -403,7 +403,7 @@ ExtensionFunction::ResponseAction NotesUpdateFunction::Run() {
   vivaldi::notes::OnChanged::ChangeInfo changeinfo;
 
   // All fields are optional.
-  base::string16 title;
+  std::u16string title;
   if (params->changes.title.get()) {
     title = base::UTF8ToUTF16(*params->changes.title);
     model->SetTitle(node, title);
@@ -538,7 +538,7 @@ ExtensionFunction::ResponseAction NotesSearchFunction::Run() {
     examine_url = false;
   }
 
-  base::string16 needle = base::UTF8ToUTF16(params->query.substr(offset));
+  std::u16string needle = base::UTF8ToUTF16(params->query.substr(offset));
   if (needle.length() > 0) {
     ui::TreeNodeIterator<NoteNode> iterator(GetNotesModel(this)->root_node());
 

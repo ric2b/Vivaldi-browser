@@ -20,6 +20,7 @@ namespace vivaldi {
 
 class DeviceMenuController;
 class ExtensionsMenuController;
+class PWALinkMenuController;
 class ProfileMenuController;
 class SpeechMenuController;
 
@@ -51,14 +52,14 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   bool SupportsInspectTools();
 
   // RenderViewContextMenuProxy. To override location in tree.
-  void AddMenuItem(int command_id, const base::string16& title) override;
+  void AddMenuItem(int command_id, const std::u16string& title) override;
   void AddMenuItemWithIcon(int command_id,
-                           const base::string16& title,
+                           const std::u16string& title,
                            const ui::ImageModel& icon) override;
-  void AddCheckItem(int command_id, const base::string16& title) override;
+  void AddCheckItem(int command_id, const std::u16string& title) override;
   void AddSeparator() override;
   void AddSubMenu(int command_id,
-                  const base::string16& label,
+                  const std::u16string& label,
                   ui::MenuModel* model) override;
   void AddSubMenuWithStringIdAndIcon(int command_id,
                                      int message_id,
@@ -67,7 +68,7 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   void UpdateMenuItem(int command_id,
                       bool enabled,
                       bool hidden,
-                      const base::string16& title) override;
+                      const std::u16string& title) override;
   void UpdateMenuIcon(int command_id, const ui::ImageModel& icon) override;
 
   void RemoveMenuItem(int command_id) override;
@@ -104,7 +105,7 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   const GURL& GetLinkUrl() const {return params_.link_url; }
   void SetLinkUrl(const GURL& url) { params_.link_url = url; }
   // Access to private members of RenderViewContextMenu for speech controller
-  const base::string16& GetSelectedText() const {
+  const std::u16string& GetSelectedText() const {
     return params_.selection_text;
   }
 
@@ -154,6 +155,7 @@ class VivaldiRenderViewContextMenu: public RenderViewContextMenu {
   std::unique_ptr<DeviceMenuController> sendtopage_controller_;
   std::unique_ptr<DeviceMenuController> sendtolink_controller_;
   std::unique_ptr<NotesSubMenuObserver> note_submenu_observer_;
+  std::unique_ptr<PWALinkMenuController> pwa_link_controller_;
 #if defined(OS_MAC)
   std::unique_ptr<SpeechMenuController> speech_controller_;
 #endif

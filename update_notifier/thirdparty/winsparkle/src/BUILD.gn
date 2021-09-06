@@ -250,24 +250,19 @@ source_set("winsparkle_no_gui") {
     "download.h",
     "error.cc",
     "error.h",
-    "settings.cc",
-    "settings.h",
-    "threads.cc",
-    "threads.h",
-    "updatechecker.cc",
-    "updatechecker.h",
     "updatedownloader.cc",
     "updatedownloader.h",
 
     # Track this here as the header does not depend on wxWidgets.
     "ui.h",
-    "winsparkle-version.h",
   ]
   public_deps = [
     "//base:base",
+    "//chrome/installer/util:with_no_strings",
+    "//components/version_info:generate_version_info",
     "//crypto",
     "//url:url",
-    "//vivaldi/update_notifier:translation_strings",
+    "//vivaldi/update_notifier:generate_strings",
   ]
 }
 

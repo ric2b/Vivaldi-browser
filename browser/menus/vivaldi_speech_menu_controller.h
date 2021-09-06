@@ -29,7 +29,7 @@ class SpeechMenuController {
   bool HandleCommand(int command_id, int event_flags);
   bool IsCommandIdEnabled(int command_id, bool* enabled);
 
-  void SpeakText(const base::string16& text);
+  void SpeakText(const std::u16string& text);
   void StopSpeaking();
   bool IsSpeaking();
 

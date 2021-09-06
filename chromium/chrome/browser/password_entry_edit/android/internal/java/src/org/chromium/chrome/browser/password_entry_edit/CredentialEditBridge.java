@@ -42,9 +42,18 @@ class CredentialEditBridge implements UiDismissalHandler, CredentialActionDelega
     }
 
     @CalledByNative
-    void initAndLaunchUi(
-            long nativeCredentialEditBridge, Context context, SettingsLauncher settingsLauncher) {
+    void initAndLaunchUi(long nativeCredentialEditBridge, Context context,
+            SettingsLauncher settingsLauncher, boolean isBlockedCredential,
+            boolean isFederatedCredential) {
         mNativeCredentialEditBridge = nativeCredentialEditBridge;
+        if (isBlockedCredential) {
+            settingsLauncher.launchSettingsActivity(context, BlockedCredentialFragmentView.class);
+            return;
+        }
+        if (isFederatedCredential) {
+            settingsLauncher.launchSettingsActivity(context, FederatedCredentialFragmentView.class);
+            return;
+        }
         settingsLauncher.launchSettingsActivity(context, CredentialEditFragmentView.class);
     }
 
@@ -59,9 +68,9 @@ class CredentialEditBridge implements UiDismissalHandler, CredentialActionDelega
 
     @CalledByNative
     void setCredential(String displayUrlOrAppName, String username, String password,
-            String displayFederationOrigin) {
-        mCoordinator.setCredential(
-                displayUrlOrAppName, username, password, displayFederationOrigin);
+            String displayFederationOrigin, boolean isInsecureCredential) {
+        mCoordinator.setCredential(displayUrlOrAppName, username, password, displayFederationOrigin,
+                isInsecureCredential);
     }
 
     @CalledByNative
@@ -86,6 +95,11 @@ class CredentialEditBridge implements UiDismissalHandler, CredentialActionDelega
         CredentialEditBridgeJni.get().saveChanges(mNativeCredentialEditBridge, username, password);
     }
 
+    @Override
+    public void deleteCredential() {
+        CredentialEditBridgeJni.get().deleteCredential(mNativeCredentialEditBridge);
+    }
+
     @CalledByNative
     void destroy() {
         if (mCoordinator != null) mCoordinator.dismiss();
@@ -98,6 +112,7 @@ class CredentialEditBridge implements UiDismissalHandler, CredentialActionDelega
         void getCredential(long nativeCredentialEditBridge);
         void getExistingUsernames(long nativeCredentialEditBridge);
         void saveChanges(long nativeCredentialEditBridge, String username, String password);
+        void deleteCredential(long nativeCredentialEditBridge);
         void onUIDismissed(long nativeCredentialEditBridge);
     }
 }

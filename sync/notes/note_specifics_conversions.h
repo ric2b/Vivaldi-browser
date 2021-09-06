@@ -73,6 +73,11 @@ const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
 bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
                            bool is_folder);
 
+// Returns the inferred GUID for given remote update's originator information.
+base::GUID InferGuidFromLegacyOriginatorId(
+    const std::string& originator_cache_guid,
+    const std::string& originator_client_item_id);
+
 // Checks if note specifics contain a GUID that matches the value that would
 // be inferred from other redundant fields. |specifics| must be valid as per
 // IsValidNotesSpecifics().

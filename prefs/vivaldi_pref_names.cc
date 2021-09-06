@@ -40,11 +40,26 @@ const char kVivaldiUniqueUserId[] = "vivaldi.unique_user_id";
 const char kVivaldiStatsNextDailyPing[] = "vivaldi.stats.next_daily_ping";
 const char kVivaldiStatsNextWeeklyPing[] = "vivaldi.stats.next_weekly_ping";
 const char kVivaldiStatsNextMonthlyPing[] = "vivaldi.stats.next_monthly_ping";
+const char kVivaldiStatsNextTrimestrialPing[] =
+    "vivaldi.stats.next_trimestrial_ping";
+const char kVivaldiStatsNextSemestrialPing[] =
+    "vivaldi.stats.next_semestrial_ping";
+const char kVivaldiStatsNextYearlyPing[] = "vivaldi.stats.next_yearly_ping";
 const char kVivaldiStatsExtraPing[] = "vivaldi.stats.extra_ping";
 const char kVivaldiStatsExtraPingTime[] = "vivaldi.stats.extra_ping_time";
+const char kVivaldiStatsPingsSinceLastMonth[] =
+    "vivaldi.stats.pings_since_last_month";
 const char kVivaldiProfileImagePath[] = "vivaldi.profile_image_path";
 const char kVivaldiTranslateLanguageList[] = "vivaldi.translate.language_list";
-const char kVivaldiTranslateLanguageListLastUpdate[] = "vivaldi.translate.language_list_last_update";
+const char kVivaldiTranslateLanguageListLastUpdate[] =
+    "vivaldi.translate.language_list_last_update";
+const char kVivaldiAccountServerUrlIdentity[] =
+    "vivaldi.vivaldi.account.server_url.identity";
+const char kVivaldiAccountServerUrlOpenId[] =
+    "vivaldi.vivaldi.account.server_url.open_id";
+const char kVivaldiSyncServerUrl[] = "vivaldi.sync.server_url";
+const char kVivaldiSyncNotificationsServerUrl[] =
+    "vivaldi.sync.notifications.server_url";
 
 // Enable native window decoration
 const char kOldVivaldiUseNativeWindowDecoration[] =

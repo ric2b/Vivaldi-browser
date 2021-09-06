@@ -12,32 +12,29 @@
             "type": "number",
             "name": "zoomFactor",
             "description": "The new value for Vivaldi UI zoom factor."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called after the zoom message has been sent to the guest process.",
-            "optional": true,
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called after the zoom message has been sent to the guest process.",
+          "optional": true,
+          "parameters": []
+        }
       },
       {
         "name": "getVivaldiUIZoom",
         "type": "function",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "zoomLevel",
-            "description": "The zoom level.",
-            "parameters": [
-              {
-                "name": "zoomlevel",
-                "type": "number"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "description": "The zoom level.",
+          "parameters": [
+            {
+              "name": "zoomlevel",
+              "type": "number"
+            }
+          ]
+      }
       },
       {
         "name": "setDefaultZoom",
@@ -47,32 +44,29 @@
             "type": "number",
             "name": "zoomFactor",
             "description": "The new Vivaldi default global zoom factor."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Called after the zoom message has been sent to the guest process.",
-            "optional": true,
-            "parameters": []
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Called after the zoom message has been sent to the guest process.",
+          "optional": true,
+          "parameters": []
+        }
       },
       {
         "name": "getDefaultZoom",
         "type": "function",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "zoomLevel",
-            "description": "The zoom level.",
-            "parameters": [
-              {
-                "name": "zoomlevel",
-                "type": "number"
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "description": "The zoom level.",
+          "parameters": [
+            {
+              "name": "zoomlevel",
+              "type": "number"
+            }
+          ]
+        }
       }
     ],
     "events": [

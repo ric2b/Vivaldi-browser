@@ -14,25 +14,26 @@
 #include "chrome/browser/ash/login/enrollment/auto_enrollment_check_screen.h"
 #include "chrome/browser/ash/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/ash/login/enrollment/enrollment_screen_view.h"
+#include "chrome/browser/ash/login/startup_utils.h"
+#include "chrome/browser/ash/login/test/device_state_mixin.h"
+#include "chrome/browser/ash/login/test/enrollment_ui_mixin.h"
+#include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
+#include "chrome/browser/ash/login/test/js_checker.h"
+#include "chrome/browser/ash/login/test/kiosk_test_helpers.h"
+#include "chrome/browser/ash/login/test/local_policy_test_server_mixin.h"
+#include "chrome/browser/ash/login/test/network_portal_detector_mixin.h"
+#include "chrome/browser/ash/login/test/oobe_base_test.h"
+#include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/ash/login/test/oobe_screens_utils.h"
+#include "chrome/browser/ash/login/test/test_condition_waiter.h"
+#include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/ash/ownership/fake_owner_settings_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/login/startup_utils.h"
-#include "chrome/browser/chromeos/login/test/device_state_mixin.h"
-#include "chrome/browser/chromeos/login/test/enrollment_ui_mixin.h"
-#include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
-#include "chrome/browser/chromeos/login/test/js_checker.h"
-#include "chrome/browser/chromeos/login/test/kiosk_test_helpers.h"
-#include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
-#include "chrome/browser/chromeos/login/test/network_portal_detector_mixin.h"
-#include "chrome/browser/chromeos/login/test/oobe_base_test.h"
-#include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/chromeos/login/test/oobe_screens_utils.h"
-#include "chrome/browser/chromeos/login/test/test_condition_waiter.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host.h"
-#include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/ownership/fake_owner_settings_service.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/device_disabled_screen_handler.h"
@@ -42,7 +43,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/attestation/attestation_flow_utils.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
-#include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/system/fake_statistics_provider.h"
@@ -59,6 +59,8 @@ namespace {
 
 constexpr test::UIPath kEnterprisePrimaryButton = {
     "enterprise-enrollment", "step-signin", "primary-action-button"};
+
+const char kRemoraRequisition[] = "remora";
 
 std::string GetDmTokenFromPolicy(const std::string& blob) {
   enterprise_management::PolicyFetchResponse policy;
@@ -316,6 +318,23 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
   EXPECT_FALSE(InstallAttributes::Get()->IsEnterpriseManaged());
 }
 
+IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
+                       EnrollmentErrorNoLicensesMeets) {
+  policy::EnrollmentRequisitionManager::SetDeviceRequisition(
+      kRemoraRequisition);
+  policy_server_.SetExpectedDeviceEnrollmentError(402);
+
+  TriggerEnrollmentAndSignInSuccessfully();
+
+  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepError);
+  enrollment_ui_.ExpectErrorMessage(
+      IDS_ENTERPRISE_ENROLLMENT_MISSING_LICENSES_ERROR_MEETS,
+      /* can retry */ true);
+  enrollment_ui_.RetryAfterError();
+  EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
+  EXPECT_FALSE(InstallAttributes::Get()->IsEnterpriseManaged());
+}
+
 // Error during enrollment : 403 - management not allowed.
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
                        EnrollmentErrorManagementNotAllowed) {
@@ -326,6 +345,22 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepError);
   enrollment_ui_.ExpectErrorMessage(
       IDS_ENTERPRISE_ENROLLMENT_AUTH_ACCOUNT_ERROR, /* can retry */ true);
+  enrollment_ui_.RetryAfterError();
+  EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
+  EXPECT_FALSE(InstallAttributes::Get()->IsEnterpriseManaged());
+}
+
+IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
+                       EnrollmentErrorManagementNotAllowedMeets) {
+  policy::EnrollmentRequisitionManager::SetDeviceRequisition(
+      kRemoraRequisition);
+  policy_server_.SetExpectedDeviceEnrollmentError(403);
+
+  TriggerEnrollmentAndSignInSuccessfully();
+
+  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepError);
+  enrollment_ui_.ExpectErrorMessage(
+      IDS_ENTERPRISE_ENROLLMENT_ACCOUNT_ERROR_MEETS, /* can retry */ true);
   enrollment_ui_.RetryAfterError();
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
   EXPECT_FALSE(InstallAttributes::Get()->IsEnterpriseManaged());
@@ -450,6 +485,23 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepError);
   enrollment_ui_.ExpectErrorMessage(
       IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED,
+      /* can retry */ true);
+  enrollment_ui_.RetryAfterError();
+  EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
+  EXPECT_FALSE(InstallAttributes::Get()->IsEnterpriseManaged());
+}
+
+IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
+                       EnrollmentErrorEnterpriseTosHasNotBeenAccepetedMeets) {
+  policy::EnrollmentRequisitionManager::SetDeviceRequisition(
+      kRemoraRequisition);
+  policy_server_.SetExpectedDeviceEnrollmentError(906);
+
+  TriggerEnrollmentAndSignInSuccessfully();
+
+  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepError);
+  enrollment_ui_.ExpectErrorMessage(
+      IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED_MEETS,
       /* can retry */ true);
   enrollment_ui_.RetryAfterError();
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());

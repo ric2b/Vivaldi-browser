@@ -43,7 +43,7 @@ class Visit {
   Visit(std::string id,
         base::Time visit_time,
         GURL url,
-        base::string16 title,
+        std::u16string title,
         ui::PageTransition transition,
         int visit_count);
   ~Visit();
@@ -56,7 +56,7 @@ class Visit {
   std::string id;
   base::Time visit_time;
   GURL url;
-  base::string16 title;
+  std::u16string title;
   ui::PageTransition transition;
   int visit_count;
 };

@@ -26,7 +26,7 @@ import java.util.Map;
 
 import javax.annotation.Nonnull;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -91,7 +91,7 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
     @Override
     public void show(final Activity activity, final String helpContext, Profile profile,
             @Nullable String url) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             VivaldiUtils.launchVivaldiHelpAndSupportUri(activity);
             return;
         }
@@ -164,7 +164,7 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
      * @return Help context ID that matches the URL and incognito mode.
      */
     public static String getHelpContextIdFromUrl(Context context, String url, boolean isIncognito) {
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             return "https://help.vivaldi.com";
         } else {
         if (TextUtils.isEmpty(url)) {

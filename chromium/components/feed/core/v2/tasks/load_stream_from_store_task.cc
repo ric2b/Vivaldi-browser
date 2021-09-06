@@ -12,9 +12,10 @@
 #include "components/feed/core/v2/config.h"
 #include "components/feed/core/v2/feed_store.h"
 #include "components/feed/core/v2/feed_stream.h"
+#include "components/feed/core/v2/feedstore_util.h"
 #include "components/feed/core/v2/proto_util.h"
 #include "components/feed/core/v2/protocol_translator.h"
-#include "components/feed/core/v2/public/feed_stream_api.h"
+#include "components/feed/core/v2/public/feed_api.h"
 #include "components/feed/core/v2/scheduling.h"
 #include "components/feed/core/v2/types.h"
 
@@ -65,8 +66,8 @@ void LoadStreamFromStoreTask::LoadStreamDone(
     return;
   }
   if (!ignore_staleness_) {
-    content_age_ =
-        base::Time::Now() - feedstore::GetLastAddedTime(result.stream_data);
+    last_added_time_ = feedstore::GetLastAddedTime(result.stream_data);
+    content_age_ = base::Time::Now() - last_added_time_;
     if (content_age_ > GetFeedConfig().content_expiration_threshold) {
       Complete(LoadStreamStatus::kDataInStoreIsExpired);
       return;
@@ -93,7 +94,8 @@ void LoadStreamFromStoreTask::LoadStreamDone(
 
   store_->ReadContent(
       stream_type_, std::move(referenced_content_ids),
-      {result.stream_data.shared_state_id()},
+      {result.stream_data.shared_state_ids().begin(),
+       result.stream_data.shared_state_ids().end()},
       base::BindOnce(&LoadStreamFromStoreTask::LoadContentDone, GetWeakPtr()));
 
   update_request_->stream_data = std::move(result.stream_data);
@@ -145,6 +147,7 @@ void LoadStreamFromStoreTask::Complete(LoadStreamStatus status) {
     task_result.status = status;
   }
   task_result.content_age = content_age_;
+  task_result.last_added_time = last_added_time_;
   std::move(result_callback_).Run(std::move(task_result));
   TaskComplete();
 }

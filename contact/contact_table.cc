@@ -20,10 +20,10 @@ namespace {
 
 void FillContactRow(sql::Statement& statement, ContactRow* contact) {
   int id = statement.ColumnInt(0);
-  base::string16 name = statement.ColumnString16(1);
+  std::u16string name = statement.ColumnString16(1);
   base::Time birthday = base::Time::FromInternalValue(statement.ColumnInt64(2));
-  base::string16 note = statement.ColumnString16(3);
-  base::string16 avatar_url = statement.ColumnString16(4);
+  std::u16string note = statement.ColumnString16(3);
+  std::u16string avatar_url = statement.ColumnString16(4);
   int separator = statement.ColumnInt(5);
   int generated_from_sent_mail = statement.ColumnInt(6);
   bool trusted = statement.ColumnInt(7) == 1 ? true : false;

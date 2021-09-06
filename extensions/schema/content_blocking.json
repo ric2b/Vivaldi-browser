@@ -277,18 +277,17 @@
           {
             "name": "rule_group",
             "$ref": "RuleGroup"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "enabled",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "enabled",
+              "type": "boolean"
+            }
+          ]
+        }
       },
       {
         "name": "addKnownSourceFromURL",
@@ -302,18 +301,17 @@
           {
             "name": "url",
             "type": "string"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters":[
-              {
-                "name": "source_id",
-                "type": "integer"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "source_id",
+              "type": "integer"
+            }
+          ]
+        }
       },
       {
         "name": "addKnownSourceFromFile",
@@ -327,18 +325,17 @@
           {
             "name": "file",
             "type": "string"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters":[
-              {
-                "name": "source_id",
-                "type": "integer"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "source_id",
+              "type": "integer"
+            }
+          ]
+        }
       },
       {
         "name": "enableSource",
@@ -423,18 +420,17 @@
           {
             "name": "source_id",
             "type": "integer"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "rule_source",
-                "$ref": "RuleSource"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "rule_source",
+              "$ref": "RuleSource"
+            }
+          ]
+        }
       },
       {
         "name": "getRuleSources",
@@ -444,21 +440,20 @@
           {
             "name": "rule_group",
             "$ref": "RuleGroup"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "rule_sources",
-                "type": "array",
-                "items": {
-                  "$ref": "RuleSource"
-                }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "rule_sources",
+              "type": "array",
+              "items": {
+                "$ref": "RuleSource"
+              }
+            }
+          ]
+        }
       },
       {
         "name": "setActiveExceptionsList",
@@ -483,18 +478,17 @@
           {
             "name": "rule_group",
             "$ref": "RuleGroup"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "state",
-                "$ref": "ExceptionList"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "state",
+              "$ref": "ExceptionList"
+            }
+          ]
+        }
       },
       {
         "name": "addExceptionForDomain",
@@ -561,74 +555,71 @@
           {
             "name": "exception_list",
             "$ref": "ExceptionList"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters":[
-              {
-                "name": "origins",
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "origins",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
       },
       {
         "name": "getAllExceptionLists",
         "type": "function",
         "description":"Retrieves all the exception lists",
-        "parameters": [
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters":[
-              {
-                "name": "origins",
-                "type": "object",
-                "properties": {
-                  "tracking": {
-                    "type": "object",
-                    "properties": {
-                      "process_list": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "exempt_list": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "origins",
+              "type": "object",
+              "properties": {
+                "tracking": {
+                  "type": "object",
+                  "properties": {
+                    "process_list": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "exempt_list": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
                       }
                     }
-                  },
-                  "ad_blocking": {
-                    "type": "object",
-                    "properties": {
-                      "process_list": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "exempt_list": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
+                  }
+                },
+                "ad_blocking": {
+                  "type": "object",
+                  "properties": {
+                    "process_list": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "exempt_list": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
                       }
                     }
                   }
                 }
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "getBlockedUrlsInfo",
@@ -646,21 +637,20 @@
             "items": {
               "type": "integer"
             }
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters": [
-              {
-                "name": "blocked_urls_info_for_tab",
-                "type": "array",
-                "items": {
-                  "$ref": "TabBlockedUrlsInfo"
-                }
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "blocked_urls_info_for_tab",
+              "type": "array",
+              "items": {
+                "$ref": "TabBlockedUrlsInfo"
+              }
+            }
+          ]
+        }
       },
       {
         "name": "getBlockedDomainCounters",
@@ -711,18 +701,17 @@
           {
             "name": "url",
             "type": "string"
-          },
-          {
-            "name": "callback",
-            "type": "function",
-            "parameters":[
-              {
-                "name": "exempt",
-                "type": "boolean"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "exempt",
+              "type": "boolean"
+            }
+          ]
+        }
       }
     ],
     "events": [

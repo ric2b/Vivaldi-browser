@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Ne engedélyezze a webhelyeknek több fájl automatikus letöltését</translation>
 <translation id="5039804452771397117">Engedélyezés</translation>
 <translation id="5057110919553308744">Amikor a bővítményre kattintasz</translation>
+<translation id="5059526285558225588">A megosztandó tartalom kiválasztása</translation>
 <translation id="5063480226653192405">Használat</translation>
 <translation id="5116628073786783676">H&amp;ang mentése másként...</translation>
 <translation id="5143374789336132547">A(z) <ph name="EXTENSION_NAME" /> bővítmény módosította, hogy melyik oldal jelenjen meg a Kezdőlap gombra kattintáskor.</translation>
@@ -458,7 +459,6 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="8823704566850948458">Jelszó ajánlása…</translation>
 <translation id="8859174528519900719">Subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Hivatkozás megnyitása új &amp;ablakban</translation>
-<translation id="8910146161325739742">Képernyőmegosztás</translation>
 <translation id="8915370057835397490">Javaslatok betöltése</translation>
 <translation id="8916476537757519021">Inkognitó subframe: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript-memória</translation>

@@ -4,12 +4,12 @@
 
 namespace bookmarks {
 
-base::string16 TitledUrlNode::GetNickName() const {
-  return base::string16();
+std::u16string TitledUrlNode::GetNickName() const {
+  return std::u16string();
 }
 
-base::string16 TitledUrlNode::GetDescription() const {
-  return base::string16();
+std::u16string TitledUrlNode::GetDescription() const {
+  return std::u16string();
 }
 
 }  // namespace bookmarks

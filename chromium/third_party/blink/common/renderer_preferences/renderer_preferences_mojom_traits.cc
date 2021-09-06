@@ -106,6 +106,11 @@ bool StructTraits<blink::mojom::RendererPreferencesDataView,
   out->plugin_fullscreen_allowed = data.plugin_fullscreen_allowed();
   out->caret_browsing_enabled = data.caret_browsing_enabled();
 
+  if (!data.ReadExplicitlyAllowedNetworkPorts(
+          &out->explicitly_allowed_network_ports)) {
+    return false;
+  }
+
 // Vivaldi additions below ?
   out->allow_tab_cycle_from_webpage_into_ui =
       data.allow_tab_cycle_from_webpage_into_ui();

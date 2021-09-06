@@ -18,15 +18,11 @@ about:version template page
     <meta name="viewport" content="width=device-width">
 </if>
     <link rel="stylesheet" href="chrome://version/about_version.css">
+<if expr="is_android or is_ios">
+    <link rel="stylesheet" href="about_version_mobile.css">
+</if>
 
-    <script src="chrome://resources/js/assert.js"></script>
-    <script src="chrome://resources/js/promise_resolver.js"></script>
-    <script src="chrome://resources/js/cr.js"></script>
-    <script src="chrome://resources/js/load_time_data.js"></script>
-    <script src="chrome://resources/js/util.js"></script>
-    <script src="chrome://version/version.js"></script>
-    <script src="chrome://version/strings.js"></script>
-    <script src="chrome://version/vivaldi_about_version.js"></script>
+    <script type ="module" src="about_version.js"></script>
   </head>
 
   <body>
@@ -49,9 +45,10 @@ about:version template page
 </if>
         <div id="company">$i18n{company}</div>
         <div id="slogan">A Browser For Our Friends</div>
-        <div id="copyright"><a href="https://vivaldi.com">$i18n{copyright}</a></div>
-        <div id="product-license"></div>
-        <div id="product-tos"></div>
+        <div id="copyright"><a href="https://vivaldi.com" target="_blank">$i18n{copyright}</a></div>
+        <div id="product-license">$i18n{productLicense}</div>
+        <div id="product-tos"><a href="https://www.chromium.org/" target="_blank">Chromium</a></div>
+        <div id="product-tos"><a href="chrome://credits" target="_blank">$i18n{productCredits}</a></div>
       </div>
       <table id="inner" cellpadding="0" cellspacing="0" border="0">
         <tr><td class="label">$i18n{application_label}</td>

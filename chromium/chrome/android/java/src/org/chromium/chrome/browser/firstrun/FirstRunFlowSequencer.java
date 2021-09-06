@@ -36,7 +36,7 @@ import org.chromium.components.signin.ChildAccountStatus;
 
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * A helper to determine what should be the sequence of First Run Experience screens, and whether
@@ -125,7 +125,7 @@ public abstract class FirstRunFlowSequencer  {
     }
 
     protected boolean shouldShowDataReductionPage() {
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
         return !DataReductionProxySettings.getInstance().isDataReductionProxyManaged()
                 && DataReductionProxySettings.getInstance().isDataReductionProxyFREPromoAllowed();
     }
@@ -160,7 +160,7 @@ public abstract class FirstRunFlowSequencer  {
         }
 
         Bundle freProperties = new Bundle();
-        freProperties.putInt(SigninFirstRunFragment.CHILD_ACCOUNT_STATUS, mChildAccountStatus);
+        freProperties.putInt(SyncConsentFirstRunFragment.CHILD_ACCOUNT_STATUS, mChildAccountStatus);
 
         onFlowIsKnown(freProperties);
         if (ChildAccountStatus.isChild(mChildAccountStatus)) {
@@ -279,7 +279,13 @@ public abstract class FirstRunFlowSequencer  {
             Intent freIntent = intentCreator.create(
                     caller, fromIntent, requiresBroadcast, preferLightweightFre);
 
-            if (!(caller instanceof Activity)) freIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            // Although the FRE tries to run in the same task now, this is still needed for
+            // non-activity entry points like the search widget to launch at all. This flag does not
+            // seem to preclude an old task from being reused.
+            if (!(caller instanceof Activity)) {
+                freIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            }
+
             boolean isVrIntent = VrModuleProvider.getIntentDelegate().isVrIntent(fromIntent);
             if (isVrIntent) {
                 freIntent =

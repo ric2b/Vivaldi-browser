@@ -65,21 +65,19 @@
         "name": "getAll",
         "type": "function",
         "description": "Returns all previously saved sessions stored on disk.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "sessions",
-                "type": "array",
-                "items": {
-                  "$ref": "SessionItem"
-                }
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "sessions",
+              "type": "array",
+              "items": {
+                "$ref": "SessionItem"
               }
-            ]
-          }
-        ]
+            }
+          ]
+        }
       },
       {
         "name": "saveOpenTabs",
@@ -95,19 +93,18 @@
             "name": "options",
             "description": "Session save options.",
             "$ref": "SessionSaveOptions"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "status",
-                "type": "integer",
-                "description": "0 for success, error code for any error."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
       },
       {
         "name": "open",
@@ -124,20 +121,19 @@
             "optional": true,
             "description": "Session open options.",
             "$ref": "SessionOpenOptions"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "status",
-                "type": "integer",
-                "description": "0 for success, error code for any error."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
       },
       {
         "name": "delete",
@@ -148,19 +144,18 @@
             "type": "string",
             "name": "name",
             "description": "Name of the session to delete."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "status",
-                "type": "integer",
-                "description": "0 for success, error code for any error."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
       }
     ]
   }

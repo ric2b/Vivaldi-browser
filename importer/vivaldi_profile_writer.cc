@@ -26,10 +26,11 @@ namespace {
 
 // Generates a unique folder name. If |folder_name| is not unique, then this
 // repeatedly tests for '|folder_name| + (i)' until a unique name is found.
-base::string16 VivaldiGenerateUniqueFolderName(BookmarkModel* model,
-                                        const base::string16& folder_name) {
+std::u16string VivaldiGenerateUniqueFolderName(
+    BookmarkModel* model,
+    const std::u16string& folder_name) {
   // Build a set containing the bookmark bar folder names.
-  std::set<base::string16> existing_folder_names;
+  std::set<std::u16string> existing_folder_names;
   const BookmarkNode* bookmark_bar = model->bookmark_bar_node();
   for (const auto& node : bookmark_bar->children()) {
     if (node->is_folder())
@@ -42,7 +43,7 @@ base::string16 VivaldiGenerateUniqueFolderName(BookmarkModel* model,
 
   // Otherwise iterate until we find a unique name.
   for (size_t i = 1; i <= existing_folder_names.size(); ++i) {
-    base::string16 name = folder_name + base::ASCIIToUTF16(" (") +
+    std::u16string name = folder_name + base::ASCIIToUTF16(" (") +
                           base::NumberToString16(i) + base::ASCIIToUTF16(")");
     if (existing_folder_names.find(name) == existing_folder_names.end())
       return name;
@@ -62,14 +63,15 @@ void ProfileWriter::AddSpeedDial(
   BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
   DCHECK(model->loaded());
   const BookmarkNode* bookmark_bar = model->bookmark_bar_node();
-  const base::string16& first_folder_name =
+  const std::u16string& first_folder_name =
       l10n_util::GetStringUTF16(IDS_SPEEDDIAL_GROUP_FROM_OPERA);
 
   model->BeginExtensiveChanges();
 
   const BookmarkNode* top_level_folder = NULL;
 
-  base::string16 name = VivaldiGenerateUniqueFolderName(model, first_folder_name);
+  std::u16string name =
+      VivaldiGenerateUniqueFolderName(model, first_folder_name);
 
   vivaldi_bookmark_kit::CustomMetaInfo vivaldi_meta;
   vivaldi_meta.SetSpeeddial(true);
@@ -86,7 +88,7 @@ void ProfileWriter::AddSpeedDial(
 }
 
 void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
-                             const base::string16& top_level_folder_name) {
+                             const std::u16string& top_level_folder_name) {
   NotesModel* model = NotesModelFactory::GetForBrowserContext(profile_);
 
   model->BeginExtensiveChanges();
@@ -99,7 +101,7 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
     // Add to a folder that will contain all the imported notes.
     // The first time we do so, create the folder.
     if (!top_level_folder) {
-      base::string16 name;
+      std::u16string name;
       name = l10n_util::GetStringUTF16(IDS_NOTES_GROUP_FROM_OPERA);
       top_level_folder = model->AddFolder(
           model->main_node(), model->main_node()->children().size(), name);
@@ -109,7 +111,7 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
     // Ensure any enclosing folders are present in the model.  The note's
     // enclosing folder structure should be
     //   path[0] > path[1] > ... > path[size() - 1]
-    for (std::vector<base::string16>::const_iterator folder_name =
+    for (std::vector<std::u16string>::const_iterator folder_name =
              note->path.begin();
          folder_name != note->path.end(); ++folder_name) {
       const NoteNode* child = NULL;

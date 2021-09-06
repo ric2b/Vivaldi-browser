@@ -2,6 +2,7 @@
 
 #include "base/path_service.h"
 #include "importer/chromium_profile_importer.h"
+#include "base/files/file_util.h"
 
 using base::PathService;
 
@@ -28,10 +29,15 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
     case importer::TYPE_BRAVE:
       profile_path = home_path.Append(".config").Append("BraveSoftware")
           .Append("Brave-Browser");
+      if (!base::PathExists(profile_path)) {
+        profile_path = home_path.Append("snap").Append("brave")
+            .Append("current").Append(".config").Append("BraveSoftware")
+            .Append("Brave-Browser");
+      }
       break;
+
     case importer::TYPE_EDGE_CHROMIUM:
-      profile_path = home_path.Append(".config").Append("Microsoft")
-          .Append("Edge");
+      profile_path = home_path.Append(".config").Append("microsoft-edge-dev");
       break;
 
     default:

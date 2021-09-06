@@ -49,7 +49,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -234,7 +234,7 @@ public class BrowserControlsManager
                 mTopControlContainerHeight =
                         mActivity.getResources().getDimensionPixelSize(resControlContainerHeight);
                 // Note(david@vivaldi.com): This will handle the top/bottom position of the toolbar.
-                if (ChromeApplication.isVivaldi()) {
+                if (ChromeApplicationImpl.isVivaldi()) {
                     mBottomControlContainerHeight = mActivity.getResources().getDimensionPixelSize(
                             org.chromium.chrome.R.dimen.bottom_toolbar_height);
                     if (!VivaldiUtils.isTopToolbarOn()) {
@@ -321,7 +321,7 @@ public class BrowserControlsManager
     public boolean areBrowserControlsAtMinHeight() {
         // Note(david@vivaldi.com): When this method is invoked we always check again whether the
         // controls are at their minimum height, rather then returning the previous state.
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             return getContentOffset() == getTopControlsMinHeight()
                     && getBottomContentOffset() == getBottomControlsMinHeight();
         return mControlsAtMinHeight.get();
@@ -570,7 +570,7 @@ public class BrowserControlsManager
                 Math.min(topContentOffset, rendererTopControlOffset + getTopControlsHeight());
 
         // Note(david@vivaldi.com): We always need to update our offsets.
-        if (!ChromeApplication.isVivaldi())
+        if (!ChromeApplicationImpl.isVivaldi())
         if (rendererTopControlOffset == mRendererTopControlOffset
                 && rendererBottomControlOffset == mRendererBottomControlOffset
                 && rendererTopContentOffset == mRendererTopContentOffset

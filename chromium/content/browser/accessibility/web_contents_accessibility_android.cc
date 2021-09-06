@@ -27,6 +27,7 @@
 #include "content/public/android/content_jni_headers/WebContentsAccessibilityImpl_jni.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
+#include "ui/accessibility/ax_assistant_structure.h"
 #include "ui/events/android/motion_event_android.h"
 
 using base::android::AttachCurrentThread;
@@ -193,10 +194,10 @@ enum {
                             UMA_ACCESSIBILITYSERVICEINFO_MAX)
 
 using SearchKeyToPredicateMap =
-    std::unordered_map<base::string16, AccessibilityMatchPredicate>;
+    std::unordered_map<std::u16string, AccessibilityMatchPredicate>;
 base::LazyInstance<SearchKeyToPredicateMap>::Leaky
     g_search_key_to_predicate_map = LAZY_INSTANCE_INITIALIZER;
-base::LazyInstance<base::string16>::Leaky g_all_search_keys =
+base::LazyInstance<std::u16string>::Leaky g_all_search_keys =
     LAZY_INSTANCE_INITIALIZER;
 
 bool SectionPredicate(BrowserAccessibility* start, BrowserAccessibility* node) {
@@ -227,10 +228,10 @@ bool AllInterestingNodesPredicate(BrowserAccessibility* start,
 
 void AddToPredicateMap(const char* search_key_ascii,
                        AccessibilityMatchPredicate predicate) {
-  base::string16 search_key_utf16 = base::ASCIIToUTF16(search_key_ascii);
+  std::u16string search_key_utf16 = base::ASCIIToUTF16(search_key_ascii);
   g_search_key_to_predicate_map.Get()[search_key_utf16] = predicate;
   if (!g_all_search_keys.Get().empty())
-    g_all_search_keys.Get() += base::ASCIIToUTF16(",");
+    g_all_search_keys.Get() += u",";
   g_all_search_keys.Get() += search_key_utf16;
 }
 
@@ -270,7 +271,7 @@ void InitSearchKeyToPredicateMapIfNeeded() {
 }
 
 AccessibilityMatchPredicate PredicateForSearchKey(
-    const base::string16& element_type) {
+    const std::u16string& element_type) {
   InitSearchKeyToPredicateMapIfNeeded();
   const auto& iter = g_search_key_to_predicate_map.Get().find(element_type);
   if (iter != g_search_key_to_predicate_map.Get().end())
@@ -365,6 +366,22 @@ WebContentsAccessibilityAndroid::WebContentsAccessibilityAndroid(
   CollectStats();
 }
 
+WebContentsAccessibilityAndroid::WebContentsAccessibilityAndroid(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong ax_tree_update_ptr)
+    : java_ref_(env, obj),
+      web_contents_(nullptr),
+      frame_info_initialized_(false),
+      use_zoom_for_dsf_enabled_(IsUseZoomForDSFEnabled()) {
+  std::unique_ptr<ui::AXTreeUpdate> ax_tree_snapshot(
+      reinterpret_cast<ui::AXTreeUpdate*>(ax_tree_update_ptr));
+  manager_.reset(new BrowserAccessibilityManagerAndroid(*ax_tree_snapshot,
+                                                        GetWeakPtr(), nullptr));
+  connector_ = nullptr;
+  CollectStats();
+}
+
 WebContentsAccessibilityAndroid::~WebContentsAccessibilityAndroid() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
@@ -384,7 +401,11 @@ void WebContentsAccessibilityAndroid::UpdateBrowserAccessibilityManager() {
 }
 
 void WebContentsAccessibilityAndroid::DeleteEarly(JNIEnv* env) {
-  connector_->DeleteEarly();
+  if (connector_) {
+    connector_->DeleteEarly();
+  } else {
+    delete this;
+  }
 }
 
 jboolean WebContentsAccessibilityAndroid::IsEnabled(
@@ -412,8 +433,18 @@ void WebContentsAccessibilityAndroid::Enable(JNIEnv* env,
   // explicitly disallowed by a command-line flag, then enable it for
   // this WebContents if that succeeded.
   accessibility_state->OnScreenReaderDetected();
-  if (accessibility_state->IsAccessibleBrowser())
+  if (accessibility_state->IsAccessibleBrowser() && web_contents_)
     web_contents_->AddAccessibilityMode(ui::kAXModeComplete);
+}
+
+void WebContentsAccessibilityAndroid::SetIsRunningAsWebView(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jboolean is_webview) {
+  auto* manager = GetRootBrowserAccessibilityManager();
+  if (manager) {
+    manager->set_is_running_as_webview(is_webview);
+  }
 }
 
 bool WebContentsAccessibilityAndroid::ShouldRespectDisplayedPasswordText() {
@@ -515,7 +546,7 @@ void WebContentsAccessibilityAndroid::HandleScrolledToAnchor(
 }
 
 void WebContentsAccessibilityAndroid::AnnounceLiveRegionText(
-    const base::string16& text) {
+    const std::u16string& text) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
@@ -547,6 +578,21 @@ void WebContentsAccessibilityAndroid::HandleEditableTextChanged(
     return;
   Java_WebContentsAccessibilityImpl_handleEditableTextChanged(env, obj,
                                                               unique_id);
+}
+
+void WebContentsAccessibilityAndroid::SignalEndOfTestForTesting(JNIEnv* env) {
+  BrowserAccessibilityManager* manager =
+      web_contents_->GetRootBrowserAccessibilityManager();
+  manager->SignalEndOfTest();
+}
+
+void WebContentsAccessibilityAndroid::HandleEndOfTestSignal() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return;
+
+  Java_WebContentsAccessibilityImpl_handleEndOfTestSignal(env, obj);
 }
 
 void WebContentsAccessibilityAndroid::HandleSliderChanged(int32_t unique_id) {
@@ -695,6 +741,29 @@ jint WebContentsAccessibilityAndroid::GetEditableTextSelectionEnd(
     return false;
 
   return node->GetSelectionEnd();
+}
+
+base::android::ScopedJavaLocalRef<jintArray>
+WebContentsAccessibilityAndroid::GetAbsolutePositionForNode(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint unique_id) {
+  auto* root_manager = GetRootBrowserAccessibilityManager();
+  if (!root_manager)
+    return nullptr;
+
+  BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
+  if (!node)
+    return nullptr;
+
+  float dip_scale =
+      use_zoom_for_dsf_enabled_ ? 1 / root_manager->device_scale_factor() : 1.0;
+  gfx::Rect absolute_rect = gfx::ScaleToEnclosingRect(
+      node->GetUnclippedRootFrameBoundsRect(), dip_scale, dip_scale);
+  int rect[4] = {absolute_rect.x(), absolute_rect.y(), absolute_rect.right(),
+                 absolute_rect.bottom()};
+
+  return base::android::ToJavaIntArray(env, rect, static_cast<size_t>(4));
 }
 
 static size_t ActualUnignoredChildCount(const ui::AXNode* node) {
@@ -848,7 +917,7 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityNodeInfo(
       base::android::ConvertUTF16ToJavaString(env,
                                               node->GetStateDescription()));
 
-  base::string16 element_id;
+  std::u16string element_id;
   if (node->GetHtmlAttribute("id", &element_id)) {
     Java_WebContentsAccessibilityImpl_setAccessibilityNodeInfoViewIdResourceName(
         env, obj, info,
@@ -911,8 +980,8 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityEvent(
 
   switch (event_type) {
     case ANDROID_ACCESSIBILITY_EVENT_TEXT_CHANGED: {
-      base::string16 before_text = node->GetTextChangeBeforeText();
-      base::string16 text = node->GetInnerText();
+      std::u16string before_text = node->GetTextChangeBeforeText();
+      std::u16string text = node->GetInnerText();
       Java_WebContentsAccessibilityImpl_setAccessibilityEventTextChangedAttrs(
           env, obj, event, node->GetTextChangeFromIndex(),
           node->GetTextChangeAddedCount(), node->GetTextChangeRemovedCount(),
@@ -921,7 +990,7 @@ jboolean WebContentsAccessibilityAndroid::PopulateAccessibilityEvent(
       break;
     }
     case ANDROID_ACCESSIBILITY_EVENT_TEXT_SELECTION_CHANGED: {
-      base::string16 text = node->GetInnerText();
+      std::u16string text = node->GetInnerText();
       Java_WebContentsAccessibilityImpl_setAccessibilityEventSelectionAttrs(
           env, obj, event, node->GetSelectionStart(), node->GetSelectionEnd(),
           node->GetEditableTextLength(),
@@ -1143,7 +1212,7 @@ jboolean WebContentsAccessibilityAndroid::NextAtGranularity(
   int end_index = -1;
   if (root_manager->NextAtGranularity(granularity, cursor_index, node,
                                       &start_index, &end_index)) {
-    base::string16 text = node->GetInnerText();
+    std::u16string text = node->GetInnerText();
     Java_WebContentsAccessibilityImpl_finishGranularityMoveNext(
         env, obj, base::android::ConvertUTF16ToJavaString(env, text),
         extend_selection, start_index, end_index);
@@ -1159,7 +1228,7 @@ jint WebContentsAccessibilityAndroid::GetTextLength(
   BrowserAccessibilityAndroid* node = GetAXFromUniqueID(unique_id);
   if (!node)
     return -1;
-  base::string16 text = node->GetInnerText();
+  std::u16string text = node->GetInnerText();
   return text.size();
 }
 
@@ -1178,7 +1247,7 @@ void WebContentsAccessibilityAndroid::AddSpellingErrorForTesting(
   }
 
   CHECK(node->GetRole() == ax::mojom::Role::kStaticText);
-  base::string16 text = node->GetInnerText();
+  std::u16string text = node->GetInnerText();
   CHECK_LT(start_offset, static_cast<int>(text.size()));
   CHECK_LE(end_offset, static_cast<int>(text.size()));
 
@@ -1421,6 +1490,10 @@ WebContentsAccessibilityAndroid::GetCharacterBoundingBoxes(
 
 BrowserAccessibilityManagerAndroid*
 WebContentsAccessibilityAndroid::GetRootBrowserAccessibilityManager() {
+  if (manager_) {
+    return manager_.get();
+  }
+
   return static_cast<BrowserAccessibilityManagerAndroid*>(
       web_contents_->GetRootBrowserAccessibilityManager());
 }
@@ -1516,6 +1589,14 @@ void WebContentsAccessibilityAndroid::CollectStats() {
 base::WeakPtr<WebContentsAccessibilityAndroid>
 WebContentsAccessibilityAndroid::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
+}
+
+jlong JNI_WebContentsAccessibilityImpl_InitWithAXTree(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong ax_tree_update_ptr) {
+  return reinterpret_cast<intptr_t>(
+      new WebContentsAccessibilityAndroid(env, obj, ax_tree_update_ptr));
 }
 
 jlong JNI_WebContentsAccessibilityImpl_Init(

@@ -19,6 +19,7 @@
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "browser/menus/vivaldi_menus.h"
 #include "browser/menus/vivaldi_profile_menu_controller.h"
+#include "browser/menus/vivaldi_pwa_link_menu_controller.h"
 #if defined(OS_MAC)
 #include "browser/menus/vivaldi_speech_menu_controller.h"
 #endif
@@ -303,7 +304,11 @@ void VivaldiRenderViewContextMenu::InitMenu() {
             match.destination_url.scheme())) {
       request.selectionurl = match.destination_url.spec();
     }
-    base::string16 printable_selection_text = PrintableSelectionText();
+    base::TrimWhitespace(params_.selection_text, base::TRIM_ALL,
+                         &params_.selection_text);
+    base::ReplaceChars(params_.selection_text, AutocompleteMatch::kInvalidChars,
+                       base::ASCIIToUTF16(" "), &params_.selection_text);
+    std::u16string printable_selection_text = PrintableSelectionText();
     EscapeAmpersands(&printable_selection_text);
     request.printableselection = base::UTF16ToUTF8(printable_selection_text);
   }
@@ -395,7 +400,7 @@ ui::SimpleMenuModel* VivaldiRenderViewContextMenu::GetMappedMenuModel(
 }
 
 void VivaldiRenderViewContextMenu::AddMenuItem(int command_id,
-                                         const base::string16& title) {
+                                               const std::u16string& title) {
   if (populating_menu_model_) {
     AddMenuModelToMap(command_id, populating_menu_model_);
     populating_menu_model_->AddItem(command_id, title);
@@ -404,9 +409,10 @@ void VivaldiRenderViewContextMenu::AddMenuItem(int command_id,
   }
 }
 
-void VivaldiRenderViewContextMenu::AddMenuItemWithIcon(int command_id,
-                                                 const base::string16& title,
-                                                 const ui::ImageModel& icon) {
+void VivaldiRenderViewContextMenu::AddMenuItemWithIcon(
+    int command_id,
+    const std::u16string& title,
+    const ui::ImageModel& icon) {
   if (populating_menu_model_) {
     AddMenuModelToMap(command_id, populating_menu_model_);
     populating_menu_model_->AddItemWithIcon(command_id, title, icon);
@@ -416,7 +422,7 @@ void VivaldiRenderViewContextMenu::AddMenuItemWithIcon(int command_id,
 }
 
 void VivaldiRenderViewContextMenu::AddCheckItem(int command_id,
-                                          const base::string16& title) {
+                                                const std::u16string& title) {
   if (populating_menu_model_) {
     AddMenuModelToMap(command_id, populating_menu_model_);
     populating_menu_model_->AddCheckItem(command_id, title);
@@ -434,7 +440,7 @@ void VivaldiRenderViewContextMenu::AddSeparator() {
 }
 
 void VivaldiRenderViewContextMenu::AddSubMenu(int command_id,
-                                        const base::string16& label,
+                                              const std::u16string& label,
                                         ui::MenuModel* model) {
   if (populating_menu_model_) {
     AddMenuModelToMap(command_id, populating_menu_model_);
@@ -460,9 +466,9 @@ void VivaldiRenderViewContextMenu::AddSubMenuWithStringIdAndIcon(
 }
 
 void VivaldiRenderViewContextMenu::UpdateMenuItem(int command_id,
-                                            bool enabled,
-                                            bool hidden,
-                                            const base::string16& title) {
+                                                  bool enabled,
+                                                  bool hidden,
+                                                  const std::u16string& title) {
   ui::SimpleMenuModel* menu_model = GetMappedMenuModel(command_id);
   if (menu_model) {
     int index = menu_model->GetIndexOfCommandId(command_id);
@@ -604,16 +610,26 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
     switch (command_id) {
       // Other static commands that are vivaldi specific, have vivaldi specific
       // behaviour and/or where we need to test for extra states.
-      case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
-        return !embedder_web_contents_->GetBrowserContext()->IsOffTheRecord()
-            && params_.media_type ==
-                blink::mojom::ContextMenuDataMediaType::kImage;
+      case IDC_VIV_OPEN_IMAGE_NEW_WINDOW: {
+        bool isGuest = Profile::FromBrowserContext(
+            embedder_web_contents_->GetBrowserContext())->IsGuestSession();
+        bool isPrivate =
+            embedder_web_contents_->GetBrowserContext()->IsOffTheRecord();
+        return params_.media_type ==
+           blink::mojom::ContextMenuDataMediaType::kImage &&
+           (isGuest || (!isGuest && !isPrivate));
+      }
       // For these two we prefer to modify the behaviour wrt chrome. That is,
       // open in private window is enabled in a private window and open in new
       // window is disabled. Chrome does it the other way around.
-      case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
-        return embedder_web_contents_->GetBrowserContext()->IsOffTheRecord() ?
-            false : RenderViewContextMenu::IsCommandIdEnabled(command_id);
+      case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW: {
+        bool isGuest = Profile::FromBrowserContext(
+            embedder_web_contents_->GetBrowserContext())->IsGuestSession();
+        bool isPrivate =
+            embedder_web_contents_->GetBrowserContext()->IsOffTheRecord();
+        return isPrivate && !isGuest ? false :
+          RenderViewContextMenu::IsCommandIdEnabled(command_id);
+      }
       case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
         return embedder_web_contents_->GetBrowserContext()->IsOffTheRecord() ?
           CanOpenInPrivateWindow(embedder_web_contents_->GetBrowserContext(),
@@ -846,7 +862,7 @@ VivaldiRenderViewContextMenu::ActionChain
       extensions::WebViewGuest* guest_view =
           extensions::WebViewGuest::FromWebContents(source_web_contents_);
       if (guest_view) {
-        base::string16 keyword(TemplateURL::GenerateKeyword(params_.page_url));
+        std::u16string keyword(TemplateURL::GenerateKeyword(params_.page_url));
         std::vector<base::Value> args;
         args.emplace_back(keyword);
         args.emplace_back(params_.vivaldi_keyword_url.spec());
@@ -920,6 +936,8 @@ bool VivaldiRenderViewContextMenu::HasContainerContent(
     case context_menu::CONTAINER_CONTENT_IMAGEINPROFILE:
       return params_.has_image_contents &&
              ProfileMenuController::HasRemoteProfile(GetProfile());
+    case context_menu::CONTAINER_CONTENT_LINKINPWA:
+      return !params_.link_url.is_empty();
     case context_menu::CONTAINER_CONTENT_SPEECH:
 #if defined(OS_MAC)
       return true;
@@ -958,12 +976,19 @@ void VivaldiRenderViewContextMenu::PopulateContainer(const Container& container,
                                           menu_model,
                                           this);
       break;
+    case context_menu::CONTAINER_CONTENT_LINKINPWA:
+      pwa_link_controller_ = std::make_unique<PWALinkMenuController>(
+          PWALinkMenuController(this, GetProfile()));
+      pwa_link_controller_->Populate(GetBrowser(),
+                                     base::UTF8ToUTF16(container.name),
+                                     menu_model);
+      break;
     case context_menu::CONTAINER_CONTENT_NOTES:
       AddNotesController(menu_model, id, container.mode ==
           extensions::vivaldi::context_menu::CONTAINER_MODE_FOLDER);
       break;
     case context_menu::CONTAINER_CONTENT_EXTENSIONS: {
-      base::string16 text = PrintableSelectionText();
+      std::u16string text = PrintableSelectionText();
       EscapeAmpersands(&text);
       extensions_controller_.reset(new ExtensionsMenuController(this));
       extensions_controller_->Populate(menu_model, this, VivaldiGetExtension(),

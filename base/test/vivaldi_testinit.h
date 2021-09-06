@@ -5,6 +5,7 @@
 
 namespace vivaldi {
 void InitTestEnvironment();
-}
+void InitTestPathEnvironment();
+}  // namespace vivaldi
 
 #endif  // BASE_TEST_VIVALDI_TESTINIT_H_

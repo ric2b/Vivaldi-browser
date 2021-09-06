@@ -13,7 +13,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.sync.StopSource;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * SyncController handles the coordination of sync state between the invalidation controller,
@@ -35,13 +35,6 @@ import org.chromium.chrome.browser.ChromeApplication;
 public class SyncController
         implements ProfileSyncService.SyncStateChangedListener, AndroidSyncSettings.Delegate {
     private static final String TAG = "SyncController";
-
-    /**
-     * An identifier for the generator in UniqueIdentificationGeneratorFactory to be used to
-     * generate the sync sessions ID. The generator is registered in the Application's onCreate
-     * method.
-     */
-    public static final String GENERATOR_ID = "SYNC";
 
     @SuppressLint("StaticFieldLeak")
     private static SyncController sInstance;
@@ -78,7 +71,7 @@ public class SyncController
      * Updates sync to reflect the state of the Android sync settings.
      */
     private void updateSyncStateFromAndroid() {
-        if(ChromeApplication.isVivaldi()) {
+        if(ChromeApplicationImpl.isVivaldi()) {
             return;
         }
         // Note: |isChromeSyncEnabled| maps to SyncRequested, and
@@ -126,11 +119,11 @@ public class SyncController
     public void syncStateChanged() {
         ThreadUtils.assertOnUiThread();
         if (mProfileSyncService.isSyncRequested()) {
-            if (ChromeApplication.isVivaldi() || !isSyncEnabledInAndroidSyncSettings()) {
+            if (ChromeApplicationImpl.isVivaldi() || !isSyncEnabledInAndroidSyncSettings()) {
                 AndroidSyncSettings.get().enableChromeSync();
             }
         } else {
-            if (ChromeApplication.isVivaldi() || isSyncEnabledInAndroidSyncSettings()) {
+            if (ChromeApplicationImpl.isVivaldi() || isSyncEnabledInAndroidSyncSettings()) {
                 // Both Android's master and Chrome sync setting are enabled, so we want to disable
                 // the Chrome sync setting to match isSyncRequested. We have to be careful not to
                 // disable it when isSyncRequested becomes false due to master sync being disabled

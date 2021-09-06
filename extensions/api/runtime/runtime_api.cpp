@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -69,9 +70,9 @@ class ProfileStorageObserver : public ProfileAttributesStorage::Observer {
   // ProfileAttributesStorage::Observer:
   void OnProfileAdded(const base::FilePath& profile_path) override;
   void OnProfileWasRemoved(const base::FilePath& profile_path,
-    const base::string16& profile_name) override;
+                           const std::u16string& profile_name) override;
   void OnProfileNameChanged(const base::FilePath& profile_path,
-    const base::string16& old_profile_name) override;
+                            const std::u16string& old_profile_name) override;
   void OnProfileAuthInfoChanged(const base::FilePath& profile_path) override;
   void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
   void OnProfileHighResAvatarLoaded(
@@ -111,13 +112,13 @@ void ProfileStorageObserver::OnProfileAdded(
 
 void ProfileStorageObserver::OnProfileWasRemoved(
     const base::FilePath& profile_path,
-    const base::string16& profile_name) {
+    const std::u16string& profile_name) {
   UpdateProfiles();
 }
 
 void ProfileStorageObserver::OnProfileNameChanged(
     const base::FilePath& profile_path,
-    const base::string16& old_profile_name) {
+    const std::u16string& old_profile_name) {
   UpdateProfiles();
 }
 
@@ -169,12 +170,7 @@ ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction RuntimePrivateRestartFunction::Run() {
-  // Free any open devtools if the user selects Exit from the menu.
-  DevtoolsConnectorAPI::CloseAllDevtools();
-
-  LOG(INFO) << "Restarting Vivaldi";
-  chrome::AttemptRestart();
-
+  ::vivaldi::RestartBrowser();
   return RespondNow(NoArguments());
 }
 
@@ -214,15 +210,23 @@ RuntimePrivateSetFeatureEnabledFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction RuntimePrivateIsGuestSessionFunction::Run() {
+  using vivaldi::runtime_private::IsGuestSession::Params;
   namespace Results = vivaldi::runtime_private::IsGuestSession::Results;
 
-  Profile *profile = Profile::FromBrowserContext(browser_context());
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
   bool is_guest = false;
   PrefService* service = g_browser_process->local_state();
   DCHECK(service);
-  if (service->GetBoolean(prefs::kBrowserGuestModeEnabled) &&
-      !profile->IsSupervised()) {
-    is_guest = profile->IsGuestSession();
+  if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
+    for (auto* browser : *BrowserList::GetInstance()) {
+      if (browser->session_id().id() == params->id) {
+        is_guest = !browser->profile()->IsSupervised() &&
+                   browser->profile()->IsGuestSession();
+        break;
+      }
+    }
   }
   return RespondNow(ArgumentList(Results::Create(is_guest)));
 }
@@ -244,6 +248,16 @@ ExtensionFunction::ResponseAction
 RuntimePrivateSwitchToGuestSessionFunction::Run() {
   namespace Results = vivaldi::runtime_private::SwitchToGuestSession::Results;
 
+  // First test available browsers and open a new guest window if we already
+  // have a browser for a guest window to allow for multiple guest windows.
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (browser->profile()->IsGuestSession()) {
+      chrome::NewWindow(browser);
+      return RespondNow(ArgumentList(Results::Create(true)));
+    }
+  }
+
+  // Otherwise we create the first guest window if possible.
   PrefService* service = g_browser_process->local_state();
   DCHECK(service);
   DCHECK(service->GetBoolean(prefs::kBrowserGuestModeEnabled));
@@ -483,7 +497,7 @@ RuntimePrivateUpdateActiveProfileFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 name = base::UTF8ToUTF16(params->name);
+  std::u16string name = base::UTF8ToUTF16(params->name);
   size_t index = params->avatar_index;
   bool success = false;
 
@@ -546,12 +560,12 @@ RuntimePrivateCreateProfileFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 name = base::UTF8ToUTF16(params->name);
-  std::string avatar_url = params->avatar_url;
+  std::u16string name = base::UTF8ToUTF16(params->name);
+  size_t index = params->avatar_index;
   bool create_shortcut = params->create_desktop_icon;
 
   ProfileManager::CreateMultiProfileAsync(
-      name, avatar_url,
+      name, index,
       base::BindRepeating(
           &RuntimePrivateCreateProfileFunction::OnProfileCreated, this,
           create_shortcut));

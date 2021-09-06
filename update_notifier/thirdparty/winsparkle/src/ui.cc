@@ -33,13 +33,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "installer/win/detached_thread.h"
+#include "installer/win/vivaldi_install_l10n.h"
 #include "update_notifier/thirdparty/winsparkle/src/appcast.h"
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
-#include "update_notifier/thirdparty/winsparkle/src/settings.h"
-#include "update_notifier/thirdparty/winsparkle/src/threads.h"
 #include "update_notifier/thirdparty/winsparkle/src/updatedownloader.h"
-#include "update_notifier/update_notifier_utils.h"
-#include "vivaldi/update_notifier/grit/vivaldi_native_strings.h"
+#include "vivaldi/update_notifier/update_notifier_strings.h"
 
 #define wxNO_NET_LIB
 #define wxNO_XML_LIB
@@ -87,7 +86,9 @@
 
 namespace winsparkle {
 
-using vivaldi_update_notifier::GetTranslation;
+using installer::GetLocalizedString;
+using installer::GetLocalizedStringF;
+using installer::GetLocalizedStringF2;
 
 /*--------------------------------------------------------------------------*
                                   helpers
@@ -96,6 +97,10 @@ using vivaldi_update_notifier::GetTranslation;
 namespace {
 
 UIDelegate* g_delegate = nullptr;
+
+std::wstring VersionAsWide(const base::Version& version) {
+  return base::ASCIIToWide(version.GetString());
+}
 
 // shows/hides layout element
 void DoShowElement(wxWindow* w, bool show) {
@@ -293,7 +298,7 @@ class WinSparkleDialog : public wxDialog {
 WinSparkleDialog::WinSparkleDialog()
     : wxDialog(NULL,
                wxID_ANY,
-               GetTranslation(IDS_UPDATE_NOTIFICATION_DIALOG_TITLE),
+               GetLocalizedString(IDS_UPDATE_NOTIFICATION_DIALOG_TITLE_BASE),
                wxDefaultPosition,
                wxDefaultSize,
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER | wxDIALOG_NO_PARENT) {
@@ -475,7 +480,7 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
 
   wxStaticText* notesLabel = new wxStaticText(
       this, wxID_ANY,
-      GetTranslation(IDS_UPDATE_NOTIFICATION_REALEASE_NOTES_LABEL));
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_REALEASE_NOTES_LABEL_BASE));
   SetBoldFont(notesLabel);
   m_releaseNotesSizer->Add(notesLabel, wxSizerFlags().Border(wxTOP, PX(10)));
   if (m_webBrowser)
@@ -490,17 +495,19 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
 
   m_updateButtonsSizer = new wxBoxSizer(wxHORIZONTAL);
   m_updateButtonsSizer->Add(
-      new wxButton(this, ID_SKIP_VERSION,
-                   GetTranslation(IDS_UPDATE_NOTIFICATION_SKIP_VERSION_LABEL)),
+      new wxButton(
+          this, ID_SKIP_VERSION,
+          GetLocalizedString(IDS_UPDATE_NOTIFICATION_SKIP_VERSION_LABEL_BASE)),
       wxSizerFlags().Border(wxRIGHT, PX(20)));
   m_updateButtonsSizer->AddStretchSpacer(1);
   m_updateButtonsSizer->Add(
-      new wxButton(this, ID_REMIND_LATER,
-                   GetTranslation(IDS_UPDATE_NOTIFICATION_REMIND_LATER_LABEL)),
+      new wxButton(
+          this, ID_REMIND_LATER,
+          GetLocalizedString(IDS_UPDATE_NOTIFICATION_REMIND_LATER_LABEL_BASE)),
       wxSizerFlags().Border(wxRIGHT, PX(10)));
-  m_installButton =
-      new wxButton(this, ID_INSTALL,
-                   GetTranslation(IDS_UPDATE_NOTIFICATION_GET_UPDATE_LABEL));
+  m_installButton = new wxButton(
+      this, ID_INSTALL,
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_GET_UPDATE_LABEL_BASE));
   m_updateButtonsSizer->Add(m_installButton, wxSizerFlags());
   m_buttonSizer->Add(m_updateButtonsSizer, wxSizerFlags(1));
 
@@ -514,7 +521,7 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
   // TODO: make this "Install and relaunch"
   m_runInstallerButton = new wxButton(
       this, ID_RUN_INSTALLER,
-      GetTranslation(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_LABEL));
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_LABEL_BASE));
   m_runInstallerButtonSizer->AddStretchSpacer(1);
   m_runInstallerButtonSizer->Add(m_runInstallerButton,
                                  wxSizerFlags(0).Border(wxLEFT));
@@ -573,7 +580,8 @@ void UpdateDialog::OnClose(wxCloseEvent&) {
 }
 
 void UpdateDialog::OnSkipVersion(wxCommandEvent&) {
-  Settings::WriteConfigValue(ConfigKey::kSkipThisVersion, m_appcast.Version);
+  WriteRegistryItem(RegistryItem::kSkipThisVersion,
+                    m_appcast.Version.GetString());
   Close();
 }
 
@@ -597,7 +605,7 @@ void UpdateDialog::OnRunInstaller(wxCommandEvent& event) {
   m_runInstallerButton->Disable();
 
   m_message->SetLabel(
-      GetTranslation(IDS_UPDATE_NOTIFICATION_LAUNCHING_MESSAGE));
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_LAUNCHING_MESSAGE_BASE));
   g_delegate->WinsparkleLaunchInstaller();
 }
 
@@ -613,10 +621,10 @@ bool UpdateDialog::SetMessage(const std::wstring& text, int width) {
 void UpdateDialog::StateCheckingUpdates() {
   LayoutChangesGuard guard(this);
 
-  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_CHECKING_MESSAGE));
+  SetMessage(GetLocalizedString(IDS_UPDATE_NOTIFICATION_CHECKING_MESSAGE_BASE));
 
   m_closeButton->SetLabel(
-      GetTranslation(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON_BASE));
   EnablePulsing(true);
 
   HIDE(m_heading);
@@ -632,12 +640,14 @@ void UpdateDialog::StateCheckingUpdates() {
 void UpdateDialog::StateNoUpdateFound() {
   LayoutChangesGuard guard(this);
 
-  m_heading->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_UPTODATE_TITLE));
+  m_heading->SetLabel(
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_UPTODATE_TITLE_BASE));
 
-  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_UPTODATE_TEXT,
-                            GetConfig().app_version));
+  SetMessage(GetLocalizedStringF(IDS_UPDATE_NOTIFICATION_UPTODATE_TEXT_BASE,
+                                 VersionAsWide(g_app_version)));
 
-  m_closeButton->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
+  m_closeButton->SetLabel(
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON_BASE));
   m_closeButton->SetFocus();
   EnablePulsing(false);
 
@@ -656,7 +666,8 @@ void UpdateDialog::StateUpdateError(Error error) {
 
   LayoutChangesGuard guard(this);
 
-  m_heading->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_ERROR_TITLE));
+  m_heading->SetLabel(
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_ERROR_TITLE_BASE));
 
   int message_id = 0;
   switch (error.kind()) {
@@ -664,34 +675,36 @@ void UpdateDialog::StateUpdateError(Error error) {
       NOTREACHED();
       break;
     case Error::kCancelled:
-      message_id = IDS_UPDATE_NOTIFICATION_ERROR_CANCEL;
+      message_id = IDS_UPDATE_NOTIFICATION_ERROR_CANCEL_BASE;
       break;
     // Treat format errors as network one.
     case Error::kFormat:
     case Error::kNetwork:
-      message_id = IDS_UPDATE_NOTIFICATION_ERROR_NETWORK;
+      message_id = IDS_UPDATE_NOTIFICATION_ERROR_NETWORK_BASE;
       break;
     case Error::kStorage:
-      message_id = IDS_UPDATE_NOTIFICATION_ERROR_STORAGE;
+      message_id = IDS_UPDATE_NOTIFICATION_ERROR_STORAGE_BASE;
       break;
     case Error::kExec:
-      message_id = IDS_UPDATE_NOTIFICATION_ERROR_EXEC;
+      message_id = IDS_UPDATE_NOTIFICATION_ERROR_EXEC_BASE;
       break;
     case Error::kVerify:
-      message_id = IDS_UPDATE_NOTIFICATION_ERROR_VERIFY;
+      message_id = IDS_UPDATE_NOTIFICATION_ERROR_VERIFY_BASE;
       break;
   }
 
-  std::wstring msg = message_id ? GetTranslation(message_id) : std::wstring();
+  std::wstring msg =
+      message_id ? GetLocalizedString(message_id) : std::wstring();
   if (error.kind() != Error::kCancelled) {
     msg += L"\n\n";
-    msg += GetTranslation(IDS_UPDATE_NOTIFICATION_ERROR_DETAILS);
+    msg += GetLocalizedString(IDS_UPDATE_NOTIFICATION_ERROR_DETAILS_BASE);
     msg += L"\n\n";
     msg += base::UTF8ToWide(error.message());
   }
   SetMessage(msg);
 
-  m_closeButton->SetLabel(GetTranslation(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
+  m_closeButton->SetLabel(
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON_BASE));
   m_closeButton->SetFocus();
   EnablePulsing(false);
 
@@ -713,15 +726,15 @@ void UpdateDialog::StateUpdateAvailable() {
     LayoutChangesGuard guard(this);
 
     m_heading->SetLabel(
-        GetTranslation(IDS_UPDATE_NOTIFICATION_NEW_VERSION_TITLE));
+        GetLocalizedString(IDS_UPDATE_NOTIFICATION_NEW_VERSION_TITLE_BASE));
 
     if (!m_appcast.HasDownload())
       m_installButton->SetLabel(
-          GetTranslation(IDS_UPDATE_NOTIFICATION_SHOW_WEBSITE_LABEL));
+          GetLocalizedString(IDS_UPDATE_NOTIFICATION_SHOW_WEBSITE_LABEL_BASE));
 
-    std::wstring message = GetTranslation(
-        IDS_UPDATE_NOTIFICATION_NEW_VERSION_QUESTION,
-        base::UTF8ToWide(m_appcast.Version), GetConfig().app_version);
+    std::wstring message = GetLocalizedStringF2(
+        IDS_UPDATE_NOTIFICATION_NEW_VERSION_QUESTION_BASE,
+        VersionAsWide(m_appcast.Version), VersionAsWide(g_app_version));
     SetMessage(message, showRelnotes ? RELNOTES_WIDTH : MESSAGE_AREA_WIDTH);
 
     EnablePulsing(false);
@@ -748,10 +761,11 @@ void UpdateDialog::StateUpdateAvailable() {
 void UpdateDialog::StateDownloading() {
   LayoutChangesGuard guard(this);
 
-  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_DOWNLOADING_MESSAGE));
+  SetMessage(
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_DOWNLOADING_MESSAGE_BASE));
 
   m_closeButton->SetLabel(
-      GetTranslation(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON_BASE));
   EnablePulsing(false);
 
   HIDE(m_heading);
@@ -785,8 +799,8 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
           m_progress->SetRange(total);
         }
         m_progress->SetValue(downloaded);
-        label = GetTranslation(
-            IDS_UPDATE_NOTIFICATION_DOWNLOADING_PROGRESS_DETAILS,
+        label = GetLocalizedStringF2(
+            IDS_UPDATE_NOTIFICATION_DOWNLOADING_PROGRESS_DETAILS_BASE,
             wxFileName::GetHumanReadableSize(downloaded, "", 1, wxSIZE_CONV_SI)
                 .ToStdWstring(),
             wxFileName::GetHumanReadableSize(total, "", 1, wxSIZE_CONV_SI)
@@ -803,15 +817,15 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
     }
     case DownloadReport::kVerificationStart:
       m_progress->Pulse();
-      if (!SetMessage(
-              GetTranslation(IDS_UPDATE_NOTIFICATION_VERIFYING_MESSAGE)))
+      if (!SetMessage(GetLocalizedString(
+              IDS_UPDATE_NOTIFICATION_VERIFYING_MESSAGE_BASE)))
         return;
       HIDE(m_progressLabel);
       break;
     case DownloadReport::kDeltaExtraction:
       m_progress->Pulse();
-      if (!SetMessage(
-              GetTranslation(IDS_UPDATE_NOTIFICATION_EXTRACTING_MESSAGE)))
+      if (!SetMessage(GetLocalizedString(
+              IDS_UPDATE_NOTIFICATION_EXTRACTING_MESSAGE_BASE)))
         return;
       break;
   }
@@ -826,7 +840,8 @@ void UpdateDialog::StateDownloaded() {
 
   LayoutChangesGuard guard(this);
 
-  SetMessage(GetTranslation(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_TEXT));
+  SetMessage(
+      GetLocalizedString(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_TEXT_BASE));
 
   m_progress->SetRange(1);
   m_progress->SetValue(1);
@@ -942,7 +957,7 @@ App::App() {
 }
 
 wxLayoutDirection App::GetLayoutDirection() const {
-  wxString lang = base::UTF8ToWide(GetConfig().language);
+  wxString lang = vivaldi::GetInstallerLanguage();
   lang.Replace("-", "_");
   const wxLanguageInfo* info = wxLocale::FindLanguageInfo(lang);
   return info ? info->LayoutDirection : wxLayout_Default;
@@ -1053,7 +1068,7 @@ void App::OnStartedInstaller(wxThreadEvent& event) {
 // This thread is only created when needed -- in most cases, it isn't. Once it
 // is created, it runs indefinitely (without wasting CPU time -- it sleeps
 // waiting for incoming messages).
-struct UIThread : public DetachedThread {
+struct UIThread : public vivaldi::DetachedThread {
   void Run() override;
 };
 
@@ -1119,7 +1134,7 @@ class UIThreadAccess {
                     nullptr   // anonymous
         );
     CHECK(global_state.start_event);
-    DetachedThread::Start(std::make_unique<UIThread>());
+    vivaldi::DetachedThread::Start(std::make_unique<UIThread>());
 
     // Thread has started, wait until it initializes the App.
     WaitForSingleObject(global_state.start_event, INFINITE);

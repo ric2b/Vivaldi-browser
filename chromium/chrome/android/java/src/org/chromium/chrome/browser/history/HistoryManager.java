@@ -64,7 +64,7 @@ import org.chromium.ui.base.PageTransition;
 
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import android.view.View;
 
 /**
@@ -222,7 +222,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         mPrefChangeRegistrar.addObserver(Pref.ALLOW_DELETING_BROWSER_HISTORY, this);
         mPrefChangeRegistrar.addObserver(Pref.INCOGNITO_MODE_AVAILABILITY, this);
 
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mSelectableListLayout.getToolbarShadow().setVisibility(View.GONE);
 
         recordUserAction("Show");
@@ -395,7 +395,7 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
 
         // Determine component or class name.
         ComponentName component;
-        if (ChromeApplication.isVivaldi() || mActivity instanceof HistoryActivity) { // phone
+        if (ChromeApplicationImpl.isVivaldi() || mActivity instanceof HistoryActivity) { // phone
             component = IntentUtils.safeGetParcelableExtra(
                     mActivity.getIntent(), IntentHandler.EXTRA_PARENT_COMPONENT);
         } else { // tablet

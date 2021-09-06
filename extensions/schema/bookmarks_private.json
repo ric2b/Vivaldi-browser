@@ -152,19 +152,17 @@
         "name": "emptyTrash",
         "type": "function",
         "description": "Empty the bookmarks trash folder.",
-        "parameters": [
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if the operation was successful, otherwise false."
-              }
-            ]
-          }
-        ]
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "true if the operation was successful, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "updatePartners",
@@ -202,19 +200,18 @@
             "name": "bookmarkId",
             "type": "string",
             "description": "the id of the bookmark"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "result",
-                "type": "boolean",
-                "description": "true if the bookmark has a custom thumbnail"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean",
+              "description": "true if the bookmark has a custom thumbnail"
+            }
+          ]
+        }
       }
     ],
     "events": [

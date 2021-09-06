@@ -46,7 +46,6 @@ static_library("notes") {
     "//url:url",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
-    "//vivaldi/importer:browser",
     "//vivaldi/sync/notes:sync_notes",
   ]
   public_deps = [

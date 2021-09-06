@@ -231,8 +231,6 @@ void HandleRequestCallback(const std::string& path,
 
 void AddPrintPreviewStrings(content::WebUIDataSource* source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-    {"accept", IDS_PRINT_PREVIEW_ACCEPT_INVITE},
-    {"acceptForGroup", IDS_PRINT_PREVIEW_ACCEPT_GROUP_INVITE},
     {"accountSelectTitle", IDS_PRINT_PREVIEW_ACCOUNT_SELECT_TITLE},
     {"addAccountTitle", IDS_PRINT_PREVIEW_ADD_ACCOUNT_TITLE},
     {"advancedSettingsDialogConfirm",
@@ -257,7 +255,6 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"extensionDestinationIconTooltip",
      IDS_PRINT_PREVIEW_EXTENSION_DESTINATION_ICON_TOOLTIP},
     {"goBackButton", IDS_PRINT_PREVIEW_BUTTON_GO_BACK},
-    {"groupPrinterSharingInviteText", IDS_PRINT_PREVIEW_GROUP_INVITE_TEXT},
     {"invalidPrinterSettings", IDS_PRINT_PREVIEW_INVALID_PRINTER_SETTINGS},
     {"layoutLabel", IDS_PRINT_PREVIEW_LAYOUT_LABEL},
     {"learnMore", IDS_LEARN_MORE},
@@ -316,14 +313,14 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
     {"printButton", IDS_PRINT_PREVIEW_PRINT_BUTTON},
     {"printDestinationsTitle", IDS_PRINT_PREVIEW_PRINT_DESTINATIONS_TITLE},
     {"printPagesLabel", IDS_PRINT_PREVIEW_PRINT_PAGES_LABEL},
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     {"printToGoogleDrive", IDS_PRINT_PREVIEW_PRINT_TO_GOOGLE_DRIVE},
+#endif
     {"printToPDF", IDS_PRINT_PREVIEW_PRINT_TO_PDF},
-    {"printerSharingInviteText", IDS_PRINT_PREVIEW_INVITE_TEXT},
     {"printing", IDS_PRINT_PREVIEW_PRINTING},
     {"recentDestinationsTitle", IDS_PRINT_PREVIEW_RECENT_DESTINATIONS_TITLE},
     {"registerPrinterInformationMessage",
      IDS_CLOUD_PRINT_REGISTER_PRINTER_INFORMATION},
-    {"reject", IDS_PRINT_PREVIEW_REJECT_INVITE},
     {"resolveExtensionUSBDialogTitle",
      IDS_PRINT_PREVIEW_RESOLVE_EXTENSION_USB_DIALOG_TITLE},
     {"resolveExtensionUSBErrorMessage",
@@ -384,7 +381,7 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
                     chrome::kCloudPrintCertificateErrorLearnMoreURL);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-  const base::string16 shortcut_text(base::UTF8ToUTF16(kBasicPrintShortcut));
+  const std::u16string shortcut_text(base::UTF8ToUTF16(kBasicPrintShortcut));
   source->AddString("systemDialogOption",
                     l10n_util::GetStringFUTF16(
                         IDS_PRINT_PREVIEW_SYSTEM_DIALOG_OPTION, shortcut_text));
@@ -394,7 +391,8 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
   base::Value pdf_strings(base::Value::Type::DICTIONARY);
   pdf_extension_util::AddStrings(
       pdf_extension_util::PdfViewerContext::kPrintPreview, &pdf_strings);
-  pdf_extension_util::AddAdditionalData(&pdf_strings);
+  pdf_extension_util::AddAdditionalData(/*enable_annotations=*/false,
+                                        &pdf_strings);
   source->AddLocalizedStrings(base::Value::AsDictionaryValue(pdf_strings));
 }
 
@@ -412,8 +410,7 @@ void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   source->AddBoolean(
       "forceEnablePrivetPrinting",
-      profile->GetPrefs()->GetBoolean(prefs::kForceEnablePrivetPrinting) ||
-          base::FeatureList::IsEnabled(features::kForceEnablePrivetPrinting));
+      profile->GetPrefs()->GetBoolean(prefs::kForceEnablePrivetPrinting));
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -423,9 +420,6 @@ void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
   source->AddBoolean(
       "showPrinterStatusInDialog",
       base::FeatureList::IsEnabled(chromeos::features::kPrinterStatusDialog));
-  source->AddBoolean(
-      "printSaveToDrive",
-      base::FeatureList::IsEnabled(chromeos::features::kPrintSaveToDrive));
   source->AddBoolean(
       "printServerScaling",
       base::FeatureList::IsEnabled(chromeos::features::kPrintServerScaling));
@@ -768,7 +762,7 @@ void PrintPreviewUI::OnNupPdfDocumentConvertDone(
       base::RefCountedSharedMemoryMapping::CreateFromWholeRegion(region));
 }
 
-void PrintPreviewUI::SetInitiatorTitle(const base::string16& job_title) {
+void PrintPreviewUI::SetInitiatorTitle(const std::u16string& job_title) {
   initiator_title_ = job_title;
 }
 

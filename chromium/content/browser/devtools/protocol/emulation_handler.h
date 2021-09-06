@@ -114,6 +114,8 @@ class EmulationHandler : public DevToolsDomainHandler,
 
   RenderFrameHostImpl* host_;
 
+  base::ScopedClosureRunner capture_handle_;
+
   DISALLOW_COPY_AND_ASSIGN(EmulationHandler);
 };
 

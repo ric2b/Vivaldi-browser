@@ -30,6 +30,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/process/process.h"
+#include "base/version.h"
 
 #include <inttypes.h>
 #include <ctime>
@@ -79,14 +80,14 @@ class DownloadUpdateDelegate {
 // downloaded data unless an installer successfully started.
 struct InstallerLaunchData {
   InstallerLaunchData(bool delta,
-                      const std::string& version,
+                      const base::Version& version,
                       base::CommandLine command_line);
   ~InstallerLaunchData();
   InstallerLaunchData(const InstallerLaunchData&) = delete;
   InstallerLaunchData& operator=(const InstallerLaunchData&) = delete;
 
   bool delta = false;
-  std::string version;
+  base::Version version;
   base::FilePath download_dir;
   base::CommandLine cmdline;
 };
@@ -107,7 +108,7 @@ base::Process RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
 // DownloadUpdate().
 void CleanDownloadLeftovers();
 
-std::wstring GetPathHash(const base::FilePath& path, bool base64);
+std::wstring GetExeDirHash(bool base64);
 
 }  // namespace winsparkle
 

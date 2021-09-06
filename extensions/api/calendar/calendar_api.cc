@@ -585,7 +585,7 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
 
   calendar::EventRow updatedEvent;
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::EventID eventId;
 
@@ -796,7 +796,7 @@ ExtensionFunction::ResponseAction CalendarDeleteEventFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::EventID eventId;
 
@@ -856,11 +856,11 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
 
   calendar::CalendarRow createCalendar;
 
-  base::string16 name;
+  std::u16string name;
   name = base::UTF8ToUTF16(params->calendar.name);
   createCalendar.set_name(name);
 
-  base::string16 account_id = base::UTF8ToUTF16(params->calendar.account_id);
+  std::u16string account_id = base::UTF8ToUTF16(params->calendar.account_id);
   calendar::AccountID accountId;
 
   if (!GetIdAsInt64(account_id, &accountId)) {
@@ -870,7 +870,7 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
   createCalendar.set_account_id(accountId);
 
   if (params->calendar.description.get()) {
-    base::string16 description =
+    std::u16string description =
         base::UTF8ToUTF16(*params->calendar.description);
     createCalendar.set_description(description);
   }
@@ -984,7 +984,7 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
 
   calendar::Calendar updatedCalendar;
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::CalendarID calendarId;
   if (!GetIdAsInt64(id, &calendarId)) {
@@ -1083,7 +1083,7 @@ ExtensionFunction::ResponseAction CalendarDeleteFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::CalendarID calendarId;
 
@@ -1106,7 +1106,7 @@ void CalendarDeleteFunction::DeleteCalendarComplete(
   if (!results->success) {
     Respond(Error("Error deleting calendar"));
   } else {
-    Respond(NoArguments());
+    Respond(ArgumentList(vivaldi::calendar::Delete::Results::Create(true)));
   }
 }
 
@@ -1140,7 +1140,7 @@ ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
 
   calendar::EventTypeRow create_event_type;
 
-  base::string16 name;
+  std::u16string name;
   name = base::UTF8ToUTF16(params->event_type.name);
   create_event_type.set_name(name);
 
@@ -1178,7 +1178,7 @@ ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
       vivaldi::calendar::EventTypeUpdate::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::EventTypeID event_type_id;
 
@@ -1189,7 +1189,7 @@ ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
   calendar::EventType update_event_type;
 
   if (params->changes.name.get()) {
-    base::string16 name;
+    std::u16string name;
     name = base::UTF8ToUTF16(*params->changes.name);
     update_event_type.name = name;
     update_event_type.updateFields |= calendar::NAME;
@@ -1231,7 +1231,7 @@ ExtensionFunction::ResponseAction CalendarDeleteEventTypeFunction::Run() {
       vivaldi::calendar::DeleteEventType::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::EventTypeID event_type_id;
 
@@ -1264,7 +1264,7 @@ ExtensionFunction::ResponseAction CalendarCreateEventExceptionFunction::Run() {
       vivaldi::calendar::CreateEventException::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->parent_event_id);
   calendar::EventID parent_event_id;
 
@@ -1343,7 +1343,7 @@ ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
 
   NotificationRow row;
   if (params->create_notification.event_id.get()) {
-    base::string16 id;
+    std::u16string id;
     id = base::UTF8ToUTF16(*params->create_notification.event_id);
     calendar::EventID event_id;
 
@@ -1389,7 +1389,7 @@ ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
 
   calendar::UpdateNotificationRow update_notification;
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::EventID eventId;
 
@@ -1457,7 +1457,7 @@ ExtensionFunction::ResponseAction CalendarDeleteNotificationFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::NotificationID notification_id;
 
@@ -1493,7 +1493,7 @@ ExtensionFunction::ResponseAction CalendarCreateInviteFunction::Run() {
 
   InviteRow row;
 
-  base::string16 id;
+  std::u16string id;
 
   id = base::UTF8ToUTF16(params->create_invite.event_id);
   calendar::EventID event_id;
@@ -1539,7 +1539,7 @@ ExtensionFunction::ResponseAction CalendarDeleteInviteFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::InviteID invite_id;
 
@@ -1572,7 +1572,7 @@ ExtensionFunction::ResponseAction CalendarUpdateInviteFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->update_invite.id);
   calendar::InviteID invite_id;
 
@@ -1674,7 +1674,7 @@ ExtensionFunction::ResponseAction CalendarDeleteAccountFunction::Run() {
       vivaldi::calendar::DeleteAccount::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::AccountID accountId;
 
@@ -1709,7 +1709,7 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
 
   AccountRow row;
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
-  base::string16 id;
+  std::u16string id;
   id = base::UTF8ToUTF16(params->id);
   calendar::AccountID accountId;
 
@@ -1720,14 +1720,14 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
   row.id = accountId;
 
   if (params->changes.name.get()) {
-    base::string16 name;
+    std::u16string name;
     name = base::UTF8ToUTF16(*params->changes.name);
     row.name = name;
     row.updateFields |= calendar::ACCOUNT_NAME;
   }
 
   if (params->changes.username.get()) {
-    base::string16 username;
+    std::u16string username;
     username = base::UTF8ToUTF16(*params->changes.username);
     row.username = username;
     row.updateFields |= calendar::ACCOUNT_USERNAME;

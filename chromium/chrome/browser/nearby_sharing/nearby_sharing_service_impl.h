@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "ash/public/cpp/session/session_observer.h"
+#include "base/callback_helpers.h"
 #include "base/cancelable_callback.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/ptr_util.h"
@@ -115,6 +116,7 @@ class NearbySharingServiceImpl
               StatusCodesCallback status_codes_callback) override;
   void Cancel(const ShareTarget& share_target,
               StatusCodesCallback status_codes_callback) override;
+  bool DidLocalUserCancelTransfer(const ShareTarget& share_target) override;
   void Open(const ShareTarget& share_target,
             StatusCodesCallback status_codes_callback) override;
   void OpenURL(GURL url) override;
@@ -367,6 +369,8 @@ class NearbySharingServiceImpl
   void OnStartAdvertisingResult(
       bool used_device_name,
       NearbyConnectionsManager::ConnectionsStatus status);
+  void OnStopAdvertisingResult(
+      NearbyConnectionsManager::ConnectionsStatus status);
   void OnStartDiscoveryResult(
       NearbyConnectionsManager::ConnectionsStatus status);
   void SetInHighVisibility(bool in_high_visibility);
@@ -377,6 +381,9 @@ class NearbySharingServiceImpl
   void DoCancel(ShareTarget share_target,
                 StatusCodesCallback status_codes_callback,
                 bool is_initiator_of_cancellation);
+
+  void AbortAndCloseConnectionIfNecessary(const TransferMetadata::Status status,
+                                          const ShareTarget& share_target);
 
   Profile* profile_;
   std::unique_ptr<NearbyConnectionsManager> nearby_connections_manager_;
@@ -446,7 +453,9 @@ class NearbySharingServiceImpl
       outgoing_share_target_info_map_;
   // For metrics. The IDs of ShareTargets that are cancelled while trying to
   // establish an outgoing connection.
-  base::flat_set<base::UnguessableToken> cancelled_share_target_ids_;
+  base::flat_set<base::UnguessableToken> all_cancelled_share_target_ids_;
+  // The IDs of ShareTargets that we cancelled the transfer to.
+  base::flat_set<base::UnguessableToken> locally_cancelled_share_target_ids_;
   // A map from endpoint ID to endpoint info from discovered, contact-based
   // advertisements that could not decrypt any available public certificates.
   // During discovery, if certificates are downloaded, we revist this map and
@@ -484,6 +493,17 @@ class NearbySharingServiceImpl
   base::Time scanning_start_timestamp_;
   // True when we are advertising with a device name visible to everyone.
   bool in_high_visibility = false;
+  // The time attachments are sent after a share target is selected. This is
+  // used to time the process from selecting a share target to writing the
+  // introduction frame (last frame before receiver gets notified).
+  base::TimeTicks send_attachments_timestamp_;
+  // Whether an incoming share has been accepted and we are waiting to log the
+  // time from acceptance to the start of payload transfer.
+  bool is_waiting_to_record_accept_to_transfer_start_metric_ = false;
+  // Time at which an incoming transfer was accepted. This is used to calculate
+  // the time between an incoming share being accepted and the first payload
+  // byte being processed.
+  base::TimeTicks incoming_share_accepted_timestamp_;
 
   int recent_nearby_process_unexpected_shutdown_count_ = 0;
   base::OneShotTimer clear_recent_nearby_process_shutdown_count_timer_;

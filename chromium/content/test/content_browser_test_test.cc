@@ -214,6 +214,9 @@ IN_PROC_BROWSER_TEST_F(MockContentBrowserTest, DISABLED_CrashTest) {
 // This is disabled due to flakiness: https://crbug.com/1086372
 #if defined(OS_WIN)
 #define MAYBE_RunMockTests DISABLED_RunMockTests
+#elif defined(OS_LINUX) && defined(THREAD_SANITIZER)
+// This is disabled because it fails on bionic: https://crbug.com/1202220
+#define MAYBE_RunMockTests DISABLED_RunMockTests
 #else
 #define MAYBE_RunMockTests RunMockTests
 #endif
@@ -278,10 +281,10 @@ class ContentBrowserTestSanityTest : public ContentBrowserTest {
   void Test() {
     GURL url = GetTestUrl(".", "simple_page.html");
 
-    base::string16 expected_title(base::ASCIIToUTF16("OK"));
+    std::u16string expected_title(u"OK");
     TitleWatcher title_watcher(shell()->web_contents(), expected_title);
     EXPECT_TRUE(NavigateToURL(shell(), url));
-    base::string16 title = title_watcher.WaitAndGetTitle();
+    std::u16string title = title_watcher.WaitAndGetTitle();
     EXPECT_EQ(expected_title, title);
   }
 };

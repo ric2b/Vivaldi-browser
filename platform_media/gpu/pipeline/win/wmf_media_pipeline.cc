@@ -13,6 +13,7 @@
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"

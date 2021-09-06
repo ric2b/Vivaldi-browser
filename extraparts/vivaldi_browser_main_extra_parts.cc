@@ -125,8 +125,9 @@ void VivaldiBrowserMainExtraParts::
 
 #if !defined(OS_ANDROID)
   vivaldi::LazyLoadServiceFactory::GetInstance();
-  VivaldiTranslateClient::LoadTranslationScript();
 #endif
+
+  VivaldiTranslateClient::LoadTranslationScript();
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
@@ -140,8 +141,10 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
   Profile* profile =
       g_browser_process->profile_manager()->GetActiveUserProfile();
 
-  translate_language_list_ =
-      std::make_unique<translate::VivaldiTranslateLanguageList>(profile);
+  if (vivaldi::IsVivaldiRunning()) {
+    translate_language_list_ =
+        std::make_unique<translate::VivaldiTranslateLanguageList>(profile);
+  }
 
 #if !defined(OS_ANDROID)
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();

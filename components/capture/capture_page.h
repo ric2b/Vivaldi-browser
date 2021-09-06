@@ -8,8 +8,8 @@
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "ui/gfx/geometry/rect.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 class SkBitmap;
 
@@ -17,7 +17,6 @@ namespace vivaldi {
 
 class CapturePage : private content::WebContentsObserver {
  public:
-
   struct CaptureParams {
     gfx::Rect rect;
     gfx::Size target_size;
@@ -57,6 +56,19 @@ class CapturePage : private content::WebContentsObserver {
   static void Capture(content::WebContents* contents,
                       const CaptureParams& params,
                       DoneCallback callback);
+
+  // Start capturing the given area of the window corresponding to the given
+  // WebContents and send the result to the callback. The rect should be in
+  // device-independent pixels. The callback can be called either synchronously
+  // or asynchronously on the original thread. The size of the captured bitmap
+  // matches the number of physical pixels that covers the area.
+  // device_scale_factor gives the scaling from device-independent pixels to
+  // physical ones.
+  using CaptureVisibleCallback = base::OnceCallback<
+      void(bool success, float device_scale_factor, const SkBitmap&)>;
+  static void CaptureVisible(content::WebContents* contents,
+                             const gfx::RectF& rect,
+                             CaptureVisibleCallback callback);
 
  private:
   explicit CapturePage();

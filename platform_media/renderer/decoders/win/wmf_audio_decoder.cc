@@ -17,10 +17,6 @@ WMFAudioDecoder::WMFAudioDecoder(
 WMFAudioDecoder::~WMFAudioDecoder() {
 }
 
-std::string WMFAudioDecoder::GetDisplayName() const {
-  return "WMFAudioDecoder";
-}
-
 void WMFAudioDecoder::Initialize(const AudioDecoderConfig& config,
                                  CdmContext* cdm_context,
                                  InitCB init_cb,

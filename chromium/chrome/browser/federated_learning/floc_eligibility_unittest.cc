@@ -8,6 +8,7 @@
 #include "chrome/browser/page_load_metrics/observers/ad_metrics/floc_page_load_metrics_observer.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/federated_learning/features/features.h"
 #include "components/federated_learning/floc_sorting_lsh_clusters_service.h"
 #include "components/history/content/browser/history_context_helper.h"
 #include "components/history/core/browser/history_service.h"
@@ -53,26 +54,27 @@ class FlocEligibilityUnitTest : public ChromeRenderViewHostTestHarness {
   }
 
   bool IsUrlVisitEligibleToComputeFloc(const GURL& url) {
-    history::QueryURLResult result = QueryUrl(url);
-    EXPECT_EQ(1u, result.visits.size());
-    return result.visits[0].floc_allowed;
-  }
+    bool eligible = false;
 
-  history::QueryURLResult QueryUrl(const GURL& url) {
-    history::QueryURLResult query_url_result;
+    history::QueryOptions options;
+    options.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
 
     base::RunLoop run_loop;
     base::CancelableTaskTracker tracker;
-    history_service()->QueryURL(
-        url, /*want_visits=*/true,
-        base::BindLambdaForTesting([&](history::QueryURLResult result) {
-          query_url_result = std::move(result);
+
+    history_service()->QueryHistory(
+        std::u16string(), options,
+        base::BindLambdaForTesting([&](history::QueryResults results) {
+          ASSERT_EQ(1u, results.size());
+          eligible = results[0].content_annotations().annotation_flags &
+                     history::VisitContentAnnotationFlag::kFlocEligibleRelaxed;
           run_loop.Quit();
         }),
         &tracker);
+
     run_loop.Run();
 
-    return query_url_result;
+    return eligible;
   }
 
   void SimulateResourceDataUseUpdate(bool is_ad_resource) {
@@ -90,7 +92,7 @@ class FlocEligibilityUnitTest : public ChromeRenderViewHostTestHarness {
 
   void NavigateToPage(const GURL& url,
                       bool publicly_routable,
-                      bool floc_feature_policy_enabled) {
+                      bool floc_permissions_policy_enabled) {
     auto simulator = content::NavigationSimulator::CreateBrowserInitiated(
         url, GetWebContents());
     simulator->SetTransition(ui::PageTransition::PAGE_TRANSITION_TYPED);
@@ -101,9 +103,9 @@ class FlocEligibilityUnitTest : public ChromeRenderViewHostTestHarness {
       simulator->SetSocketAddress(net::IPEndPoint(address, /*port=*/0));
     }
 
-    if (!floc_feature_policy_enabled) {
-      simulator->SetFeaturePolicyHeader(
-          {{blink::mojom::FeaturePolicyFeature::kInterestCohort,
+    if (!floc_permissions_policy_enabled) {
+      simulator->SetPermissionsPolicyHeader(
+          {{blink::mojom::PermissionsPolicyFeature::kInterestCohort,
             /*values=*/{}, /*matches_all_origins=*/false,
             /*matches_opaque_src=*/false}});
     }
@@ -143,7 +145,7 @@ class FlocEligibilityUnitTest : public ChromeRenderViewHostTestHarness {
 TEST_F(FlocEligibilityUnitTest, OnInterestCohortApiUsed) {
   GURL url("https://foo.com");
   NavigateToPage(url, /*publicly_routable=*/true,
-                 /*floc_feature_policy_enabled=*/true);
+                 /*floc_permissions_policy_enabled=*/true);
 
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 
@@ -154,18 +156,18 @@ TEST_F(FlocEligibilityUnitTest, OnInterestCohortApiUsed) {
 TEST_F(FlocEligibilityUnitTest, OnAdResourceObserved) {
   GURL url("https://foo.com");
   NavigateToPage(url, /*publicly_routable=*/true,
-                 /*floc_feature_policy_enabled=*/true);
+                 /*floc_permissions_policy_enabled=*/true);
 
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 
   SimulateResourceDataUseUpdate(/*is_ad_resource=*/true);
-  EXPECT_TRUE(IsUrlVisitEligibleToComputeFloc(url));
+  EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 }
 
 TEST_F(FlocEligibilityUnitTest, OnNonAdResourceObserved) {
   GURL url("https://foo.com");
   NavigateToPage(url, /*publicly_routable=*/true,
-                 /*floc_feature_policy_enabled=*/true);
+                 /*floc_permissions_policy_enabled=*/true);
 
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 
@@ -176,7 +178,7 @@ TEST_F(FlocEligibilityUnitTest, OnNonAdResourceObserved) {
 TEST_F(FlocEligibilityUnitTest, StopObservingPrivateIP) {
   GURL url("https://foo.com");
   NavigateToPage(url, /*publicly_routable=*/false,
-                 /*floc_feature_policy_enabled=*/true);
+                 /*floc_permissions_policy_enabled=*/true);
 
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 
@@ -187,10 +189,10 @@ TEST_F(FlocEligibilityUnitTest, StopObservingPrivateIP) {
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 }
 
-TEST_F(FlocEligibilityUnitTest, StopObservingFlocFeaturePolicyDisabled) {
+TEST_F(FlocEligibilityUnitTest, StopObservingFlocPermissionsPolicyDisabled) {
   GURL url("https://foo.com");
   NavigateToPage(url, /*publicly_routable=*/true,
-                 /*floc_feature_policy_enabled=*/false);
+                 /*floc_permissions_policy_enabled=*/false);
 
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 
@@ -198,6 +200,42 @@ TEST_F(FlocEligibilityUnitTest, StopObservingFlocFeaturePolicyDisabled) {
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 
   GetFlocEligibilityObserver()->OnInterestCohortApiUsed();
+  EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
+}
+
+class FlocEligibilityUnitTestPagesWithAdResourcesDefaultIncluded
+    : public FlocEligibilityUnitTest {
+ public:
+  FlocEligibilityUnitTestPagesWithAdResourcesDefaultIncluded() {
+    feature_list_.InitAndEnableFeature(
+        kFlocPagesWithAdResourcesDefaultIncludedInFlocComputation);
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(FlocEligibilityUnitTestPagesWithAdResourcesDefaultIncluded,
+       OnAdResourceObserved) {
+  GURL url("https://foo.com");
+  NavigateToPage(url, /*publicly_routable=*/true,
+                 /*floc_permissions_policy_enabled=*/true);
+
+  EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
+
+  SimulateResourceDataUseUpdate(/*is_ad_resource=*/true);
+  EXPECT_TRUE(IsUrlVisitEligibleToComputeFloc(url));
+}
+
+TEST_F(FlocEligibilityUnitTestPagesWithAdResourcesDefaultIncluded,
+       OnNonAdResourceObserved) {
+  GURL url("https://foo.com");
+  NavigateToPage(url, /*publicly_routable=*/true,
+                 /*floc_permissions_policy_enabled=*/true);
+
+  EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
+
+  SimulateResourceDataUseUpdate(/*is_ad_resource=*/false);
   EXPECT_FALSE(IsUrlVisitEligibleToComputeFloc(url));
 }
 
@@ -229,7 +267,7 @@ class FlocEligibilityIncognitoUnitTest : public FlocEligibilityUnitTest {
 TEST_F(FlocEligibilityIncognitoUnitTest, SkipSettingFlocAllowedInIncognito) {
   GURL url("https://foo.com");
   NavigateToPage(url, /*publicly_routable=*/true,
-                 /*floc_feature_policy_enabled=*/true);
+                 /*floc_permissions_policy_enabled=*/true);
 
   SimulateResourceDataUseUpdate(/*is_ad_resource=*/true);
 

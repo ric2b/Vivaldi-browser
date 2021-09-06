@@ -10,7 +10,6 @@
   <release seq="1" allow_pseudo="false">
     <includes>
       <include name="VIVALDI_MANIFEST_JS" file="../../vivapp/src/manifest.json" type="BINDATA" />
-      <include name="IDR_VIVALDI_VERSION_UI_JS" file="version_ui/vivaldi_about_version.js" type="BINDATA" compress="gzip" />
       <part file="../../ui/webui/vivaldi_game_resources.grdp" />
     </includes>
   </release>

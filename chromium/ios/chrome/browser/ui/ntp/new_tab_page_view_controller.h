@@ -8,17 +8,21 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_controlling.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
 
 @class ContentSuggestionsHeaderViewController;
 @class ContentSuggestionsViewController;
+@class DiscoverFeedMetricsRecorder;
 @class DiscoverFeedWrapperViewController;
 @protocol NewTabPageContentDelegate;
 @protocol OverscrollActionsControllerDelegate;
+@class ViewRevealingVerticalPanHandler;
 
 // View controller containing all the content presented on a standard,
 // non-incognito new tab page.
 @interface NewTabPageViewController
     : UIViewController <ContentSuggestionsCollectionControlling,
+                        ThumbStripSupporting,
                         UIScrollViewDelegate>
 
 // View controller wrapping the Discover feed.
@@ -35,10 +39,18 @@
 // Delegate for actions relating to the NTP content.
 @property(nonatomic, weak) id<NewTabPageContentDelegate> ntpContentDelegate;
 
+// The pan gesture handler to notify of scroll events happening in this view
+// controller.
+@property(nonatomic, weak) ViewRevealingVerticalPanHandler* panGestureHandler;
+
 // Identity disc shown in the NTP.
 // TODO(crbug.com/1170995): Remove once the Feed header properly supports
 // ContentSuggestions.
 @property(nonatomic, weak) UIButton* identityDiscButton;
+
+// Discover Feed metrics recorder.
+@property(nonatomic, strong)
+    DiscoverFeedMetricsRecorder* discoverFeedMetricsRecorder;
 
 // Initializes view controller with NTP content view controllers.
 // |discoverFeedViewController| represents the Discover feed for suggesting
@@ -61,6 +73,9 @@
 // Sets the feed collection contentOffset from the saved state to |offset| to
 // set the initial scroll position.
 - (void)setSavedContentOffset:(CGFloat)offset;
+
+// Sets the feed collection contentOffset to the top of the page.
+- (void)setContentOffsetToTop;
 
 // Updates the ContentSuggestionsViewController and its header for the current
 // layout.

@@ -61,11 +61,11 @@ void DocumentBlockedInterstitial::PopulateInterstitialStrings(
     base::DictionaryValue* load_time_data) {
   CHECK(load_time_data);
 
-  base::string16 blocker_name =
+  std::u16string blocker_name =
       blocking_group_ == RuleGroup::kTrackingRules
           ? l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_TRACKER_BLOCKER)
           : l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_AD_BLOCKER);
-  base::string16 block_type =
+  std::u16string block_type =
       blocking_group_ == RuleGroup::kTrackingRules
           ? l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_TRACKERS)
           : l10n_util::GetStringUTF16(IDS_DOCUMENT_BLOCKED_ADS);

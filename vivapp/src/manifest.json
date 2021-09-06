@@ -1,6 +1,6 @@
 {
   "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDZkVvA5GwPYgY0TLcWEuM3yp/SnK7aZul39rvMTTAXd8YUgd1CpoFSoparbHO9qcrp2o4dzKDuIlJchAZhd8Rc2BgC9YVceW8s0VkhbPxuECKPWjb+VzxV1u9f6OhD6oNtrkaKBEJRFQVHe29P+vaOwiFLuR9pkCo62vYnMK8fGwIDAQAB",
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "Vivaldi",
   "minimum_chrome_version": "32.0.1700.0",
   "default_locale":"en",
@@ -15,19 +15,32 @@
         "background-common-bundle.js",
         "background-bundle.js"
       ]
-    },
-    "content_security_policy": "script-src 'self' http://localhost:35729/; object-src 'self'"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' http://localhost:35729/; object-src 'self'"
   },
   "display_in_launcher": true,
   "display_in_new_tab_page": true,
-  "offline_enabled": true,
-  "web_accessible_resources": [
-    "rss/showfeed.html",
-    "rss/showopml.html",
-    "rss/hidepage.css"
-  ],
-  "permissions": [
+  "host_permissions": [
     "<all_urls>",
+    "chrome://favicon/",
+    "chrome://game/",
+    "chrome://theme/",
+    "chrome://vivaldi-data/",
+    "chrome://vivaldi-webui/"
+  ],
+  "offline_enabled": true,
+  "web_accessible_resources": [{
+    "resources": [
+      "rss/showfeed.html",
+      "rss/showopml.html",
+      "rss/hidepage.css"
+    ],
+    "matches": [],
+    "extension_ids": []
+  }],
+  "permissions": [
     "accessibilityFeatures.read",
     "accessibilityFeatures.modify",
     "accessKeys",
@@ -44,11 +57,6 @@
     "calendar",
     "contacts",
     "contentBlocking",
-    "chrome://favicon/",
-    "chrome://theme/",
-    "chrome://vivaldi-data/",
-    "chrome://vivaldi-webui/",
-    "chrome://game/",
     "clipboardRead",
     "commandLinePrivate",
     "contentSettings",
@@ -85,6 +93,7 @@
     "privacy",
     "runtimePrivate",
     "savedpasswords",
+    "scripting",
     "sessions",
     "sessionsPrivate",
     "settings",
@@ -112,6 +121,7 @@
         "name": "storage",
         "accessible_resources": [
           "browser.html",
+          "saga/saga.html",
           "components/thumbnail/capture.html",
           "components/chat/chat.html",
           "components/settings/settings.html",

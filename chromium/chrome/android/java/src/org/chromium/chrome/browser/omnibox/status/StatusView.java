@@ -30,12 +30,13 @@ import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * StatusView is a location bar's view displaying status (icons and/or text).
@@ -155,7 +156,9 @@ public class StatusView extends LinearLayout {
         // This is to prevent the visibility of the view being changed both implicitly here and
         // explicitly in setStatusIconShown. The visibility should only be set here through code not
         // related to the dse icon.
-        if (mLocationBarDataProvider != null
+        // Since the tablet never adjusts the alpha manually we want the implicit behavior.
+        if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())
+                && mLocationBarDataProvider != null
                 && mSearchEngineLogoUtils.shouldShowSearchEngineLogo(
                         mLocationBarDataProvider.isIncognito())) {
             return;
@@ -208,10 +211,16 @@ public class StatusView extends LinearLayout {
 
     /**
      * Start animating transition of status icon.
+     * @param transitionType The animation transition type for the icon.
+     * @param animationFinishedCallback The callback to be run after the status icon has been
+     *                                  successfully set.
      */
-    private void animateStatusIcon(@IconTransitionType int transitionType) {
+    private void animateStatusIcon(
+            @IconTransitionType int transitionType, @Nullable Runnable animationFinishedCallback) {
         Drawable targetIcon = mStatusIconDrawable;
         boolean wantIconHidden = mStatusIconDrawable == null;
+        // We only handle additional callback after rotation.
+        assert transitionType == IconTransitionType.ROTATE || animationFinishedCallback == null;
 
         // Ensure proper handling of animations.
         // Possible variants:
@@ -240,7 +249,7 @@ public class StatusView extends LinearLayout {
 
         // Action 3: Specify icon content. Use TransitionDrawable whenever object is visible.
         if (targetIcon != null) {
-            if (ChromeApplication.isVivaldi()) mIconView.setVisibility(VISIBLE);
+            if (ChromeApplicationImpl.isVivaldi()) mIconView.setVisibility(VISIBLE);
             if (!isIconHidden) {
                 Drawable existingDrawable = mIconView.getDrawable();
                 if (existingDrawable instanceof TransitionDrawable
@@ -269,7 +278,13 @@ public class StatusView extends LinearLayout {
                                     () -> { newImage.startTransition(ICON_ANIMATION_DURATION_MS); })
                             .withEndAction(() -> {
                                 mIconView.setRotation(0);
-                                mIconView.setImageDrawable(targetIcon);
+                                // Only update status icon if it is still the current icon.
+                                if (mStatusIconDrawable == targetIcon) {
+                                    mIconView.setImageDrawable(targetIcon);
+                                    if (animationFinishedCallback != null) {
+                                        animationFinishedCallback.run();
+                                    }
+                                }
                             })
                             .start();
                 }
@@ -326,10 +341,17 @@ public class StatusView extends LinearLayout {
         mAnimationsEnabled = enabled;
     }
 
-    void setStatusIconResources(
-            @Nullable Drawable statusIconDrawable, @IconTransitionType int transitionType) {
+    /**
+     * Sets the Drawable to be used as the status icon.
+     * @param statusIconDrawable The Drawable.
+     * @param transitionType The animation transition type for the icon.
+     * @param animationFinishedCallback The callback to be run after the new drawable has been
+     *                                  successfully set.
+     */
+    void setStatusIconResources(@Nullable Drawable statusIconDrawable,
+            @IconTransitionType int transitionType, @Nullable Runnable animationFinishedCallback) {
         mStatusIconDrawable = statusIconDrawable;
-        animateStatusIcon(transitionType);
+        animateStatusIcon(transitionType, animationFinishedCallback);
     }
 
     /** Specify the status icon alpha. */

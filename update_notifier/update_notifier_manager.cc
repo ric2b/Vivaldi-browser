@@ -18,6 +18,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/i18n/rtl.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
@@ -35,32 +36,24 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/language/core/browser/pref_names.h"
-#include "components/prefs/json_pref_store.h"
-#include "components/prefs/pref_filter.h"
 #include "components/version_info/version_info_values.h"
 #include "ui/base/ui_base_paths.h"
 
 #include "app/vivaldi_constants.h"
 #include "base/vivaldi_switches.h"
 #include "browser/init_sparkle.h"
+#include "installer/win/detached_thread.h"
+#include "installer/win/vivaldi_install_l10n.h"
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
 #include "update_notifier/thirdparty/winsparkle/src/download.h"
-#include "update_notifier/thirdparty/winsparkle/src/settings.h"
-#include "update_notifier/thirdparty/winsparkle/src/threads.h"
 #include "update_notifier/thirdparty/winsparkle/src/ui.h"
-#include "update_notifier/thirdparty/winsparkle/src/updatechecker.h"
 #include "update_notifier/thirdparty/winsparkle/src/updatedownloader.h"
-#include "update_notifier/update_notifier_utils.h"
 #include "update_notifier/update_notifier_window.h"
+#include "vivaldi/update_notifier/update_notifier_strings.h"
 
 namespace vivaldi_update_notifier {
 
 namespace {
-
-const wchar_t kVivaldiProductName[] = L"" PRODUCT_NAME;
-const wchar_t kVivaldiProductVersion[] = L"" VIVALDI_VERSION;
-
-const wchar_t kUpdateRegPath[] = L"Software\\Vivaldi\\AutoUpdate";
 
 constexpr base::TimeDelta kPeriodicAutomaticCheckInterval =
     base::TimeDelta::FromDays(1);
@@ -72,6 +65,13 @@ constexpr base::TimeDelta kOldDownloadsCleanupDelay =
     base::TimeDelta::FromSeconds(30);
 
 constexpr bool g_silent_download = true;
+
+constexpr base::win::i18n::LanguageSelector::LangToOffset
+    kLanguageOffsetPairs[] = {
+#define HANDLE_LANGUAGE(l_, o_) {L## #l_, o_},
+        DO_LANGUAGES
+#undef HANDLE_LANGUAGE
+};
 
 bool SafeGetTokenInformation(HANDLE token,
                              TOKEN_INFORMATION_CLASS token_information_class,
@@ -219,22 +219,6 @@ base::win::ScopedHandle MakeGlobalEvent(const std::wstring& event_name) {
   return event_handle;
 }
 
-bool PathProvider(int key, base::FilePath* result) {
-  base::FilePath cur;
-  switch (key) {
-    case ui::DIR_LOCALES:
-      if (!base::PathService::Get(base::DIR_MODULE, &cur))
-        return false;
-      cur = cur.Append(FILE_PATH_LITERAL("locales"));
-      break;
-    default:
-      return false;
-  }
-
-  *result = cur;
-  return true;
-}
-
 // NOTE(jarle@vivaldi.com): High DPI enabling functions source code is borrowed
 // from chrome_exe_main_win.cc.
 
@@ -269,39 +253,36 @@ void EnableHighDPISupport() {
   }
 }
 
-void InitWinsparkle(const base::CommandLine& command_line,
-                    const base::FilePath& exe_dir,
-                    const std::string& language,
-                    winsparkle::UIDelegate& ui_delegate) {
-  init_sparkle::Config init_config = init_sparkle::GetConfig(command_line);
-  winsparkle::Config config;
-  config.appcast_url = init_config.appcast_url;
-  config.registry_path = kUpdateRegPath;
-  config.language = language;
-  config.app_name = kVivaldiProductName;
-  config.app_version = kVivaldiProductVersion;
-  config.exe_dir = exe_dir;
-#if !defined(OFFICIAL_BUILD)
-  std::wstring debug_version = command_line.GetSwitchValueNative(kDebugVersion);
-  if (!debug_version.empty()) {
-    config.app_version = std::move(debug_version);
+std::wstring ReadLocaleStateLanguage() {
+  base::FilePath local_state_path;
+  CHECK(base::PathService::Get(chrome::FILE_LOCAL_STATE, &local_state_path));
+  std::string json_text;
+  if (!base::ReadFileToString(local_state_path, &json_text)) {
+    LOG(WARNING) << "Failed to read " << local_state_path;
+    return std::wstring();
   }
-#endif
-  winsparkle::InitConfig(std::move(config));
-  winsparkle::UI::Init(ui_delegate);
+  base::Optional<base::Value> json = base::JSONReader::Read(json_text);
+  if (!json) {
+    LOG(WARNING) << "Failed to parse " << local_state_path << " as json";
+    return std::wstring();
+  }
+  base::Value* value = json->FindPath(language::prefs::kApplicationLocale);
+  if (!value || !value->is_string())
+    return std::wstring();
+  std::string language = value->GetString();
+  return base::UTF8ToWide(language);
 }
 
 }  // namespace
 
 class UpdateNotifierManager::UpdateCheckThread
-    : public winsparkle::DetachedThread {
+    : public vivaldi::DetachedThread {
  public:
   UpdateCheckThread(int download_flags) : download_flags_(download_flags) {}
 
   void Run() override {
     winsparkle::Error error;
-    std::unique_ptr<winsparkle::Appcast> appcast =
-        winsparkle::CheckForUpdates(download_flags_, error);
+    std::unique_ptr<winsparkle::Appcast> appcast = CheckForUpdates(error);
     if (error) {
       LOG(ERROR) << error.log_message();
     }
@@ -311,11 +292,38 @@ class UpdateNotifierManager::UpdateCheckThread
                                   std::move(appcast), std::move(error)));
   }
 
+  std::unique_ptr<winsparkle::Appcast> CheckForUpdates(
+      winsparkle::Error& error) {
+    if (error)
+      return nullptr;
+
+    GURL url = init_sparkle::GetAppcastUrl();
+    LOG(INFO) << "Downloading an appcast from " << url.spec();
+    winsparkle::FileDownloader downloader(url, download_flags_, error);
+    std::string appcast_xml = downloader.FetchAll(error);
+    if (error)
+      return nullptr;
+    if (appcast_xml.size() == 0) {
+      error.set(winsparkle::Error::kFormat, "Appcast XML data incomplete.");
+      return nullptr;
+    }
+
+    std::unique_ptr<winsparkle::Appcast> appcast =
+        winsparkle::Appcast::Load(appcast_xml, error);
+    if (!appcast)
+      return nullptr;
+    DCHECK(appcast->IsValid());
+    if (!appcast->IsValid())
+      return nullptr;
+
+    return appcast;
+  }
+
   bool download_flags_ = 0;
 };
 
 class UpdateNotifierManager::UpdateDownloadThread
-    : public winsparkle::DetachedThread,
+    : public vivaldi::DetachedThread,
       public winsparkle::DownloadUpdateDelegate {
  public:
   UpdateDownloadThread(JobId job_id, const winsparkle::Appcast& appcast)
@@ -404,7 +412,7 @@ void UpdateNotifierManager::InitEvents(bool& already_runs) {
     check_for_updates_event_name = kNetworkInstallerUniquenessEventName;
   } else {
     check_for_updates_event_name = vivaldi::GetUpdateNotifierEventName(
-        kCheckForUpdatesEventPrefix, &exe_dir_);
+        kCheckForUpdatesEventPrefix, winsparkle::GetExeDir());
   }
   base::win::ScopedHandle check_for_updates_event_handle(
       CreateEvent(nullptr, TRUE, FALSE, check_for_updates_event_name.c_str()));
@@ -425,8 +433,8 @@ void UpdateNotifierManager::InitEvents(bool& already_runs) {
 
   if (!winsparkle::g_install_mode) {
     // Update listen for quit events from the installer.
-    std::wstring quit_event_name =
-        vivaldi::GetUpdateNotifierEventName(kQuitEventPrefix, &exe_dir_);
+    std::wstring quit_event_name = vivaldi::GetUpdateNotifierEventName(
+        kQuitEventPrefix, winsparkle::GetExeDir());
     base::win::ScopedHandle quit_event_handle(
         CreateEvent(nullptr, TRUE, FALSE, quit_event_name.c_str()));
     PCHECK(quit_event_handle.IsValid());
@@ -442,7 +450,7 @@ void UpdateNotifierManager::InitEvents(bool& already_runs) {
       // For system-wide installations listen to the global event to exit the
       // notifier for any user during update or uninstall.
       std::wstring global_quit_event_name = vivaldi::GetUpdateNotifierEventName(
-          kGlobalQuitEventPrefix, &exe_dir_);
+          kGlobalQuitEventPrefix, winsparkle::GetExeDir());
       base::win::ScopedHandle global_quit_handle =
           MakeGlobalEvent(global_quit_event_name);
       if (global_quit_handle.IsValid()) {
@@ -458,17 +466,7 @@ void UpdateNotifierManager::InitEvents(bool& already_runs) {
   }
 }
 
-ExitCode UpdateNotifierManager::RunNotifier(base::FilePath exe_dir) {
-  if (winsparkle::g_install_mode) {
-    DCHECK(exe_dir.empty());
-  } else {
-    DCHECK(!exe_dir.empty());
-    exe_dir_ = std::move(exe_dir);
-  }
-
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-
+ExitCode UpdateNotifierManager::RunNotifier() {
   bool already_runs = false;
   InitEvents(already_runs);
   if (already_runs) {
@@ -486,35 +484,14 @@ ExitCode UpdateNotifierManager::RunNotifier(base::FilePath exe_dir) {
   }
 
   EnableHighDPISupport();
-
-  base::PathService::RegisterProvider(PathProvider, ui::PATH_START,
-                                      ui::PATH_END);
   chrome::RegisterPathProvider();
 
-  std::string language;
-  if (!winsparkle::g_install_mode) {
-    base::FilePath local_state_path;
-    CHECK(base::PathService::Get(chrome::FILE_LOCAL_STATE, &local_state_path));
-    scoped_refptr<JsonPrefStore> local_state =
-        new JsonPrefStore(local_state_path, nullptr, main_thread_runner_);
-    local_state->ReadPrefs();
-    const base::Value* language_value = nullptr;
-    if (local_state->GetValue(language::prefs::kApplicationLocale,
-                              &language_value)) {
-      language_value->GetAsString(&language);
-    }
-  }
-#if !defined(OFFICIAL_BUILD)
-  if (command_line.HasSwitch(kDebugLanguage)) {
-    language = command_line.GetSwitchValueASCII(kDebugLanguage);
-  }
-#endif
-  language = InitTranslations(std::move(language));
-  LOG(INFO) << "Language to use: " << language;
+  vivaldi::InitInstallerLanguage(
+      kLanguageOffsetPairs,
+      winsparkle::g_install_mode ? nullptr : &ReadLocaleStateLanguage);
+  winsparkle::UI::Init(*this);
 
-  InitWinsparkle(command_line, exe_dir_, language, *this);
-
-  if (kUseTaskScheduler) {
+  if (winsparkle::IsUsingTaskScheduler()) {
     // When we run the first time after been enabled from the installer, this
     // may fail as the installer may still be running preventing to remove its
     // setup.exe file. But then we will remove the leftovers the next time we
@@ -608,7 +585,7 @@ void UpdateNotifierManager::StartUpdateCheck() {
     // through caches yet.
     download_flags = winsparkle::Download_NoCached;
   }
-  winsparkle::DetachedThread::Start(
+  vivaldi::DetachedThread::Start(
       std::make_unique<UpdateCheckThread>(download_flags));
 }
 
@@ -622,19 +599,16 @@ void UpdateNotifierManager::OnUpdateCheckResult(
   // this version to allow the user to reconsider. This is the semantics in
   // Sparkle for Mac.
   if (appcast && !winsparkle::g_manual_check) {
-    std::string toSkip = winsparkle::Settings::ReadConfigValue(
-        winsparkle::ConfigKey::kSkipThisVersion);
-    if (toSkip == appcast->Version) {
+    base::Version toSkip(winsparkle::ReadRegistryIem(
+        winsparkle::RegistryItem::kSkipThisVersion));
+    if (toSkip.IsValid() && toSkip == appcast->Version) {
       appcast.reset();
     }
   }
 
-  if (appcast && !winsparkle::g_install_mode) {
-    const std::string current_version =
-        base::WideToUTF8(winsparkle::GetConfig().app_version);
-
+  if (appcast && winsparkle::g_app_version.IsValid()) {
     // Check if our version is out of date.
-    if (winsparkle::CompareVersions(current_version, appcast->Version) >= 0) {
+    if (appcast->Version <= winsparkle::g_app_version) {
       // The same or newer version is already installed.
       appcast.reset();
     }
@@ -713,7 +687,7 @@ void UpdateNotifierManager::OnNotificationAcceptance() {
 void UpdateNotifierManager::StartDownload() {
   DCHECK(main_thread_runner_->RunsTasksInCurrentSequence());
 
-  if (!kUseTaskScheduler) {
+  if (!winsparkle::IsUsingTaskScheduler()) {
     // Make sure that at this point no downloads from the previous invocation of
     // the notifier process exists.
     EnsureOldDownloadsDeleted();
@@ -736,7 +710,7 @@ void UpdateNotifierManager::StartDownload() {
                            winsparkle::Error());
     return;
   }
-  winsparkle::DetachedThread::Start(
+  vivaldi::DetachedThread::Start(
       std::make_unique<UpdateDownloadThread>(job_id, *appcast_));
 }
 
@@ -852,14 +826,10 @@ void UpdateNotifierManager::FinishCheck() {
   base::TimeDelta check_duration = base::Time::Now() - check_start_time_;
   LOG(INFO) << "Update check finished in " << check_duration;
 
-  if (!kUseTaskScheduler && !winsparkle::g_install_mode &&
+  if (!winsparkle::IsUsingTaskScheduler() && !winsparkle::g_install_mode &&
       winsparkle::g_install_type != vivaldi::InstallType::kStandalone) {
-    bool keep_running = vivaldi::IsUpdateNotifierEnabled(&exe_dir_);
-#if !defined(OFFICIAL_BUILD)
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(kDebugKeepRunning)) {
-      keep_running = true;
-    }
-#endif
+    bool keep_running =
+        vivaldi::IsUpdateNotifierEnabledAsAutorun(winsparkle::GetExeDir());
     if (keep_running) {
       base::TimeDelta next_check_delay;
       if (kPeriodicAutomaticCheckInterval > check_duration) {
@@ -909,11 +879,13 @@ void UpdateNotifierManager::OnCheckForUpdatesEvent(
   StartUpdateCheck();
 }
 
-void UpdateNotifierManager::ShowUpdateNotification(const std::string& version) {
+void UpdateNotifierManager::ShowUpdateNotification(
+    const base::Version& version) {
   if (!update_notifier_window_) {
     update_notifier_window_ = std::make_unique<UpdateNotifierWindow>();
   }
-  update_notifier_window_->ShowNotification(base::UTF8ToWide(version));
+  update_notifier_window_->ShowNotification(
+      base::UTF8ToWide(version.GetString()));
 }
 
 }  // namespace vivaldi_update_notifier

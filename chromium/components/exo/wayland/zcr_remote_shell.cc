@@ -185,10 +185,10 @@ int SystemUiBehavior(const display::Display& display) {
   auto* shelf_layout_manager = GetShelfLayoutManagerForDisplay(display);
   switch (shelf_layout_manager->auto_hide_behavior()) {
     case ash::ShelfAutoHideBehavior::kNever:
-      return ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_VISIBLE;
+      return ZCR_REMOTE_OUTPUT_V1_SYSTEMUI_BEHAVIOR_VISIBLE;
     case ash::ShelfAutoHideBehavior::kAlways:
     case ash::ShelfAutoHideBehavior::kAlwaysHidden:
-      return ZCR_REMOTE_SURFACE_V1_SYSTEMUI_VISIBILITY_STATE_AUTOHIDE_NON_STICKY;
+      return ZCR_REMOTE_OUTPUT_V1_SYSTEMUI_BEHAVIOR_HIDDEN;
   }
   NOTREACHED() << "Got unexpected shelf visibility behavior.";
   return 0;
@@ -332,7 +332,7 @@ void remote_surface_set_title(wl_client* client,
                               wl_resource* resource,
                               const char* title) {
   GetUserDataAs<ShellSurfaceBase>(resource)->SetTitle(
-      base::string16(base::UTF8ToUTF16(title)));
+      std::u16string(base::UTF8ToUTF16(title)));
 }
 
 void remote_surface_set_top_inset(wl_client* client,
@@ -559,7 +559,7 @@ void remote_surface_set_extra_title(wl_client* client,
                                     wl_resource* resource,
                                     const char* extra_title) {
   GetUserDataAs<ClientControlledShellSurface>(resource)->SetExtraTitle(
-      base::string16(base::UTF8ToUTF16(extra_title)));
+      std::u16string(base::UTF8ToUTF16(extra_title)));
 }
 
 ash::OrientationLockType OrientationLock(uint32_t orientation_lock) {
@@ -668,6 +668,15 @@ void remote_surface_set_system_gesture_exclusion(wl_client* client,
   }
 }
 
+void remote_surface_set_resize_lock(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetResizeLock(true);
+}
+
+void remote_surface_unset_resize_lock(wl_client* client,
+                                      wl_resource* resource) {
+  GetUserDataAs<ClientControlledShellSurface>(resource)->SetResizeLock(false);
+}
+
 const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_destroy,
     remote_surface_set_app_id,
@@ -717,7 +726,9 @@ const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_set_accessibility_id,
     remote_surface_set_pip_original_window,
     remote_surface_unset_pip_original_window,
-    remote_surface_set_system_gesture_exclusion};
+    remote_surface_set_system_gesture_exclusion,
+    remote_surface_set_resize_lock,
+    remote_surface_unset_resize_lock};
 
 ////////////////////////////////////////////////////////////////////////////////
 // notification_surface_interface:
@@ -864,9 +875,13 @@ class WaylandRemoteOutput : public WaylandDisplayObserver {
         resource_, stable_insets_in_pixel.left(), stable_insets_in_pixel.top(),
         stable_insets_in_pixel.right(), stable_insets_in_pixel.bottom());
 
-    int systemui_visibility = SystemUiBehavior(display);
-    zcr_remote_output_v1_send_systemui_visibility(resource_,
-                                                  systemui_visibility);
+    // Currently no client uses zcr_remote_output_v1 systemui_visibility.
+    // Only systemui_behavior is sent here.
+    if (wl_resource_get_version(resource_) >=
+        ZCR_REMOTE_OUTPUT_V1_SYSTEMUI_BEHAVIOR_SINCE_VERSION) {
+      int systemui_behavior = SystemUiBehavior(display);
+      zcr_remote_output_v1_send_systemui_behavior(resource_, systemui_behavior);
+    }
 
     return true;
   }

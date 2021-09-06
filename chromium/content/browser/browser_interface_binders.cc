@@ -5,13 +5,14 @@
 #include "content/browser/browser_interface_binders.h"
 
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/base/switches.h"
-#include "chrome/browser/profiles/profile.h"
 #include "content/browser/background_fetch/background_fetch_service_impl.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/browser_main_loop.h"
@@ -26,6 +27,8 @@
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/handwriting/handwriting_recognition_service_factory.h"
 #include "content/browser/image_capture/image_capture_impl.h"
+#include "content/browser/interest_group/ad_auction_service_impl.h"
+#include "content/browser/interest_group/interest_group_service_impl.h"
 #include "content/browser/keyboard_lock/keyboard_lock_service_impl.h"
 #include "content/browser/loader/content_security_notifier.h"
 #include "content/browser/media/midi_host.h"
@@ -38,6 +41,8 @@
 #include "content/browser/renderer_host/file_utilities_host_impl.h"
 #include "content/browser/renderer_host/media/media_devices_dispatcher_host.h"
 #include "content/browser/renderer_host/media/media_stream_dispatcher_host.h"
+#include "content/browser/renderer_host/media/peer_connection_tracker_host.h"
+#include "content/browser/renderer_host/media/video_capture_host.h"
 #include "content/browser/renderer_host/raw_clipboard_host_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -69,6 +74,7 @@
 #include "device/vr/buildflags/buildflags.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "media/capture/mojom/image_capture.mojom.h"
+#include "media/capture/mojom/video_capture.mojom.h"
 #include "media/mojo/mojom/interface_factory.mojom-forward.h"
 #include "media/mojo/mojom/media_metrics_provider.mojom.h"
 #include "media/mojo/mojom/remoting.mojom.h"
@@ -120,6 +126,7 @@
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom.h"
 #include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
 #include "third_party/blink/public/mojom/payments/payment_credential.mojom.h"
+#include "third_party/blink/public/mojom/peerconnection/peer_connection_tracker.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom.h"
 #include "third_party/blink/public/mojom/picture_in_picture/picture_in_picture.mojom.h"
 #include "third_party/blink/public/mojom/prerender/prerender.mojom.h"
@@ -171,10 +178,6 @@
 #if defined(OS_MAC)
 #include "content/browser/renderer_host/text_input_host_impl.h"
 #include "third_party/blink/public/mojom/input/text_input_host.mojom.h"
-#endif
-
-#if defined(OS_MAC) && defined(ARCH_CPU_ARM_FAMILY)
-#include "media/mojo/mojom/cdm_infobar_service.mojom.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -622,6 +625,10 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::NotificationService>(base::BindRepeating(
       &RenderFrameHostImpl::CreateNotificationService, base::Unretained(host)));
 
+  map->Add<blink::mojom::PeerConnectionTrackerHost>(
+      base::BindRepeating(&RenderFrameHostImpl::BindPeerConnectionTrackerHost,
+                          base::Unretained(host)));
+
   map->Add<blink::mojom::PermissionService>(base::BindRepeating(
       &RenderFrameHostImpl::CreatePermissionService, base::Unretained(host)));
 
@@ -650,6 +657,9 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
 #if !defined(OS_ANDROID)
   map->Add<blink::mojom::DeviceAPIService>(base::BindRepeating(
       &RenderFrameHostImpl::GetDeviceInfoService, base::Unretained(host)));
+  map->Add<blink::mojom::ManagedConfigurationService>(
+      base::BindRepeating(&RenderFrameHostImpl::GetManagedConfigurationService,
+                          base::Unretained(host)));
 #endif  // !defined(OS_ANDROID)
 
   map->Add<blink::mojom::ScreenEnumeration>(
@@ -710,8 +720,13 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<payments::mojom::PaymentManager>(base::BindRepeating(
       &RenderFrameHostImpl::CreatePaymentManager, base::Unretained(host)));
 
-  map->Add<handwriting::mojom::HandwritingRecognitionService>(
-      base::BindRepeating(&CreateHandwritingRecognitionService));
+  if (base::FeatureList::IsEnabled(
+          blink::features::kHandwritingRecognitionWebPlatformApi) &&
+      base::FeatureList::IsEnabled(
+          blink::features::kHandwritingRecognitionWebPlatformApiFinch)) {
+    map->Add<handwriting::mojom::HandwritingRecognitionService>(
+        base::BindRepeating(&CreateHandwritingRecognitionService));
+  }
 
   map->Add<blink::mojom::WebBluetoothService>(base::BindRepeating(
       &RenderFrameHostImpl::CreateWebBluetoothService, base::Unretained(host)));
@@ -719,11 +734,12 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::PushMessaging>(base::BindRepeating(
       &RenderFrameHostImpl::GetPushMessaging, base::Unretained(host)));
 
-  map->Add<blink::mojom::Authenticator>(base::BindRepeating(
-      &RenderFrameHostImpl::GetAuthenticator, base::Unretained(host)));
-
   map->Add<blink::mojom::QuicTransportConnector>(
       base::BindRepeating(&RenderFrameHostImpl::CreateQuicTransportConnector,
+                          base::Unretained(host)));
+
+  map->Add<blink::mojom::Authenticator>(
+      base::BindRepeating(&RenderFrameHostImpl::GetWebAuthenticationService,
                           base::Unretained(host)));
 
   map->Add<blink::test::mojom::VirtualAuthenticatorManager>(
@@ -748,6 +764,12 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
     map->Add<blink::mojom::MediaStreamDispatcherHost>(
         base::BindRepeating(&MediaStreamDispatcherHost::Create,
                             host->GetProcess()->GetID(), host->GetRoutingID(),
+                            base::Unretained(media_stream_manager)),
+        GetIOThreadTaskRunner({}));
+
+    map->Add<media::mojom::VideoCaptureHost>(
+        base::BindRepeating(&VideoCaptureHost::Create,
+                            host->GetProcess()->GetID(),
                             base::Unretained(media_stream_manager)),
         GetIOThreadTaskRunner({}));
   }
@@ -890,8 +912,14 @@ void PopulateBinderMapWithContext(
   map->Add<blink::mojom::KeyboardLockService>(
       base::BindRepeating(&KeyboardLockServiceImpl::CreateMojoService));
   if (!vivaldi::IsVivaldiRunning()) {
-    map->Add<blink::mojom::FlocService>(
-        base::BindRepeating(&FlocServiceImpl::CreateMojoService));
+  map->Add<blink::mojom::FlocService>(
+      base::BindRepeating(&FlocServiceImpl::CreateMojoService));
+  }
+  if (base::FeatureList::IsEnabled(blink::features::kFledgeInterestGroups)) {
+    map->Add<blink::mojom::AdAuctionService>(
+        base::BindRepeating(&AdAuctionServiceImpl::CreateMojoService));
+    map->Add<blink::mojom::RestrictedInterestGroupStore>(
+        base::BindRepeating(&InterestGroupServiceImpl::CreateMojoService));
   }
   map->Add<blink::mojom::MediaSessionService>(
       base::BindRepeating(&MediaSessionServiceImpl::Create));
@@ -925,11 +953,6 @@ void PopulateBinderMapWithContext(
       base::BindRepeating(&ClipboardHostImpl::Create));
   map->Add<blink::mojom::RawClipboardHost>(
       base::BindRepeating(&RawClipboardHostImpl::Create));
-
-#if defined(OS_MAC) && defined(ARCH_CPU_ARM_FAMILY)
-  map->Add<media::mojom::CdmInfobarService>(base::BindRepeating(
-      &EmptyBinderForFrame<media::mojom::CdmInfobarService>));
-#endif
 
   GetContentClient()->browser()->RegisterBrowserInterfaceBindersForFrame(host,
                                                                          map);

@@ -50,8 +50,8 @@ void JavaScriptDialogHelper::RunJavaScriptDialog(
     content::WebContents* web_contents,
     content::RenderFrameHost* render_frame_host,
     content::JavaScriptDialogType dialog_type,
-    const base::string16& message_text,
-    const base::string16& default_prompt_text,
+    const std::u16string& message_text,
+    const std::u16string& default_prompt_text,
     DialogClosedCallback callback,
     bool* did_suppress_message) {
   base::DictionaryValue request_info;
@@ -91,13 +91,13 @@ void JavaScriptDialogHelper::RunBeforeUnloadDialog(
   }
   // This is called if the guest has a beforeunload event handler.
   // This callback allows navigation to proceed.
-  std::move(callback).Run(true, base::string16());
+  std::move(callback).Run(true, std::u16string());
 }
 
 bool JavaScriptDialogHelper::HandleJavaScriptDialog(
     content::WebContents* web_contents,
     bool accept,
-    const base::string16* prompt_override) {
+    const std::u16string* prompt_override) {
   return false;
 }
 

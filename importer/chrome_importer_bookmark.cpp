@@ -28,10 +28,10 @@ class ChromeBookmarkReader : public ChromeBookmarkFileReader {
   ChromeBookmarkReader() {}
   ~ChromeBookmarkReader() override {}
 
-  void AddBookmark(const std::vector<base::string16>& current_folder,
+  void AddBookmark(const std::vector<std::u16string>& current_folder,
                    const base::DictionaryValue& entries,
                    bool is_folder,
-                   base::string16* item_name = NULL);
+                   std::u16string* item_name = NULL);
 
   const std::vector<ImportedBookmarkEntry>& Bookmarks() const {
     return bookmarks_;
@@ -47,7 +47,7 @@ class ChromeBookmarkReader : public ChromeBookmarkFileReader {
                    const base::DictionaryValue& entries) override;
 
  private:
-  std::vector<base::string16> current_folder_;
+  std::vector<std::u16string> current_folder_;
   std::vector<ImportedBookmarkEntry> bookmarks_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBookmarkReader);
@@ -56,7 +56,7 @@ class ChromeBookmarkReader : public ChromeBookmarkFileReader {
 void ChromeBookmarkReader::HandleEntry(const std::string& category,
                                        const base::DictionaryValue& entries) {
   if (base::LowerCaseEqualsASCII(category, "folder")) {
-    base::string16 foldername;
+    std::u16string foldername;
     AddBookmark(current_folder_, entries, true, &foldername);
     current_folder_.push_back(foldername);
   } else if (base::LowerCaseEqualsASCII(category, "url")) {
@@ -67,24 +67,24 @@ void ChromeBookmarkReader::HandleEntry(const std::string& category,
 }
 
 void ChromeBookmarkReader::AddBookmark(
-    const std::vector<base::string16>& current_folder,
+    const std::vector<std::u16string>& current_folder,
     const base::DictionaryValue& entries,
     bool is_folder,
-    base::string16* item_name) {
+    std::u16string* item_name) {
   std::string temp;
-  base::string16 name;
-  base::string16 url;
+  std::u16string name;
+  std::u16string url;
   std::string nickname;
   std::string description;
 #if 0 /* current unused */
-  base::string16 on_personal_bar_s;
+  std::u16string on_personal_bar_s;
   bool on_personal_bar = false;
 #endif
 
   double created_time = 0;
 
   if (!is_folder && !entries.GetString("url", &url))
-    url = base::string16();
+    url = std::u16string();
 
   if (!entries.GetString("name", &name))
     name = url;
@@ -140,7 +140,7 @@ void ChromiumImporter::ImportBookMarks() {
   reader.LoadFile(file);
 
   if (!reader.Bookmarks().empty() && !cancelled()) {
-    const base::string16& first_folder_name =
+    const std::u16string& first_folder_name =
         bridge_->GetLocalizedString(IDS_IMPORTED_BOOKMARKS);
 
     bridge_->AddBookmarks(reader.Bookmarks(), first_folder_name);

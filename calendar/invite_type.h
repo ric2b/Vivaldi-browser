@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 #include "base/macros.h"
-#include "base/strings/string16.h"
 
 #include "calendar/calendar_typedefs.h"
 
@@ -30,9 +29,9 @@ enum UpdateInviteFields {
 // Simplified invite. Used when invite has to be created during
 // event create
 struct InviteToCreate {
-  base::string16 name;
+  std::u16string name;
   std::string partstat;
-  base::string16 address;
+  std::u16string address;
 };
 
 // Holds all information associated with event invite.
@@ -44,8 +43,8 @@ class InviteRow {
 
   InviteID id;
   EventID event_id;
-  base::string16 name;
-  base::string16 address;
+  std::u16string name;
+  std::u16string address;
   bool sent;
   std::string partstat;
 };

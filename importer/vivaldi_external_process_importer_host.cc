@@ -15,7 +15,7 @@ void ExternalProcessImporterHost::NotifyImportItemFailed(
 }
 
 void ExternalProcessImporterHost::ShowChromeWarningDialog() {
-  base::string16 importerLockString;
+  std::u16string importerLockString;
 
   if (source_profile_.importer_type == importer::TYPE_CHROME ||
       source_profile_.importer_type == importer::TYPE_CHROMIUM) {

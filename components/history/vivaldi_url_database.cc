@@ -2,9 +2,10 @@
 
 #include "components/history/core/browser/url_database.h"
 
+#include <string>
+
 #include "base/i18n/case_conversion.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/strings/string16.h"
 #include "url/gurl.h"
 
 namespace history {
@@ -32,9 +33,9 @@ bool URLDatabase::GetVivaldiTypedHistory(const std::string query,
     sql.append("OR (k.keyword_id = ? AND k.normalized_term LIKE ?) ");
   sql.append("ORDER BY u.last_visit_time DESC LIMIT ?");
 
-  base::string16 lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));
+  std::u16string lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));
   sql::Statement statement(GetDB().GetUniqueStatement(sql.c_str()));
-  const base::string16 wild(base::UTF8ToUTF16("%"));
+  const std::u16string wild(base::UTF8ToUTF16("%"));
   const std::string wild8("%");
   statement.BindString(0, wild8 + query + wild8);
   statement.BindString16(1, wild + lower_query + wild);

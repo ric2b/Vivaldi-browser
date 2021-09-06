@@ -17,7 +17,10 @@ bool done_init_path = false;
 void InitTestEnvironment() {
   vivaldi::CommandLineAppendSwitchNoDup(base::CommandLine::ForCurrentProcess(),
                                         switches::kDisableVivaldi);
+  InitTestPathEnvironment();
+}
 
+void InitTestPathEnvironment() {
   if (!done_init_path) {
     base::FilePath src_dir;
     base::PathService::Get(base::DIR_SOURCE_ROOT, &src_dir);

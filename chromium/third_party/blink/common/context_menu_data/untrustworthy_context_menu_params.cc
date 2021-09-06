@@ -75,6 +75,7 @@ void UntrustworthyContextMenuParams::Assign(
   input_field_type = other.input_field_type;
   selection_rect = other.selection_rect;
   selection_start_offset = other.selection_start_offset;
+  opened_from_highlight = other.opened_from_highlight;
 
   // Vivaldi
   vivaldi_keyword_url = other.vivaldi_keyword_url;

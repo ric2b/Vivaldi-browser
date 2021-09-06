@@ -93,18 +93,17 @@
             "name": "tabId",
             "minimum": 1,
             "description": "The tab id of the tab changing its devtools docking state."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "devtoolsResizingStrategy",
-                "$ref": "DevtoolResizingStrategy"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "devtoolsResizingStrategy",
+              "$ref": "DevtoolResizingStrategy"
+            }
+          ]
+        }
       },
       {
         "name": "closeDevtools",
@@ -123,19 +122,18 @@
             "optional": true,
             "minimum": 1,
             "description": "The window id (not app window id) of the window to close all open devtools for."
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "success",
-                "type": "boolean",
-                "description": "true if the operation was successful, otherwise false."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "true if the operation was successful, otherwise false."
+            }
+          ]
+        }
       },
       {
         "name": "toggleDevtools",
@@ -213,6 +211,19 @@
           {
             "name": "params",
             "$ref": "DevtoolsWindowParams"
+          }
+        ]
+      },
+      {
+        "name": "onActivateWindow",
+        "type": "function",
+        "description": "Fired when devtools wants to activate the given undocked devtools window.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "minimum": 1,
+            "description": "The tab id of the tab we are debugging."
           }
         ]
       }

@@ -26,7 +26,7 @@ MuteButton::MuteButton(PressedCallback callback)
   // Accessibility.
   SetInstallFocusRingOnFocus(true);
 
-  const base::string16 mute_tab_button_label(
+  const std::u16string mute_tab_button_label(
       l10n_util::GetStringUTF16(IDS_PICTURE_IN_PICTURE_MUTE_TAB_CONTROL_TEXT));
   SetAccessibleName(mute_tab_button_label);
   SetTooltipText(mute_tab_button_label);

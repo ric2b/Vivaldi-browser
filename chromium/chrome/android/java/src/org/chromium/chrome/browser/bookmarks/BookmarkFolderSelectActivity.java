@@ -36,7 +36,7 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemV
 import java.util.ArrayList;
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -110,7 +110,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
      */
     public static void startNewFolderSelectActivity(
             BookmarkAddEditFolderActivity activity, List<BookmarkId> bookmarks) {
-        assert ChromeApplication.isVivaldi() || bookmarks.size() > 0;
+        assert ChromeApplicationImpl.isVivaldi() || bookmarks.size() > 0;
         Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
         intent.putExtra(INTENT_IS_CREATING_FOLDER, true);
         ArrayList<String> bookmarkStrings = new ArrayList<>(bookmarks.size());
@@ -171,11 +171,11 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             getSupportActionBar().setHomeAsUpIndicator(
                     getResources().getDrawable(R.drawable.vivaldi_nav_button_back));
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             showBookmarks = getIntent().getBooleanExtra(INTENT_SHOW_BOOKMARKS, true);
             showSpeedDials = getIntent().getBooleanExtra(INTENT_SHOW_SPEED_DIALS, true);
             VivaldiUtils.updateStatusBar(this);
@@ -213,7 +213,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             if (!mModel.isFolderVisible(folder)) continue;
 
             String title = mModel.getBookmarkById(folder).getTitle();
-            if (ChromeApplication.isVivaldi()) {
+            if (ChromeApplicationImpl.isVivaldi()) {
                 boolean sd = mModel.getBookmarkById(folder).isSpeeddial();
                 if (showSpeedDials && sd || showBookmarks && !sd)
                 entryList.add(new FolderListEntry(folder, depthList.get(i), title,
@@ -262,7 +262,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             setResult(RESULT_OK, intent);
             finish();
         } else if (entry.mType == FolderListEntry.TYPE_NEW_FOLDER) {
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 VivaldiBookmarkAddEditFolderActivity.startAddFolderActivity(
                         this,
                         false,
@@ -271,7 +271,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             else
             BookmarkAddEditFolderActivity.startAddFolderActivity(this, mBookmarksToMove);
         } else if (entry.mType == FolderListEntry.TYPE_NORMAL) {
-            if (ChromeApplication.isVivaldi() && entry.mId.equals(mParentId)) {
+            if (ChromeApplicationImpl.isVivaldi() && entry.mId.equals(mParentId)) {
                 finish();
             } else {
                 mModel.moveBookmarks(mBookmarksToMove, entry.mId);
@@ -383,7 +383,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
                 return convertView;
             }
             if (convertView == null) {
-                if (ChromeApplication.isVivaldi())
+                if (ChromeApplicationImpl.isVivaldi())
                     convertView =
                             LayoutInflater.from(parent.getContext())
                                     .inflate(R.layout.bookmark_folder_select_item, parent, false);
@@ -415,7 +415,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
 
             Drawable iconDrawable;
             if (entry.mType == FolderListEntry.TYPE_NORMAL) {
-                if (ChromeApplication.isVivaldi()) {
+                if (ChromeApplicationImpl.isVivaldi()) {
                     iconDrawable = VivaldiBookmarkUtils.getFolderIconForAddDialog(
                             view.getContext(), entry.mIsSpeedDial, entry.mIsSelected);
                 } else
@@ -429,7 +429,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
                 iconDrawable = vectorDrawable;
             }
 
-            if (ChromeApplication.isVivaldi())
+            if (ChromeApplicationImpl.isVivaldi())
                 startIcon.setImageDrawable(iconDrawable);
             else
             SelectableItemView.applyModernIconStyle(startIcon, iconDrawable, entry.mIsSelected);
@@ -479,7 +479,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
             VivaldiBookmarkAddEditFolderActivity activity,
             boolean onlySD,
             List<BookmarkId> bookmarks) {
-        assert ChromeApplication.isVivaldi() || bookmarks.size() > 0;
+        assert ChromeApplicationImpl.isVivaldi() || bookmarks.size() > 0;
         Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
         intent.putExtra(INTENT_IS_CREATING_FOLDER, true);
         intent.putExtra(INTENT_SHOW_SPEED_DIALS, onlySD);
@@ -499,7 +499,7 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
      */
     public static void startNewFolderSelectActivityForVivaldi(
             VivaldiBookmarkAddEditFolderActivity activity, List<BookmarkId> bookmarks) {
-        assert ChromeApplication.isVivaldi() || bookmarks.size() > 0;
+        assert ChromeApplicationImpl.isVivaldi() || bookmarks.size() > 0;
         Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
         intent.putExtra(INTENT_IS_CREATING_FOLDER, true);
         ArrayList<String> bookmarkStrings = new ArrayList<>(bookmarks.size());

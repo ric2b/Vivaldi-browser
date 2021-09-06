@@ -56,8 +56,6 @@ class VivaldiSubresourceFilterClient
 
   const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
   GetSafeBrowsingDatabaseManager() override;
-  subresource_filter::ProfileInteractionManager* GetProfileInteractionManager()
-      override;
 
   void SetAdblockList(AdverseAdFilterListService* list) {
     adblock_list_ = list;

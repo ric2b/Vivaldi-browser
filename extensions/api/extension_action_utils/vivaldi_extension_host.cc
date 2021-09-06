@@ -11,11 +11,11 @@ namespace vivaldi {
 
 VivaldiExtensionHost::VivaldiExtensionHost(
     content::BrowserContext* browser_context,
-    extensions::ViewType host_type,
+    extensions::mojom::ViewType host_type,
     content::WebContents* webcontents)
     : delegate_(extensions::ExtensionsBrowserClient::Get()
                     ->CreateExtensionHostDelegate()) {
-  SetViewType(webcontents, host_type);
+  extensions::SetViewType(webcontents, host_type);
 
   // Set up web contents observers and pref observers.
   delegate_->OnExtensionHostCreated(webcontents);

@@ -9,6 +9,8 @@
 class Browser;
 class Profile;
 
+class VivaldiBrowserWindow;
+
 namespace extensions {
 
 class VivaldiWindowsAPI {
@@ -36,7 +38,7 @@ class WindowPrivateCreateFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   // Fired when the ui-document has loaded. |Window| is now valid.
-  void OnAppUILoaded(ResponseValue result_arg, bool did_finish);
+  void OnAppUILoaded(VivaldiBrowserWindow* window);
 
   DISALLOW_COPY_AND_ASSIGN(WindowPrivateCreateFunction);
 };

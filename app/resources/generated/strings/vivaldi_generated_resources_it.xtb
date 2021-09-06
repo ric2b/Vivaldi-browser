@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">Non consentire ai siti di scaricare automaticamente più file</translation>
 <translation id="5039804452771397117">Consenti</translation>
 <translation id="5057110919553308744">Quando fai clic sull'estensione</translation>
+<translation id="5059526285558225588">Scegli cosa condividere</translation>
 <translation id="5063480226653192405">Utilizzo</translation>
 <translation id="5116628073786783676">Sal&amp;va Audio Come...</translation>
 <translation id="5143374789336132547">L'estensione "<ph name="EXTENSION_NAME" />" ha cambiato la pagina mostrata quando fai clic sul pulsante Pagina iniziale.</translation>
@@ -459,7 +460,6 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="8823704566850948458">Suggerisci password...</translation>
 <translation id="8859174528519900719">Frame secondario: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Apri link in un'altra &amp;finestra</translation>
-<translation id="8910146161325739742">Condividi lo schermo</translation>
 <translation id="8915370057835397490">Caricamento suggerimento</translation>
 <translation id="8916476537757519021">Frame secondario modalità di navigazione in incognito: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">Memoria JavaScript</translation>

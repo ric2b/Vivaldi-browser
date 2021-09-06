@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "app/vivaldi_apptools.h"
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -17,44 +16,38 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_paths.h"
-#include "components/datasource/vivaldi_data_source_api.h"
-#include "content/browser/renderer_host/render_view_host_delegate_view.h" // nogncheck
-#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/common/error_utils.h"
-#include "extensions/schema/thumbnails.h"
-#include "extensions/tools/vivaldi_tools.h"
-#include "renderer/vivaldi_render_messages.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
+
+#include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
+#include "components/datasource/vivaldi_data_source_api.h"
+#include "extensions/tools/vivaldi_tools.h"
+#include "renderer/vivaldi_render_messages.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
-
-using content::BrowserThread;
-using content::RenderWidgetHost;
-using content::RenderWidgetHostView;
-using content::WebContents;
 
 namespace {
 
@@ -103,18 +96,18 @@ struct CaptureFilePattern {
 };
 
 struct CaptureFilePattern file_patterns[] = {
-  {"$timestamp", CaptureFilePatternType::TIMESTAMP},
-  {"$year",     CaptureFilePatternType::YEAR},
-  {"$month",    CaptureFilePatternType::MONTH},
-  {"$day",      CaptureFilePatternType::DAY},
-  {"$hour",     CaptureFilePatternType::HOUR},
-  {"$minute",   CaptureFilePatternType::MINUTE},
-  {"$second",   CaptureFilePatternType::SECOND},
-  {"$ms",       CaptureFilePatternType::MILLISECOND},
-  {"$longid",   CaptureFilePatternType::LONGID},
-  {"$shortid",  CaptureFilePatternType::SHORTID},
-  {"$host",     CaptureFilePatternType::HOST},
-  {"$title",    CaptureFilePatternType::TITLE},
+    {"$timestamp", CaptureFilePatternType::TIMESTAMP},
+    {"$year", CaptureFilePatternType::YEAR},
+    {"$month", CaptureFilePatternType::MONTH},
+    {"$day", CaptureFilePatternType::DAY},
+    {"$hour", CaptureFilePatternType::HOUR},
+    {"$minute", CaptureFilePatternType::MINUTE},
+    {"$second", CaptureFilePatternType::SECOND},
+    {"$ms", CaptureFilePatternType::MILLISECOND},
+    {"$longid", CaptureFilePatternType::LONGID},
+    {"$shortid", CaptureFilePatternType::SHORTID},
+    {"$host", CaptureFilePatternType::HOST},
+    {"$title", CaptureFilePatternType::TITLE},
 };
 
 std::string ConstructCaptureArgument(CaptureFilePatternType type,
@@ -205,7 +198,7 @@ base::FilePath ConstructCaptureFilename(
 #if defined(OS_POSIX)
     base_path = base_path.Append(new_string);
 #elif defined(OS_WIN)
-    base_path = base_path.Append(base::UTF8ToUTF16(new_string));
+    base_path = base_path.Append(base::UTF8ToWide(new_string));
 #endif
   }
   base_path = base_path.AddExtension(extension);
@@ -214,7 +207,7 @@ base::FilePath ConstructCaptureFilename(
   int unique_number = base::GetUniquePathNumber(base_path);
   if (unique_number > 0) {
     base_path = base_path.InsertBeforeExtensionASCII(
-      base::StringPrintf(" (%d)", unique_number));
+        base::StringPrintf(" (%d)", unique_number));
   }
   return base_path;
 }
@@ -254,63 +247,6 @@ bool SaveBitmapOnWorkerThread(SkBitmap bitmap,
   return true;
 }
 
-namespace {
-
-void OnCopyFromBackingStoreComplete(float device_scale_factor,
-                                    UICaptureCallback callback,
-                                    const SkBitmap& bitmap) {
-  bool success = !bitmap.drawsNothing();
-  if (!success) {
-    LOG(ERROR) << "empty bitmap was returned";
-  }
-  std::move(callback).Run(success, device_scale_factor, bitmap);
-}
-
-}  // namespace
-
-void StartUICapture(content::WebContents* web_contents,
-                    float x,
-                    float y,
-                    float width,
-                    float height,
-                    UICaptureCallback callback) {
-  RenderWidgetHostView* view = nullptr;
-  if (!web_contents) {
-    LOG(ERROR) << "WebContents is null";
-  } else {
-    view = web_contents->GetRenderWidgetHostView();
-    if (!view || !view->GetRenderWidgetHost()) {
-      LOG(ERROR) << "View is invisible";
-      view = nullptr;
-    }
-  }
-  if (!view) {
-    std::move(callback).Run(false, 0.0f, SkBitmap());
-    return;
-  }
-
-  gfx::RectF rect_f(x, y, width, height);
-  ::vivaldi::FromUICoordinates(web_contents, &rect_f);
-
-  // CopyFromSurface takes the area in device-independent pixels. However, we
-  // want to capture all physical pixels. So scale the bitmap size accordingly.
-  gfx::SizeF size_f = rect_f.size();
-  const gfx::NativeView native_view = view->GetNativeView();
-  display::Screen* const screen = display::Screen::GetScreen();
-  const float device_scale_factor =
-      screen->GetDisplayNearestView(native_view).device_scale_factor();
-  size_f.Scale(device_scale_factor);
-
-  gfx::Rect capture_area(std::round(rect_f.x()), std::round(rect_f.y()),
-                         std::round(rect_f.width()),
-                         std::round(rect_f.height()));
-  gfx::Size bitmap_size = gfx::ToRoundedSize(size_f);
-  view->CopyFromSurface(
-      capture_area, bitmap_size,
-      base::BindOnce(&OnCopyFromBackingStoreComplete, device_scale_factor,
-                     std::move(callback)));
-}
-
 CaptureFormat::CaptureFormat() = default;
 CaptureFormat::~CaptureFormat() = default;
 
@@ -328,8 +264,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
   }
   if (params->params.encode_format.get()) {
     format_.image_format = *params->params.encode_format == "jpg"
-      ? ::vivaldi::skia_utils::ImageFormat::kJPEG
-      : ::vivaldi::skia_utils::ImageFormat::kPNG;
+                               ? ::vivaldi::skia_utils::ImageFormat::kJPEG
+                               : ::vivaldi::skia_utils::ImageFormat::kPNG;
   }
   if (params->params.encode_quality.get()) {
     format_.encode_quality = *params->params.encode_quality.get();
@@ -360,9 +296,11 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureUIFunction::Run() {
     format_.title = base::UTF16ToUTF8(tab->GetTitle());
   }
 
-  StartUICapture(
-      web_contents, params->params.pos_x, params->params.pos_y,
-      params->params.width, params->params.height,
+  gfx::RectF rect(params->params.pos_x, params->params.pos_y,
+                  params->params.width, params->params.height);
+  ::vivaldi::FromUICoordinates(web_contents, &rect);
+  ::vivaldi::CapturePage::CaptureVisible(
+      web_contents, rect,
       base::BindOnce(&ThumbnailsCaptureUIFunction::OnCaptureDone, this));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
@@ -387,21 +325,18 @@ void ThumbnailsCaptureUIFunction::OnCaptureDone(bool success,
     return;
   }
 
-  base::PostTask(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&ThumbnailsCaptureUIFunction::ProcessImageOnWorkerThread,
-                     this, bitmap));
+                     this, bitmap),
+      base::BindOnce(&ThumbnailsCaptureUIFunction::SendResult, this));
 }
 
-void ThumbnailsCaptureUIFunction::ProcessImageOnWorkerThread(
-    SkBitmap bitmap) {
-  bool success = SaveBitmapOnWorkerThread(std::move(bitmap), format_,
-                                          &image_data_, &file_path_);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&ThumbnailsCaptureUIFunction::SendResult, this, success));
+bool ThumbnailsCaptureUIFunction::ProcessImageOnWorkerThread(SkBitmap bitmap) {
+  return SaveBitmapOnWorkerThread(std::move(bitmap), format_, &image_data_,
+                                  &file_path_);
 }
 
 void ThumbnailsCaptureUIFunction::SendResult(bool success) {
@@ -489,11 +424,11 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   int tab_id = params->tab_id;
   if (tab_id) {
     tabstrip_contents = ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
-      tab_id, browser_context());
+        tab_id, browser_context());
   } else {
     Browser* browser = BrowserList::GetInstance()->GetLastActive();
     tabstrip_contents =
-      browser ? browser->tab_strip_model()->GetActiveWebContents() : nullptr;
+        browser ? browser->tab_strip_model()->GetActiveWebContents() : nullptr;
   }
   if (!tabstrip_contents)
     return RespondNow(Error("No such tab - " + std::to_string(tab_id)));
@@ -504,13 +439,12 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
   ::vivaldi::CapturePage::CaptureParams capture_params;
   capture_params.full_page = capture_full_page;
 
-// Need to transform the rect to pixelsize from device-size.
+  // Need to transform the rect to pixelsize from device-size.
   double scale = 1.0f;
   display::Screen* screen = display::Screen::GetScreen();
   if (screen) {
     gfx::NativeWindow window = tabstrip_contents->GetTopLevelNativeWindow();
-    display::Display display =
-      screen->GetDisplayNearestWindow(window);
+    display::Display display = screen->GetDisplayNearestWindow(window);
     scale = display.device_scale_factor();
   }
   capture_params.rect =
@@ -519,46 +453,38 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
 
   ::vivaldi::CapturePage::Capture(
       tabstrip_contents, capture_params,
-      base::BindOnce(
-          &ThumbnailsCaptureTabFunction::OnThumbnailsCaptureCompleted,
-          this));
-  return RespondLater();
+      base::BindOnce(&ThumbnailsCaptureTabFunction::OnTabCaptureCompleted,
+                     this));
+
+  // did_respond() is true  when the capture method above called the callback
+  // immediately due to errors.
+  return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
-void ThumbnailsCaptureTabFunction::OnThumbnailsCaptureCompleted(
+void ThumbnailsCaptureTabFunction::OnTabCaptureCompleted(
     ::vivaldi::CapturePage::Result captured) {
-  base::PostTask(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&ThumbnailsCaptureTabFunction::ConvertImageOnWorkerThread,
-                     this, std::move(captured)));
+                     this, std::move(captured)),
+      base::BindOnce(&ThumbnailsCaptureTabFunction::SendResult, this));
 }
 
-void ThumbnailsCaptureTabFunction::ConvertImageOnWorkerThread(
+bool ThumbnailsCaptureTabFunction::ConvertImageOnWorkerThread(
     ::vivaldi::CapturePage::Result captured) {
-
-  bool success = false;
-  do {
-    if (!captured.MovePixelsToBitmap(&bitmap_))
-      break;
-    if (format_.copy_to_clipboard) {
-      success = true;
-      break;
-    }
-    success = SaveBitmapOnWorkerThread(std::move(bitmap_), format_,
-                                       &image_data_, &file_path_);
-  } while (false);
-
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&ThumbnailsCaptureTabFunction::OnImageConverted, this,
-                     success));
+  if (!captured.MovePixelsToBitmap(&bitmap_))
+    return false;
+  if (format_.copy_to_clipboard)
+    return true;
+  return SaveBitmapOnWorkerThread(std::move(bitmap_), format_, &image_data_,
+                                  &file_path_);
 }
 
-void ThumbnailsCaptureTabFunction::OnImageConverted(bool success) {
+void ThumbnailsCaptureTabFunction::SendResult(bool success) {
   namespace Results = vivaldi::thumbnails::CaptureTab::Results;
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (!success) {
     LOG(ERROR) << "Failed to capture tab "
@@ -581,9 +507,11 @@ void ThumbnailsCaptureTabFunction::OnImageConverted(bool success) {
   }
 }
 
-ThumbnailsCaptureBookmarkFunction::ThumbnailsCaptureBookmarkFunction() = default;
+ThumbnailsCaptureBookmarkFunction::ThumbnailsCaptureBookmarkFunction() =
+    default;
 
-ThumbnailsCaptureBookmarkFunction::~ThumbnailsCaptureBookmarkFunction() = default;
+ThumbnailsCaptureBookmarkFunction::~ThumbnailsCaptureBookmarkFunction() =
+    default;
 
 ExtensionFunction::ResponseAction ThumbnailsCaptureBookmarkFunction::Run() {
   using vivaldi::thumbnails::CaptureBookmark::Params;

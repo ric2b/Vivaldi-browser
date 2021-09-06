@@ -12,6 +12,8 @@
 #import "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
 #include "components/infobars/core/infobar_manager.h"
@@ -75,6 +77,7 @@
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
+#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/first_run/location_permissions_commands.h"
 #import "ios/chrome/browser/ui/first_run/location_permissions_coordinator.h"
@@ -91,6 +94,7 @@
 #import "ios/chrome/browser/ui/main/ui_blocker_scene_agent.h"
 #import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
+#import "ios/chrome/browser/ui/start_surface/start_surface_recent_tab_browser_agent.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_scene_agent.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_util.h"
 #include "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator.h"
@@ -99,7 +103,6 @@
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/top_view_controller.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/whats_new/default_browser_utils.h"
 #import "ios/chrome/browser/url_loading/scene_url_loading_service.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
@@ -260,6 +263,8 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   std::unique_ptr<ScopedUIBlocker> _firstRunUIBlocker;
 }
 @synthesize startupParameters = _startupParameters;
+@synthesize startupParametersAreBeingHandled =
+    _startupParametersAreBeingHandled;
 
 - (instancetype)initWithSceneState:(SceneState*)sceneState {
   self = [super init];
@@ -275,6 +280,8 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
     if (!base::ios::IsSceneStartupSupported() && !self.sceneState.window) {
       self.sceneState.window = [[ChromeOverlayWindow alloc]
           initWithFrame:[[UIScreen mainScreen] bounds]];
+      // Assign an a11y identifier for using in EGTest.
+      self.sceneState.window.accessibilityIdentifier = @"0";
       CustomizeUIWindowAppearance(self.sceneState.window);
     }
     _sceneURLLoadingService = new SceneUrlLoadingService();
@@ -344,6 +351,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 
 - (void)setStartupParameters:(AppStartupParameters*)parameters {
   _startupParameters = parameters;
+  self.startupParametersAreBeingHandled = NO;
   BOOL shouldShowPromo =
       self.sceneState.appState.shouldShowDefaultBrowserPromo &&
       (parameters.postOpeningAction == NO_ACTION);
@@ -540,29 +548,35 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 // TODO(crbug.com/1173160): Split and move to the StartSurfaceSceneAgent after
 // refactoring the scene states.
 - (void)handleShowStartSurfaceIfNecessary {
+  if (!ShouldShowStartSurfaceForSceneState(self.sceneState)) {
+    return;
+  }
+
   // Do not show the Start Surface no matter whether it is enabled or not when
   // the Tab grid is active by design.
   if (self.mainCoordinator.isTabGridActive) {
     return;
   }
 
+  // If there is no active tab, a NTP will be added, and since there is no
+  // recent tab, there is not need to mark |modifytVisibleNTPForStartSurface|.
   // Keep showing the last active NTP tab no matter whether the Start Surface is
   // enabled or not by design.
   // Note that currentWebState could only be nullptr when the Tab grid is active
   // for now.
   web::WebState* currentWebState =
-      self.currentInterface.browser->GetWebStateList()->GetActiveWebState();
-  if (IsURLNtp(currentWebState->GetVisibleURL())) {
+      self.mainInterface.browser->GetWebStateList()->GetActiveWebState();
+  if (!currentWebState || IsURLNtp(currentWebState->GetVisibleURL())) {
     return;
   }
 
-  if (!ShouldShowStartSurfaceForSceneState(self.sceneState)) {
-    return;
-  }
+  base::RecordAction(base::UserMetricsAction("IOS.StartSurface.Show"));
   self.sceneState.modifytVisibleNTPForStartSurface = YES;
+  Browser* browser = self.currentInterface.browser;
+  StartSurfaceRecentTabBrowserAgent::FromBrowser(browser)->SaveMostRecentTab();
 
   // Activate the existing NTP tab for the Start surface.
-  WebStateList* webStateList = self.currentInterface.browser->GetWebStateList();
+  WebStateList* webStateList = browser->GetWebStateList();
   for (int i = 0; i < webStateList->count(); i++) {
     if (IsURLNtp(webStateList->GetWebStateAt(i)->GetVisibleURL())) {
       webStateList->ActivateWebStateAt(i);
@@ -574,7 +588,6 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   OpenNewTabCommand* command =
       [OpenNewTabCommand commandWithIncognito:self.currentInterface.incognito];
   command.userInitiated = NO;
-  Browser* browser = self.currentInterface.browser;
   id<ApplicationCommands> applicationHandler =
       HandlerForProtocol(browser->GetCommandDispatcher(), ApplicationCommands);
   [applicationHandler openURLInNewTab:command];
@@ -866,6 +879,12 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
     [self setCurrentInterfaceForMode:ApplicationMode::NORMAL];
   }
 
+  // Call this right after |setCurrentInterfaceForMode:| to ensure the
+  // currentInterface is set in case a new tab needs to be opened. Since this is
+  // synchronous with |setActivePage:| above, then the user should not see the
+  // last tab if the Start Surface is opened.
+  [self handleShowStartSurfaceIfNecessary];
+
   // Figure out what UI to show initially.
 
   if (self.mainCoordinator.isTabGridActive) {
@@ -890,7 +909,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 
   // If this is first run, show the first run UI on top of the new tab.
   // If this isn't first run, check if the sign-in promo needs to display.
-  if (firstRun && launchMode != ApplicationMode::INCOGNITO &&
+  if (firstRun &&
       !self.sceneState.appState.startupInformation.isPresentingFirstRunUI) {
     [self showFirstRunUI];
     // Do not ever show the 'restore' infobar during first run.
@@ -906,23 +925,54 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   }
   if (!firstRun && !self.sceneState.appState.isInSafeMode &&
       postOpeningAction == NO_ACTION &&
-      !self.sceneState.appState.postCrashLaunch) {
+      !self.sceneState.appState.postCrashLaunch &&
+      !IsChromeLikelyDefaultBrowser() && !UserInFullscreenPromoCooldown()) {
     // Show the Default Browser promo UI if the user's past behavior fits
     // the categorization of potentially interested users or if the user is
     // signed in. Do not show if it is determined that Chrome is already the
-    // default browser or if the user has already seen the promo UI.
-    // If the user was in the experiment group that showed the Remind Me Later
-    // button and tapped on it, then show the promo again if now is the right
-    // time.
-    BOOL isEligibleUser = IsLikelyInterestedDefaultBrowserUser() ||
-                          ios::GetChromeBrowserProvider()
-                              ->GetChromeIdentityService()
-                              ->HasIdentities();
+    // default browser (checked in the if enclosing this comment) or if the user
+    // has already seen the promo UI. If the user was in the experiment group
+    // that showed the Remind Me Later button and tapped on it, then show the
+    // promo again if now is the right time.
 
-    if ((!IsChromeLikelyDefaultBrowser() &&
-         !HasUserInteractedWithFullscreenPromoBefore() && isEligibleUser) ||
+    AuthenticationService* authenticationService =
+        AuthenticationServiceFactory::GetForBrowserState(
+            self.sceneState.appState.mainBrowserState);
+    DCHECK(authenticationService);
+    DCHECK(authenticationService->initialized());
+    BOOL isSignedIn = authenticationService->IsAuthenticated();
+
+    // Tailored promos take priority over general promo.
+    BOOL isMadeForIOSPromoEligible =
+        IsLikelyInterestedDefaultBrowserUser(DefaultPromoTypeMadeForIOS);
+    BOOL isAllTabsPromoEligible =
+        IsLikelyInterestedDefaultBrowserUser(DefaultPromoTypeAllTabs) &&
+        isSignedIn;
+    BOOL isStaySafePromoEligible =
+        IsLikelyInterestedDefaultBrowserUser(DefaultPromoTypeStaySafe);
+
+    BOOL isTailoredPromoEligibleUser =
+        !HasUserInteractedWithTailoredFullscreenPromoBefore() &&
+        (isMadeForIOSPromoEligible || isAllTabsPromoEligible ||
+         isStaySafePromoEligible);
+    if (isTailoredPromoEligibleUser) {
+      self.sceneState.appState.shouldShowDefaultBrowserPromo = YES;
+      self.sceneState.appState.defaultBrowserPromoTypeToShow =
+          MostRecentInterestDefaultPromoType(!isSignedIn);
+      DCHECK(self.sceneState.appState.defaultBrowserPromoTypeToShow !=
+             DefaultPromoTypeGeneral);
+      return;
+    }
+
+    BOOL isGeneralPromoEligibleUser =
+        !HasUserInteractedWithFullscreenPromoBefore() &&
+        (IsLikelyInterestedDefaultBrowserUser(DefaultPromoTypeGeneral) ||
+         isSignedIn);
+    if (isGeneralPromoEligibleUser ||
         ShouldShowRemindMeLaterDefaultBrowserFullscreenPromo()) {
       self.sceneState.appState.shouldShowDefaultBrowserPromo = YES;
+      self.sceneState.appState.defaultBrowserPromoTypeToShow =
+          DefaultPromoTypeGeneral;
     }
   }
 }
@@ -981,16 +1031,16 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   int numberOfTabs = self.currentInterface.browser->GetWebStateList()->count();
   DCHECK(numberOfTabs > 0);
   GURL url = webState->GetVisibleURL();
-  base::string16 urlText = url_formatter::FormatUrl(
+  std::u16string urlText = url_formatter::FormatUrl(
       url,
       url_formatter::kFormatUrlOmitDefaults |
           url_formatter::kFormatUrlOmitTrivialSubdomains |
           url_formatter::kFormatUrlOmitHTTPS |
           url_formatter::kFormatUrlTrimAfterHost,
       net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
-  base::string16 pattern =
+  std::u16string pattern =
       l10n_util::GetStringUTF16(IDS_IOS_APP_SWITCHER_SCENE_TITLE);
-  base::string16 formattedTitle =
+  std::u16string formattedTitle =
       base::i18n::MessageFormatter::FormatWithNamedArgs(
           pattern, "domain", urlText, "count", numberOfTabs - 1);
   return base::SysUTF16ToNSString(formattedTitle);
@@ -1034,7 +1084,8 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
   message.action = action;
 
-  [handler showSnackbarMessage:message];
+  [handler showSnackbarMessage:message
+                withHapticType:UINotificationFeedbackTypeError];
 }
 
 - (BOOL)isIncognitoDisabled {
@@ -1082,7 +1133,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   WelcomeToChromeViewController* welcomeToChrome =
       [[WelcomeToChromeViewController alloc]
           initWithBrowser:browser
-                presenter:self.mainInterface.bvc
+                presenter:self.currentInterface.bvc
                dispatcher:welcomeHandler];
   self.welcomeToChromeController = welcomeToChrome;
   UINavigationController* navController =
@@ -1093,9 +1144,9 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   CGRect appFrame = [[UIScreen mainScreen] bounds];
   [[navController view] setFrame:appFrame];
   self.sceneState.presentingFirstRunUI = YES;
-  [self.mainInterface.viewController presentViewController:navController
-                                                  animated:NO
-                                                completion:nil];
+  [self.currentInterface.viewController presentViewController:navController
+                                                     animated:NO
+                                                   completion:nil];
 }
 
 // Sets a LocalState pref marking the TOS EULA as accepted.
@@ -1136,8 +1187,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
               LocationPermissionsUI::kFirstRunPromptNotShown];
     // As soon as First Run has finished, give OmniboxGeolocationController an
     // opportunity to present the iOS system location alert.
-    [[OmniboxGeolocationController sharedInstance]
-        triggerSystemPromptForNewUser:YES];
+    [[OmniboxGeolocationController sharedInstance] triggerSystemPrompt];
   } else if (location_permissions_field_trial::
                  IsInRemoveFirstRunPromptGroup()) {
     // If in RemoveFirstRunPrompt group, the system prompt will be delayed until
@@ -1480,18 +1530,6 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   [self startSigninCoordinatorWithCompletion:nil];
 }
 
-// TODO(crbug.com/779791) : Remove settings commands from MainController.
-- (void)showAddAccountFromViewController:(UIViewController*)baseViewController {
-  DCHECK(!self.signinCoordinator);
-  self.signinCoordinator = [SigninCoordinator
-      addAccountCoordinatorWithBaseViewController:baseViewController
-                                          browser:self.mainInterface.browser
-                                      accessPoint:signin_metrics::AccessPoint::
-                                                      ACCESS_POINT_UNKNOWN];
-
-  [self startSigninCoordinatorWithCompletion:nil];
-}
-
 - (void)showConsistencyPromoFromViewController:
     (UIViewController*)baseViewController {
   DCHECK(!self.signinCoordinator);
@@ -1634,6 +1672,25 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 }
 
 // TODO(crbug.com/779791) : Remove show settings commands from MainController.
+- (void)showSyncSettingsFromViewController:
+    (UIViewController*)baseViewController {
+  DCHECK(!self.signinCoordinator);
+  if (self.settingsNavigationController) {
+    [self.settingsNavigationController
+        showSyncSettingsFromViewController:baseViewController];
+    return;
+  }
+
+  Browser* browser = self.mainInterface.browser;
+  self.settingsNavigationController =
+      [SettingsNavigationController syncSettingsControllerForBrowser:browser
+                                                            delegate:self];
+  [baseViewController presentViewController:self.settingsNavigationController
+                                   animated:YES
+                                 completion:nil];
+}
+
+// TODO(crbug.com/779791) : Remove show settings commands from MainController.
 - (void)showSyncPassphraseSettingsFromViewController:
     (UIViewController*)baseViewController {
   DCHECK(!self.signinCoordinator);
@@ -1749,7 +1806,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
     return nil;
   // Returns URL of browser tab that is currently showing.
   GURL url = webState->GetVisibleURL();
-  base::string16 urlText = url_formatter::FormatUrl(url);
+  std::u16string urlText = url_formatter::FormatUrl(url);
   return base::SysUTF16ToNSString(urlText);
 }
 
@@ -1984,11 +2041,15 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
     IncognitoReauthSceneAgent* reauthAgent =
         [IncognitoReauthSceneAgent agentFromScene:self.sceneState];
     if (reauthAgent.authenticationRequired) {
+      void (^wrappedDismissModalCompletion)() = dismissModalsCompletion;
       dismissModalsCompletion = ^{
         [reauthAgent
             authenticateIncognitoContentWithCompletionBlock:^(BOOL success) {
               if (success) {
-                dismissModalsCompletion();
+                wrappedDismissModalCompletion();
+              } else {
+                // Do not open the tab, but still call completion.
+                completion();
               }
             }];
       };

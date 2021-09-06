@@ -163,7 +163,7 @@ void ContextMenuController::PopulateModel(const Element& child,
         rv_context_menu_->SetCommandId(id, -1);
       }
     }
-    const base::string16 label = base::UTF8ToUTF16(item.name);
+    const std::u16string label = base::UTF8ToUTF16(item.name);
     switch (item.type) {
       case context_menu::ITEM_TYPE_COMMAND:
         menu_model->AddItem(id, label);
@@ -249,7 +249,7 @@ ui::SimpleMenuModel* ContextMenuController::GetContainerModel(
   namespace context_menu = extensions::vivaldi::context_menu;
 
   if (container.mode == context_menu::CONTAINER_MODE_FOLDER) {
-    const base::string16 label = base::UTF8ToUTF16(container.name);
+    const std::u16string label = base::UTF8ToUTF16(container.name);
     ui::SimpleMenuModel* child_menu_model;
     if (rv_context_menu_) {
       child_menu_model = new ui::SimpleMenuModel(rv_context_menu_);
@@ -377,13 +377,13 @@ bool ContextMenuController::IsItemForCommandIdDynamic(int command_id) const {
 }
 
 // This function only needs to return a valid string for dynamic items.
-base::string16 ContextMenuController::GetLabelForCommandId(
+std::u16string ContextMenuController::GetLabelForCommandId(
     int command_id) const {
   if (pwa_controller_ &&
       pwa_controller_->IsItemForCommandIdDynamic(command_id)) {
     return pwa_controller_->GetLabelForCommandId(command_id);
   }
-  return base::string16();
+  return std::u16string();
 }
 
 // We do not specify accelerators in context menus in JS so mostly return false.

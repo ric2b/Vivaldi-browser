@@ -10,8 +10,10 @@
 #import "base/ios/ios_util.h"
 #import "base/ios/ns_error_util.h"
 #include "base/mac/bundle_locations.h"
+#include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#import "components/autofill/ios/browser/autofill_java_script_feature.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -36,6 +38,7 @@
 #include "ios/chrome/browser/web/features.h"
 #import "ios/chrome/browser/web/java_script_console/java_script_console_feature.h"
 #import "ios/chrome/browser/web/java_script_console/java_script_console_feature_factory.h"
+#include "ios/chrome/browser/web/print/print_java_script_feature.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
 #import "ios/components/security_interstitials/legacy_tls/legacy_tls_blocking_page.h"
 #import "ios/components/security_interstitials/legacy_tls/legacy_tls_controller_client.h"
@@ -49,6 +52,7 @@
 #include "ios/public/provider/chrome/browser/browser_url_rewriter_provider.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/public/provider/chrome/browser/font_size_java_script_feature.h"
 #include "ios/public/provider/chrome/browser/voice/audio_session_controller.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
 #include "ios/web/common/features.h"
@@ -139,16 +143,27 @@ NSString* GetLookalikeUrlErrorPageHtml(web::WebState* web_state,
 // Returns the legacy TLS error page HTML.
 NSString* GetLegacyTLSErrorPageHTML(web::WebState* web_state,
                                     int64_t navigation_id) {
-  // Construct the blocking page and associate it with the WebState.
-  std::unique_ptr<security_interstitials::IOSSecurityInterstitialPage> page =
-      std::make_unique<LegacyTLSBlockingPage>(
-          web_state, web_state->GetVisibleURL() /*request_url*/,
-          std::make_unique<LegacyTLSControllerClient>(
-              web_state, web_state->GetVisibleURL(),
-              GetApplicationContext()->GetApplicationLocale()));
-  std::string error_page_content = page->GetHtmlContents();
-  security_interstitials::IOSBlockingPageTabHelper::FromWebState(web_state)
-      ->AssociateBlockingPage(navigation_id, std::move(page));
+  std::string error_page_content;
+  security_interstitials::IOSBlockingPageTabHelper* blocking_page_tab_helper =
+      security_interstitials::IOSBlockingPageTabHelper::FromWebState(web_state);
+
+  // WebStates that are not in the WebStateList (e.g., WebStates used for
+  // reading list sync) do not have an IOSBlockingPageTabHelper. Since such
+  // WebStates are not used for displaying web contents to a user, it is not
+  // necessary to produce an actual error page, and instead an empty string is
+  // used.
+  if (blocking_page_tab_helper) {
+    // Construct the blocking page and associate it with the WebState.
+    std::unique_ptr<security_interstitials::IOSSecurityInterstitialPage> page =
+        std::make_unique<LegacyTLSBlockingPage>(
+            web_state, web_state->GetVisibleURL() /*request_url*/,
+            std::make_unique<LegacyTLSControllerClient>(
+                web_state, web_state->GetVisibleURL(),
+                GetApplicationContext()->GetApplicationLocale()));
+    error_page_content = page->GetHtmlContents();
+    blocking_page_tab_helper->AssociateBlockingPage(navigation_id,
+                                                    std::move(page));
+  }
 
   return base::SysUTF8ToNSString(error_page_content);
 }
@@ -214,13 +229,6 @@ bool ChromeWebClient::IsAppSpecificURL(const GURL& url) const {
   return url.SchemeIs(kChromeUIScheme);
 }
 
-bool ChromeWebClient::ShouldBlockUrlDuringRestore(
-    const GURL& url,
-    web::WebState* web_state) const {
-  return ios::GetChromeBrowserProvider()->ShouldBlockUrlDuringRestore(
-      url, web_state);
-}
-
 void ChromeWebClient::AddSerializableData(
     web::SerializableUserDataManager* user_data_manager,
     web::WebState* web_state) {
@@ -228,7 +236,7 @@ void ChromeWebClient::AddSerializableData(
                                                               web_state);
 }
 
-base::string16 ChromeWebClient::GetPluginNotSupportedText() const {
+std::u16string ChromeWebClient::GetPluginNotSupportedText() const {
   return l10n_util::GetStringUTF16(IDS_PLUGIN_NOT_SUPPORTED);
 }
 
@@ -253,7 +261,7 @@ std::string ChromeWebClient::GetUserAgent(web::UserAgentType type) const {
   return web::BuildMobileUserAgent(GetMobileProduct());
 }
 
-base::string16 ChromeWebClient::GetLocalizedString(int message_id) const {
+std::u16string ChromeWebClient::GetLocalizedString(int message_id) const {
   return l10n_util::GetStringUTF16(message_id);
 }
 
@@ -286,6 +294,7 @@ void ChromeWebClient::PostBrowserURLRewriterCreation(
 
 std::vector<web::JavaScriptFeature*> ChromeWebClient::GetJavaScriptFeatures(
     web::BrowserState* browser_state) const {
+  static base::NoDestructor<PrintJavaScriptFeature> print_feature;
   std::vector<web::JavaScriptFeature*> features;
   if (base::FeatureList::IsEnabled(
           password_manager::features::kPasswordReuseDetectionEnabled) &&
@@ -297,6 +306,11 @@ std::vector<web::JavaScriptFeature*> ChromeWebClient::GetJavaScriptFeatures(
       JavaScriptConsoleFeatureFactory::GetInstance()->GetForBrowserState(
           browser_state);
   features.push_back(java_script_console_feature);
+
+  features.push_back(print_feature.get());
+
+  features.push_back(autofill::AutofillJavaScriptFeature::GetInstance());
+  features.push_back(FontSizeJavaScriptFeature::GetInstance());
 
   return features;
 }
@@ -312,24 +326,6 @@ NSString* ChromeWebClient::GetDocumentStartScriptForMainFrame(
   [scripts addObject:GetPageScript(@"chrome_bundle_main_frame")];
 
   return [scripts componentsJoinedByString:@";"];
-}
-
-void ChromeWebClient::AllowCertificateError(
-    web::WebState* web_state,
-    int cert_error,
-    const net::SSLInfo& info,
-    const GURL& request_url,
-    bool overridable,
-    int64_t navigation_id,
-    base::OnceCallback<void(bool)> callback) {
-  base::OnceCallback<void(NSString*)> null_callback;
-  // TODO(crbug.com/760873): IOSSSLErrorHandler will present an interstitial
-  // for the user to decide if it is safe to proceed.
-  // Handle the case of web_state not presenting UI to users like prerender tabs
-  // or web_state used to fetch offline content in Reading List.
-  IOSSSLErrorHandler::HandleSSLError(
-      web_state, cert_error, info, request_url, overridable, navigation_id,
-      std::move(callback), std::move(null_callback));
 }
 
 bool ChromeWebClient::IsLegacyTLSAllowedForHost(web::WebState* web_state,
@@ -445,8 +441,4 @@ web::UserAgentType ChromeWebClient::GetDefaultUserAgent(
                               UIUserInterfaceSizeClassRegular;
   return isRegularRegular ? web::UserAgentType::DESKTOP
                           : web::UserAgentType::MOBILE;
-}
-
-bool ChromeWebClient::IsEmbedderBlockRestoreUrlEnabled() {
-  return ios::GetChromeBrowserProvider()->MightBlockUrlDuringRestore();
 }

@@ -32,7 +32,7 @@ import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -287,7 +287,7 @@ public class StripLayoutTab implements VirtualView {
                               : R.color.default_bg_color_elev_3;
         }
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             tint = mIncognito ? R.color.toolbar_background_primary_dark
                               : foreground ? R.color.default_bg_color_elev_3
                                            : R.color.compositor_background_tab_bg;
@@ -540,7 +540,7 @@ public class StripLayoutTab implements VirtualView {
      */
     public boolean checkCloseHitTest(float x, float y) {
         // Note(david@vivaldi.com): This will make sure that the resources are loaded correctly.
-        if (ChromeApplication.isVivaldi()) resetCloseRect();
+        if (ChromeApplicationImpl.isVivaldi()) resetCloseRect();
         return mShowingCloseButton ? mCloseButton.checkClicked(x, y) : false;
     }
 

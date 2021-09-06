@@ -18,7 +18,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.ui.widget.ChromeImageButton;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * A {@link View} that allows a user to toggle between incognito and normal {@link TabModel}s. This
@@ -80,7 +80,7 @@ public class IncognitoToggleButton extends ChromeImageButton {
                         isIncognitoSelected ? R.color.white_mode_tint
                                             : R.color.default_icon_color_tint_list));
 
-        if (ChromeApplication.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             setImageResource(R.drawable.vivaldi_model_selector);
             ApiCompatibilityUtils.setImageTintList(this,
                     AppCompatResources.getColorStateList(getContext(), R.color.white_mode_tint));

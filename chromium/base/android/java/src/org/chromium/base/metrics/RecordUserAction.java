@@ -10,6 +10,9 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Java API for recording UMA actions.
  * <p>
@@ -29,7 +32,7 @@ public class RecordUserAction {
      */
     public static void record(final String action) {
         // Vivaldi - Disable recording user actions
-        if (true) return;
+        if (BuildConfig.IS_VIVALDI) return;
         UmaRecorderHolder.get().recordUserAction(action, SystemClock.elapsedRealtime());
     }
 

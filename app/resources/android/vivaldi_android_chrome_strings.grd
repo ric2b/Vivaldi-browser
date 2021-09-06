@@ -230,7 +230,11 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_BOOKMARK_PAGE_SAVED_FOLDER" desc="Message shown after user adds a new bookmark. Also specifies in which folder the bookmark was added. [CHAR-LIMIT=32]">
         Bookmark saved in <ph name="FOLDER_NAME">%1$s<ex>Mobile bookmarks</ex></ph> folder
       </message>
-    </messages>
 
+    <!-- Language settings -->
+      <message name="IDS_LANGUAGES_SEND_TRANSLATE_SWITCH" desc="Appears next to the switch controlling whether or not Vivaldi will offer to translate pages in other languages">
+        Offer to translate pages in other languages using Vivaldi's translation service
+      </message>
+    </messages>
   </release>
 </grit>

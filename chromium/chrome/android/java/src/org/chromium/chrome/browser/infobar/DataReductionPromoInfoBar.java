@@ -28,7 +28,7 @@ import java.sql.Date;
 import java.util.Calendar;
 import java.util.TimeZone;
 
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * Generates an infobar to promote the data reduction proxy to non-users of it. The infobar contains
@@ -52,7 +52,7 @@ public class DataReductionPromoInfoBar extends ConfirmInfoBar {
         // This switch is only used for testing so let it override every other check.
         if (CommandLine.getInstance().hasSwitch(FORCE_INFOBAR_SWITCH)) return true;
 
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
 
         if (webContents.isIncognito()) return false;
         if (isErrorPage) return false;
@@ -121,7 +121,7 @@ public class DataReductionPromoInfoBar extends ConfirmInfoBar {
             GURL url, boolean isErrorPage, boolean isFragmentNavigation, int statusCode) {
         ThreadUtils.assertOnUiThread();
 
-        if (ChromeApplication.isVivaldi()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) return false;
 
         if (!shouldLaunchPromoInfoBar(
                     context, webContents, url, isErrorPage, isFragmentNavigation, statusCode)) {

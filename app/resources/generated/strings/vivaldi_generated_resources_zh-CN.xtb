@@ -242,6 +242,7 @@
 <translation id="5036662165765606524">禁止任何网站自动下载多个文件</translation>
 <translation id="5039804452771397117">允许</translation>
 <translation id="5057110919553308744">当您点击此扩展程序时</translation>
+<translation id="5059526285558225588">选择分享内容</translation>
 <translation id="5063480226653192405">使用情况</translation>
 <translation id="5116628073786783676">音频另存为(&amp;V)...</translation>
 <translation id="5143374789336132547">“<ph name="EXTENSION_NAME" />”扩展程序更改了您点击“主页”按钮后系统显示的页面。</translation>
@@ -459,7 +460,6 @@
 <translation id="8823704566850948458">建议密码…</translation>
 <translation id="8859174528519900719">辅助框架：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">在新窗口中打开链接(&amp;W)</translation>
-<translation id="8910146161325739742">共享屏幕</translation>
 <translation id="8915370057835397490">正在加载建议</translation>
 <translation id="8916476537757519021">隐身辅助框架：<ph name="SUBFRAME_SITE" /></translation>
 <translation id="895944840846194039">JavaScript 内存</translation>

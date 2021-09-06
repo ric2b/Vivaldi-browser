@@ -42,7 +42,7 @@ import java.util.Stack;
 import org.vivaldi.browser.bookmarks.VivaldiBookmarksPageObserver;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
@@ -75,6 +75,7 @@ public class BookmarkManager
     private boolean mFaviconsNeedRefresh;
     private String mInitialUrl;
     private boolean mIsDialogUi;
+    private boolean mIsIncognito;
     private boolean mIsDestroyed;
 
     // Vivaldi
@@ -148,7 +149,7 @@ public class BookmarkManager
         // DragStateDelegate implementation
         @Override
         public boolean getDragEnabled() {
-            if (ChromeApplication.isVivaldi()) {
+            if (ChromeApplicationImpl.isVivaldi()) {
                 return !mA11yEnabled
                         && mBookmarkDelegate.getCurrentState() == BookmarkUIState.STATE_FOLDER
                         && mBookmarkDelegate.getSortOrder() == BookmarkItemsAdapter.SortOrder.MANUAL;
@@ -180,13 +181,15 @@ public class BookmarkManager
      * @param context The current {@link Context} used to obtain resources or inflate views.
      * @param openBookmarkComponentName The component to use when opening a bookmark.
      * @param isDialogUi Whether the main bookmarks UI will be shown in a dialog, not a NativePage.
+     * @param isIncognito Whether the tab model loading the bookmark manager is for incognito mode.
      * @param snackbarManager The {@link SnackbarManager} used to display snackbars.
      */
     public BookmarkManager(Context context, ComponentName openBookmarkComponentName,
-            boolean isDialogUi, SnackbarManager snackbarManager) {
+            boolean isDialogUi, boolean isIncognito, SnackbarManager snackbarManager) {
         mContext = context;
         mOpenBookmarkComponentName = openBookmarkComponentName;
         mIsDialogUi = isDialogUi;
+        mIsIncognito = isIncognito;
 
         mSelectionDelegate = new SelectionDelegate<BookmarkId>() {
             @Override
@@ -211,7 +214,7 @@ public class BookmarkManager
         mSelectableListLayout.initializeEmptyView(
                 R.string.bookmarks_folder_empty, R.string.bookmark_no_result);
 
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mSelectableListLayout.setBackgroundColor(ApiCompatibilityUtils.
                     getColor(mContext.getResources(), android.R.color.transparent));
 
@@ -237,7 +240,7 @@ public class BookmarkManager
                 R.id.selection_mode_menu_group, null, true, isDialogUi);
         mToolbar.initializeSearchView(
                 this, R.string.bookmark_action_bar_search, R.id.search_menu_id);
-        if (ChromeApplication.isVivaldi())
+        if (ChromeApplicationImpl.isVivaldi())
             mSelectableListLayout.getToolbarShadow().setVisibility(View.GONE);
 
         mSelectableListLayout.configureWideDisplayStyle();
@@ -500,7 +503,7 @@ public class BookmarkManager
         switch (state) {
             case BookmarkUIState.STATE_FOLDER:
                 observer.onFolderStateSet(mStateStack.peek().mFolder);
-                if (ChromeApplication.isVivaldi())
+                if (ChromeApplicationImpl.isVivaldi())
                     mBookmarksPageObserver.onBookmarkFolderOpened();
                 break;
             case BookmarkUIState.STATE_LOADING:
@@ -520,7 +523,7 @@ public class BookmarkManager
     @Override
     public void openBookmark(BookmarkId bookmark) {
         if (!BookmarkUtils.openBookmark(
-                    mContext, mOpenBookmarkComponentName, mBookmarkModel, bookmark)) {
+                    mContext, mOpenBookmarkComponentName, mBookmarkModel, bookmark, mIsIncognito)) {
             return;
         }
 

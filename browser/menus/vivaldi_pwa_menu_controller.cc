@@ -27,12 +27,12 @@ namespace vivaldi {
 // Returns the appropriate menu label for the IDC_INSTALL_PWA command if
 // available.
 // Copied from app_menu_model.cc.
-base::Optional<base::string16> GetInstallPWAAppMenuItemName(Browser* browser) {
+base::Optional<std::u16string> GetInstallPWAAppMenuItemName(Browser* browser) {
   content::WebContents* web_contents =
     browser->tab_strip_model()->GetActiveWebContents();
   if (!web_contents)
     return base::nullopt;
-  base::string16 app_name =
+  std::u16string app_name =
     webapps::AppBannerManager::GetInstallableWebAppName(web_contents);
   if (app_name.empty())
     return base::nullopt;
@@ -69,7 +69,7 @@ void PWAMenuController::PopulateModel(ui::SimpleMenuModel* menu_model) {
                                 kMaxAppNameLength,
                                 gfx::CHARACTER_BREAK)));
     } else {
-      base::Optional<base::string16> install_pwa_item_name =
+      base::Optional<std::u16string> install_pwa_item_name =
           GetInstallPWAAppMenuItemName(browser_);
       if (install_pwa_item_name) {
         menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -85,11 +85,11 @@ bool PWAMenuController::IsItemForCommandIdDynamic(int command_id) const {
   return command_id == IDC_INSTALL_PWA;
 }
 
-base::string16 PWAMenuController::GetLabelForCommandId(int command_id) const {
+std::u16string PWAMenuController::GetLabelForCommandId(int command_id) const {
   if (command_id == IDC_INSTALL_PWA) {
     return GetInstallPWAAppMenuItemName(browser_).value();
   } else {
-    return base::string16();
+    return std::u16string();
   }
 }
 

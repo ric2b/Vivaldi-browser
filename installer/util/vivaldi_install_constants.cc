@@ -5,9 +5,11 @@
 namespace vivaldi {
 namespace constants {
 
-const wchar_t kVivaldiAutoUpdate[] = L"AutoUpdate";
+#define VIVALDI_REGISTRY_KEY L"Software\\Vivaldi"
+
 const wchar_t kVivaldiDeltaPatchFailed[] = L"DeltaPatchFailed";
-const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
+const wchar_t kVivaldiKey[] = VIVALDI_REGISTRY_KEY;
+const wchar_t kVivaldiAutoUpdateKey[] = VIVALDI_REGISTRY_KEY "\\AutoUpdate";
 const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
 
 // Vivaldi installer settings from last install.
@@ -32,6 +34,9 @@ const wchar_t kVivaldiUpdateNotifierOldExe[] = L"update_notifier.old";
 // Use the given installation directory overriding the value from the registry.
 const char kVivaldiInstallDir[] = "vivaldi-install-dir";
 
+// Language to use during the installation.
+const char kVivaldiLanguage[] = "vivaldi-language";
+
 // Installer runs from the mini installer.
 const char kVivaldiMini[] = "vivaldi-mini";
 
@@ -55,6 +60,9 @@ const char kVivaldiUpdate[] = "vivaldi-update";
 const char kVivaldiDebugTargetExe[] = "vivaldi-debug-target-exe";
 
 #endif
+
+const wchar_t kUninstallSurveyUrl[] =
+    L"https://vivaldi.com/uninstall/feedback?hl=$1";
 
 }  // namespace constants
 }  // namespace vivaldi

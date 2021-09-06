@@ -90,10 +90,6 @@ class MEDIA_EXPORT DefaultRendererFactory final : public RendererFactory {
   std::unique_ptr<SpeechRecognitionClient> speech_recognition_client_;
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_WIN)
-  MFSessionLifetime mf_session_;
-#endif
-
   DISALLOW_COPY_AND_ASSIGN(DefaultRendererFactory);
 };
 
